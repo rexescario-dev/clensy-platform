@@ -1,10 +1,11 @@
-# compiled output
-/dist
-/node_modules
-/build
+# compiled output (any app/package)
+dist/
+node_modules/
+build/
+.turbo/
 
 # generated GraphQL schema (code-first: TS classes are the source of truth)
-/src/schema.gql
+schema.gql
 
 # Logs
 logs
