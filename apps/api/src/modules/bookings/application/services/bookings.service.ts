@@ -2,8 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { Booking } from '../../domain/booking';
 import { BookingStatus } from '../../domain/booking-status';
-import { CreateBookingCommand } from '../inputs/create-booking.command';
-import { UpdateBookingCommand } from '../inputs/update-booking.command';
+import { CreateBookingCommand } from '../commands/create-booking.command';
+import { UpdateBookingCommand } from '../commands/update-booking.command';
 
 @Injectable()
 export class BookingsService {

@@ -1,6 +1,6 @@
 import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
-import { CreateBookingCommand } from '../../application/inputs/create-booking.command';
-import { UpdateBookingCommand } from '../../application/inputs/update-booking.command';
+import { CreateBookingCommand } from '../../application/commands/create-booking.command';
+import { UpdateBookingCommand } from '../../application/commands/update-booking.command';
 import { BookingsService } from '../../application/services/bookings.service';
 import { BookingType } from './booking.type';
 import { CreateBookingInput } from './create-booking.input';

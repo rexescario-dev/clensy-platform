@@ -9,8 +9,8 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
-import { CreateBookingCommand } from '../../application/inputs/create-booking.command';
-import { UpdateBookingCommand } from '../../application/inputs/update-booking.command';
+import { CreateBookingCommand } from '../../application/commands/create-booking.command';
+import { UpdateBookingCommand } from '../../application/commands/update-booking.command';
 import { BookingsService } from '../../application/services/bookings.service';
 import { CreateBookingDto } from './create-booking.dto';
 import { UpdateBookingDto } from './update-booking.dto';
