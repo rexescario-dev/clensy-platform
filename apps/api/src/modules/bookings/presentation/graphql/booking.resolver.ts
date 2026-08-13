@@ -1,4 +1,6 @@
 import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
+import { CreateBookingCommand } from '../../application/inputs/create-booking.command';
+import { UpdateBookingCommand } from '../../application/inputs/update-booking.command';
 import { BookingsService } from '../../application/services/bookings.service';
 import { BookingType } from './booking.type';
 import { CreateBookingInput } from './create-booking.input';
@@ -10,7 +12,12 @@ export class BookingResolver {
 
   @Mutation(() => BookingType)
   createBooking(@Args('createBookingInput') input: CreateBookingInput) {
-    return this.bookingsService.create(input);
+    const command: CreateBookingCommand = {
+      customerName: input.customerName,
+      serviceType: input.serviceType,
+      scheduledAt: input.scheduledAt,
+    };
+    return this.bookingsService.create(command);
   }
 
   @Query(() => [BookingType], { name: 'bookings' })
@@ -25,8 +32,13 @@ export class BookingResolver {
 
   @Mutation(() => BookingType)
   updateBooking(@Args('updateBookingInput') input: UpdateBookingInput) {
-    const { id, ...command } = input;
-    return this.bookingsService.update(id, command);
+    const command: UpdateBookingCommand = {
+      customerName: input.customerName,
+      serviceType: input.serviceType,
+      scheduledAt: input.scheduledAt,
+      status: input.status,
+    };
+    return this.bookingsService.update(input.id, command);
   }
 
   @Mutation(() => BookingType)

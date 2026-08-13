@@ -7,6 +7,8 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
+import { CreateBookingCommand } from '../../application/inputs/create-booking.command';
+import { UpdateBookingCommand } from '../../application/inputs/update-booking.command';
 import { BookingsService } from '../../application/services/bookings.service';
 import { CreateBookingDto } from './create-booking.dto';
 import { UpdateBookingDto } from './update-booking.dto';
@@ -17,7 +19,12 @@ export class BookingController {
 
   @Post()
   create(@Body() dto: CreateBookingDto) {
-    return this.bookingsService.create(dto);
+    const command: CreateBookingCommand = {
+      customerName: dto.customerName,
+      serviceType: dto.serviceType,
+      scheduledAt: dto.scheduledAt,
+    };
+    return this.bookingsService.create(command);
   }
 
   @Get()
@@ -32,7 +39,13 @@ export class BookingController {
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateBookingDto) {
-    return this.bookingsService.update(id, dto);
+    const command: UpdateBookingCommand = {
+      customerName: dto.customerName,
+      serviceType: dto.serviceType,
+      scheduledAt: dto.scheduledAt,
+      status: dto.status,
+    };
+    return this.bookingsService.update(id, command);
   }
 
   @Delete(':id')
