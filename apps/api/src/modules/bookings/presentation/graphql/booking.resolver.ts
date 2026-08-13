@@ -5,7 +5,7 @@ import { CreateBookingInput } from './create-booking.input';
 import { UpdateBookingInput } from './update-booking.input';
 
 @Resolver(() => BookingType)
-export class BookingsResolver {
+export class BookingResolver {
   constructor(private readonly bookingsService: BookingsService) {}
 
   @Mutation(() => BookingType)
