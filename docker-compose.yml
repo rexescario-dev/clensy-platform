@@ -10,6 +10,30 @@ services:
       - '${DB_PORT}:5432'
     volumes:
       - clensy_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USERNAME} -d ${DB_NAME}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      # Container-network address, not the host-mapped ${DB_PORT} — api reaches
+      # postgres via the service name, always on its internal 5432.
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   clensy_postgres_data:
