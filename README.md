@@ -54,7 +54,10 @@ src/
 └── platform/                          shared infrastructure, not business logic
     ├── config/
     ├── database/
-    │   ├── database.module.ts         TypeOrmModule wiring
+    │   ├── database.module.ts         TypeOrmModule wiring (synchronize: false — schema comes
+    │   │                               from migrations, see "Database migrations" below)
+    │   ├── data-source.ts             plain DataSource for the TypeORM CLI
+    │   ├── migrations/                generated migration files
     │   └── seed.ts                    `pnpm db:seed` entrypoint — calls each module's seeder
     └── graphql/
         ├── graphql.module.ts          Apollo driver wiring
@@ -71,15 +74,30 @@ cp .env.example .env   # first time only
 docker compose up -d --build
 ```
 
-That's it — `docker compose up` builds and runs `apps/api` itself (not just Postgres), connecting to the `postgres` service over the container network. No separate `pnpm dev` needed. The `bookings` table starts **empty** — see "Seeding fake data" below.
+That's it — `docker compose up` builds and runs `apps/api` itself (not just Postgres), connecting to the `postgres` service over the container network. A `migrate` service runs the pending migrations once before `api` starts (`depends_on: condition: service_completed_successfully`); the table is then empty but schema-correct — see "Seeding fake data" below.
 
 For local iteration with hot-reload instead (edits reflected immediately, no rebuild):
 
 ```bash
 pnpm install
 docker compose up -d postgres   # Postgres only
+pnpm --filter api migration:run # apply migrations — first time only, or after a new one is added
 pnpm dev                         # apps/api in watch mode, against that Postgres
 ```
+
+## Database migrations
+
+No `synchronize: true` — schema changes go through real, reviewable migrations, closer to how `flash-sale-system` uses Prisma migrations.
+
+```bash
+pnpm --filter api migration:generate add customer phone number  # after changing an entity
+pnpm --filter api migration:run       # apply pending migrations
+pnpm --filter api migration:revert    # roll back the last one
+```
+
+`migration:generate` takes a plain phrase (or an already-PascalCase name, or anything in between — `scripts/generate-migration.js` normalizes it) and writes it into `src/platform/database/migrations/` as `<timestamp>-AddCustomerPhoneNumber.ts`.
+
+`generate` diffs the TypeORM entities (currently just `BookingEntity`) against the actual database, so run it against an environment that already has the *previous* migration applied (not a synchronized or ad-hoc schema) — otherwise the diff will be wrong. `apps/api/src/platform/database/data-source.ts` is the plain `DataSource` these commands use (the CLI can't consume `database.module.ts`'s Nest-wrapped, `ConfigService`-driven config directly). It needs its own `tsconfig.cli.json` (forces `commonjs`/`node` module resolution) — TypeORM's CLI loads the datasource via Node's native ESM resolver, which the rest of the project's `nodenext` config doesn't satisfy for a plain `ts-node` script.
 
 ## Seeding fake data
 
@@ -113,4 +131,4 @@ pnpm lint     # lint all workspace packages that have a lint script
 pnpm db:seed  # insert/refresh fake bookings — see "Seeding fake data" above
 ```
 
-Package-specific commands can be run directly, e.g. `pnpm --filter api test:e2e`.
+Package-specific commands can be run directly, e.g. `pnpm --filter api test:e2e`, `pnpm --filter api migration:generate ...` (see "Database migrations" above).

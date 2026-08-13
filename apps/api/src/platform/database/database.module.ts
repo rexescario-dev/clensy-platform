@@ -15,7 +15,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
         password: config.get('DB_PASSWORD', 'clensy_dev'),
         database: config.get('DB_NAME', 'clensy'),
         autoLoadEntities: true,
-        synchronize: true,
+        // Schema comes from migrations now (pnpm migration:run), not runtime sync.
+        synchronize: false,
       }),
     }),
   ],
