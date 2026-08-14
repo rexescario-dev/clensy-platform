@@ -53,6 +53,9 @@ lerna-debug.log*
 .temp
 .tmp
 
+# Superpowers SDD scratch workspace (ledgers, briefs, reports, review diffs)
+.superpowers/
+
 # Runtime data
 pids
 *.pid
