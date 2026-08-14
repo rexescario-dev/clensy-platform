@@ -80,13 +80,13 @@ The application-layer queries orchestrate reads across other modules' **applicat
 
 ### 2.6 Cross-Module Dependency Rules
 
-> A module may depend on another module's public application/presentation contract, types, or identity primitives, but never reach into another module's infrastructure or persistence implementation.
+> Modules communicate through explicitly exposed application contracts and stable identity/value types. Presentation layers are external adapters and should not be used as internal module dependencies. A module never reaches into another module's infrastructure or persistence implementation.
 
-Concretely: `bookings` references `customerId`/`propertyId`/`serviceId`, never `CustomerEntity`/`PropertyEntity`/`ServiceEntity`. `modules/dashboard` queries other modules' application-layer read contracts, never their TypeORM repositories. This is the rule most likely to erode under time pressure — it's called out explicitly so violations are a conscious exception, not a silent default.
+Concretely: `bookings` references `customerId`/`propertyId`/`serviceId`, never `CustomerEntity`/`PropertyEntity`/`ServiceEntity`. `modules/dashboard` queries other modules' **application-layer** read contracts (not their GraphQL resolvers, and never their TypeORM repositories). This is the rule most likely to erode under time pressure — it's called out explicitly so violations are a conscious exception, not a silent default.
 
 ## 3. Web Architecture & Testing
 
-**apps/web** (Next.js, App Router): routes mirror module boundaries — `/customers`, `/cleaners`, `/catalog`, `/bookings`, `/jobs`, `/quality`, `/admin` (staff/roles), `/` as the Operations Dashboard once M8 exists (redirects to the first available module before then). Route-group-level auth middleware checks the JWT and role from `platform/auth`; unauthorized requests redirect to `/login`. Every screen goes through `packages/client` for data and `packages/ui` for components — no screen hand-rolls its own query string or button.
+**apps/web** (Next.js, App Router): routes mirror module boundaries — `/customers`, `/cleaners`, `/catalog`, `/bookings`, `/jobs`, `/quality`, `/admin` (staff/roles), `/` as the Operations Dashboard once M8 exists (redirects to the first available module before then). Route-group-level authentication checks the authenticated session/JWT claims available to `apps/web`; authorization semantics mirror the six-role matrix defined by `platform/auth`, but `apps/web` does not depend on `apps/api`'s Nest infrastructure directly. The API (`platform/auth`) remains the authoritative enforcement point — frontend route protection is UX/security layering, not the source of authorization truth. Unauthorized requests redirect to `/login`. Every screen goes through `packages/client` for data and `packages/ui` for components — no screen hand-rolls its own query string or button.
 
 **Testing**: each module gets unit tests for its `application/` layer (mirroring the existing `bookings/tests/` structure) and one e2e spec covering its primary GraphQL workflow end-to-end — not exhaustive field-by-field coverage. `platform/auth` and `platform/audit` get their own unit tests as shared infrastructure. Frontend testing in Phase 1 is manual verification against each milestone's golden path; no browser-automation test suite is being added yet (revisit if regressions start recurring).
 
@@ -103,7 +103,7 @@ Concretely: `bookings` references `customerId`/`propertyId`/`serviceId`, never `
 | M7 | Quality & Re-cleans | Issue → re-clean → resolution |
 | M8 | Operations Dashboard | Cross-domain operational read model |
 
-Audit (EPIC-09) is not a milestone. Its infrastructure is built in M1 and exercised by every subsequent milestone's mutations.
+Audit is cross-cutting and has no standalone Phase-1 backlog issue or milestone. Its infrastructure is built in M1 and exercised by every subsequent milestone's mutations.
 
 Dependency order: M1 unblocks all business modules (nothing is exposed without auth). M2, M3, M4 have no dependencies on each other and can be built in any order once M1 exists. M5 depends on M2–M4. M6 depends on M5 and M3 (jobs need bookings and teams). M7 depends on M6. M8 depends on all of M2–M7.
 
@@ -123,7 +123,7 @@ A milestone is not "done" because its entity and API exist — the web UI and th
 
 ### 6.1 Phase-1 Issues
 
-One issue per vertical slice (module), attached to its milestone (M1–M8). ~8–9 issues total for Phase 1. Each issue body includes a checklist of its layers (domain → application → infrastructure → GraphQL → web UI → tests) as sub-steps, not separate issues.
+One issue per vertical slice (module), attached to its milestone (M1–M8). 8 issues total for Phase 1. Each issue body includes a checklist of its layers (domain → application → infrastructure → GraphQL → web UI → tests) as sub-steps, not separate issues.
 
 ### 6.2 Deferred Roadmap Issues
 
