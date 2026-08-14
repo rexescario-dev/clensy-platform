@@ -8,7 +8,7 @@
 | **Package/repo scope** | `apps/api` (new: `platform/auth`, `platform/audit`, `modules/admins`; modified: `app/app.module.ts`, `platform/database/data-source.ts`, `main.ts`, `.env.example`, `package.json`); `apps/web` (bootstrap + `/login`, `/admin`); `packages/client`, `packages/ui` (bootstrap, minimal) |
 | **Depends on (Accepted)** | [Admin Foundation Specification](../specs/2026-08-14-admin-foundation-design.md) — Status: Accepted, 2026-08-14 |
 | **Governing process** | [Standardized Agent Workflows](../workflows/specs/agent-workflow-design.md) — stage M4 |
-| **Revision note** | First plan was returned at M5: task decomposition and traceability were sound, but 4 material issues would have forced the implementer to invent behavior — a circular contract dependency (admins implementing a port that didn't exist yet), a leaked `EntityManager` parameter on the `AuditLogger` public contract, the wrong module-import direction for the identity-lookup binding, and several under-specified operational details (JWT extraction source, seed credentials, fail-fast on missing secrets, GraphQL type boundary). All resolved; §7 sequencing became 9 tasks (auth split into contracts + implementation), §3 gained explicit constraints, and a new §4 separates M4 implementation choices from spec-derived constraints. A second M5 pass tightened remaining operational mechanics not yet covered: explicit `login` resolver orchestration order (credential check → token issuance → cookie), a shared cookie-name constant, credentialed CORS + Apollo `credentials: 'include'` for the cross-origin cookie to actually reach the browser, and an explicit decision that `Secure` cookies work correctly on `http://localhost` without weakening the flag. |
+| **Revision note** | First plan was returned at M5 for a circular contract dependency, a leaked `EntityManager` parameter, wrong module-import direction, and several under-specified operational details — all resolved (auth split into contracts + implementation, single-method `AuditLogger`, composition-root wiring). A second M5 pass tightened cross-origin cookie mechanics (CORS, Apollo credentials, `Secure`-on-`localhost`, explicit login orchestration order). A third M5 pass (self-review) found a genuine correctness bug the first two rounds missed: the last-active-Owner check was specified to run *before* the transaction, a check-then-act race that could let concurrent disable requests leave zero active Owners — moved inside the transaction behind a locking read. Also added an explicit unique constraint on `email` (§4.3's login-by-email step is only well-defined if accounts can't share one) and fixed two ambiguous section citations. |
 | **Followed by** | M5 Plan Review (re-review) |
 
 Where this plan and the Accepted specification disagree, the specification wins and this plan must be revised.
@@ -80,7 +80,7 @@ The spec deliberately leaves these open; this plan fixes them for M6 so no imple
 | `apps/api/src/modules/admins/**` (new) | `packages/domain`, `packages/auth`, `packages/config`, `packages/testing` (no extraction this slice) |
 | `apps/api/src/app/app.module.ts` (composition root — registers new modules and wires the identity-lookup binding) | — |
 | `apps/api/src/platform/database/data-source.ts` (add new entities) | — |
-| `apps/api/src/main.ts` (register `cookie-parser`) | — |
+| `apps/api/src/main.ts` (register `cookie-parser`, enable credentialed CORS) | — |
 | `apps/api/package.json`, `.env.example` (new deps/env vars) | — |
 | `apps/web/**`, `packages/client/**`, `packages/ui/**` (bootstrap + login/admin only) | Any other Phase-1 module's future screens |
 
@@ -152,16 +152,16 @@ No test-framework changes — reuse the existing `apps/api` Jest config (unit sp
 
 **Tests:** none — pure type/interface definitions, nothing to execute yet. Verified by Task 3 compiling against them and Task 4's tests exercising the port through a real implementation.
 
-**Traceability:** spec §3, §4.7, §5.2, §6 (contract inventory).
+**Traceability:** spec §3, §4.7, §5.2; this plan's §6 (contract inventory).
 
 ### Task 3 — `modules/admins`
 
 **Files (new):**
 - `apps/api/src/modules/admins/domain/admin-user.ts` — plain interface: `{ id, email, passwordHash, role, isActive, createdAt }` (imports `Role` from `platform/auth`)
-- `apps/api/src/modules/admins/infrastructure/persistence/admin-user.entity.ts` — TypeORM entity implementing `AdminUser`
+- `apps/api/src/modules/admins/infrastructure/persistence/admin-user.entity.ts` — TypeORM entity implementing `AdminUser`; `email` has a unique constraint on the normalized (lowercase) value — required for §4.3's "look up by email" login step to be well-defined; without it, two accounts could share an email and login would have no deterministic match
 - `apps/api/src/modules/admins/infrastructure/admin-identity-lookup.service.ts` — implements Task 2's `AdminIdentityLookupPort` by querying `AdminUserEntity` (filters on `isActive`)
 - `apps/api/src/modules/admins/application/commands/create-admin.command.ts`, `disable-admin.command.ts` — plain command interfaces (mirroring `bookings`' command style)
-- `apps/api/src/modules/admins/application/services/admins.service.ts` — `create`, `list`, `disable`. `create`/`disable` each open a transaction (`EntityManager.transaction(...)`), perform the `AdminUserEntity` write, and call `AuditLogger.log(...)` such that an audit failure fails the whole transaction (§3's transactional guarantee — the *mechanism* is chosen here, e.g. constructing the audit implementation with the transaction's own `EntityManager` for the duration of the call; the public `AuditLogger.log()` signature itself stays untouched). `disable` enforces self-disable and last-active-Owner checks (§4.4) before opening the transaction.
+- `apps/api/src/modules/admins/application/services/admins.service.ts` — `create`, `list`, `disable`. `create`/`disable` each open a transaction (`EntityManager.transaction(...)`), perform the `AdminUserEntity` write, and call `AuditLogger.log(...)` such that an audit failure fails the whole transaction (§3's transactional guarantee — the *mechanism* is chosen here, e.g. constructing the audit implementation with the transaction's own `EntityManager` for the duration of the call; the public `AuditLogger.log()` signature itself stays untouched). `disable`'s self-disable check (a pure id comparison, no concurrent-mutation risk) happens before opening the transaction, but the **last-active-Owner check happens inside the transaction using a locking read** (e.g. `SELECT COUNT(*) FROM admin_user WHERE role = 'OWNER' AND "isActive" = true FOR UPDATE`, or TypeORM's equivalent pessimistic lock) — checking before the transaction would be a check-then-act race where two concurrent disable-Owner requests could each observe "more than one active Owner" and both proceed, leaving zero. The locking read serializes concurrent disable attempts against each other, which is the actual guarantee §4.4 requires.
 - `apps/api/src/modules/admins/application/services/login.service.ts` — verifies email (case-insensitive) + password against `AdminUserEntity` (bcrypt compare), returns `AuthenticatedPrincipal | null` (`null` covers unknown email, wrong password, and disabled — indistinguishable per §4.3); calls `AuditLogger.log('admin.login.succeeded' | 'admin.login.failed', ...)` per §4.3/§4.6 (a plain best-effort call — login has no accompanying state change to be transactional with, matching §4.6's differentiated guarantee)
 - `apps/api/src/modules/admins/admins.module.ts` — exports `AdminIdentityLookupService` bound to `ADMIN_IDENTITY_LOOKUP` for the composition root (Task 6) to consume; does **not** import `AuthModule`
 - `apps/api/src/modules/admins/tests/application/admins.service.spec.ts`
@@ -175,7 +175,8 @@ No test-framework changes — reuse the existing `apps/api` Jest config (unit sp
 
 **Tests to write first (TDD):**
 - `create`: persists an `AdminUser` with a bcrypt hash (never the plaintext), records `admin.created`. With a forced audit failure (mock the transaction's audit call to throw), assert the `AdminUser` row does not exist afterward (the actual transactional guarantee, observed at this layer — not via a special audit method).
-- `disable`: rejects self-disable; rejects disabling the last active Owner; allows disabling a non-last Owner; records `admin.disabled`; same forced-audit-failure rollback assertion as `create`.
+- `disable`: rejects self-disable; rejects disabling the last active Owner; allows disabling a non-last Owner; records `admin.disabled`; same forced-audit-failure rollback assertion as `create`; two concurrent `disable` calls targeting two different Owners when exactly two active Owners exist — at most one MUST succeed (proves the locking read actually serializes, not just that the count is checked).
+- `create`: a second `create` with an email already in use (differing only in case) is rejected — proves the unique constraint, not just the normalization.
 - `login.service`: unknown email → `null` + `admin.login.failed`; wrong password → same; disabled account → same (all three assert the *same* outward result and the *same* generic failure path, proving indistinguishability); correct credentials on an active account → principal + `admin.login.succeeded`.
 - `admin-identity-lookup.service`: returns `null` for a disabled or nonexistent id; returns the principal for an active one.
 
