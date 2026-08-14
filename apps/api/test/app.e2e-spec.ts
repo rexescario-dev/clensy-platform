@@ -58,3 +58,39 @@ describe('Bookings (e2e)', () => {
     await app.close();
   });
 });
+
+describe('GraphQL (e2e)', () => {
+  let app: INestApplication<App>;
+
+  beforeEach(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    app = moduleFixture.createNestApplication();
+    await app.init();
+  });
+
+  // The actual API contract — GraphiQL is just a UI client on top of this.
+  it('POST /graphql — bookings query still works', () => {
+    return request(app.getHttpServer())
+      .post('/graphql')
+      .send({ query: '{ bookings { id } }' })
+      .expect(200)
+      .expect((res) => {
+        expect(Array.isArray(res.body.data.bookings)).toBe(true);
+      });
+  });
+
+  // Dev-tooling smoke check, not part of the GraphQL API contract itself.
+  it('GET /graphiql — dev IDE is served', () => {
+    return request(app.getHttpServer())
+      .get('/graphiql')
+      .expect(200)
+      .expect('Content-Type', /text\/html/);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+});
