@@ -60,7 +60,10 @@ src/
     │   ├── migrations/                generated migration files
     │   └── seed.ts                    `pnpm db:seed` entrypoint — calls each module's seeder
     └── graphql/
-        ├── graphql.module.ts          Apollo driver wiring
+        ├── graphql.module.ts          Apollo driver wiring (playground: false — no landing
+        │                               page at /graphql, see "GraphQL IDE" below)
+        ├── graphiql.controller.ts     GET /graphiql — dev-only (registered only when
+        │                               NODE_ENV !== 'production')
         ├── directives/                reserved, not yet implemented
         └── scalars/                   reserved, not yet implemented
 ```
@@ -115,11 +118,17 @@ Seed data lives at `apps/api/src/modules/bookings/infrastructure/persistence/see
 
 | | URL | Notes |
 | --- | --- | --- |
-| GraphQL API | http://localhost:3000/graphql | queries/mutations for `bookings` |
-| GraphQL playground | http://localhost:3000/graphql | same URL, open in a browser (legacy GraphQL Playground, not Apollo Sandbox) |
+| GraphQL API | http://localhost:3000/graphql | queries/mutations for `bookings` — API only, no browser landing page |
+| GraphQL IDE (GraphiQL) | http://localhost:3000/graphiql | separate route, dev-only (see below) |
 | REST API | http://localhost:3000/bookings | full CRUD |
-| REST docs (Swagger UI) | http://localhost:3000/docs | interactive explorer, equivalent to the GraphQL playground |
+| REST docs (Swagger UI) | http://localhost:3000/docs | interactive explorer, equivalent to GraphiQL |
 | OpenAPI spec | http://localhost:3000/docs-json | raw JSON |
+
+## GraphQL IDE
+
+`/graphql` is API-only — visiting it in a browser now returns a CSRF-protection error instead of an interactive IDE (`playground: false` in `graphql.module.ts`). GraphiQL lives at a deliberately separate route, `/graphiql`, so the API endpoint and the dev tool never share a URL. It's a small self-contained controller (`graphiql.controller.ts`) that returns GraphiQL's CDN-bundle HTML pointed at `/graphql` — no local `graphiql` package dependency, works via `unpkg`. Registered only when `NODE_ENV !== 'production'`; the route doesn't exist at all otherwise.
+
+`@nestjs/apollo` also has a native `graphiql: true` option, but that serves GraphiQL *at* `/graphql` itself — deliberately not used here, to keep the API endpoint and the IDE on separate URLs.
 
 ## Scripts (run from the repo root, via Turborepo)
 
