@@ -1,5 +1,7 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app/app.module';
@@ -67,7 +69,12 @@ describe('GraphQL (e2e)', () => {
       imports: [AppModule],
     }).compile();
 
-    app = moduleFixture.createNestApplication();
+    app = moduleFixture.createNestApplication<NestExpressApplication>();
+    // Mirrors main.ts's bootstrap(), which this test doesn't go through.
+    app.useStaticAssets(
+      join(__dirname, '..', 'public', 'graphiql'),
+      { prefix: '/graphiql-static' },
+    );
     await app.init();
   });
 
@@ -82,13 +89,23 @@ describe('GraphQL (e2e)', () => {
       });
   });
 
-  // Dev-tooling smoke check, not part of the GraphQL API contract itself.
-  it('GET /graphiql — dev IDE is served', () => {
+  // Dev-tooling smoke checks, not part of the GraphQL API contract itself.
+  it('GET /graphiql — dev IDE HTML is served', () => {
     return request(app.getHttpServer())
       .get('/graphiql')
       .expect(200)
       .expect('Content-Type', /text\/html/);
   });
+
+  it.each(['graphiql.js', 'editor.worker.js', 'json.worker.js', 'graphql.worker.js'])(
+    'GET /graphiql-static/%s — locally-bundled asset is served',
+    (asset) => {
+      return request(app.getHttpServer())
+        .get(`/graphiql-static/${asset}`)
+        .expect(200)
+        .expect('Content-Type', /javascript/);
+    },
+  );
 
   afterEach(async () => {
     await app.close();

@@ -4,6 +4,9 @@ node_modules/
 build/
 .turbo/
 
+# generated GraphiQL bundle (esbuild — see scripts/build-graphiql.ts)
+public/
+
 # generated GraphQL schema (code-first: TS classes are the source of truth)
 schema.gql
 

@@ -62,10 +62,19 @@ src/
     └── graphql/
         ├── graphql.module.ts          Apollo driver wiring (playground: false — no landing
         │                               page at /graphql, see "GraphQL IDE" below)
-        ├── graphiql.controller.ts     GET /graphiql — dev-only (registered only when
+        ├── graphiql.controller.ts     GET /graphiql (HTML) — dev-only (registered only when
         │                               NODE_ENV !== 'production')
+        ├── graphiql/
+        │   └── graphiql.entry.ts      browser entry point — bundled by scripts/build-graphiql.ts
         ├── directives/                reserved, not yet implemented
         └── scalars/                   reserved, not yet implemented
+
+apps/api/
+├── scripts/
+│   └── build-graphiql.ts   esbuild: React + GraphiQL + CSS + Monaco's worker bundles, locally
+│                            bundled and served entirely from application-owned static assets
+│                            — no CDN (see "GraphQL IDE" below; NOT a single-file bundle)
+└── public/graphiql/        generated, gitignored — served at /graphiql-static (see below)
 ```
 
 **Two presentation surfaces, one application layer:** both `presentation/graphql/booking.resolver.ts` and `presentation/rest/booking.controller.ts` map their own transport input (`CreateBookingInput` / `CreateBookingDto`) into the same `CreateBookingCommand` before calling `BookingsService` — the command is the shared contract, not either DTO. This is also why the TypeORM entity, the domain type, and the GraphQL `BookingType` are three separate classes instead of one decorated class: it keeps persistence, business rules, and each transport's shape free to evolve independently.
@@ -126,9 +135,28 @@ Seed data lives at `apps/api/src/modules/bookings/infrastructure/persistence/see
 
 ## GraphQL IDE
 
-`/graphql` is API-only — visiting it in a browser now returns a CSRF-protection error instead of an interactive IDE (`playground: false` in `graphql.module.ts`). GraphiQL lives at a deliberately separate route, `/graphiql`, so the API endpoint and the dev tool never share a URL. It's a small self-contained controller (`graphiql.controller.ts`) that returns GraphiQL's CDN-bundle HTML pointed at `/graphql` — no local `graphiql` package dependency, works via `unpkg`. Registered only when `NODE_ENV !== 'production'`; the route doesn't exist at all otherwise.
+`/graphql` is API-only — visiting it in a browser returns a CSRF-protection error instead of an interactive IDE (`playground: false` in `graphql.module.ts`). GraphiQL lives at a deliberately separate route, `/graphiql`, so the API endpoint and the dev tool never share a URL.
 
 `@nestjs/apollo` also has a native `graphiql: true` option, but that serves GraphiQL *at* `/graphql` itself — deliberately not used here, to keep the API endpoint and the IDE on separate URLs.
+
+GraphiQL is locally bundled with esbuild and served entirely from application-owned static assets, including Monaco's worker bundles — not CDN-loaded. `graphiql`, `@graphiql/toolkit`, `react`, `react-dom`, `monaco-editor`, and `monaco-graphql` are real devDependencies of `apps/api`, bundled by `scripts/build-graphiql.ts` into `public/graphiql/` — zero runtime CDN dependency. An earlier CDN-embed attempt (`unpkg`/`esm.sh`, dynamically resolving React/GraphiQL at request time) hit real breakage twice — a UMD bundle path that no longer exists in current `graphiql` releases, then a bare-module-specifier resolution error even after switching to an import map — which is why this project bundles it itself instead.
+
+The build runs via `pnpm build:graphiql`, wired as a `turbo.json` task dependency (`build` and `start:dev` both depend on it — plain npm `pre`/`post` script hooks don't fire when Turborepo invokes a script directly, so the dependency has to be expressed in `turbo.json`, not just `package.json`). `main.ts` serves the output via `useStaticAssets` at `/graphiql-static` — deliberately not `/graphiql` itself, since Express's static middleware runs ahead of routing and would otherwise intercept the bare `/graphiql` request as a directory-index lookup before `GraphiqlController` ever saw it.
+
+**Not one file — five.** GraphiQL's editor is Monaco (via `@graphiql/react` + `monaco-graphql`), and Monaco needs its own Web Worker scripts for language-service features (autocomplete, live validation) — those can't run inside the main bundle. The build produces:
+
+```text
+public/graphiql/
+├── graphiql.js          main bundle: React + GraphiQL + @graphiql/toolkit + Monaco host
+├── graphiql.css          (monaco-editor's font/icon assets inlined as data URIs)
+├── editor.worker.js      Monaco's generic editor worker (default fallback)
+├── json.worker.js        Monaco's JSON language worker
+└── graphql.worker.js     monaco-graphql's language worker (schema-aware validation/completion)
+```
+
+`graphiql.entry.ts` wires `self.MonacoEnvironment.getWorker` to load these by label (`'json'`, `'graphql'`, default) as plain `new Worker('/graphiql-static/...')` calls. The exact worker source paths and label mapping came from `@graphiql/react`'s own `dist/setup-workers/{vite,webpack}.js` helpers (there's no esbuild-specific one shipped) — verified against the installed package rather than guessed, since `monaco-editor`/`monaco-graphql`'s internal file layout isn't part of any public API contract.
+
+`public/graphiql/` is generated and gitignored — CI/build produces it, it's never committed.
 
 ## Scripts (run from the repo root, via Turborepo)
 
