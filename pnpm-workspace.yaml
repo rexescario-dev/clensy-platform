@@ -1,3 +1,6 @@
 packages:
-  - "apps/*"
-  - "packages/*"
+  - apps/*
+  - packages/*
+
+patchedDependencies:
+  '@graphql-codegen/typescript-react-apollo@4.4.2': patches/@graphql-codegen__typescript-react-apollo@4.4.2.patch

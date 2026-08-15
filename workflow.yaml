@@ -1,0 +1,71 @@
+workflow:
+  version: "1"
+  profile: application
+  packages:
+    generic: 1.2.0
+    claude: 0.1.0
+  assets:
+    - path: docs/workflows/README.md
+      package: generic
+      version: 1.2.0
+      digest: sha256:ce2d90a4b4bec3c3c23cb607dc75bb3e97ac3c0fcb689370f763cc4aac53bd0a
+    - path: docs/workflows/specs/agent-workflow-design.md
+      package: generic
+      version: 1.2.0
+      digest: sha256:2b04f7790be41a0d0a2bd9c2e9762a1a9d848d52f06290e8c9cb669d77b142e1
+    - path: docs/workflows/conventions/prompt-library.md
+      package: generic
+      version: 1.2.0
+      digest: sha256:b45b7ee524ddf95a26701ce491ba3f7c85ba8372595d4a1f029785bc2256f960
+    - path: docs/workflows/conventions/reporting-conventions.md
+      package: generic
+      version: 1.2.0
+      digest: sha256:f5d3ee015f184bb866c0770c5de2aa3d8abcfb1b95b550026ef2c2a14d4e6208
+    - path: docs/workflows/prompts/specification.md
+      package: generic
+      version: 1.2.0
+      digest: sha256:c0171774c06817ec1d62582e0c1081cbcba418cb223d3c1de05298727ffa6bd4
+    - path: docs/workflows/prompts/design-review.md
+      package: generic
+      version: 1.2.0
+      digest: sha256:df24b0777626160fe01737c897a435e00cbffc413497ee3fde4c733f1cc145fc
+    - path: docs/workflows/prompts/implementation-planning.md
+      package: generic
+      version: 1.2.0
+      digest: sha256:4c2993137f082adc0243958b832fc8496bc94781874b4d3ebdb9b3bf27a96157
+    - path: docs/workflows/prompts/plan-review.md
+      package: generic
+      version: 1.2.0
+      digest: sha256:3c02bca9e4c74dc9eaed1af8ac701a61f3e01dd3b928d4162ff74cf7ad26db2e
+    - path: docs/workflows/prompts/implementation-execution.md
+      package: generic
+      version: 1.2.0
+      digest: sha256:d50592418442294028cc26187c578627710ce374dafbf6b5b232c79a9a2a1af6
+    - path: docs/workflows/prompts/code-review.md
+      package: generic
+      version: 1.2.0
+      digest: sha256:10e79516afad0fe15992086d4ea2f0291e589395ef864ed20ce9c0b7f6f622c4
+    - path: docs/workflows/prompts/refactoring.md
+      package: generic
+      version: 1.2.0
+      digest: sha256:a0a1f4131df01be62d93fedd207a9cd0866db4061c1e04483a748fee2984abc2
+    - path: docs/workflows/prompts/documentation-execution.md
+      package: generic
+      version: 1.2.0
+      digest: sha256:8a2646dbb1faa5e52aba6f151e5e6189c722901b5234942deb7544eee52702aa
+    - path: docs/workflows/prompts/workflow-validation.md
+      package: generic
+      version: 1.2.0
+      digest: sha256:303efbfb6c8b6dc8ea0443e1ad0a5139ce36e8ba5b71df4e11c37489aecced2b
+    - path: .claude/skills/workflow/SKILL.md
+      package: claude
+      version: 0.1.0
+      digest: sha256:e3d2e0dfd8f8a03ea9121c2be82029a882d0d86dce28d7b063f13e9ae6c7cc96
+  installation:
+    installedAt: 2026-08-14T13:19:30.994Z
+    toolVersion: 0.0.0
+    catalogId: local
+  providers:
+    issueTracker: github
+    sourceControl: github
+    pullRequests: github

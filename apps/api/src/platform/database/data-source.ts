@@ -1,6 +1,8 @@
 import 'dotenv/config';
 import { DataSource } from 'typeorm';
 import { BookingEntity } from '../../modules/bookings/infrastructure/persistence/booking.entity';
+import { AdminUserEntity } from '../../modules/admins/infrastructure/persistence/admin-user.entity';
+import { AuditEventEntity } from '../audit/infrastructure/persistence/audit-event.entity';
 
 // Plain DataSource for the TypeORM CLI (migration:generate/run/revert) — kept
 // separate from database.module.ts, which is Nest-wrapped (ConfigService,
@@ -12,6 +14,6 @@ export default new DataSource({
   username: process.env.DB_USERNAME ?? 'clensy',
   password: process.env.DB_PASSWORD ?? 'clensy_dev',
   database: process.env.DB_NAME ?? 'clensy',
-  entities: [BookingEntity],
+  entities: [BookingEntity, AuditEventEntity, AdminUserEntity],
   migrations: [__dirname + '/migrations/*.ts'],
 });

@@ -1,0 +1,8 @@
+query Admins {
+  admins {
+    id
+    email
+    role
+    isActive
+  }
+}

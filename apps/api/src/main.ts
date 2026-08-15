@@ -2,11 +2,30 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import cookieParser from 'cookie-parser';
 import { join } from 'path';
 import { AppModule } from './app/app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // `JwtStrategy`'s cookie extractor (platform/auth) reads the session JWT
+  // off `req.cookies[SESSION_COOKIE_NAME]` — without this middleware,
+  // Express never parses the `Cookie` header into `req.cookies` at all, so
+  // every authenticated request would see it as `undefined`.
+  app.use(cookieParser());
+
+  // `apps/web` and `apps/api` are served from different origins (spec §4) —
+  // `credentials: true` is required for the browser to attach the HttpOnly
+  // session cookie cross-origin, and per the Fetch spec that only works
+  // paired with a specific (non-wildcard) `origin`. `WEB_ORIGIN` is an
+  // env var so this doesn't hardcode a single environment's URL; the
+  // `localhost:3001` fallback matches `apps/web`'s local dev port.
+  app.enableCors({
+    origin: process.env.WEB_ORIGIN ?? 'http://localhost:3001',
+    credentials: true,
+  });
+
   app.useGlobalPipes(
     new ValidationPipe({
       transform: true,
