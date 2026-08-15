@@ -5,6 +5,8 @@ import { CustomersService } from './application/services/customers.service';
 import { PropertiesService } from './application/services/properties.service';
 import { CustomerEntity } from './infrastructure/persistence/customer.entity';
 import { PropertyEntity } from './infrastructure/persistence/property.entity';
+import { CustomerResolver } from './presentation/graphql/customer.resolver';
+import { PropertyResolver } from './presentation/graphql/property.resolver';
 
 // Imports `AuditModule` directly (mirroring `admins.module.ts:35` exactly)
 // so `AUDIT_LOGGER` is DI-visible to `CustomersService`/`PropertiesService`:
@@ -19,7 +21,12 @@ import { PropertyEntity } from './infrastructure/persistence/property.entity';
     TypeOrmModule.forFeature([CustomerEntity, PropertyEntity]),
     AuditModule,
   ],
-  providers: [CustomersService, PropertiesService],
+  providers: [
+    CustomersService,
+    PropertiesService,
+    CustomerResolver,
+    PropertyResolver,
+  ],
   exports: [CustomersService, PropertiesService],
 })
 export class CustomersModule {}
