@@ -1,13 +1,13 @@
 import * as bcrypt from 'bcrypt';
 import { DataSource } from 'typeorm';
-import { AuditEventEntity } from '../../../../platform/audit/infrastructure/persistence/audit-event.entity';
-import { Role } from '../../../../platform/auth/domain/role';
-import { AdminsService } from '../../application/services/admins.service';
-import { AdminUserEntity } from '../../infrastructure/persistence/admin-user.entity';
+import { AuditEventEntity } from '../src/platform/audit/infrastructure/persistence/audit-event.entity';
+import { Role } from '../src/platform/auth/domain/role';
+import { AdminsService } from '../src/modules/admins/application/services/admins.service';
+import { AdminUserEntity } from '../src/modules/admins/infrastructure/persistence/admin-user.entity';
 import {
   acquireAdminDbTestLock,
   AdminDbTestLock,
-} from '../support/admin-db-test-lock';
+} from './helpers/admin-db-test-lock';
 
 // Real Postgres, single connection — NOT mocked repositories. The brief's
 // forced-audit-failure assertions ("the AdminUser row does not exist
@@ -18,11 +18,15 @@ import {
 // docker-compose Postgres the rest of the suite/e2e tests use (`apps/api`'s
 // gitignored `.env`).
 //
-// Holds a Postgres advisory lock (see `../support/admin-db-test-lock.ts`)
+// Lives under `apps/api/test/` (the `pnpm test:e2e` path), not `src/`'s
+// mocked/no-infra `pnpm test` path — this file opens a real `DataSource`
+// and truncates real tables, which `pnpm test` must never do.
+//
+// Holds a Postgres advisory lock (see `./helpers/admin-db-test-lock.ts`)
 // for the whole file's run, so it can never overlap with
-// `admins.service.disable-concurrency.spec.ts` — the only other spec file
-// touching the same real `admin_user_entity` table — regardless of how Jest
-// schedules the two files across parallel workers.
+// `admins.service.disable-concurrency.e2e-spec.ts` — the only other spec
+// file touching the same real `admin_user_entity` table — regardless of how
+// Jest schedules the two files across parallel workers.
 describe('AdminsService (real Postgres)', () => {
   let dataSource: DataSource;
   let dbLock: AdminDbTestLock;

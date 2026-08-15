@@ -1,7 +1,8 @@
 import { DataSource } from 'typeorm';
 
-// `admins.service.spec.ts` and `admins.service.disable-concurrency.spec.ts`
-// are the only two spec files in the repo that hit a real Postgres
+// `admins.service.e2e-spec.ts` and
+// `admins.service.disable-concurrency.e2e-spec.ts` are the only two spec
+// files in the repo that hit a real Postgres
 // connection against `admin_user_entity` and assert on a genuinely global
 // invariant (the count of active Owner rows table-wide). Jest runs separate
 // spec *files* as separate parallel worker processes by default; if both

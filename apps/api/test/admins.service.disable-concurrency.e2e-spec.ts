@@ -1,14 +1,14 @@
 import * as bcrypt from 'bcrypt';
 import { DataSource } from 'typeorm';
-import { AuditLogger } from '../../../../platform/audit/application/audit-logger.port';
-import { AuditEventEntity } from '../../../../platform/audit/infrastructure/persistence/audit-event.entity';
-import { Role } from '../../../../platform/auth/domain/role';
-import { AdminsService } from '../../application/services/admins.service';
-import { AdminUserEntity } from '../../infrastructure/persistence/admin-user.entity';
+import { AuditLogger } from '../src/platform/audit/application/audit-logger.port';
+import { AuditEventEntity } from '../src/platform/audit/infrastructure/persistence/audit-event.entity';
+import { Role } from '../src/platform/auth/domain/role';
+import { AdminsService } from '../src/modules/admins/application/services/admins.service';
+import { AdminUserEntity } from '../src/modules/admins/infrastructure/persistence/admin-user.entity';
 import {
   acquireAdminDbTestLock,
   AdminDbTestLock,
-} from '../support/admin-db-test-lock';
+} from './helpers/admin-db-test-lock';
 
 // Separate file, on purpose: this test proves actual Postgres row-locking
 // behavior, which no mock can do. It opens TWO independent `DataSource`
@@ -18,8 +18,12 @@ import {
 // sessions — exactly the race the brief's last-active-Owner lock exists to
 // serialize (spec §4.4).
 //
-// Also holds the same Postgres advisory lock as `admins.service.spec.ts`
-// (see `../support/admin-db-test-lock.ts`) for the whole file's run, so the
+// Lives under `apps/api/test/` (the `pnpm test:e2e` path), not `src/`'s
+// mocked/no-infra `pnpm test` path — this file opens two real `DataSource`s
+// and truncates real tables, which `pnpm test` must never do.
+//
+// Also holds the same Postgres advisory lock as `admins.service.e2e-spec.ts`
+// (see `./helpers/admin-db-test-lock.ts`) for the whole file's run, so the
 // two real-DB spec files can never overlap regardless of Jest's worker
 // scheduling — without serializing the rest of the suite.
 describe('AdminsService.disable — last-active-Owner race (real Postgres, two connections)', () => {
