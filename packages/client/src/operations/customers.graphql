@@ -1,0 +1,40 @@
+query Customers {
+  customers {
+    id
+    fullName
+    email
+    phone
+  }
+}
+
+query Customer($id: ID!) {
+  customer(id: $id) {
+    id
+    fullName
+    email
+    phone
+    notes
+    properties {
+      id
+      label
+      addressLine1
+      addressLine2
+      city
+      region
+      postalCode
+      accessNotes
+    }
+  }
+}
+
+mutation CreateCustomer($input: CreateCustomerInput!) {
+  createCustomer(input: $input) {
+    id
+  }
+}
+
+mutation UpdateCustomer($id: ID!, $input: UpdateCustomerInput!) {
+  updateCustomer(id: $id, input: $input) {
+    id
+  }
+}

@@ -1,0 +1,11 @@
+mutation CreateProperty($customerId: ID!, $input: CreatePropertyInput!) {
+  createProperty(customerId: $customerId, input: $input) {
+    id
+  }
+}
+
+mutation UpdateProperty($id: ID!, $input: UpdatePropertyInput!) {
+  updateProperty(id: $id, input: $input) {
+    id
+  }
+}
