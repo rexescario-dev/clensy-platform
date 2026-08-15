@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@graphql-codegen/typescript-react-apollo@4.4.2':
+    hash: bfb272ce259be0fd4031794b112e1e49bb32ce76209a67173c3be66c5dd07b73
+    path: patches/@graphql-codegen__typescript-react-apollo@4.4.2.patch
+
 importers:
 
   .:
@@ -201,6 +206,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@apollo/client':
+        specifier: ^3.14.1
+        version: 3.14.1(@types/react@19.2.18)(graphql-ws@6.2.1(graphql@17.0.2)(ws@8.21.3))(graphql@17.0.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(subscriptions-transport-ws@0.11.0(graphql@17.0.2))
       '@clensy/client':
         specifier: workspace:*
         version: link:../../packages/client
@@ -278,7 +286,7 @@ importers:
         version: 6.1.6(graphql@17.0.2)
       '@graphql-codegen/typescript-react-apollo':
         specifier: ^4.4.2
-        version: 4.4.2(graphql@17.0.2)
+        version: 4.4.2(patch_hash=bfb272ce259be0fd4031794b112e1e49bb32ce76209a67173c3be66c5dd07b73)(graphql@17.0.2)
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
@@ -6956,7 +6964,7 @@ snapshots:
       graphql: 17.0.2
       tslib: 2.8.1
 
-  '@graphql-codegen/typescript-react-apollo@4.4.2(graphql@17.0.2)':
+  '@graphql-codegen/typescript-react-apollo@4.4.2(patch_hash=bfb272ce259be0fd4031794b112e1e49bb32ce76209a67173c3be66c5dd07b73)(graphql@17.0.2)':
     dependencies:
       '@graphql-codegen/plugin-helpers': 6.3.0(graphql@17.0.2)
       '@graphql-codegen/visitor-plugin-common': 6.3.0(graphql@17.0.2)

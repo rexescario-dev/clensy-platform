@@ -1,0 +1,8 @@
+mutation DisableAdmin($id: ID!) {
+  disableAdmin(id: $id) {
+    id
+    email
+    role
+    isActive
+  }
+}

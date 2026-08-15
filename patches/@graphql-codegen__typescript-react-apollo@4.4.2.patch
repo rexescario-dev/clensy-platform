@@ -1,0 +1,26 @@
+diff --git a/cjs/visitor.js b/cjs/visitor.js
+index e67d3a276301db8359b19136e8eded6c1ce92633..36a4c1ca6ef9dae13db205bc4e32ee73ad2858d4 100644
+--- a/cjs/visitor.js
++++ b/cjs/visitor.js
+@@ -190,7 +190,7 @@ class ReactApolloVisitor extends visitor_plugin_common_1.ClientSideBaseVisitor {
+         return [componentProps, component].join('\n');
+     }
+     _buildHooksJSDoc(node, operationName, operationType) {
+-        const variableString = node.variableDefinitions.reduce((acc, item) => {
++        const variableString = (node.variableDefinitions || []).reduce((acc, item) => {
+             const name = item.variable.name.value;
+             return `${acc}\n *      ${name}: // value for '${name}'`;
+         }, '');
+diff --git a/esm/visitor.js b/esm/visitor.js
+index 3c6d422760f567a6666659e1de88c787255c773d..3212433ca4f22bdc4637751f62b233aac51ddbe6 100644
+--- a/esm/visitor.js
++++ b/esm/visitor.js
+@@ -186,7 +186,7 @@ export class ReactApolloVisitor extends ClientSideBaseVisitor {
+         return [componentProps, component].join('\n');
+     }
+     _buildHooksJSDoc(node, operationName, operationType) {
+-        const variableString = node.variableDefinitions.reduce((acc, item) => {
++        const variableString = (node.variableDefinitions || []).reduce((acc, item) => {
+             const name = item.variable.name.value;
+             return `${acc}\n *      ${name}: // value for '${name}'`;
+         }, '');

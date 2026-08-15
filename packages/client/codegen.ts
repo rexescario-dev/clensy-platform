@@ -9,7 +9,13 @@ const config: CodegenConfig = {
   documents: ['src/**/*.graphql'],
   generates: {
     'src/generated/graphql.ts': {
-      plugins: ['typescript', 'typescript-operations', 'typescript-react-apollo'],
+      // No base `typescript` plugin: `typescript-operations` already emits
+      // self-contained declarations (Scalars/Enum/Input types) for
+      // whatever the operation documents actually use — adding `typescript`
+      // on top would redeclare those same identifiers (e.g. `Role`,
+      // `CreateAdminInput`) a second time in this single output file,
+      // producing TS2300 duplicate-identifier errors.
+      plugins: ['typescript-operations', 'typescript-react-apollo'],
       config: {
         withHooks: true,
       },

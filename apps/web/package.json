@@ -10,6 +10,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@apollo/client": "^3.14.1",
     "@clensy/client": "workspace:*",
     "@clensy/ui": "workspace:*",
     "next": "^16.3.1",
