@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { BookingEntity } from '../../modules/bookings/infrastructure/persistence/booking.entity';
 import { AdminUserEntity } from '../../modules/admins/infrastructure/persistence/admin-user.entity';
 import { CustomerEntity } from '../../modules/customers/infrastructure/persistence/customer.entity';
+import { PropertyEntity } from '../../modules/customers/infrastructure/persistence/property.entity';
 import { AuditEventEntity } from '../audit/infrastructure/persistence/audit-event.entity';
 
 // Plain DataSource for the TypeORM CLI (migration:generate/run/revert) — kept
@@ -15,6 +16,12 @@ export default new DataSource({
   username: process.env.DB_USERNAME ?? 'clensy',
   password: process.env.DB_PASSWORD ?? 'clensy_dev',
   database: process.env.DB_NAME ?? 'clensy',
-  entities: [BookingEntity, AuditEventEntity, AdminUserEntity, CustomerEntity],
+  entities: [
+    BookingEntity,
+    AuditEventEntity,
+    AdminUserEntity,
+    CustomerEntity,
+    PropertyEntity,
+  ],
   migrations: [__dirname + '/migrations/*.ts'],
 });
