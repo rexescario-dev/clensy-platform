@@ -4,6 +4,10 @@ node_modules/
 build/
 .turbo/
 
+# Next.js build output and its auto-generated (do-not-edit) type-reference file
+.next/
+next-env.d.ts
+
 # generated GraphiQL bundle (esbuild — see scripts/build-graphiql.ts)
 public/
 

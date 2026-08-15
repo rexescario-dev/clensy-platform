@@ -1,3 +1,11 @@
-// Not yet implemented. Intended to hold generic UI primitives (Button, Card, Modal, ...)
-// plus Clensy-specific composed components (BookingCard, ...), consumed by apps/web.
-export {};
+export { Button } from './button';
+export type { ButtonProps, ButtonVariant } from './button';
+
+export { FormField } from './form-field';
+export type { FormFieldProps } from './form-field';
+
+export { DataTable } from './data-table';
+export type { DataTableColumn, DataTableProps } from './data-table';
+
+export { StatusBadge } from './status-badge';
+export type { StatusBadgeProps, StatusTone } from './status-badge';
