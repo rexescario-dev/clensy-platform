@@ -162,6 +162,22 @@ describe('Admin Foundation (e2e)', () => {
     // here on (including step 5's rejection) depends on that being true.
     const ownerSessionCookie = extractSessionCookie(ownerLoginResponse);
 
+    // The cookie's *attributes* (spec §4.8), asserted against the raw
+    // `Set-Cookie` header — `extractSessionCookie` above deliberately
+    // discards everything but the `name=value` pair (that's all a `Cookie`
+    // request header may carry), so without this, dropping e.g.
+    // `httpOnly: true` in `AdminResolver.setSessionCookie` would leave the
+    // whole suite green.
+    const ownerSetCookieHeader = (
+      ownerLoginResponse.headers['set-cookie'] as unknown as string[]
+    )[0];
+    expect(ownerSetCookieHeader).toContain('HttpOnly');
+    expect(ownerSetCookieHeader).toContain('Secure');
+    expect(ownerSetCookieHeader).toContain('SameSite=Lax');
+    expect(ownerSetCookieHeader).toContain('Path=/');
+    // 28800s = 8h, matching the default `JWT_EXPIRES_IN=8h`.
+    expect(ownerSetCookieHeader).toContain('Max-Age=28800');
+
     const schedulerEmail = `scheduler-${owner.id}@example.com`;
     const schedulerPassword = 'scheduler-pw-12345';
     const createAdminResponse = await authedRequest(ownerSessionCookie).send({
