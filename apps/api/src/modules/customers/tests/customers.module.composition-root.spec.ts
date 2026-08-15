@@ -6,7 +6,9 @@ import { AUDIT_LOGGER } from '../../../platform/audit/application/audit-logger.p
 import { AuditEventEntity } from '../../../platform/audit/infrastructure/persistence/audit-event.entity';
 import { CustomersModule } from '../customers.module';
 import { CustomersService } from '../application/services/customers.service';
+import { PropertiesService } from '../application/services/properties.service';
 import { CustomerEntity } from '../infrastructure/persistence/customer.entity';
+import { PropertyEntity } from '../infrastructure/persistence/property.entity';
 
 // Proves `AUDIT_LOGGER` actually resolves through real NestJS DI when only
 // `CustomersModule` (not `AppModule`) is imported — not just that
@@ -40,6 +42,8 @@ describe('CustomersModule — composition-root wiring (real AuditModule)', () =>
     })
       .overrideProvider(getRepositoryToken(CustomerEntity))
       .useValue({ find: jest.fn(), findOneBy: jest.fn() })
+      .overrideProvider(getRepositoryToken(PropertyEntity))
+      .useValue({ findOneBy: jest.fn(), findBy: jest.fn() })
       .overrideProvider(getRepositoryToken(AuditEventEntity))
       .useValue({ create: jest.fn(), save: jest.fn() })
       .compile();
@@ -47,6 +51,14 @@ describe('CustomersModule — composition-root wiring (real AuditModule)', () =>
 
   it('resolves CustomersService (its AUDIT_LOGGER dependency resolves without error)', () => {
     expect(moduleRef.get(CustomersService)).toBeInstanceOf(CustomersService);
+  });
+
+  // `PropertiesService` depends on `AUDIT_LOGGER` too, plus two
+  // repositories (`PropertyEntity` and `CustomerEntity` — the latter for
+  // `listCustomerProperties`'s existence check). Proves it resolves now
+  // that it's part of `CustomersModule`'s `providers`.
+  it('resolves PropertiesService (its AUDIT_LOGGER and repository dependencies resolve without error)', () => {
+    expect(moduleRef.get(PropertiesService)).toBeInstanceOf(PropertiesService);
   });
 
   it('resolves AUDIT_LOGGER from the imported AuditModule', () => {
