@@ -1,7 +1,10 @@
+import { NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { AuditEventEntity } from '../src/platform/audit/infrastructure/persistence/audit-event.entity';
 import { CustomersService } from '../src/modules/customers/application/services/customers.service';
+import { PropertiesService } from '../src/modules/customers/application/services/properties.service';
 import { CustomerEntity } from '../src/modules/customers/infrastructure/persistence/customer.entity';
+import { PropertyEntity } from '../src/modules/customers/infrastructure/persistence/property.entity';
 import {
   acquireCustomerDbTestLock,
   CustomerDbTestLock,
@@ -25,8 +28,6 @@ import {
 // another spec file touching the same tables, regardless of how Jest
 // schedules files across parallel workers.
 //
-// Task 2 extends this file with a `Property`/`PropertiesService` describe
-// block and adds `PropertyEntity` to the shared `beforeEach` `.clear()`.
 describe('CustomersService (real Postgres)', () => {
   let dataSource: DataSource;
   let dbLock: CustomerDbTestLock;
@@ -41,7 +42,7 @@ describe('CustomersService (real Postgres)', () => {
       username: process.env.DB_USERNAME ?? 'clensy',
       password: process.env.DB_PASSWORD ?? 'clensy_dev',
       database: process.env.DB_NAME ?? 'clensy',
-      entities: [CustomerEntity, AuditEventEntity],
+      entities: [CustomerEntity, PropertyEntity, AuditEventEntity],
     });
     await dataSource.initialize();
     dbLock = await acquireCustomerDbTestLock(dataSource);
@@ -54,7 +55,17 @@ describe('CustomersService (real Postgres)', () => {
 
   beforeEach(async () => {
     await dataSource.getRepository(AuditEventEntity).clear();
-    await dataSource.getRepository(CustomerEntity).clear();
+    // `property_entity` now carries a real FK to `customer_entity`
+    // (this task's `AddProperty` migration), so a plain single-table
+    // `TRUNCATE customer_entity` (what `Repository.clear()` issues) always
+    // fails with "cannot truncate a table referenced in a foreign key
+    // constraint" — regardless of table emptiness or clear-call order.
+    // Postgres requires either both tables in the same TRUNCATE statement
+    // or CASCADE; a raw multi-table TRUNCATE is used here instead of two
+    // `.clear()` calls.
+    await dataSource.query(
+      'TRUNCATE TABLE "property_entity", "customer_entity"',
+    );
     auditLogger = { log: jest.fn().mockResolvedValue(undefined) };
     service = new CustomersService(
       dataSource,
@@ -172,6 +183,248 @@ describe('CustomersService (real Postgres)', () => {
         .getRepository(CustomerEntity)
         .findOneBy({ id: existing.id });
       expect(row?.phone).toBe('555-0100');
+    });
+  });
+});
+
+describe('PropertiesService (real Postgres)', () => {
+  let dataSource: DataSource;
+  let dbLock: CustomerDbTestLock;
+  let auditLogger: { log: jest.Mock };
+  let service: PropertiesService;
+
+  beforeAll(async () => {
+    dataSource = new DataSource({
+      type: 'postgres',
+      host: process.env.DB_HOST ?? 'localhost',
+      port: Number(process.env.DB_PORT ?? 5432),
+      username: process.env.DB_USERNAME ?? 'clensy',
+      password: process.env.DB_PASSWORD ?? 'clensy_dev',
+      database: process.env.DB_NAME ?? 'clensy',
+      entities: [CustomerEntity, PropertyEntity, AuditEventEntity],
+    });
+    await dataSource.initialize();
+    dbLock = await acquireCustomerDbTestLock(dataSource);
+  });
+
+  afterAll(async () => {
+    await dbLock.release();
+    await dataSource.destroy();
+  });
+
+  beforeEach(async () => {
+    await dataSource.getRepository(AuditEventEntity).clear();
+    // See the identical comment in the `CustomersService` describe block
+    // above — plain single-table TRUNCATE on either table fails now that
+    // `property_entity` carries a real FK to `customer_entity`.
+    await dataSource.query(
+      'TRUNCATE TABLE "property_entity", "customer_entity"',
+    );
+    auditLogger = { log: jest.fn().mockResolvedValue(undefined) };
+    service = new PropertiesService(
+      dataSource,
+      dataSource.getRepository(PropertyEntity),
+      dataSource.getRepository(CustomerEntity),
+      auditLogger,
+    );
+  });
+
+  const seedCustomer = async (overrides?: Partial<CustomerEntity>) => {
+    const repo = dataSource.getRepository(CustomerEntity);
+    return repo.save(
+      repo.create({
+        fullName: 'Jane Doe',
+        email: 'jane@example.com',
+        phone: '555-0100',
+        notes: 'Gate code 1234',
+        ...overrides,
+      }),
+    );
+  };
+
+  const seedProperty = async (
+    customerId: string,
+    overrides?: Partial<PropertyEntity>,
+  ) => {
+    const repo = dataSource.getRepository(PropertyEntity);
+    return repo.save(
+      repo.create({
+        customerId,
+        label: 'Home',
+        addressLine1: '123 Main St',
+        addressLine2: null,
+        city: 'Springfield',
+        region: 'IL',
+        postalCode: '62704',
+        accessNotes: 'Gate code 1234',
+        ...overrides,
+      }),
+    );
+  };
+
+  describe('create', () => {
+    it('persists a PropertyEntity referencing the given Customer and records property.create', async () => {
+      const customer = await seedCustomer();
+
+      const created = await service.create({
+        actorId: 'actor-1',
+        customerId: customer.id,
+        label: 'Downtown Office',
+        addressLine1: '456 Market St',
+        city: 'Springfield',
+        region: 'IL',
+        postalCode: '62701',
+      });
+
+      expect(created.addressLine2).toBeNull();
+      expect(created.accessNotes).toBeNull();
+
+      const row = await dataSource
+        .getRepository(PropertyEntity)
+        .findOneBy({ id: created.id });
+      expect(row).not.toBeNull();
+      expect(row?.customerId).toBe(customer.id);
+      expect(row?.label).toBe('Downtown Office');
+      expect(row?.addressLine1).toBe('456 Market St');
+      expect(row?.city).toBe('Springfield');
+      expect(row?.region).toBe('IL');
+      expect(row?.postalCode).toBe('62701');
+
+      expect(auditLogger.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actorId: 'actor-1',
+          action: 'property.create',
+          entityType: 'property',
+          entityId: created.id,
+        }),
+      );
+    });
+
+    it('throws NotFoundException and persists no row for a nonexistent customerId', async () => {
+      await expect(
+        service.create({
+          actorId: 'actor-1',
+          customerId: '00000000-0000-0000-0000-000000000000',
+          label: 'Home',
+          addressLine1: '123 Main St',
+          city: 'Springfield',
+          region: 'IL',
+          postalCode: '62704',
+        }),
+      ).rejects.toThrow(NotFoundException);
+
+      const rows = await dataSource.getRepository(PropertyEntity).find();
+      expect(rows).toHaveLength(0);
+    });
+
+    it('rolls back the PropertyEntity row when the audit write fails inside the transaction', async () => {
+      const customer = await seedCustomer();
+      auditLogger.log.mockRejectedValueOnce(new Error('audit down'));
+
+      await expect(
+        service.create({
+          actorId: 'actor-1',
+          customerId: customer.id,
+          label: 'Rollback Case',
+          addressLine1: '789 Rollback Ave',
+          city: 'Springfield',
+          region: 'IL',
+          postalCode: '62704',
+        }),
+      ).rejects.toThrow('audit down');
+
+      const row = await dataSource
+        .getRepository(PropertyEntity)
+        .findOneBy({ label: 'Rollback Case' });
+      expect(row).toBeNull();
+    });
+  });
+
+  describe('update', () => {
+    it('updates only the provided field, leaving the others unchanged in the re-read row', async () => {
+      const customer = await seedCustomer();
+      const existing = await seedProperty(customer.id);
+
+      await service.update(existing.id, {
+        actorId: 'actor-1',
+        label: 'Updated Label',
+      });
+
+      const row = await dataSource
+        .getRepository(PropertyEntity)
+        .findOneBy({ id: existing.id });
+      expect(row?.label).toBe('Updated Label');
+      expect(row?.addressLine1).toBe('123 Main St');
+      expect(row?.city).toBe('Springfield');
+      expect(row?.region).toBe('IL');
+      expect(row?.postalCode).toBe('62704');
+      expect(row?.accessNotes).toBe('Gate code 1234');
+    });
+
+    it('explicitly clears accessNotes to null when the command sets accessNotes: null', async () => {
+      const customer = await seedCustomer();
+      const existing = await seedProperty(customer.id, {
+        accessNotes: 'Some existing note',
+      });
+
+      await service.update(existing.id, {
+        actorId: 'actor-1',
+        accessNotes: null,
+      });
+
+      const row = await dataSource
+        .getRepository(PropertyEntity)
+        .findOneBy({ id: existing.id });
+      expect(row?.accessNotes).toBeNull();
+    });
+
+    it('rolls back the update when the audit write fails inside the transaction', async () => {
+      const customer = await seedCustomer();
+      const existing = await seedProperty(customer.id);
+      auditLogger.log.mockRejectedValueOnce(new Error('audit down'));
+
+      await expect(
+        service.update(existing.id, {
+          actorId: 'actor-1',
+          label: 'Should Not Persist',
+        }),
+      ).rejects.toThrow('audit down');
+
+      const row = await dataSource
+        .getRepository(PropertyEntity)
+        .findOneBy({ id: existing.id });
+      expect(row?.label).toBe('Home');
+    });
+  });
+
+  describe('listCustomerProperties', () => {
+    it('returns both properties for a customer with two persisted properties', async () => {
+      const customer = await seedCustomer();
+      const first = await seedProperty(customer.id, { label: 'Home' });
+      const second = await seedProperty(customer.id, {
+        label: 'Downtown Office',
+      });
+
+      const result = await service.listCustomerProperties(customer.id);
+
+      expect(result).toHaveLength(2);
+      expect(result.map((p) => p.id).sort()).toEqual(
+        [first.id, second.id].sort(),
+      );
+    });
+
+    it('returns an empty array for a customer with zero persisted properties', async () => {
+      const customer = await seedCustomer();
+
+      await expect(
+        service.listCustomerProperties(customer.id),
+      ).resolves.toEqual([]);
+    });
+
+    it('throws NotFoundException for a nonexistent customerId', async () => {
+      await expect(
+        service.listCustomerProperties('00000000-0000-0000-0000-000000000000'),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });
