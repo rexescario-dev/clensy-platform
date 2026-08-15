@@ -74,6 +74,30 @@ describe('CustomersService', () => {
       expect(manager.save).not.toHaveBeenCalled();
       expect(auditLogger.log).not.toHaveBeenCalled();
     });
+
+    // Regression test: `command.actorId` is required by `UpdateCustomerCommand`
+    // (needed for the audit call) but is not a `Customer` field. An earlier
+    // version of `update()` did `Object.assign(entity, command)` with the
+    // full command object, which leaked a stray `actorId` property onto the
+    // returned entity.
+    it('does not leak actorId from the command onto the returned entity', async () => {
+      manager.findOneBy.mockResolvedValue({
+        id: 'customer-1',
+        fullName: 'Jane Doe',
+        email: 'jane@example.com',
+        phone: '555-0100',
+        notes: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const result = await service.update('customer-1', {
+        actorId: 'actor-1',
+        phone: '555-9999',
+      });
+
+      expect(result).not.toHaveProperty('actorId');
+    });
   });
 
   describe('assertValid via create', () => {

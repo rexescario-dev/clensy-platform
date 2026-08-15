@@ -66,8 +66,14 @@ export class CustomersService {
         // Safe because `command` is constructed by the resolver via spread
         // (spec §4.2) — it only carries keys the caller actually provided,
         // so an omitted field retains its current value and a provided
-        // field (including `notes: null`) is applied.
-        Object.assign(entity, command);
+        // field (including `notes: null`) is applied. `actorId` is
+        // destructured out first — it's part of the command (needed for
+        // the audit call below) but not a `Customer` field, and merging it
+        // in would leak a stray `actorId` property onto the returned
+        // entity.
+        const { actorId, ...fields } = command;
+        void actorId; // consumed via `command.actorId` in the audit call below
+        Object.assign(entity, fields);
 
         this.assertValid(entity);
         await manager.save(entity);
