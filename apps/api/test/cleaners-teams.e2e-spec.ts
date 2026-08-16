@@ -469,10 +469,10 @@ describe('Cleaners & Teams (e2e)', () => {
     // These spies are intentionally left active (not restored) for the rest
     // of the suite — no later step calls `getTeamsByIds`/
     // `listCleanersByTeamIds` in a way the spies would affect, since step 6
-    // exercises `cleaner(id) { team }`, which resolves through
-    // `teamLoader`/`getTeamsByIds` too, but each request gets its own fresh
-    // loader/spy-call regardless of the wrapping — the spy only counts calls,
-    // it does not share state across requests. ---
+    // exercises `TEAMS_QUERY`, which resolves through
+    // `teamCleanersLoader`/`listCleanersByTeamIds` too, but each request
+    // gets its own fresh loader/spy-call regardless of the wrapping — the
+    // spy only counts calls, it does not share state across requests. ---
     const getTeamsByIdsSpy = jest.spyOn(teamsService, 'getTeamsByIds');
     const listCleanersByTeamIdsSpy = jest.spyOn(
       cleanersService,
@@ -511,34 +511,60 @@ describe('Cleaners & Teams (e2e)', () => {
     expect(expectedTeamIdsForTeamsQuery).toContain(teamCId);
 
     // --- Step 6: Request-isolation proof. Two genuinely separate Supertest
-    // requests (two HTTP round-trips), not two field selections within one
-    // query document. First query while on Team A, reassign to Team B in
-    // between, then query again — the second request must reflect Team B,
-    // proving the request-scoped `CleanerTeamLoaders` is constructed fresh
-    // per request rather than reused/cached across requests. ---
-    const isolationCleanerId = teamACleaner1Id;
-
+    // requests (two HTTP round-trips) issue the SAME `TEAMS_QUERY`, and both
+    // requests resolve `teamCleanersLoader` against the SAME cache keys
+    // (`teamAId`, `teamBId`) — reusing the fixture teams/cleaners already
+    // created in step 4. This is deliberate: a `DataLoader`'s cache is keyed
+    // per-value, so querying a brand-new key is always a cache miss and
+    // always hits the database, regardless of whether the loader instance
+    // is request-scoped or a stale singleton — that would prove nothing.
+    // Only re-querying the SAME key across two requests can distinguish the
+    // two, which is why `teamACleaner1Id` is reassigned from Team A to Team
+    // B in between: if the request-scoped `CleanerTeamLoaders` is
+    // constructed fresh per request, the second request's loader has never
+    // seen `teamAId`/`teamBId` before and must reflect the reassignment. If
+    // `CleanerTeamLoaders` were accidentally changed to a default-scoped
+    // (singleton) provider, its `teamCleanersLoader` would still have
+    // `teamAId`/`teamBId` cached from the first request in this same test
+    // run and would return the stale, pre-reassignment membership instead —
+    // that's the regression this test needs to catch. ---
     const beforeReassignResponse = await authedRequest(ownerSessionCookie).send(
-      {
-        query: CLEANER_QUERY,
-        variables: { id: isolationCleanerId },
-      },
+      { query: TEAMS_QUERY },
     );
     expect(beforeReassignResponse.body.errors).toBeUndefined();
-    expect(beforeReassignResponse.body.data.cleaner.team).toMatchObject({
-      id: teamAId,
-    });
+    const teamsBeforeReassign: Array<{
+      id: string;
+      cleaners: Array<{ id: string }>;
+    }> = beforeReassignResponse.body.data.teams;
+    const teamsBeforeReassignById = new Map(
+      teamsBeforeReassign.map((row) => [row.id, row]),
+    );
+    expect(
+      new Set(teamsBeforeReassignById.get(teamAId)?.cleaners.map((c) => c.id)),
+    ).toEqual(new Set([teamACleaner1Id, teamACleaner2Id]));
+    expect(
+      new Set(teamsBeforeReassignById.get(teamBId)?.cleaners.map((c) => c.id)),
+    ).toEqual(new Set([teamBCleaner1Id]));
 
-    await assignFixture(isolationCleanerId, teamBId);
+    await assignFixture(teamACleaner1Id, teamBId);
 
     const afterReassignResponse = await authedRequest(ownerSessionCookie).send({
-      query: CLEANER_QUERY,
-      variables: { id: isolationCleanerId },
+      query: TEAMS_QUERY,
     });
     expect(afterReassignResponse.body.errors).toBeUndefined();
-    expect(afterReassignResponse.body.data.cleaner.team).toMatchObject({
-      id: teamBId,
-    });
+    const teamsAfterReassign: Array<{
+      id: string;
+      cleaners: Array<{ id: string }>;
+    }> = afterReassignResponse.body.data.teams;
+    const teamsAfterReassignById = new Map(
+      teamsAfterReassign.map((row) => [row.id, row]),
+    );
+    expect(
+      new Set(teamsAfterReassignById.get(teamAId)?.cleaners.map((c) => c.id)),
+    ).toEqual(new Set([teamACleaner2Id]));
+    expect(
+      new Set(teamsAfterReassignById.get(teamBId)?.cleaners.map((c) => c.id)),
+    ).toEqual(new Set([teamBCleaner1Id, teamACleaner1Id]));
 
     // --- Step 7: Owner creates a Scheduler, Customer Support, Finance, and
     // Analyst admin within this suite — no dependency on the Customers &
