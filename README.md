@@ -6,13 +6,13 @@ pnpm workspace + Turborepo monorepo:
 
 ```text
 apps/
-├── api/      NestJS + TypeORM + GraphQL (code-first, Apollo) + REST — the only app with real code so far
-├── web/      not yet implemented
+├── api/      NestJS + TypeORM + GraphQL (code-first, Apollo) + REST
+├── web/      Next.js (App Router) web console — /login, /admin, /customers
 └── worker/   not yet implemented
 
 packages/
-├── ui/       not yet implemented
-├── client/   not yet implemented
+├── ui/       shared React components: Button, DataTable, FormField, StatusBadge
+├── client/   Apollo Client + graphql-codegen-generated hooks against apps/api's schema
 ├── graphql/  not yet implemented
 ├── auth/     not yet implemented
 ├── domain/   not yet implemented
@@ -20,9 +20,11 @@ packages/
 └── testing/  not yet implemented
 ```
 
+`packages/graphql`, `auth`, `domain`, `config`, `testing` stay empty stubs deliberately — the [Phase 1 design](docs/superpowers/specs/2026-08-14-clensy-platform-phase1-design.md) defers each extraction until a second consumer actually needs the shared code, rather than speculatively factoring it out now.
+
 ## `apps/api/src` structure
 
-Each business module is layered domain → application → infrastructure → presentation, so REST and GraphQL are thin adapters over the same business logic rather than separate implementations:
+Each business module is layered domain → application → infrastructure → presentation, so REST and GraphQL are thin adapters over the same business logic rather than separate implementations. `bookings` below is the worked example (it's also the only module with a REST surface, kept for the REST/GraphQL comparison this repo exists to run); `modules/admins` and `modules/customers` follow the identical domain/application/infrastructure/presentation layering but are GraphQL-only, per the [Phase 1 design](docs/superpowers/specs/2026-08-14-clensy-platform-phase1-design.md)'s "Presentation: GraphQL only" default for every module after `bookings`. `platform/auth` (JWT session auth, `AuthGuard`, `@Roles()`/`@CurrentUser()`) and `platform/audit` (`AuditEvent`, `AuditLogger`) are shared platform infrastructure, not business modules — every mutation across `admins`/`customers` is authenticated, role-gated, and audit-logged through them (see the [Admin Foundation](docs/superpowers/specs/2026-08-14-admin-foundation-design.md) and [Customers & Properties](docs/superpowers/specs/2026-08-15-customers-properties-design.md) specs):
 
 ```text
 src/
@@ -86,7 +88,7 @@ cp .env.example .env   # first time only
 docker compose up -d --build
 ```
 
-That's it — `docker compose up` builds and runs `apps/api` itself (not just Postgres), connecting to the `postgres` service over the container network. A `migrate` service runs the pending migrations once before `api` starts (`depends_on: condition: service_completed_successfully`); the table is then empty but schema-correct — see "Seeding fake data" below.
+That's it — `docker compose up` builds and runs `apps/api` itself (not just Postgres), connecting to the `postgres` service over the container network. A `migrate` service runs the pending migrations once before `api` starts (`depends_on: condition: service_completed_successfully`); the table is then empty but schema-correct — see "Seeding fake data" below. `apps/web` has no `docker-compose.yml` service yet — this path gives you the API only; use the hot-reload path below to also run the web console.
 
 For local iteration with hot-reload instead (edits reflected immediately, no rebuild):
 
@@ -94,7 +96,7 @@ For local iteration with hot-reload instead (edits reflected immediately, no reb
 pnpm install
 docker compose up -d postgres   # Postgres only
 pnpm --filter api migration:run # apply migrations — first time only, or after a new one is added
-pnpm dev                         # apps/api in watch mode, against that Postgres
+pnpm dev                         # apps/api AND apps/web in watch mode, in parallel (Turborepo)
 ```
 
 ## Database migrations
@@ -109,7 +111,7 @@ pnpm --filter api migration:revert    # roll back the last one
 
 `migration:generate` takes a plain phrase (or an already-PascalCase name, or anything in between — `scripts/generate-migration.ts` normalizes it) and writes it into `src/platform/database/migrations/` as `<timestamp>-AddCustomerPhoneNumber.ts`.
 
-`generate` diffs the TypeORM entities (currently just `BookingEntity`) against the actual database, so run it against an environment that already has the *previous* migration applied (not a synchronized or ad-hoc schema) — otherwise the diff will be wrong. `apps/api/src/platform/database/data-source.ts` is the plain `DataSource` these commands use (the CLI can't consume `database.module.ts`'s Nest-wrapped, `ConfigService`-driven config directly). It needs its own `tsconfig.cli.json` (forces `commonjs`/`node` module resolution) — TypeORM's CLI loads the datasource via Node's native ESM resolver, which the rest of the project's `nodenext` config doesn't satisfy for a plain `ts-node` script.
+`generate` diffs the TypeORM entities registered in `data-source.ts` (`BookingEntity`, `AdminUserEntity`, `AuditEventEntity`, `CustomerEntity`, `PropertyEntity`) against the actual database, so run it against an environment that already has the *previous* migration applied (not a synchronized or ad-hoc schema) — otherwise the diff will be wrong. One exception: `PropertyEntity.customerId` carries no TypeORM relation decorator by design (see the [Customers & Properties spec](docs/superpowers/specs/2026-08-15-customers-properties-design.md) §4.5), so its foreign key is hand-written directly into `1786807294116-AddProperty.ts`'s SQL rather than inferred by `generate` — re-running `generate` after touching that entity will propose dropping the constraint; don't apply that. `apps/api/src/platform/database/data-source.ts` is the plain `DataSource` these commands use (the CLI can't consume `database.module.ts`'s Nest-wrapped, `ConfigService`-driven config directly). It needs its own `tsconfig.cli.json` (forces `commonjs`/`node` module resolution) — TypeORM's CLI loads the datasource via Node's native ESM resolver, which the rest of the project's `nodenext` config doesn't satisfy for a plain `ts-node` script.
 
 ## Seeding fake data
 
@@ -123,13 +125,16 @@ Inserts (or re-applies, if already present) 3 fake bookings with fixed, determin
 
 Seed data lives at `apps/api/src/modules/bookings/infrastructure/persistence/seed/booking.seed-data.ts` (plain TypeScript, no TypeORM); `booking.seeder.ts` is what actually persists it. `apps/api/src/platform/database/seed.ts` is the runnable entrypoint — it boots a Nest application context (no HTTP server) and calls each module's seeder.
 
+The same run also seeds a dev Owner `AdminUser` (needed to log into the web console at all) when `ADMIN_SEED_EMAIL`/`ADMIN_SEED_PASSWORD` are set in `apps/api/.env` — it's a no-op, not an error, when either is unset, so `pnpm db:seed` stays safe to run without opting into it. `modules/customers` has no seeder; create data through the web console or the `createCustomer`/`createProperty` GraphQL mutations once logged in.
+
 ## Endpoints
 
 | | URL | Notes |
 | --- | --- | --- |
-| GraphQL API | http://localhost:3000/graphql | queries/mutations for `bookings` — API only, no browser landing page |
+| Web console | http://localhost:3001 | Next.js — `/login`, `/admin` (staff/roles, Owner-only), `/customers` |
+| GraphQL API | http://localhost:3000/graphql | queries/mutations for `bookings`, `admins`, `customers`/`properties` — API only, no browser landing page |
 | GraphQL IDE (GraphiQL) | http://localhost:3000/graphiql | separate route, dev-only (see below) |
-| REST API | http://localhost:3000/bookings | full CRUD |
+| REST API | http://localhost:3000/bookings | full CRUD — `bookings` only; `admins`/`customers` are GraphQL-only |
 | REST docs (Swagger UI) | http://localhost:3000/docs | interactive explorer, equivalent to GraphiQL |
 | OpenAPI spec | http://localhost:3000/docs-json | raw JSON |
 
@@ -161,7 +166,7 @@ public/graphiql/
 ## Scripts (run from the repo root, via Turborepo)
 
 ```bash
-pnpm dev      # apps/api in watch mode
+pnpm dev      # apps/api + apps/web in watch mode (Turborepo)
 pnpm build    # build all workspace packages that have a build script
 pnpm test     # run all workspace test suites
 pnpm lint     # lint all workspace packages that have a lint script
