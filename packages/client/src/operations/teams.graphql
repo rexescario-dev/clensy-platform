@@ -1,0 +1,28 @@
+query Teams {
+  teams {
+    id
+    name
+    cleaners {
+      id
+    }
+  }
+}
+
+query Team($id: ID!) {
+  team(id: $id) {
+    id
+    name
+    cleaners {
+      id
+      fullName
+      phone
+      email
+    }
+  }
+}
+
+mutation CreateTeam($input: CreateTeamInput!) {
+  createTeam(input: $input) {
+    id
+  }
+}

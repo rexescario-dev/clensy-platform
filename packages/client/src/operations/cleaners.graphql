@@ -1,0 +1,44 @@
+query Cleaners {
+  cleaners {
+    id
+    fullName
+    phone
+    email
+    team {
+      id
+      name
+    }
+  }
+}
+
+query Cleaner($id: ID!) {
+  cleaner(id: $id) {
+    id
+    fullName
+    phone
+    email
+    notes
+    team {
+      id
+      name
+    }
+  }
+}
+
+mutation CreateCleaner($input: CreateCleanerInput!) {
+  createCleaner(input: $input) {
+    id
+  }
+}
+
+mutation UpdateCleaner($id: ID!, $input: UpdateCleanerInput!) {
+  updateCleaner(id: $id, input: $input) {
+    id
+  }
+}
+
+mutation AssignCleanerToTeam($cleanerId: ID!, $teamId: ID!) {
+  assignCleanerToTeam(cleanerId: $cleanerId, teamId: $teamId) {
+    id
+  }
+}
