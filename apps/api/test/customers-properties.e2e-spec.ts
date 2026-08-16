@@ -166,6 +166,22 @@ describe('Customers & Properties (e2e)', () => {
     }
   `;
 
+  const PROPERTY_QUERY = `
+    query Property($id: ID!) {
+      property(id: $id) {
+        id
+        customerId
+        label
+        addressLine1
+        addressLine2
+        city
+        region
+        postalCode
+        accessNotes
+      }
+    }
+  `;
+
   const CUSTOMER_PROPERTIES_QUERY = `
     query CustomerProperties($customerId: ID!) {
       customerProperties(customerId: $customerId) {
@@ -306,6 +322,23 @@ describe('Customers & Properties (e2e)', () => {
     });
     expect(propertyCreateAuditEvent).not.toBeNull();
     expect(propertyCreateAuditEvent?.actorId).toBe(owner.id);
+
+    const propertyByIdResponse = await authedRequest(ownerSessionCookie).send({
+      query: PROPERTY_QUERY,
+      variables: { id: propertyId },
+    });
+    expect(propertyByIdResponse.body.errors).toBeUndefined();
+    expect(propertyByIdResponse.body.data.property).toMatchObject({
+      id: propertyId,
+      customerId,
+      label: 'Home',
+      addressLine1: '123 Main St',
+      addressLine2: 'Unit 4',
+      city: 'Springfield',
+      region: 'IL',
+      postalCode: '62704',
+      accessNotes: 'Gate code 1234',
+    });
 
     const customerAfterCreateResponse = await authedRequest(
       ownerSessionCookie,
@@ -569,6 +602,41 @@ describe('Customers & Properties (e2e)', () => {
     expect(
       financeCreateCustomerResponse.body.errors?.[0]?.extensions?.code,
     ).toBe('FORBIDDEN');
+
+    // --- Step 7b: Customer Support logs in; createCustomer succeeds — the
+    // write-allow side of the matrix for a non-Owner write-permitted role,
+    // proven end-to-end (previously only covered by Task 3's decorator-
+    // metadata reflection tests). ---
+    const customerSupportLoginResponse = await login(
+      customerSupportEmail,
+      customerSupportPassword,
+    );
+    expect(customerSupportLoginResponse.body.errors).toBeUndefined();
+    expect(customerSupportLoginResponse.body.data.login.success).toBe(true);
+    const customerSupportSessionCookie = extractSessionCookie(
+      customerSupportLoginResponse,
+    );
+
+    const customerSupportCreateCustomerResponse = await authedRequest(
+      customerSupportSessionCookie,
+    ).send({
+      query: CREATE_CUSTOMER_MUTATION,
+      variables: {
+        input: {
+          fullName: 'Created By Customer Support',
+          email: `created-by-customer-support-${runId}@example.com`,
+          phone: '555-0111',
+        },
+      },
+    });
+    expect(customerSupportCreateCustomerResponse.body.errors).toBeUndefined();
+    expect(
+      customerSupportCreateCustomerResponse.body.data.createCustomer,
+    ).toMatchObject({
+      fullName: 'Created By Customer Support',
+      email: `created-by-customer-support-${runId}@example.com`,
+      phone: '555-0111',
+    });
 
     // --- Step 8: createProperty with a nonexistent customerId (as Owner) is
     // rejected with a not-found error, and no property is persisted. The

@@ -54,7 +54,6 @@ describe('CustomersService (real Postgres)', () => {
   });
 
   beforeEach(async () => {
-    await dataSource.getRepository(AuditEventEntity).clear();
     // `property_entity` now carries a real FK to `customer_entity`
     // (this task's `AddProperty` migration), so a plain single-table
     // `TRUNCATE customer_entity` (what `Repository.clear()` issues) always
@@ -62,7 +61,11 @@ describe('CustomersService (real Postgres)', () => {
     // constraint" — regardless of table emptiness or clear-call order.
     // Postgres requires either both tables in the same TRUNCATE statement
     // or CASCADE; a raw multi-table TRUNCATE is used here instead of two
-    // `.clear()` calls.
+    // `.clear()` calls. `audit_event_entity` is deliberately NOT truncated
+    // here — this file fakes `auditLogger` as `{ log: jest.fn() }` and never
+    // reads a real `AuditEventEntity` row, so truncating it would only widen
+    // this file's blast radius onto other spec files' audit-row assertions
+    // for no benefit.
     await dataSource.query(
       'TRUNCATE TABLE "property_entity", "customer_entity"',
     );
@@ -213,10 +216,11 @@ describe('PropertiesService (real Postgres)', () => {
   });
 
   beforeEach(async () => {
-    await dataSource.getRepository(AuditEventEntity).clear();
     // See the identical comment in the `CustomersService` describe block
     // above — plain single-table TRUNCATE on either table fails now that
-    // `property_entity` carries a real FK to `customer_entity`.
+    // `property_entity` carries a real FK to `customer_entity`, and
+    // `audit_event_entity` is deliberately NOT truncated here for the same
+    // reason (this file never reads a real `AuditEventEntity` row).
     await dataSource.query(
       'TRUNCATE TABLE "property_entity", "customer_entity"',
     );
