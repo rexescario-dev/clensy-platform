@@ -46,6 +46,21 @@ const EMPTY_PROPERTY_FORM: PropertyFormState = {
   accessNotes: '',
 };
 
+// Optional fields (`addressLine2`, `accessNotes`) are cleared to `null`
+// rather than sent as an empty string, so the server's partial-update
+// merge (spec §4.2) actually clears them instead of retaining stale text.
+function toPropertyInput(form: PropertyFormState) {
+  return {
+    label: form.label,
+    addressLine1: form.addressLine1,
+    addressLine2: form.addressLine2.trim() === '' ? null : form.addressLine2,
+    city: form.city,
+    region: form.region,
+    postalCode: form.postalCode,
+    accessNotes: form.accessNotes.trim() === '' ? null : form.accessNotes,
+  };
+}
+
 export default function CustomerDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
@@ -148,15 +163,7 @@ function CustomerDetail({
       await createProperty({
         variables: {
           customerId: id,
-          input: {
-            label: newProperty.label,
-            addressLine1: newProperty.addressLine1,
-            addressLine2: newProperty.addressLine2.trim() === '' ? null : newProperty.addressLine2,
-            city: newProperty.city,
-            region: newProperty.region,
-            postalCode: newProperty.postalCode,
-            accessNotes: newProperty.accessNotes.trim() === '' ? null : newProperty.accessNotes,
-          },
+          input: toPropertyInput(newProperty),
         },
       });
       setNewProperty(EMPTY_PROPERTY_FORM);
@@ -199,15 +206,7 @@ function CustomerDetail({
       await updateProperty({
         variables: {
           id: editingPropertyId,
-          input: {
-            label: editProperty.label,
-            addressLine1: editProperty.addressLine1,
-            addressLine2: editProperty.addressLine2.trim() === '' ? null : editProperty.addressLine2,
-            city: editProperty.city,
-            region: editProperty.region,
-            postalCode: editProperty.postalCode,
-            accessNotes: editProperty.accessNotes.trim() === '' ? null : editProperty.accessNotes,
-          },
+          input: toPropertyInput(editProperty),
         },
       });
       setEditingPropertyId(null);

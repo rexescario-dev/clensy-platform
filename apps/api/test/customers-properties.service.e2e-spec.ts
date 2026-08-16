@@ -10,6 +10,58 @@ import {
   CustomerDbTestLock,
 } from './helpers/customer-db-test-lock';
 
+// Shared by both `describe` blocks below. Each block still creates and
+// destroys its own `DataSource`/lock independently (deliberate — Jest scopes
+// `beforeAll`/`afterAll` per `describe`, so the two lock-acquire/release
+// cycles run strictly sequentially and can never deadlock); only the
+// stateless config/query/fixture shape is factored out here.
+function createTestDataSource(): DataSource {
+  return new DataSource({
+    type: 'postgres',
+    host: process.env.DB_HOST ?? 'localhost',
+    port: Number(process.env.DB_PORT ?? 5432),
+    username: process.env.DB_USERNAME ?? 'clensy',
+    password: process.env.DB_PASSWORD ?? 'clensy_dev',
+    database: process.env.DB_NAME ?? 'clensy',
+    entities: [CustomerEntity, PropertyEntity, AuditEventEntity],
+  });
+}
+
+// `property_entity` carries a real FK to `customer_entity` (this task's
+// `AddProperty` migration), so a plain single-table `TRUNCATE
+// customer_entity` (what `Repository.clear()` issues) always fails with
+// "cannot truncate a table referenced in a foreign key constraint" —
+// regardless of table emptiness or clear-call order. Postgres requires
+// either both tables in the same TRUNCATE statement or CASCADE; a raw
+// multi-table TRUNCATE is used here instead of two `.clear()` calls.
+// `audit_event_entity` is deliberately NOT truncated — both describe blocks
+// below fake `auditLogger` as `{ log: jest.fn() }` and never read a real
+// `AuditEventEntity` row, so truncating it would only widen this file's
+// blast radius onto other spec files' audit-row assertions for no benefit.
+async function truncateCustomersAndProperties(
+  dataSource: DataSource,
+): Promise<void> {
+  await dataSource.query(
+    'TRUNCATE TABLE "property_entity", "customer_entity"',
+  );
+}
+
+function seedCustomer(
+  dataSource: DataSource,
+  overrides?: Partial<CustomerEntity>,
+) {
+  const repo = dataSource.getRepository(CustomerEntity);
+  return repo.save(
+    repo.create({
+      fullName: 'Jane Doe',
+      email: 'jane@example.com',
+      phone: '555-0100',
+      notes: 'Gate code 1234',
+      ...overrides,
+    }),
+  );
+}
+
 // Real Postgres, single connection — NOT mocked repositories. The
 // transactional-rollback assertions below ("the row does not exist
 // afterward") are an actual transactional guarantee: a mock can only prove
@@ -35,15 +87,7 @@ describe('CustomersService (real Postgres)', () => {
   let service: CustomersService;
 
   beforeAll(async () => {
-    dataSource = new DataSource({
-      type: 'postgres',
-      host: process.env.DB_HOST ?? 'localhost',
-      port: Number(process.env.DB_PORT ?? 5432),
-      username: process.env.DB_USERNAME ?? 'clensy',
-      password: process.env.DB_PASSWORD ?? 'clensy_dev',
-      database: process.env.DB_NAME ?? 'clensy',
-      entities: [CustomerEntity, PropertyEntity, AuditEventEntity],
-    });
+    dataSource = createTestDataSource();
     await dataSource.initialize();
     dbLock = await acquireCustomerDbTestLock(dataSource);
   });
@@ -54,21 +98,7 @@ describe('CustomersService (real Postgres)', () => {
   });
 
   beforeEach(async () => {
-    // `property_entity` now carries a real FK to `customer_entity`
-    // (this task's `AddProperty` migration), so a plain single-table
-    // `TRUNCATE customer_entity` (what `Repository.clear()` issues) always
-    // fails with "cannot truncate a table referenced in a foreign key
-    // constraint" — regardless of table emptiness or clear-call order.
-    // Postgres requires either both tables in the same TRUNCATE statement
-    // or CASCADE; a raw multi-table TRUNCATE is used here instead of two
-    // `.clear()` calls. `audit_event_entity` is deliberately NOT truncated
-    // here — this file fakes `auditLogger` as `{ log: jest.fn() }` and never
-    // reads a real `AuditEventEntity` row, so truncating it would only widen
-    // this file's blast radius onto other spec files' audit-row assertions
-    // for no benefit.
-    await dataSource.query(
-      'TRUNCATE TABLE "property_entity", "customer_entity"',
-    );
+    await truncateCustomersAndProperties(dataSource);
     auditLogger = { log: jest.fn().mockResolvedValue(undefined) };
     service = new CustomersService(
       dataSource,
@@ -76,19 +106,6 @@ describe('CustomersService (real Postgres)', () => {
       auditLogger,
     );
   });
-
-  const seedCustomer = async (overrides?: Partial<CustomerEntity>) => {
-    const repo = dataSource.getRepository(CustomerEntity);
-    return repo.save(
-      repo.create({
-        fullName: 'Jane Doe',
-        email: 'jane@example.com',
-        phone: '555-0100',
-        notes: 'Gate code 1234',
-        ...overrides,
-      }),
-    );
-  };
 
   describe('create', () => {
     it('persists a CustomerEntity with the given fields, notes defaulting to null when omitted, and records customer.create', async () => {
@@ -141,7 +158,7 @@ describe('CustomersService (real Postgres)', () => {
 
   describe('update', () => {
     it('updates only the provided field, leaving the others unchanged in the re-read row', async () => {
-      const existing = await seedCustomer();
+      const existing = await seedCustomer(dataSource);
 
       await service.update(existing.id, {
         actorId: 'actor-1',
@@ -158,7 +175,7 @@ describe('CustomersService (real Postgres)', () => {
     });
 
     it('explicitly clears notes to null when the command sets notes: null', async () => {
-      const existing = await seedCustomer({ notes: 'Some existing note' });
+      const existing = await seedCustomer(dataSource, { notes: 'Some existing note' });
 
       await service.update(existing.id, {
         actorId: 'actor-1',
@@ -172,7 +189,7 @@ describe('CustomersService (real Postgres)', () => {
     });
 
     it('rolls back the update when the audit write fails inside the transaction', async () => {
-      const existing = await seedCustomer();
+      const existing = await seedCustomer(dataSource);
       auditLogger.log.mockRejectedValueOnce(new Error('audit down'));
 
       await expect(
@@ -197,15 +214,7 @@ describe('PropertiesService (real Postgres)', () => {
   let service: PropertiesService;
 
   beforeAll(async () => {
-    dataSource = new DataSource({
-      type: 'postgres',
-      host: process.env.DB_HOST ?? 'localhost',
-      port: Number(process.env.DB_PORT ?? 5432),
-      username: process.env.DB_USERNAME ?? 'clensy',
-      password: process.env.DB_PASSWORD ?? 'clensy_dev',
-      database: process.env.DB_NAME ?? 'clensy',
-      entities: [CustomerEntity, PropertyEntity, AuditEventEntity],
-    });
+    dataSource = createTestDataSource();
     await dataSource.initialize();
     dbLock = await acquireCustomerDbTestLock(dataSource);
   });
@@ -216,14 +225,7 @@ describe('PropertiesService (real Postgres)', () => {
   });
 
   beforeEach(async () => {
-    // See the identical comment in the `CustomersService` describe block
-    // above — plain single-table TRUNCATE on either table fails now that
-    // `property_entity` carries a real FK to `customer_entity`, and
-    // `audit_event_entity` is deliberately NOT truncated here for the same
-    // reason (this file never reads a real `AuditEventEntity` row).
-    await dataSource.query(
-      'TRUNCATE TABLE "property_entity", "customer_entity"',
-    );
+    await truncateCustomersAndProperties(dataSource);
     auditLogger = { log: jest.fn().mockResolvedValue(undefined) };
     service = new PropertiesService(
       dataSource,
@@ -232,19 +234,6 @@ describe('PropertiesService (real Postgres)', () => {
       auditLogger,
     );
   });
-
-  const seedCustomer = async (overrides?: Partial<CustomerEntity>) => {
-    const repo = dataSource.getRepository(CustomerEntity);
-    return repo.save(
-      repo.create({
-        fullName: 'Jane Doe',
-        email: 'jane@example.com',
-        phone: '555-0100',
-        notes: 'Gate code 1234',
-        ...overrides,
-      }),
-    );
-  };
 
   const seedProperty = async (
     customerId: string,
@@ -268,7 +257,7 @@ describe('PropertiesService (real Postgres)', () => {
 
   describe('create', () => {
     it('persists a PropertyEntity referencing the given Customer and records property.create', async () => {
-      const customer = await seedCustomer();
+      const customer = await seedCustomer(dataSource);
 
       const created = await service.create({
         actorId: 'actor-1',
@@ -322,7 +311,7 @@ describe('PropertiesService (real Postgres)', () => {
     });
 
     it('rolls back the PropertyEntity row when the audit write fails inside the transaction', async () => {
-      const customer = await seedCustomer();
+      const customer = await seedCustomer(dataSource);
       auditLogger.log.mockRejectedValueOnce(new Error('audit down'));
 
       await expect(
@@ -346,7 +335,7 @@ describe('PropertiesService (real Postgres)', () => {
 
   describe('update', () => {
     it('updates only the provided field, leaving the others unchanged in the re-read row', async () => {
-      const customer = await seedCustomer();
+      const customer = await seedCustomer(dataSource);
       const existing = await seedProperty(customer.id);
 
       await service.update(existing.id, {
@@ -366,7 +355,7 @@ describe('PropertiesService (real Postgres)', () => {
     });
 
     it('explicitly clears accessNotes to null when the command sets accessNotes: null', async () => {
-      const customer = await seedCustomer();
+      const customer = await seedCustomer(dataSource);
       const existing = await seedProperty(customer.id, {
         accessNotes: 'Some existing note',
       });
@@ -383,7 +372,7 @@ describe('PropertiesService (real Postgres)', () => {
     });
 
     it('rolls back the update when the audit write fails inside the transaction', async () => {
-      const customer = await seedCustomer();
+      const customer = await seedCustomer(dataSource);
       const existing = await seedProperty(customer.id);
       auditLogger.log.mockRejectedValueOnce(new Error('audit down'));
 
@@ -403,7 +392,7 @@ describe('PropertiesService (real Postgres)', () => {
 
   describe('listCustomerProperties', () => {
     it('returns both properties for a customer with two persisted properties', async () => {
-      const customer = await seedCustomer();
+      const customer = await seedCustomer(dataSource);
       const first = await seedProperty(customer.id, { label: 'Home' });
       const second = await seedProperty(customer.id, {
         label: 'Downtown Office',
@@ -418,7 +407,7 @@ describe('PropertiesService (real Postgres)', () => {
     });
 
     it('returns an empty array for a customer with zero persisted properties', async () => {
-      const customer = await seedCustomer();
+      const customer = await seedCustomer(dataSource);
 
       await expect(
         service.listCustomerProperties(customer.id),

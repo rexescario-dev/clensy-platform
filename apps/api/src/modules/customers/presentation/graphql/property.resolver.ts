@@ -3,35 +3,15 @@ import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { PropertiesService } from '../../application/services/properties.service';
 import { CreatePropertyCommand } from '../../application/commands/create-property.command';
 import { UpdatePropertyCommand } from '../../application/commands/update-property.command';
-import { Property } from '../../domain/property';
 import { CurrentUser } from '../../../../platform/auth/decorators/current-user.decorator';
 import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
 import type { AuthenticatedPrincipal } from '../../../../platform/auth/domain/authenticated-principal';
 import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
 import { CreatePropertyInput } from './create-property.input';
+import { toPropertyType } from './mappers';
 import { PropertyType } from './property.type';
 import { UpdatePropertyInput } from './update-property.input';
-
-// Never expose `Property` (the domain interface) or the TypeORM entity as a
-// GraphQL value — every `PropertiesService` result is mapped through this
-// before leaving either resolver (also used by `CustomerResolver`'s
-// `properties` field resolver, spec §4.5).
-export function toPropertyType(property: Property): PropertyType {
-  return {
-    id: property.id,
-    customerId: property.customerId,
-    label: property.label,
-    addressLine1: property.addressLine1,
-    addressLine2: property.addressLine2,
-    city: property.city,
-    region: property.region,
-    postalCode: property.postalCode,
-    accessNotes: property.accessNotes,
-    createdAt: property.createdAt,
-    updatedAt: property.updatedAt,
-  };
-}
 
 // Exactly the `Property`-scoped operations of spec §4.5 — no others.
 @Resolver(() => PropertyType)

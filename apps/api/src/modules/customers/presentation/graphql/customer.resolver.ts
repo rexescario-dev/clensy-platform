@@ -12,7 +12,6 @@ import { CustomersService } from '../../application/services/customers.service';
 import { PropertiesService } from '../../application/services/properties.service';
 import { CreateCustomerCommand } from '../../application/commands/create-customer.command';
 import { UpdateCustomerCommand } from '../../application/commands/update-customer.command';
-import { Customer } from '../../domain/customer';
 import { CurrentUser } from '../../../../platform/auth/decorators/current-user.decorator';
 import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
 import type { AuthenticatedPrincipal } from '../../../../platform/auth/domain/authenticated-principal';
@@ -20,28 +19,9 @@ import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
 import { CreateCustomerInput } from './create-customer.input';
 import { CustomerType } from './customer.type';
+import { toCustomerType, toPropertyType } from './mappers';
 import { PropertyType } from './property.type';
-import { toPropertyType } from './property.resolver';
 import { UpdateCustomerInput } from './update-customer.input';
-
-// Never expose `Customer` (the domain interface) or the TypeORM entity as a
-// GraphQL value. Returns `Omit<CustomerType, 'properties'>` cast to
-// `CustomerType` — `properties` is presentation-layer-only computed data
-// (spec §4.5), populated exclusively by `properties()`'s `@ResolveField`
-// below; Apollo calls that field resolver for the `properties` key
-// independently of whatever this mapper's return value carries for it, so
-// no caller of `toCustomerType()` needs to (or can) populate it here.
-function toCustomerType(customer: Customer): CustomerType {
-  return {
-    id: customer.id,
-    fullName: customer.fullName,
-    email: customer.email,
-    phone: customer.phone,
-    notes: customer.notes,
-    createdAt: customer.createdAt,
-    updatedAt: customer.updatedAt,
-  } as CustomerType;
-}
 
 // Exactly the `Customer`-scoped operations of spec §4.5 — no others.
 @Resolver(() => CustomerType)
