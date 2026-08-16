@@ -5,7 +5,9 @@ import { DataSource } from 'typeorm';
 import { AUDIT_LOGGER } from '../../../platform/audit/application/audit-logger.port';
 import { AuditEventEntity } from '../../../platform/audit/infrastructure/persistence/audit-event.entity';
 import { CleanersModule } from '../cleaners.module';
+import { CleanersService } from '../application/services/cleaners.service';
 import { TeamsService } from '../application/services/teams.service';
+import { CleanerEntity } from '../infrastructure/persistence/cleaner.entity';
 import { TeamEntity } from '../infrastructure/persistence/team.entity';
 
 // Proves `CleanersModule` can construct its own providers in isolation —
@@ -43,6 +45,8 @@ describe('CleanersModule — module-internal DI wiring (real AuditModule)', () =
     })
       .overrideProvider(getRepositoryToken(TeamEntity))
       .useValue({ find: jest.fn(), findOneBy: jest.fn(), findBy: jest.fn() })
+      .overrideProvider(getRepositoryToken(CleanerEntity))
+      .useValue({ find: jest.fn(), findOneBy: jest.fn(), findBy: jest.fn() })
       .overrideProvider(getRepositoryToken(AuditEventEntity))
       .useValue({ create: jest.fn(), save: jest.fn() })
       .compile();
@@ -50,6 +54,10 @@ describe('CleanersModule — module-internal DI wiring (real AuditModule)', () =
 
   it('resolves TeamsService (its AUDIT_LOGGER dependency resolves without error)', () => {
     expect(moduleRef.get(TeamsService)).toBeInstanceOf(TeamsService);
+  });
+
+  it('resolves CleanersService (its AUDIT_LOGGER dependency resolves without error)', () => {
+    expect(moduleRef.get(CleanersService)).toBeInstanceOf(CleanersService);
   });
 
   it('resolves AUDIT_LOGGER from the imported AuditModule', () => {

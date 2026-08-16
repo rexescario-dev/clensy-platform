@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuditModule } from '../../platform/audit/audit.module';
+import { CleanersService } from './application/services/cleaners.service';
 import { TeamsService } from './application/services/teams.service';
+import { CleanerEntity } from './infrastructure/persistence/cleaner.entity';
 import { TeamEntity } from './infrastructure/persistence/team.entity';
 
 // Imports `AuditModule` directly (mirroring `customers.module.ts`'s
@@ -13,10 +15,9 @@ import { TeamEntity } from './infrastructure/persistence/team.entity';
 // with each other. `AuditModule` is not `@Global()`, so there is no
 // ambient mechanism that makes this import optional.
 //
-// Task 2 extends this with `CleanerEntity`/`CleanersService`.
 @Module({
-  imports: [TypeOrmModule.forFeature([TeamEntity]), AuditModule],
-  providers: [TeamsService],
-  exports: [TeamsService],
+  imports: [TypeOrmModule.forFeature([TeamEntity, CleanerEntity]), AuditModule],
+  providers: [TeamsService, CleanersService],
+  exports: [TeamsService, CleanersService],
 })
 export class CleanersModule {}
