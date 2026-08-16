@@ -6,6 +6,7 @@ import { CustomerEntity } from '../../modules/customers/infrastructure/persisten
 import { PropertyEntity } from '../../modules/customers/infrastructure/persistence/property.entity';
 import { TeamEntity } from '../../modules/cleaners/infrastructure/persistence/team.entity';
 import { CleanerEntity } from '../../modules/cleaners/infrastructure/persistence/cleaner.entity';
+import { ServiceEntity } from '../../modules/catalog/infrastructure/persistence/service.entity';
 import { AuditEventEntity } from '../audit/infrastructure/persistence/audit-event.entity';
 
 // Plain DataSource for the TypeORM CLI (migration:generate/run/revert) — kept
@@ -26,6 +27,7 @@ export default new DataSource({
     PropertyEntity,
     TeamEntity,
     CleanerEntity,
+    ServiceEntity,
   ],
   migrations: [__dirname + '/migrations/*.ts'],
 });
