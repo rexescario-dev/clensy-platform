@@ -4,6 +4,8 @@ import { BookingEntity } from '../../modules/bookings/infrastructure/persistence
 import { AdminUserEntity } from '../../modules/admins/infrastructure/persistence/admin-user.entity';
 import { CustomerEntity } from '../../modules/customers/infrastructure/persistence/customer.entity';
 import { PropertyEntity } from '../../modules/customers/infrastructure/persistence/property.entity';
+import { TeamEntity } from '../../modules/cleaners/infrastructure/persistence/team.entity';
+import { CleanerEntity } from '../../modules/cleaners/infrastructure/persistence/cleaner.entity';
 import { AuditEventEntity } from '../audit/infrastructure/persistence/audit-event.entity';
 
 // Plain DataSource for the TypeORM CLI (migration:generate/run/revert) — kept
@@ -22,6 +24,8 @@ export default new DataSource({
     AdminUserEntity,
     CustomerEntity,
     PropertyEntity,
+    TeamEntity,
+    CleanerEntity,
   ],
   migrations: [__dirname + '/migrations/*.ts'],
 });

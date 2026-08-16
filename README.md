@@ -7,7 +7,7 @@ pnpm workspace + Turborepo monorepo:
 ```text
 apps/
 ├── api/      NestJS + TypeORM + GraphQL (code-first, Apollo) + REST
-├── web/      Next.js (App Router) web console — /login, /admin, /customers
+├── web/      Next.js (App Router) web console — /login, /admin, /customers, /cleaners
 └── worker/   not yet implemented
 
 packages/
@@ -24,7 +24,7 @@ packages/
 
 ## `apps/api/src` structure
 
-Each business module is layered domain → application → infrastructure → presentation, so REST and GraphQL are thin adapters over the same business logic rather than separate implementations. `bookings` below is the worked example (it's also the only module with a REST surface, kept for the REST/GraphQL comparison this repo exists to run); `modules/admins` and `modules/customers` follow the identical domain/application/infrastructure/presentation layering but are GraphQL-only, per the [Phase 1 design](docs/superpowers/specs/2026-08-14-clensy-platform-phase1-design.md)'s "Presentation: GraphQL only" default for every module after `bookings`. `platform/auth` (JWT session auth, `AuthGuard`, `@Roles()`/`@CurrentUser()`) and `platform/audit` (`AuditEvent`, `AuditLogger`) are shared platform infrastructure, not business modules — every mutation across `admins`/`customers` is authenticated, role-gated, and audit-logged through them (see the [Admin Foundation](docs/superpowers/specs/2026-08-14-admin-foundation-design.md) and [Customers & Properties](docs/superpowers/specs/2026-08-15-customers-properties-design.md) specs):
+Each business module is layered domain → application → infrastructure → presentation, so REST and GraphQL are thin adapters over the same business logic rather than separate implementations. `bookings` below is the worked example (it's also the only module with a REST surface, kept for the REST/GraphQL comparison this repo exists to run); `modules/admins`, `modules/customers`, and `modules/cleaners` follow the identical domain/application/infrastructure/presentation layering but are GraphQL-only, per the [Phase 1 design](docs/superpowers/specs/2026-08-14-clensy-platform-phase1-design.md)'s "Presentation: GraphQL only" default for every module after `bookings`. `platform/auth` (JWT session auth, `AuthGuard`, `@Roles()`/`@CurrentUser()`) and `platform/audit` (`AuditEvent`, `AuditLogger`) are shared platform infrastructure, not business modules — every mutation across `admins`/`customers`/`cleaners` is authenticated, role-gated, and audit-logged through them (see the [Admin Foundation](docs/superpowers/specs/2026-08-14-admin-foundation-design.md), [Customers & Properties](docs/superpowers/specs/2026-08-15-customers-properties-design.md), and [Cleaners & Teams](docs/superpowers/specs/2026-08-16-cleaners-teams-design.md) specs):
 
 ```text
 src/
@@ -111,7 +111,7 @@ pnpm --filter api migration:revert    # roll back the last one
 
 `migration:generate` takes a plain phrase (or an already-PascalCase name, or anything in between — `scripts/generate-migration.ts` normalizes it) and writes it into `src/platform/database/migrations/` as `<timestamp>-AddCustomerPhoneNumber.ts`.
 
-`generate` diffs the TypeORM entities registered in `data-source.ts` (`BookingEntity`, `AdminUserEntity`, `AuditEventEntity`, `CustomerEntity`, `PropertyEntity`) against the actual database, so run it against an environment that already has the *previous* migration applied (not a synchronized or ad-hoc schema) — otherwise the diff will be wrong. One exception: `PropertyEntity.customerId` carries no TypeORM relation decorator by design (see the [Customers & Properties spec](docs/superpowers/specs/2026-08-15-customers-properties-design.md) §4.5), so its foreign key is hand-written directly into `1786807294116-AddProperty.ts`'s SQL rather than inferred by `generate` — re-running `generate` after touching that entity will propose dropping the constraint; don't apply that. `apps/api/src/platform/database/data-source.ts` is the plain `DataSource` these commands use (the CLI can't consume `database.module.ts`'s Nest-wrapped, `ConfigService`-driven config directly). It needs its own `tsconfig.cli.json` (forces `commonjs`/`node` module resolution) — TypeORM's CLI loads the datasource via Node's native ESM resolver, which the rest of the project's `nodenext` config doesn't satisfy for a plain `ts-node` script.
+`generate` diffs the TypeORM entities registered in `data-source.ts` (`BookingEntity`, `AdminUserEntity`, `AuditEventEntity`, `CustomerEntity`, `PropertyEntity`, `TeamEntity`, `CleanerEntity`) against the actual database, so run it against an environment that already has the *previous* migration applied (not a synchronized or ad-hoc schema) — otherwise the diff will be wrong. Two exceptions, same reason both times: `PropertyEntity.customerId` (see the [Customers & Properties spec](docs/superpowers/specs/2026-08-15-customers-properties-design.md) §4.5) and `CleanerEntity.teamId` (see the [Cleaners & Teams spec](docs/superpowers/specs/2026-08-16-cleaners-teams-design.md) §4.1) both carry no TypeORM relation decorator by design, so their foreign keys are hand-written directly into `1786807294116-AddProperty.ts`'s and `1786871992353-AddCleaner.ts`'s SQL respectively, rather than inferred by `generate` — re-running `generate` after touching either entity will propose dropping the constraint; don't apply that. `apps/api/src/platform/database/data-source.ts` is the plain `DataSource` these commands use (the CLI can't consume `database.module.ts`'s Nest-wrapped, `ConfigService`-driven config directly). It needs its own `tsconfig.cli.json` (forces `commonjs`/`node` module resolution) — TypeORM's CLI loads the datasource via Node's native ESM resolver, which the rest of the project's `nodenext` config doesn't satisfy for a plain `ts-node` script.
 
 ## Seeding fake data
 
@@ -125,16 +125,16 @@ Inserts (or re-applies, if already present) 3 fake bookings with fixed, determin
 
 Seed data lives at `apps/api/src/modules/bookings/infrastructure/persistence/seed/booking.seed-data.ts` (plain TypeScript, no TypeORM); `booking.seeder.ts` is what actually persists it. `apps/api/src/platform/database/seed.ts` is the runnable entrypoint — it boots a Nest application context (no HTTP server) and calls each module's seeder.
 
-The same run also seeds a dev Owner `AdminUser` (needed to log into the web console at all) when `ADMIN_SEED_EMAIL`/`ADMIN_SEED_PASSWORD` are set in `apps/api/.env` — it's a no-op, not an error, when either is unset, so `pnpm db:seed` stays safe to run without opting into it. `modules/customers` has no seeder; create data through the web console or the `createCustomer`/`createProperty` GraphQL mutations once logged in.
+The same run also seeds a dev Owner `AdminUser` (needed to log into the web console at all) when `ADMIN_SEED_EMAIL`/`ADMIN_SEED_PASSWORD` are set in `apps/api/.env` — it's a no-op, not an error, when either is unset, so `pnpm db:seed` stays safe to run without opting into it. `modules/customers` and `modules/cleaners` have no seeders; create data through the web console or the respective GraphQL mutations (`createCustomer`/`createProperty`, `createCleaner`/`createTeam`) once logged in.
 
 ## Endpoints
 
 | | URL | Notes |
 | --- | --- | --- |
-| Web console | http://localhost:3001 | Next.js — `/login`, `/admin` (staff/roles, Owner-only), `/customers` |
-| GraphQL API | http://localhost:3000/graphql | queries/mutations for `bookings`, `admins`, `customers`/`properties` — API only, no browser landing page |
+| Web console | http://localhost:3001 | Next.js — `/login`, `/admin` (staff/roles, Owner-only), `/customers`, `/cleaners` |
+| GraphQL API | http://localhost:3000/graphql | queries/mutations for `bookings`, `admins`, `customers`/`properties`, `cleaners`/`teams` — API only, no browser landing page |
 | GraphQL IDE (GraphiQL) | http://localhost:3000/graphiql | separate route, dev-only (see below) |
-| REST API | http://localhost:3000/bookings | full CRUD — `bookings` only; `admins`/`customers` are GraphQL-only |
+| REST API | http://localhost:3000/bookings | full CRUD — `bookings` only; `admins`/`customers`/`cleaners` are GraphQL-only |
 | REST docs (Swagger UI) | http://localhost:3000/docs | interactive explorer, equivalent to GraphiQL |
 | OpenAPI spec | http://localhost:3000/docs-json | raw JSON |
 

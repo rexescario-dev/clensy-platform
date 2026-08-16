@@ -11,6 +11,13 @@ export type CreateAdminInput = {
   role: Role;
 };
 
+export type CreateCleanerInput = {
+  email: string;
+  fullName: string;
+  notes?: string | null | undefined;
+  phone: string;
+};
+
 export type CreateCustomerInput = {
   email: string;
   fullName: string;
@@ -28,6 +35,10 @@ export type CreatePropertyInput = {
   region: string;
 };
 
+export type CreateTeamInput = {
+  name: string;
+};
+
 export type LoginInput = {
   email: string;
   password: string;
@@ -40,6 +51,13 @@ export type Role =
   | 'OPS_MANAGER'
   | 'OWNER'
   | 'SCHEDULER';
+
+export type UpdateCleanerInput = {
+  email?: string | null | undefined;
+  fullName?: string | null | undefined;
+  notes?: string | null | undefined;
+  phone?: string | null | undefined;
+};
 
 export type UpdateCustomerInput = {
   email?: string | null | undefined;
@@ -62,6 +80,41 @@ export type AdminsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
 export type AdminsQuery = { admins: Array<{ id: string, email: string, role: Role, isActive: boolean }> };
+
+export type CleanersQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type CleanersQuery = { cleaners: Array<{ id: string, fullName: string, phone: string, email: string, team: { id: string, name: string } | null }> };
+
+export type CleanerQueryVariables = Exact<{
+  id: string | number;
+}>;
+
+
+export type CleanerQuery = { cleaner: { id: string, fullName: string, phone: string, email: string, notes: string | null, team: { id: string, name: string } | null } | null };
+
+export type CreateCleanerMutationVariables = Exact<{
+  input: CreateCleanerInput;
+}>;
+
+
+export type CreateCleanerMutation = { createCleaner: { id: string } };
+
+export type UpdateCleanerMutationVariables = Exact<{
+  id: string | number;
+  input: UpdateCleanerInput;
+}>;
+
+
+export type UpdateCleanerMutation = { updateCleaner: { id: string } };
+
+export type AssignCleanerToTeamMutationVariables = Exact<{
+  cleanerId: string | number;
+  teamId: string | number;
+}>;
+
+
+export type AssignCleanerToTeamMutation = { assignCleanerToTeam: { id: string } };
 
 export type CreateAdminMutationVariables = Exact<{
   createAdminInput: CreateAdminInput;
@@ -132,6 +185,25 @@ export type UpdatePropertyMutationVariables = Exact<{
 
 export type UpdatePropertyMutation = { updateProperty: { id: string } };
 
+export type TeamsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type TeamsQuery = { teams: Array<{ id: string, name: string, cleaners: Array<{ id: string }> }> };
+
+export type TeamQueryVariables = Exact<{
+  id: string | number;
+}>;
+
+
+export type TeamQuery = { team: { id: string, name: string, cleaners: Array<{ id: string, fullName: string, phone: string, email: string }> } | null };
+
+export type CreateTeamMutationVariables = Exact<{
+  input: CreateTeamInput;
+}>;
+
+
+export type CreateTeamMutation = { createTeam: { id: string } };
+
 
 export const AdminsDocument = gql`
     query Admins {
@@ -178,6 +250,207 @@ export type AdminsQueryHookResult = ReturnType<typeof useAdminsQuery>;
 export type AdminsLazyQueryHookResult = ReturnType<typeof useAdminsLazyQuery>;
 export type AdminsSuspenseQueryHookResult = ReturnType<typeof useAdminsSuspenseQuery>;
 export type AdminsQueryResult = Apollo.QueryResult<AdminsQuery, AdminsQueryVariables>;
+export const CleanersDocument = gql`
+    query Cleaners {
+  cleaners {
+    id
+    fullName
+    phone
+    email
+    team {
+      id
+      name
+    }
+  }
+}
+    `;
+
+/**
+ * __useCleanersQuery__
+ *
+ * To run a query within a React component, call `useCleanersQuery` and pass it any options that fit your needs.
+ * When your component renders, `useCleanersQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useCleanersQuery({
+ *   variables: {
+ *   },
+ * });
+ */
+export function useCleanersQuery(baseOptions?: Apollo.QueryHookOptions<CleanersQuery, CleanersQueryVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<CleanersQuery, CleanersQueryVariables>(CleanersDocument, options);
+      }
+export function useCleanersLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<CleanersQuery, CleanersQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<CleanersQuery, CleanersQueryVariables>(CleanersDocument, options);
+        }
+// @ts-ignore
+export function useCleanersSuspenseQuery(baseOptions?: Apollo.SuspenseQueryHookOptions<CleanersQuery, CleanersQueryVariables>): Apollo.UseSuspenseQueryResult<CleanersQuery, CleanersQueryVariables>;
+export function useCleanersSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<CleanersQuery, CleanersQueryVariables>): Apollo.UseSuspenseQueryResult<CleanersQuery | undefined, CleanersQueryVariables>;
+export function useCleanersSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<CleanersQuery, CleanersQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<CleanersQuery, CleanersQueryVariables>(CleanersDocument, options);
+        }
+export type CleanersQueryHookResult = ReturnType<typeof useCleanersQuery>;
+export type CleanersLazyQueryHookResult = ReturnType<typeof useCleanersLazyQuery>;
+export type CleanersSuspenseQueryHookResult = ReturnType<typeof useCleanersSuspenseQuery>;
+export type CleanersQueryResult = Apollo.QueryResult<CleanersQuery, CleanersQueryVariables>;
+export const CleanerDocument = gql`
+    query Cleaner($id: ID!) {
+  cleaner(id: $id) {
+    id
+    fullName
+    phone
+    email
+    notes
+    team {
+      id
+      name
+    }
+  }
+}
+    `;
+
+/**
+ * __useCleanerQuery__
+ *
+ * To run a query within a React component, call `useCleanerQuery` and pass it any options that fit your needs.
+ * When your component renders, `useCleanerQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useCleanerQuery({
+ *   variables: {
+ *      id: // value for 'id'
+ *   },
+ * });
+ */
+export function useCleanerQuery(baseOptions: Apollo.QueryHookOptions<CleanerQuery, CleanerQueryVariables> & ({ variables: CleanerQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<CleanerQuery, CleanerQueryVariables>(CleanerDocument, options);
+      }
+export function useCleanerLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<CleanerQuery, CleanerQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<CleanerQuery, CleanerQueryVariables>(CleanerDocument, options);
+        }
+// @ts-ignore
+export function useCleanerSuspenseQuery(baseOptions?: Apollo.SuspenseQueryHookOptions<CleanerQuery, CleanerQueryVariables>): Apollo.UseSuspenseQueryResult<CleanerQuery, CleanerQueryVariables>;
+export function useCleanerSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<CleanerQuery, CleanerQueryVariables>): Apollo.UseSuspenseQueryResult<CleanerQuery | undefined, CleanerQueryVariables>;
+export function useCleanerSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<CleanerQuery, CleanerQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<CleanerQuery, CleanerQueryVariables>(CleanerDocument, options);
+        }
+export type CleanerQueryHookResult = ReturnType<typeof useCleanerQuery>;
+export type CleanerLazyQueryHookResult = ReturnType<typeof useCleanerLazyQuery>;
+export type CleanerSuspenseQueryHookResult = ReturnType<typeof useCleanerSuspenseQuery>;
+export type CleanerQueryResult = Apollo.QueryResult<CleanerQuery, CleanerQueryVariables>;
+export const CreateCleanerDocument = gql`
+    mutation CreateCleaner($input: CreateCleanerInput!) {
+  createCleaner(input: $input) {
+    id
+  }
+}
+    `;
+export type CreateCleanerMutationFn = Apollo.MutationFunction<CreateCleanerMutation, CreateCleanerMutationVariables>;
+
+/**
+ * __useCreateCleanerMutation__
+ *
+ * To run a mutation, you first call `useCreateCleanerMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useCreateCleanerMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [createCleanerMutation, { data, loading, error }] = useCreateCleanerMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useCreateCleanerMutation(baseOptions?: Apollo.MutationHookOptions<CreateCleanerMutation, CreateCleanerMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<CreateCleanerMutation, CreateCleanerMutationVariables>(CreateCleanerDocument, options);
+      }
+export type CreateCleanerMutationHookResult = ReturnType<typeof useCreateCleanerMutation>;
+export type CreateCleanerMutationResult = Apollo.MutationResult<CreateCleanerMutation>;
+export type CreateCleanerMutationOptions = Apollo.BaseMutationOptions<CreateCleanerMutation, CreateCleanerMutationVariables>;
+export const UpdateCleanerDocument = gql`
+    mutation UpdateCleaner($id: ID!, $input: UpdateCleanerInput!) {
+  updateCleaner(id: $id, input: $input) {
+    id
+  }
+}
+    `;
+export type UpdateCleanerMutationFn = Apollo.MutationFunction<UpdateCleanerMutation, UpdateCleanerMutationVariables>;
+
+/**
+ * __useUpdateCleanerMutation__
+ *
+ * To run a mutation, you first call `useUpdateCleanerMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useUpdateCleanerMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [updateCleanerMutation, { data, loading, error }] = useUpdateCleanerMutation({
+ *   variables: {
+ *      id: // value for 'id'
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useUpdateCleanerMutation(baseOptions?: Apollo.MutationHookOptions<UpdateCleanerMutation, UpdateCleanerMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<UpdateCleanerMutation, UpdateCleanerMutationVariables>(UpdateCleanerDocument, options);
+      }
+export type UpdateCleanerMutationHookResult = ReturnType<typeof useUpdateCleanerMutation>;
+export type UpdateCleanerMutationResult = Apollo.MutationResult<UpdateCleanerMutation>;
+export type UpdateCleanerMutationOptions = Apollo.BaseMutationOptions<UpdateCleanerMutation, UpdateCleanerMutationVariables>;
+export const AssignCleanerToTeamDocument = gql`
+    mutation AssignCleanerToTeam($cleanerId: ID!, $teamId: ID!) {
+  assignCleanerToTeam(cleanerId: $cleanerId, teamId: $teamId) {
+    id
+  }
+}
+    `;
+export type AssignCleanerToTeamMutationFn = Apollo.MutationFunction<AssignCleanerToTeamMutation, AssignCleanerToTeamMutationVariables>;
+
+/**
+ * __useAssignCleanerToTeamMutation__
+ *
+ * To run a mutation, you first call `useAssignCleanerToTeamMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useAssignCleanerToTeamMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [assignCleanerToTeamMutation, { data, loading, error }] = useAssignCleanerToTeamMutation({
+ *   variables: {
+ *      cleanerId: // value for 'cleanerId'
+ *      teamId: // value for 'teamId'
+ *   },
+ * });
+ */
+export function useAssignCleanerToTeamMutation(baseOptions?: Apollo.MutationHookOptions<AssignCleanerToTeamMutation, AssignCleanerToTeamMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<AssignCleanerToTeamMutation, AssignCleanerToTeamMutationVariables>(AssignCleanerToTeamDocument, options);
+      }
+export type AssignCleanerToTeamMutationHookResult = ReturnType<typeof useAssignCleanerToTeamMutation>;
+export type AssignCleanerToTeamMutationResult = Apollo.MutationResult<AssignCleanerToTeamMutation>;
+export type AssignCleanerToTeamMutationOptions = Apollo.BaseMutationOptions<AssignCleanerToTeamMutation, AssignCleanerToTeamMutationVariables>;
 export const CreateAdminDocument = gql`
     mutation CreateAdmin($createAdminInput: CreateAdminInput!) {
   createAdmin(createAdminInput: $createAdminInput) {
@@ -567,3 +840,132 @@ export function useUpdatePropertyMutation(baseOptions?: Apollo.MutationHookOptio
 export type UpdatePropertyMutationHookResult = ReturnType<typeof useUpdatePropertyMutation>;
 export type UpdatePropertyMutationResult = Apollo.MutationResult<UpdatePropertyMutation>;
 export type UpdatePropertyMutationOptions = Apollo.BaseMutationOptions<UpdatePropertyMutation, UpdatePropertyMutationVariables>;
+export const TeamsDocument = gql`
+    query Teams {
+  teams {
+    id
+    name
+    cleaners {
+      id
+    }
+  }
+}
+    `;
+
+/**
+ * __useTeamsQuery__
+ *
+ * To run a query within a React component, call `useTeamsQuery` and pass it any options that fit your needs.
+ * When your component renders, `useTeamsQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useTeamsQuery({
+ *   variables: {
+ *   },
+ * });
+ */
+export function useTeamsQuery(baseOptions?: Apollo.QueryHookOptions<TeamsQuery, TeamsQueryVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<TeamsQuery, TeamsQueryVariables>(TeamsDocument, options);
+      }
+export function useTeamsLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<TeamsQuery, TeamsQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<TeamsQuery, TeamsQueryVariables>(TeamsDocument, options);
+        }
+// @ts-ignore
+export function useTeamsSuspenseQuery(baseOptions?: Apollo.SuspenseQueryHookOptions<TeamsQuery, TeamsQueryVariables>): Apollo.UseSuspenseQueryResult<TeamsQuery, TeamsQueryVariables>;
+export function useTeamsSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<TeamsQuery, TeamsQueryVariables>): Apollo.UseSuspenseQueryResult<TeamsQuery | undefined, TeamsQueryVariables>;
+export function useTeamsSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<TeamsQuery, TeamsQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<TeamsQuery, TeamsQueryVariables>(TeamsDocument, options);
+        }
+export type TeamsQueryHookResult = ReturnType<typeof useTeamsQuery>;
+export type TeamsLazyQueryHookResult = ReturnType<typeof useTeamsLazyQuery>;
+export type TeamsSuspenseQueryHookResult = ReturnType<typeof useTeamsSuspenseQuery>;
+export type TeamsQueryResult = Apollo.QueryResult<TeamsQuery, TeamsQueryVariables>;
+export const TeamDocument = gql`
+    query Team($id: ID!) {
+  team(id: $id) {
+    id
+    name
+    cleaners {
+      id
+      fullName
+      phone
+      email
+    }
+  }
+}
+    `;
+
+/**
+ * __useTeamQuery__
+ *
+ * To run a query within a React component, call `useTeamQuery` and pass it any options that fit your needs.
+ * When your component renders, `useTeamQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useTeamQuery({
+ *   variables: {
+ *      id: // value for 'id'
+ *   },
+ * });
+ */
+export function useTeamQuery(baseOptions: Apollo.QueryHookOptions<TeamQuery, TeamQueryVariables> & ({ variables: TeamQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<TeamQuery, TeamQueryVariables>(TeamDocument, options);
+      }
+export function useTeamLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<TeamQuery, TeamQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<TeamQuery, TeamQueryVariables>(TeamDocument, options);
+        }
+// @ts-ignore
+export function useTeamSuspenseQuery(baseOptions?: Apollo.SuspenseQueryHookOptions<TeamQuery, TeamQueryVariables>): Apollo.UseSuspenseQueryResult<TeamQuery, TeamQueryVariables>;
+export function useTeamSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<TeamQuery, TeamQueryVariables>): Apollo.UseSuspenseQueryResult<TeamQuery | undefined, TeamQueryVariables>;
+export function useTeamSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<TeamQuery, TeamQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<TeamQuery, TeamQueryVariables>(TeamDocument, options);
+        }
+export type TeamQueryHookResult = ReturnType<typeof useTeamQuery>;
+export type TeamLazyQueryHookResult = ReturnType<typeof useTeamLazyQuery>;
+export type TeamSuspenseQueryHookResult = ReturnType<typeof useTeamSuspenseQuery>;
+export type TeamQueryResult = Apollo.QueryResult<TeamQuery, TeamQueryVariables>;
+export const CreateTeamDocument = gql`
+    mutation CreateTeam($input: CreateTeamInput!) {
+  createTeam(input: $input) {
+    id
+  }
+}
+    `;
+export type CreateTeamMutationFn = Apollo.MutationFunction<CreateTeamMutation, CreateTeamMutationVariables>;
+
+/**
+ * __useCreateTeamMutation__
+ *
+ * To run a mutation, you first call `useCreateTeamMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useCreateTeamMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [createTeamMutation, { data, loading, error }] = useCreateTeamMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useCreateTeamMutation(baseOptions?: Apollo.MutationHookOptions<CreateTeamMutation, CreateTeamMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<CreateTeamMutation, CreateTeamMutationVariables>(CreateTeamDocument, options);
+      }
+export type CreateTeamMutationHookResult = ReturnType<typeof useCreateTeamMutation>;
+export type CreateTeamMutationResult = Apollo.MutationResult<CreateTeamMutation>;
+export type CreateTeamMutationOptions = Apollo.BaseMutationOptions<CreateTeamMutation, CreateTeamMutationVariables>;
