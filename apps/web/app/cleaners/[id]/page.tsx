@@ -8,7 +8,7 @@ import {
 } from '@clensy/client';
 import { Button, FormField } from '@clensy/ui';
 import { useParams } from 'next/navigation';
-import { type FormEvent, useEffect, useState } from 'react';
+import { type ChangeEvent, type FormEvent, useEffect, useState } from 'react';
 
 export default function CleanerDetailPage() {
   const params = useParams<{ id: string }>();
@@ -104,7 +104,7 @@ function CleanerDetail({
   // --- Team assignment ---
   const [teamAssignError, setTeamAssignError] = useState<string | undefined>(undefined);
 
-  async function handleTeamChange(event: FormEvent<HTMLSelectElement>) {
+  async function handleTeamChange(event: ChangeEvent<HTMLSelectElement>) {
     const teamId = event.currentTarget.value;
     if (teamId === '') return;
     setTeamAssignError(undefined);

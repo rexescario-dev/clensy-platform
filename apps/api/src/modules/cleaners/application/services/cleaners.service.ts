@@ -51,14 +51,7 @@ export class CleanersService {
 
         this.assertValid(entity);
 
-        try {
-          await manager.save(entity);
-        } catch (error) {
-          if ((error as { code?: string }).code === POSTGRES_UNIQUE_VIOLATION) {
-            throw new ConflictException('Email is already in use');
-          }
-          throw error;
-        }
+        await this.translateUniqueViolation(() => manager.save(entity));
 
         await this.auditLogger.log({
           actorId: command.actorId,
@@ -96,18 +89,13 @@ export class CleanersService {
         // through Object.assign on `entity`.
         this.assertValid({ ...entity, ...changes });
 
-        try {
-          await manager.update(
+        await this.translateUniqueViolation(() =>
+          manager.update(
             CleanerEntity,
             { id },
             { ...changes, updatedAt: new Date() },
-          );
-        } catch (error) {
-          if ((error as { code?: string }).code === POSTGRES_UNIQUE_VIOLATION) {
-            throw new ConflictException('Email is already in use');
-          }
-          throw error;
-        }
+          ),
+        );
 
         const updated = await manager.findOneByOrFail(CleanerEntity, { id });
 
@@ -187,6 +175,19 @@ export class CleanersService {
   // it — see this module's plan notes.
   listCleanersByTeamIds(teamIds: string[]): Promise<Cleaner[]> {
     return this.cleanerRepository.findBy({ teamId: In(teamIds) });
+  }
+
+  // Shared by `createCleaner`/`updateCleaner` (M8 dedup — behavior
+  // unchanged, same translation each call site already performed inline).
+  private async translateUniqueViolation<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (error) {
+      if ((error as { code?: string }).code === POSTGRES_UNIQUE_VIOLATION) {
+        throw new ConflictException('Email is already in use');
+      }
+      throw error;
+    }
   }
 
   private assertValid(
