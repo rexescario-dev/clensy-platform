@@ -5,6 +5,9 @@ import { CleanersService } from './application/services/cleaners.service';
 import { TeamsService } from './application/services/teams.service';
 import { CleanerEntity } from './infrastructure/persistence/cleaner.entity';
 import { TeamEntity } from './infrastructure/persistence/team.entity';
+import { CleanerTeamLoaders } from './presentation/graphql/cleaner-team.loaders';
+import { CleanerResolver } from './presentation/graphql/cleaner.resolver';
+import { TeamResolver } from './presentation/graphql/team.resolver';
 
 // Imports `AuditModule` directly (mirroring `customers.module.ts`'s
 // precedent exactly, per the review that fixed `customers.module.ts`'s
@@ -17,7 +20,13 @@ import { TeamEntity } from './infrastructure/persistence/team.entity';
 //
 @Module({
   imports: [TypeOrmModule.forFeature([TeamEntity, CleanerEntity]), AuditModule],
-  providers: [TeamsService, CleanersService],
+  providers: [
+    TeamsService,
+    CleanersService,
+    CleanerResolver,
+    TeamResolver,
+    CleanerTeamLoaders,
+  ],
   exports: [TeamsService, CleanersService],
 })
 export class CleanersModule {}
