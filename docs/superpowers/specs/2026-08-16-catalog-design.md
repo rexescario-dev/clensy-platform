@@ -2,14 +2,14 @@
 
 | Field | Value |
 | --- | --- |
-| **Status** | Draft |
+| **Status** | Accepted |
 | **Kind** | Architecture RFC (product behavior/contracts for this slice, not a process specification) |
 | **Date** | 2026-08-16 |
 | **Tracking** | [#4](https://github.com/rexescario-dev/clensy-platform/issues/4) (milestone M4 — Catalog) |
 | **Depends on (informative)** | [Phase 1 Design](2026-08-14-clensy-platform-phase1-design.md) §2.3 (catalog row), §2.6 (cross-module dependency rules), §4 (M4), §5 (vertical-slice DoD). [Admin Foundation](2026-08-14-admin-foundation-design.md) (Accepted) — this slice depends on it for `AuthGuard`, `@Roles()`, `@CurrentUser()`, and `AuditLogger` (including its transactional-audit rule); it does not redesign any of those contracts. [Cleaners & Teams](2026-08-16-cleaners-teams-design.md) (Accepted) — precedent for `manager.update()` over diffing `save()` on same-value updates, computed presentation-layer fields with an N+1 invariant, and the Postgres `23505` → `ConflictException` translation pattern; all reused here, not redesigned. |
 | **Governing process** | [Standardized Agent Workflows](../workflows/specs/agent-workflow-design.md) — stage M2 |
 | **Revision note** | M3 round 1 (reviewer: project owner) returned the draft for five mandatory changes, not a redesign: `AddOn` gained full lifecycle parity with `Service` (`description`, `active`, `UpdateAddOn`) — the initial draft's "immutable forever" model was identified as a business-model defect, since a permanently-unique, never-editable `name` and price would make a real price correction impossible without renaming the row. `Service.active` semantics were made explicit (Option B: "not retired," administrative reads return both active and inactive rows; a future consumer like M5 Bookings is responsible for filtering to active-only itself). Money representation renamed `priceCents` → `priceMinorUnits` throughout, decoupling it from USD (Clensy operates in PHP); no `currency` column was added, per the reviewer's simpler suggested path. `PricingRule` was made explicitly append-only (no `updatedAt` field at all — `createdAt` is the only meaningful timestamp for a row whose only ever state transition is an internal `active` flip performed by a later `CreatePricingRule` call, never a direct edit). `Service.name`/`AddOn.name` uniqueness was changed from case-sensitive to case-insensitive (expression unique index on `LOWER(name)`), with input trimmed before the check. A concurrency test for simultaneous `createPricingRule` calls was added to the Tests scope. `createPricingRule`'s GraphQL mutation was changed from positional arguments to an `input` object, matching every other mutation's shape. The `PricingRule` naming question (an alternative like `ServicePricing` was suggested) was considered and explicitly kept as-is — not a mandatory change; see §5. |
-| **M3 decision** | Pending — round 1 fixes applied above; awaiting confirmation before moving to Accepted. |
+| **M3 decision** | **Accepted** — 2026-08-16. Round 1 fixes verified consistent across thesis, scope, domain contracts, application layer, RBAC, audit, GraphQL surface, web UI, and rationale (no remaining `priceCents`/USD language, no remaining "AddOn has no update/no active" language). No remaining design blocker. Ready for M4 Implementation Planning. |
 
 ## 1. Primary question & thesis
 
