@@ -44,7 +44,7 @@ const SESSION_COOKIE_OPTIONS = {
   path: '/',
 };
 
-// Exactly the 5 operations of spec §4.9 — no others. This is also the only
+// Exactly the 6 operations of spec §4.9 — no others. This is also the only
 // class in the codebase that depends on both `modules/admins`' application
 // services (`AdminsService`, `LoginService`) AND `platform/auth`'s
 // infrastructure (`TokenService`, `AuthGuard`) at once — the ordinary
