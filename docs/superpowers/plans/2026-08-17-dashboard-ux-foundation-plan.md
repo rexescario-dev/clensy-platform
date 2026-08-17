@@ -12,7 +12,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Accepted |
 | Date | 2026-08-17 |
 | Tracking issue | [#24](https://github.com/rexescario-dev/clensy-platform/issues/24) |
 | Milestone | M5 — Dashboard UX Foundation |
@@ -22,6 +22,8 @@
 **Authoritative-input rule:** the Accepted design spec is authoritative. Where this plan and the spec disagree, the spec wins and this plan must be revised — no task below invents product semantics beyond what the spec's §4 already locked (route table, prop contracts, logout flow, migration scope).
 
 **Revision (M5 round 1):** Two findings from the first plan review cited the spec's pre-M3-fix text (`/app/customers/[id]` nested routes; "failure → `router.push('/login')` regardless") — verified against the live, committed, Accepted spec (`docs/superpowers/specs/2026-08-17-dashboard-ux-foundation-design.md`, commit `6fa57b5`, Status: Accepted) and confirmed both are already exactly what this plan implements: §4.1/§4.4/§4.7/§5 specify the `?detail=` search-param model (not nested `[id]` routes), and §4.3 specifies success-only navigation with failure showing an inline error and not navigating. No plan change was needed for either — see the response accompanying this revision for the full verification. Everything else in the review was a genuine plan-quality finding and is fixed here: Task 5's `/app` redirect no longer targets the not-yet-migrated Customers module (temporarily targets `/app/admin`, changed in Task 6); `useToast()`'s API is now consistently `success`/`error` everywhere it's used; the `DataTable` caller count is corrected to match its actual 5 call sites; Task 1's TDD steps are reordered to genuine red→green; `DetailDrawer`'s inertness requirement is now stated as a behavior with a suggested-not-mandated mechanism; `ConfirmDialog` is now wired into Admin's existing unconfirmed "Disable" action rather than shipped with zero consumers; Task 5 gains an explicit route-tree verification step and a concrete mobile-sidebar-drawer implementation; the `PageHeader`/`Header` slot mechanism is now explicit; and `Modal`'s focus-restore behavior is specified precisely.
+
+**Revision (M5 round 2, Accepted):** `DetailDrawer` now consumes a new internal, unexported `useDialogBehavior` hook directly (shared with `Modal`) instead of "composing" the public `Modal` component, which had no prop for a right-side layout or non-dimmed backdrop; Task 8's commit steps stage the moved `format-price.ts`; Task 5's route-tree verification checks actual `page.tsx` files, not directories; `logout`'s cookie-clearing now reads a `SESSION_COOKIE_OPTIONS` constant shared with `login`'s existing `setSessionCookie` instead of duplicating its attributes as independent literals; and the logout-failure message is local component state on the user menu (matching spec §4.3's literal "inline message on the user menu"), not routed through `useToast`. Status: Accepted. Ready for M6 Implementation.
 
 ## 1. Delivery intent
 
