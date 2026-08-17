@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { BookingsModule } from '../modules/bookings/bookings.module';
+import { CatalogModule } from '../modules/catalog/catalog.module';
 import { CleanersModule } from '../modules/cleaners/cleaners.module';
 import { CustomersModule } from '../modules/customers/customers.module';
 import { AdminIdentityLookupService } from '../modules/admins/infrastructure/admin-identity-lookup.service';
@@ -40,6 +41,7 @@ import { GraphqlModule } from '../platform/graphql/graphql.module';
       useFactory: (service: AdminIdentityLookupService) => service,
     }),
     BookingsModule,
+    CatalogModule,
     CleanersModule,
     CustomersModule,
   ],
