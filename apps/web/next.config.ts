@@ -12,7 +12,11 @@ const nextConfig: NextConfig = {
   // task that touches this array, re-read it in full and confirm every
   // entry added by an earlier task is still present.
   async redirects() {
-    return [{ source: '/admin', destination: '/app/admin', permanent: true }];
+    return [
+      { source: '/admin', destination: '/app/admin', permanent: true },
+      { source: '/customers', destination: '/app/customers', permanent: true },
+      { source: '/customers/:id', destination: '/app/customers?detail=:id', permanent: true },
+    ];
   },
 };
 
