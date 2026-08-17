@@ -86,26 +86,27 @@ Concretely: `bookings` references `customerId`/`propertyId`/`serviceId`, never `
 
 ## 3. Web Architecture & Testing
 
-**apps/web** (Next.js, App Router): routes mirror module boundaries — `/customers`, `/cleaners`, `/catalog`, `/bookings`, `/jobs`, `/quality`, `/admin` (staff/roles), `/` as the Operations Dashboard once M8 exists (redirects to the first available module before then). Route-group-level authentication checks the authenticated session/JWT claims available to `apps/web`; authorization semantics mirror the six-role matrix defined by `platform/auth`, but `apps/web` does not depend on `apps/api`'s Nest infrastructure directly. The API (`platform/auth`) remains the authoritative enforcement point — frontend route protection is UX/security layering, not the source of authorization truth. Unauthorized requests redirect to `/login`. Every screen goes through `packages/client` for data and `packages/ui` for components — no screen hand-rolls its own query string or button.
+**apps/web** (Next.js, App Router): routes mirror module boundaries — `/customers`, `/cleaners`, `/catalog`, `/bookings`, `/jobs`, `/quality`, `/admin` (staff/roles), `/` as the Operations Dashboard once M9 exists (redirects to the first available module before then). Route-group-level authentication checks the authenticated session/JWT claims available to `apps/web`; authorization semantics mirror the six-role matrix defined by `platform/auth`, but `apps/web` does not depend on `apps/api`'s Nest infrastructure directly. The API (`platform/auth`) remains the authoritative enforcement point — frontend route protection is UX/security layering, not the source of authorization truth. Unauthorized requests redirect to `/login`. Every screen goes through `packages/client` for data and `packages/ui` for components — no screen hand-rolls its own query string or button.
 
 **Testing**: each module gets unit tests for its `application/` layer (mirroring the existing `bookings/tests/` structure) and one e2e spec covering its primary GraphQL workflow end-to-end — not exhaustive field-by-field coverage. `platform/auth` and `platform/audit` get their own unit tests as shared infrastructure. Frontend testing in Phase 1 is manual verification against each milestone's golden path; no browser-automation test suite is being added yet (revisit if regressions start recurring).
 
 ## 4. Phase-1 Milestones
 
-| Milestone | Epic | Outcome |
-|---|---|---|
-| M1 | Admin Foundation | Secure admin shell + auth/RBAC + audit foundation |
-| M2 | Customers & Properties | Customer/property workflow end-to-end |
-| M3 | Cleaners & Teams | Workforce workflow end-to-end |
-| M4 | Catalog | Services/add-ons/pricing workflow |
-| M5 | Bookings | Real relational booking workflow |
-| M6 | Jobs & Checklists | Booking → job → checklist execution |
-| M7 | Quality & Re-cleans | Issue → re-clean → resolution |
-| M8 | Operations Dashboard | Cross-domain operational read model |
+| Milestone | Phase | Epic | Outcome |
+|---|---|---|---|
+| M1 | Foundation | Admin Foundation | Secure admin shell + auth/RBAC + audit foundation |
+| M2 | Core Domain | Customers & Properties | Customer/property workflow end-to-end |
+| M3 | Core Domain | Cleaners & Teams | Workforce workflow end-to-end |
+| M4 | Core Domain | Catalog | Services/add-ons/pricing workflow |
+| M5 | Application Experience | Dashboard UX Foundation | Protected app shell + reusable CRUD/data-table/dialog/overlay UX patterns |
+| M6 | Operations | Bookings | Real relational booking workflow |
+| M7 | Operations | Jobs & Checklists | Booking → job → checklist execution |
+| M8 | Operations | Quality & Re-cleans | Issue → re-clean → resolution |
+| M9 | Operations | Operations Dashboard | Cross-domain operational read model |
 
 Audit is cross-cutting and has no standalone Phase-1 backlog issue or milestone. Its infrastructure is built in M1 and exercised by every subsequent milestone's mutations.
 
-Dependency order: M1 unblocks all business modules (nothing is exposed without auth). M2, M3, M4 have no dependencies on each other and can be built in any order once M1 exists. M5 depends on M2–M4. M6 depends on M5 and M3 (jobs need bookings and teams). M7 depends on M6. M8 depends on all of M2–M7.
+Dependency order: M1 unblocks all business modules (nothing is exposed without auth). M2, M3, M4 have no dependencies on each other and can be built in any order once M1 exists. M5 (Dashboard UX Foundation) depends on M2–M4 for existing screens to migrate and prove its patterns against, and establishes the app-shell/data-table/dialog/overlay UX conventions that M6–M9 build on rather than each inventing its own. M6 depends on M2–M5. M7 depends on M6, M5, and M3 (jobs need bookings, the UX patterns, and teams). M8 depends on M7 and M5. M9 depends on all of M2–M8.
 
 ## 5. Vertical-Slice Definition of Done
 
@@ -123,7 +124,7 @@ A milestone is not "done" because its entity and API exist — the web UI and th
 
 ### 6.1 Phase-1 Issues
 
-One issue per vertical slice (module), attached to its milestone (M1–M8). 8 issues total for Phase 1. Each issue body includes a checklist of its layers (domain → application → infrastructure → GraphQL → web UI → tests) as sub-steps, not separate issues.
+One issue per vertical slice (module), attached to its milestone (M1–M9). 9 issues total for Phase 1. Each issue body includes a checklist of its layers (domain → application → infrastructure → GraphQL → web UI → tests) as sub-steps, not separate issues.
 
 ### 6.2 Deferred Roadmap Issues
 
