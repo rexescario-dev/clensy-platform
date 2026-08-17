@@ -13,6 +13,15 @@ export type { StatusBadgeProps, StatusTone } from './status-badge';
 export { Modal } from './modal';
 export type { ModalProps } from './modal';
 
+export { FormDialog } from './form-dialog';
+export type { FormDialogProps } from './form-dialog';
+
+export { ConfirmDialog } from './confirm-dialog';
+export type { ConfirmDialogProps } from './confirm-dialog';
+
+export { DetailDrawer } from './detail-drawer';
+export type { DetailDrawerProps } from './detail-drawer';
+
 export { PageHeader } from './page-header';
 export type { PageHeaderProps } from './page-header';
 
