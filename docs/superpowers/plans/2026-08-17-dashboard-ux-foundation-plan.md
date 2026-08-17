@@ -172,27 +172,39 @@ Adjust `LOGIN_MUTATION`/`SEED_OWNER_CREDENTIALS`/`extractSetCookie` to whatever 
 Run: `pnpm --filter api test -- admin.resolver.spec.ts` and `pnpm --filter api test:e2e -- admin-foundation.e2e-spec.ts`
 Expected: both FAIL — the unit test on an undefined `logout` method, the e2e test on a GraphQL "Cannot query field 'logout'" error.
 
-- [ ] **Step 4: Implement the `logout` resolver method**, mirroring `login`'s cookie-handling structure exactly (spec §4.3 — idempotent, unauthenticated-safe):
+- [ ] **Step 4: Implement the `logout` resolver method**, mirroring `login`'s cookie-handling structure exactly (spec §4.3 — idempotent, unauthenticated-safe). Do not hand-copy `setSessionCookie`'s `httpOnly`/`secure`/`sameSite`/`path` values as independent literals — a browser only clears a cookie when `clearCookie`'s options match the ones it was set with, so a second, separately-typed copy is exactly the kind of drift risk that later silently breaks logout if `setSessionCookie` ever changes. Extract those four shared attributes (everything except `maxAge`, which only `setSessionCookie` needs) into one constant both methods read from:
 
 ```ts
+const SESSION_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'lax' as const,
+  path: '/',
+};
+
+// existing method — refactor its inline options object to spread the
+// shared constant instead of repeating the four literals, adding only
+// the `maxAge` this method alone needs:
+private setSessionCookie(res: Response, token: string): void {
+  const expiresIn = this.configService.get<string>('JWT_EXPIRES_IN', '8h');
+  res.cookie(SESSION_COOKIE_NAME, token, {
+    ...SESSION_COOKIE_OPTIONS,
+    maxAge: ms(expiresIn as Parameters<typeof ms>[0]),
+  });
+}
+
 @Mutation(() => Boolean)
 async logout(@Context() context: GqlContext): Promise<boolean> {
   this.clearSessionCookie(context.res);
   return true;
 }
 
-// Mirrors `setSessionCookie`'s exact cookie attributes (httpOnly/secure/
-// sameSite/path) — a browser only clears a cookie when `clearCookie`'s
-// options match the ones it was set with.
 private clearSessionCookie(res: Response): void {
-  res.clearCookie(SESSION_COOKIE_NAME, {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'lax',
-    path: '/',
-  });
+  res.clearCookie(SESSION_COOKIE_NAME, SESSION_COOKIE_OPTIONS);
 }
 ```
+
+This does touch `setSessionCookie`'s existing body — a small, behavior-preserving refactor (its runtime options are identical before and after), not a new decision about what the attributes should be.
 
 - [ ] **Step 5: Re-run both tests, confirm they pass.**
 
@@ -225,6 +237,7 @@ git commit -m "feat(admins): add logout mutation"
 ### Task 2: `packages/ui` — `Modal`, `PageHeader`, feedback primitives
 
 **Files:**
+- Create: `packages/ui/src/internal/use-dialog-behavior.ts` (not exported from `index.ts` — internal to the package)
 - Create: `packages/ui/src/modal.tsx`
 - Create: `packages/ui/src/page-header.tsx`
 - Create: `packages/ui/src/toast.tsx` (`ToastProvider`, `useToast`)
@@ -234,36 +247,77 @@ git commit -m "feat(admins): add logout mutation"
 - Modify: `packages/ui/src/index.ts`
 
 **Interfaces:**
-- Produces: `Modal({ open, onClose, title, children })`, `PageHeaderProps` exactly as spec §4.4, `ToastProvider`/`useToast()` (`success(message)`/`error(message)` methods, minimal), `LoadingState`, `EmptyState({ message, action? })`, `ErrorState({ message, onRetry? })`.
+- Produces: `Modal({ open, onClose, title, children })`, `PageHeaderProps` exactly as spec §4.4, `ToastProvider`/`useToast()` (`success(message)`/`error(message)` methods, minimal), `LoadingState`, `EmptyState({ message, action? })`, `ErrorState({ message, onRetry? })`. Also produces the internal `useDialogBehavior` hook (not part of the package's public surface) that Task 3's `DetailDrawer` consumes directly — see that task's note on why `DetailDrawer` doesn't compose the public `Modal` component.
 - Consumes: nothing outside `packages/ui` and React.
 
-- [ ] **Step 1: Implement `Modal`** per spec §4.4, with these precise behaviors (loose enough to cause subtly broken focus handling if left implicit):
+- [ ] **Step 1: Implement `useDialogBehavior`** — the shared accessibility mechanics every modal-like primitive in this package needs, factored out so `Modal` and `DetailDrawer` (Task 3) each get it without either depending on the other's public component contract:
 
-  - `role="dialog"`, `aria-modal="true"`, `aria-labelledby` pointing at a generated title id.
-  - Capture `document.activeElement` into a ref at the moment `open` transitions from `false` to `true` (the trigger element) — not read lazily later, since by the time a close effect runs, `document.activeElement` may already be inside the dialog.
-  - While `open`, trap Tab/Shift+Tab within the dialog's focusable descendants; if there are none, focus the dialog container itself (`tabIndex={-1}`) so focus doesn't silently fall back to `<body>`.
-  - On close, restore focus to the captured trigger element only if it is still attached to the DOM (`element.isConnected`); otherwise do nothing rather than throwing.
-  - Escape (`keydown` while `open`) calls `onClose`.
-  - A click on the backdrop calls `onClose`; a click anywhere inside the dialog content must not — stop propagation on the dialog content's own click handler, or check `event.target === event.currentTarget` on the backdrop element specifically, rather than a single document-level listener that can't distinguish the two.
-  - Do not run any of the trap/backdrop/Escape logic at all while `open` is `false`.
+```ts
+// packages/ui/src/internal/use-dialog-behavior.ts
+'use client';
+import { useEffect, useRef } from 'react';
 
-- [ ] **Step 2: Implement `PageHeader`** — a simple `title`/`description?`/`actions?` layout, no logic.
+export function useDialogBehavior(open: boolean, onClose: () => void) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<Element | null>(null);
 
-- [ ] **Step 3: Implement `ToastProvider`/`useToast`** — a React context holding a list of `{ id, tone: 'success' | 'error', message }`, auto-dismissed after a few seconds, rendered as a fixed-position stack.
+  useEffect(() => {
+    if (open) triggerRef.current = document.activeElement;
+  }, [open]);
 
-- [ ] **Step 4: Implement `LoadingState`, `EmptyState`, `ErrorState`** — small presentational components (spinner/message, message + optional action slot, message + optional retry button respectively), matching this package's existing visual style (see `packages/ui/src/data-table.tsx`'s Tailwind classes for the established look).
+  useEffect(() => {
+    if (!open) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose();
+      if (event.key === 'Tab') {
+        // cycle Tab/Shift+Tab within containerRef's focusable descendants;
+        // if none exist, keep focus on the container itself.
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [open, onClose]);
 
-- [ ] **Step 5: Export the primitives introduced by this task from `packages/ui/src/index.ts`** — `Modal`, `PageHeader`, `ToastProvider`, `useToast`, `LoadingState`, `EmptyState`, `ErrorState` (the last six are components; `useToast` is a hook, not a component, but is exported alongside them the same way) — following the existing `export { X } from './x'; export type { XProps } from './x';` pattern.
+  useEffect(() => {
+    if (open) return;
+    const trigger = triggerRef.current;
+    if (trigger && trigger.isConnected) (trigger as HTMLElement).focus?.();
+  }, [open]);
 
-- [ ] **Step 6: Type-check.**
+  function backdropProps() {
+    return {
+      onClick: (event: React.MouseEvent) => {
+        if (event.target === event.currentTarget) onClose();
+      },
+    };
+  }
+
+  return { containerRef, backdropProps };
+}
+```
+
+This is the **only** place focus-trap/Escape/backdrop-click logic lives — neither `Modal` nor `DetailDrawer` reimplements it. It has no opinion on backdrop dimming or positioning; those stay in each component's own markup/Tailwind classes, which is exactly where the two are supposed to visually differ.
+
+- [ ] **Step 2: Implement `Modal`** using `useDialogBehavior`: `role="dialog"`, `aria-modal="true"`, `aria-labelledby` pointing at a generated title id, centered layout, dimmed (`bg-black/50` or similar) backdrop via `backdropProps()`.
+
+- [ ] **Step 3: Implement `PageHeader`** — a simple `title`/`description?`/`actions?` layout, no logic.
+
+- [ ] **Step 4: Implement `ToastProvider`/`useToast`** — a React context holding a list of `{ id, tone: 'success' | 'error', message }`, auto-dismissed after a few seconds, rendered as a fixed-position stack.
+
+- [ ] **Step 5: Implement `LoadingState`, `EmptyState`, `ErrorState`** — small presentational components (spinner/message, message + optional action slot, message + optional retry button respectively), matching this package's existing visual style (see `packages/ui/src/data-table.tsx`'s Tailwind classes for the established look).
+
+- [ ] **Step 6: Export the public primitives introduced by this task from `packages/ui/src/index.ts`** — `Modal`, `PageHeader`, `ToastProvider`, `useToast`, `LoadingState`, `EmptyState`, `ErrorState` (the last six are components; `useToast` is a hook, not a component, but is exported alongside them the same way) — following the existing `export { X } from './x'; export type { XProps } from './x';` pattern. **Do not export `useDialogBehavior`** — it stays internal to the package.
+
+- [ ] **Step 7: Type-check.**
 
 Run: `pnpm --filter @clensy/ui build`
 Expected: no errors.
 
-- [ ] **Step 7: Commit.**
+- [ ] **Step 8: Commit.**
 
 ```bash
-git add packages/ui/src/modal.tsx packages/ui/src/page-header.tsx packages/ui/src/toast.tsx \
+git add packages/ui/src/internal/use-dialog-behavior.ts \
+        packages/ui/src/modal.tsx packages/ui/src/page-header.tsx packages/ui/src/toast.tsx \
         packages/ui/src/loading-state.tsx packages/ui/src/empty-state.tsx packages/ui/src/error-state.tsx \
         packages/ui/src/index.ts
 git commit -m "feat(ui): add Modal, PageHeader, and feedback primitives"
@@ -280,14 +334,14 @@ git commit -m "feat(ui): add Modal, PageHeader, and feedback primitives"
 - Modify: `packages/ui/src/index.ts`
 
 **Interfaces:**
-- Consumes: `Modal` from Task 2 (`FormDialog`/`ConfirmDialog` compose it internally).
+- Consumes: the public `Modal` component from Task 2 for `FormDialog`/`ConfirmDialog` (both want exactly `Modal`'s centered, dimmed-backdrop behavior — no new capability needed from it). Consumes the **internal** `useDialogBehavior` hook from Task 2 directly for `DetailDrawer` — `DetailDrawer` does **not** compose the public `Modal` component, since `Modal`'s public contract (`{ open, onClose, title, children }`) has no prop for a right-side layout or a non-dimmed backdrop, and adding one would be a new, spec-unauthorized public surface. Sharing the same internal hook gives both the identical accessibility behavior without either duplicating it or reaching into the other's implementation.
 - Produces: `FormDialogProps`, `ConfirmDialogProps`, `DetailDrawer` props — exactly as spec §4.4.
 
 - [ ] **Step 1: Implement `FormDialog`** composing `Modal`: renders a `<form onSubmit={...}>` wrapping `children`, calling the spec's `onSubmit` on the form's native submit event; owns the Cancel button and a submit button disabled while `submitting`.
 
 - [ ] **Step 2: Implement `ConfirmDialog`** composing `Modal`: renders `description`, owns Cancel and a `confirmLabel` button that calls `onConfirm` and is disabled (alongside Cancel) while `confirming`.
 
-- [ ] **Step 3: Implement `DetailDrawer`** per spec §4.4: `role="dialog"`, `aria-modal="true"`, `aria-labelledby`, slides in from the right at `widthClassName` (default within 360–480px). The behavioral requirement is that no click, focus, or keyboard interaction reaches the background content while open (spec §4.4) — reuse `Modal`'s own focus trap for this rather than inventing a second mechanism (a trapped focus already can't reach the background, and a transparent click-catching backdrop element — the same one `Modal` already uses, just visually non-opaque here instead of dimmed — already blocks background clicks). Do not apply `aria-hidden`/`inert` to a wrapper around the rest of the page; that targets a different problem (hiding content from assistive tech that focus-trapping and a click-catching backdrop don't already solve here) and risks hiding content a screen reader user still needs. Closes the same way as `Modal` (`X`/Escape/backdrop click) via `onClose`.
+- [ ] **Step 3: Implement `DetailDrawer`** using `useDialogBehavior` directly (not the public `Modal` component — see this task's Interfaces note): `role="dialog"`, `aria-modal="true"`, `aria-labelledby`, slides in from the right at `widthClassName` (default within 360–480px), backdrop rendered via the hook's `backdropProps()` but styled transparent/non-dimming instead of `Modal`'s dimmed backdrop — the only visual difference between the two, while the underlying focus-trap/Escape/backdrop-click mechanics are identical because both call the same hook. No `aria-hidden`/`inert` on a wrapper around the rest of the page — the shared hook's focus trap plus its click-catching backdrop already stop every form of interaction from reaching the background; adding `aria-hidden` on top would target a different problem (hiding content from assistive tech) and risks hiding content a screen reader user still needs. Closes via `onClose`, same as `Modal`.
 
   **Note:** `DetailDrawer` itself does not decide *how* `onClose` updates the URL — that's the caller's job (see Task 5's `useDetailDrawer` hook). `DetailDrawer` only calls `onClose()`; it holds no routing knowledge.
 
@@ -360,7 +414,7 @@ This is the first task to touch `apps/web/app/app/**` and is deliberately built 
 
 - [ ] **Step 0: Verify the route tree** this task's redirects and Tasks 6–8's redirects will depend on, against spec §4.1's table exactly (spec §6 requires the redirect map be "exhaustive against every route that exists in `apps/web/app` today"):
 
-Run: `find apps/web/app -maxdepth 3 -type d | sort` and confirm it matches exactly: `admin`, `catalog`, `catalog/[id]`, `catalog/add-ons`, `catalog/add-ons/[id]`, `cleaners`, `cleaners/[id]`, `cleaners/teams`, `cleaners/teams/[id]`, `customers`, `customers/[id]`, `login`. If the tree has drifted since the spec was written, stop and return to M2/M3 rather than silently adjusting the redirect map here.
+Run: `find apps/web/app -type f \( -name 'page.tsx' -o -name 'page.ts' \) | sort` — a directory alone isn't a Next.js route, only a `page.*` file inside it is, so this is the authoritative check, not a directory listing. Map each result to its route and confirm the set matches spec §4.1's table exactly: `/admin`, `/catalog`, `/catalog/[id]`, `/catalog/add-ons`, `/catalog/add-ons/[id]`, `/cleaners`, `/cleaners/[id]`, `/cleaners/teams`, `/cleaners/teams/[id]`, `/customers`, `/customers/[id]`, `/login`. If the tree has drifted since the spec was written, stop and return to M2/M3 rather than silently adjusting the redirect map here.
 
 - [ ] **Step 1: `use-sidebar-collapsed.ts`** — the localStorage-backed collapse state (spec §4.2, key `clensy.sidebar.collapsed`):
 
@@ -395,34 +449,37 @@ export function useSidebarCollapsed(): [boolean, (value: boolean) => void] {
 
 - [ ] **Step 3: `header.tsx`** — renders its `children` (a mobile nav-toggle button, visible only below `md:`, calling the `onMobileNavToggle` prop `AppShell` passes down) plus mounts `UserMenu`. `Header` does **not** render `PageHeader` — see Step 6's note on why that's a separate, page-level concern, not a header-owned slot.
 
-- [ ] **Step 4: `user-menu.tsx`** — calls `useCurrentAdminQuery` for identity/role display; **Log out** action implements the exact success/failure flow from spec §4.3:
+- [ ] **Step 4: `user-menu.tsx`** — calls `useCurrentAdminQuery` for identity/role display; **Log out** action implements the exact success/failure flow from spec §4.3. Spec §4.3 says the failure message is "an inline message **on the user menu**," not a toast — `ToastProvider`/`useToast` (Task 2) is not used here at all; the message is local component state rendered directly in this menu:
 
 ```ts
 'use client';
 import { useApolloClient } from '@apollo/client';
 import { useLogoutMutation, useCurrentAdminQuery } from '@clensy/client';
 import { useRouter } from 'next/navigation';
-import { useToast } from '@clensy/ui';
+import { useState } from 'react';
 
 export function UserMenu() {
   const apolloClient = useApolloClient();
   const router = useRouter();
-  const { error: showError } = useToast();
   const { data } = useCurrentAdminQuery();
   const [logout, { loading }] = useLogoutMutation();
+  const [logoutError, setLogoutError] = useState<string | undefined>(undefined);
 
   async function handleLogout() {
+    setLogoutError(undefined);
     try {
       const result = await logout();
       if (!result.data?.logout) throw new Error('logout returned false');
       await apolloClient.clearStore();
       router.replace('/login');
     } catch {
-      showError('Unable to log out. Please try again.');
+      setLogoutError('Unable to log out. Please try again.');
     }
   }
 
-  // ...identity display + "Log out" button calling handleLogout, disabled while `loading`
+  // ...identity display + "Log out" button calling handleLogout, disabled while
+  // `loading`; render `logoutError` as text inside this menu when set, e.g.
+  // directly beneath the Log out button, not via the toast system.
 }
 ```
 
@@ -632,10 +689,10 @@ git commit -m "feat(web): migrate Cleaners & Teams to /app/cleaners with DetailD
 
 - [ ] **Step 6: Manual verification** — same checklist shape as Task 6 Step 6, run against both `/app/catalog` and `/app/catalog/add-ons`; additionally confirm price entry/display still round-trips correctly through `DetailDrawer` (money formatting is unchanged, but the surrounding container is new).
 
-- [ ] **Step 7: Commit.**
+- [ ] **Step 7: Commit.** `apps/web/lib/format-price.ts` is only in this file list if Step 3 actually moved it — omit that path if `format-price.ts` already lived outside `app/catalog/` and Step 3 was skipped.
 
 ```bash
-git add apps/web/app/app/catalog/ apps/web/next.config.ts
+git add apps/web/app/app/catalog/ apps/web/lib/format-price.ts apps/web/next.config.ts
 git rm apps/web/app/catalog/page.tsx
 git rm -r apps/web/app/catalog/\[id\]
 git rm apps/web/app/catalog/add-ons/page.tsx
