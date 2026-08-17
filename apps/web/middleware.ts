@@ -11,12 +11,13 @@ const SESSION_COOKIE_NAME = 'clensy_admin_session';
 // UX-hint-only gate (spec §4.8/§5.6): checks ONLY whether the session
 // cookie is present, never its validity. It does not decode the JWT and
 // makes no role decision — an expired, invalid, or disabled-account session
-// still has a present cookie and will pass through here. On `/admin`
+// still has a present cookie and will pass through here. On `/app/admin`
 // specifically, that case is caught downstream by its `currentAdmin` query
-// (a GraphQL error or missing principal); `/customers`/`/customers/:path*`
-// (also matched below) have no equivalent downstream redirect-on-invalid-
-// session logic yet. The API's guards remain the sole source of
-// authorization truth regardless.
+// (a GraphQL error or missing principal); other `/app/*` routes (all
+// matched below, via the single `/app/:path*` pattern now that every
+// authenticated route lives under `/app`) have no equivalent
+// downstream redirect-on-invalid-session logic yet. The API's guards
+// remain the sole source of authorization truth regardless.
 export function middleware(request: NextRequest) {
   const hasSessionCookie = request.cookies.has(SESSION_COOKIE_NAME);
 
@@ -29,14 +30,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    '/admin',
-    '/admin/:path*',
-    '/customers',
-    '/customers/:path*',
-    '/cleaners',
-    '/cleaners/:path*',
-    '/catalog',
-    '/catalog/:path*',
-  ],
+  matcher: ['/app/:path*'],
 };

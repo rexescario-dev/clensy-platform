@@ -25,7 +25,7 @@ export default function LoginPage() {
     try {
       const result = await login({ variables: { loginInput: { email, password } } });
       if (result.data?.login.success) {
-        router.push('/admin');
+        router.push('/app');
         return;
       }
       setError('Invalid email or password.');
