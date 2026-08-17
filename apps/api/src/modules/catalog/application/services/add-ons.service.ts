@@ -83,13 +83,16 @@ export class AddOnsService {
 
         if (changes.name !== undefined) {
           changes.name = changes.name.trim();
-          await this.assertNameAvailable(manager, changes.name, id);
         }
 
         // Validate the resulting state WITHOUT mutating the tracked entity —
         // manager.update() below persists `changes` directly, it never goes
         // through Object.assign on `entity`.
         this.assertValid({ ...entity, ...changes });
+
+        if (changes.name !== undefined) {
+          await this.assertNameAvailable(manager, changes.name, id);
+        }
 
         await this.translateUniqueViolation(() =>
           manager.update(

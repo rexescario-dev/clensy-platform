@@ -120,6 +120,35 @@ describe('AddOnsService', () => {
       expect(manager.update).not.toHaveBeenCalled();
       expect(auditLogger.log).not.toHaveBeenCalled();
     });
+
+    // Final-review fix: validate-before-uniqueness-check, matching
+    // createAddOn's order. Input that is invalid in both ways (a colliding
+    // name AND an invalid field) must fail with the validation error, not
+    // the uniqueness error — same as createAddOn already does.
+    it('throws BadRequestException, not ConflictException, when priceMinorUnits is invalid and name collides', async () => {
+      manager.findOneBy.mockResolvedValue({
+        id: 'add-on-1',
+        name: 'Extra Towels',
+        description: null,
+        priceMinorUnits: 500,
+        active: true,
+      });
+      nameQueryBuilder.getOne.mockResolvedValue({
+        id: 'other-add-on',
+        name: 'Existing Name',
+      });
+
+      await expect(
+        service.updateAddOn('add-on-1', {
+          actorId: 'actor-1',
+          name: 'Existing Name',
+          priceMinorUnits: -5,
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(manager.update).not.toHaveBeenCalled();
+      expect(auditLogger.log).not.toHaveBeenCalled();
+    });
   });
 
   describe('listAddOns', () => {

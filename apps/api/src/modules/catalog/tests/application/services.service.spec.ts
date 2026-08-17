@@ -190,5 +190,34 @@ describe('ServicesService', () => {
       expect(manager.update).not.toHaveBeenCalled();
       expect(auditLogger.log).not.toHaveBeenCalled();
     });
+
+    // Final-review fix: validate-before-uniqueness-check, matching
+    // createService's order. Input that is invalid in both ways (a
+    // colliding name AND an invalid field) must fail with the validation
+    // error, not the uniqueness error — same as createService already does.
+    it('throws BadRequestException, not ConflictException, when durationMinutes is invalid and name collides', async () => {
+      manager.findOneBy.mockResolvedValue({
+        id: 'service-1',
+        name: 'Standard Clean',
+        description: null,
+        durationMinutes: 60,
+        active: true,
+      });
+      nameQueryBuilder.getOne.mockResolvedValue({
+        id: 'other-service',
+        name: 'Existing Name',
+      });
+
+      await expect(
+        service.updateService('service-1', {
+          actorId: 'actor-1',
+          name: 'Existing Name',
+          durationMinutes: -5,
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(manager.update).not.toHaveBeenCalled();
+      expect(auditLogger.log).not.toHaveBeenCalled();
+    });
   });
 });
