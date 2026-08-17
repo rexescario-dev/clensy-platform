@@ -31,13 +31,16 @@ function createTestDataSource(): DataSource {
   });
 }
 
-// Combined `TRUNCATE` of all three catalog tables in one statement, ordered
-// so the FK direction (`pricing_rule_entity.serviceId → service_entity.id`)
-// is always respected — same technique the Cleaners plan used for
-// `cleaner_entity`/`team_entity` (a plain sequential `.clear()`/`TRUNCATE` of
-// the parent table first would fail once the FK constraint exists). Shared
-// by all three `describe` blocks below so none of them can see residue left
-// behind by another block earlier in the same file/process.
+// Combined `TRUNCATE` of all three catalog tables in one statement — same
+// technique the Cleaners plan used for `cleaner_entity`/`team_entity`. A
+// single multi-table `TRUNCATE` truncates every listed table together
+// regardless of listing order, so the ordering here is not load-bearing;
+// what matters is that all three are truncated in ONE statement rather than
+// as separate sequential `.clear()`/`TRUNCATE` calls, since a sequential
+// truncate of `service_entity` before `pricing_rule_entity` would fail once
+// the FK constraint (`pricing_rule_entity.serviceId → service_entity.id`)
+// exists. Shared by all three `describe` blocks below so none of them can
+// see residue left behind by another block earlier in the same file/process.
 const TRUNCATE_CATALOG_TABLES =
   'TRUNCATE TABLE "pricing_rule_entity", "service_entity", "add_on_entity"';
 

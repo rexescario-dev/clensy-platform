@@ -111,6 +111,13 @@ describe('ServicesService', () => {
 
         expect(manager.save).not.toHaveBeenCalled();
         expect(auditLogger.log).not.toHaveBeenCalled();
+        // Closes the M8 gap: the title claims validation runs "before any
+        // repository call," but until this assertion the test only proved
+        // `save`/`log` were skipped — it never proved the name-availability
+        // query builder (`manager.getRepository(...).createQueryBuilder(...)`)
+        // was skipped too. A regression that reordered createService to
+        // check name availability first would have passed this test silently.
+        expect(manager.getRepository).not.toHaveBeenCalled();
       },
     );
   });

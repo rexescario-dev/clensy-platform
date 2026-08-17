@@ -5,7 +5,7 @@ import { Button, FormField } from '@clensy/ui';
 import { useParams } from 'next/navigation';
 import { type FormEvent, useEffect, useState } from 'react';
 
-import { formatMinorUnits, parsePesosToMinorUnits } from '../../format-price';
+import { parsePesosToMinorUnits, toEditableAmount } from '../../format-price';
 
 // There is no standalone `addOn(id)` GraphQL query (only `addOns`, the full
 // list — see task-6-brief.md). This page fetches the full list via
@@ -66,14 +66,14 @@ function AddOnDetail({
   const [name, setName] = useState(addOn.name);
   const [description, setDescription] = useState(addOn.description ?? '');
   const [active, setActive] = useState(addOn.active);
-  const [price, setPrice] = useState(formatMinorUnits(addOn.priceMinorUnits).replace('₱', ''));
+  const [price, setPrice] = useState(toEditableAmount(addOn.priceMinorUnits));
   const [formError, setFormError] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     setName(addOn.name);
     setDescription(addOn.description ?? '');
     setActive(addOn.active);
-    setPrice(formatMinorUnits(addOn.priceMinorUnits).replace('₱', ''));
+    setPrice(toEditableAmount(addOn.priceMinorUnits));
   }, [addOn.name, addOn.description, addOn.active, addOn.priceMinorUnits]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {

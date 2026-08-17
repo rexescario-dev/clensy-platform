@@ -384,15 +384,13 @@ describe('Catalog (e2e)', () => {
       priceMinorUnits: 9500,
     });
 
-    const pricingRuleCreateAuditEventsForService =
-      await auditEventRepository.findBy({
+    const secondPricingRuleCreateAuditEvent =
+      await auditEventRepository.findOneBy({
         action: 'pricing_rule.create',
+        entityId: secondPricingRuleId,
       });
-    const pricingRuleCreateEntityIdsForService =
-      pricingRuleCreateAuditEventsForService.map((e) => e.entityId);
-    expect(pricingRuleCreateEntityIdsForService).toEqual(
-      expect.arrayContaining([firstPricingRuleId, secondPricingRuleId]),
-    );
+    expect(secondPricingRuleCreateAuditEvent).not.toBeNull();
+    expect(secondPricingRuleCreateAuditEvent?.actorId).toBe(owner.id);
 
     const activeRowsForService = await pricingRuleRepository.findBy({
       serviceId,

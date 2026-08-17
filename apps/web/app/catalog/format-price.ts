@@ -20,3 +20,13 @@ export function parsePesosToMinorUnits(input: string): number {
   const fractionPart = fractionPartRaw.padEnd(2, '0');
   return parseInt(wholePart + fractionPart, 10);
 }
+
+// Pre-fills an editable price input from a persisted value — the inverse
+// display step of `formatMinorUnits`, without its `₱` prefix, so the result
+// is directly re-parseable by `parsePesosToMinorUnits`. Kept next to
+// `formatMinorUnits` rather than inlining `.replace('₱', '')` at each call
+// site, since the prefix is this file's own formatting detail, not
+// something a page should need to know about to strip back off.
+export function toEditableAmount(minorUnits: number): string {
+  return formatMinorUnits(minorUnits).replace('₱', '');
+}

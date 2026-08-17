@@ -102,6 +102,9 @@ describe('AddOnsService', () => {
 
         expect(manager.save).not.toHaveBeenCalled();
         expect(auditLogger.log).not.toHaveBeenCalled();
+        // Closes the same M8 gap fixed in services.service.spec.ts: proves
+        // the name-availability query builder was never reached either.
+        expect(manager.getRepository).not.toHaveBeenCalled();
       },
     );
   });
