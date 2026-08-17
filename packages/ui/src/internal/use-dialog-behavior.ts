@@ -26,7 +26,21 @@ export function useDialogBehavior(open: boolean, onClose: () => void) {
   const triggerRef = useRef<Element | null>(null);
 
   useEffect(() => {
-    if (open) triggerRef.current = document.activeElement;
+    if (!open) return;
+    triggerRef.current = document.activeElement;
+
+    // WAI-ARIA Dialog (Modal) Pattern: focus moves into the dialog the
+    // moment it opens, not on the user's first Tab press. Focus the first
+    // focusable descendant if there is one; otherwise fall back to the
+    // container itself (already `tabIndex={-1}` for exactly this case).
+    const container = containerRef.current;
+    if (!container) return;
+    const [first] = getFocusableElements(container);
+    if (first) {
+      first.focus();
+    } else {
+      container.focus();
+    }
   }, [open]);
 
   useEffect(() => {

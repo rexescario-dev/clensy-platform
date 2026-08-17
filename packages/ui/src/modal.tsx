@@ -27,7 +27,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="w-full max-w-lg rounded-lg bg-white p-6 shadow-lg focus:outline-none"
+        className="w-full max-w-lg rounded-lg bg-white p-6 shadow-lg focus:outline-none focus:ring-2 focus:ring-slate-400"
       >
         <h2 id={titleId} className="text-lg font-semibold text-slate-900">
           {title}
