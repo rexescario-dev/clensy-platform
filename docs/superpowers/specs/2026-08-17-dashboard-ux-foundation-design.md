@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Accepted |
 | Date | 2026-08-17 |
 | Tracking issue | [#24](https://github.com/rexescario-dev/clensy-platform/issues/24) |
 | Milestone | M5 — Dashboard UX Foundation |
@@ -10,6 +10,8 @@
 | Governing references | [Phase 1 Design](2026-08-14-clensy-platform-phase1-design.md) §2.5 (Shared Packages), §3 (Web Architecture & Testing), §4 (M5) |
 
 **Revision (M3 round 1):** resolved the drawer URL mechanism as a `detail` search param rather than a nested dynamic route (§3, §4.4, §4.7); corrected logout failure semantics so a failed `logout` call never claims the session was destroyed (§4.3); replaced "protected boundary" with precise three-layer authentication/authorization language throughout (§3, §4.1); defined `PageHeader` (§4.4); resolved `DetailDrawer`'s ARIA role, `FormDialog`'s `<form>` ownership, and keyboard activation for interactive table rows (§4.4, §4.6); added Admin/Staff to the sidebar information architecture (§4.2); marked `/app` → `/app/customers` as explicitly temporary (§4.1); scoped pagination as presentation-only, not server-side (§7); added a golden-path manual-verification acceptance criterion (§6).
+
+**Revision (M3 round 2, Accepted):** fixed inconsistent "five route groups" wording to name the four route areas directly (§4.7, §6); relaxed `DetailDrawer`'s close behavior from a prescribed `router.back()`/`router.replace` mechanism to a behavioral requirement, leaving the history-detection mechanism to M4 (§4.4); documented `logout`'s idempotency when called without a valid session — no privilege-escalation surface (§4.3); gave `ConfirmDialog` the same concrete TypeScript contract as the other primitives (§4.4).
 
 ## 1. Thesis
 
@@ -101,7 +103,7 @@ type Mutation {
 }
 ```
 
-Resolved alongside `login` in `modules/admins/presentation/graphql/admin.resolver.ts`. Its handler sets an immediately expired `Set-Cookie` for `SESSION_COOKIE_NAME` (the same constant `login` already writes and `JwtStrategy` already reads — `apps/api/src/platform/auth/auth.constants.ts`) and returns `true`. It requires no request body and performs no audit-worthy state change (audit already excludes login itself), so it is unauthenticated-safe to call and needs no new RBAC rule.
+Resolved alongside `login` in `modules/admins/presentation/graphql/admin.resolver.ts`. Its handler sets an immediately expired `Set-Cookie` for `SESSION_COOKIE_NAME` (the same constant `login` already writes and `JwtStrategy` already reads — `apps/api/src/platform/auth/auth.constants.ts`) and returns `true`. It requires no request body and performs no audit-worthy state change (audit already excludes login itself), so it is unauthenticated-safe to call and needs no new RBAC rule. Calling it without a valid session is idempotent — it expires a cookie that either already carried no valid session or didn't exist, and returns `true` either way; there is no privilege-escalation surface from calling `logout` unauthenticated.
 
 This is a deliberate, narrow exception to the "no new GraphQL operations" scope boundary in §2 — it exists only because the shell's logout menu item (§4.2) has no other way to clear an `HttpOnly` cookie. See §5 for why this is preferable to alternatives.
 
@@ -176,11 +178,27 @@ export interface FormDialogProps {
 
 `FormDialog` renders the `<form>` element itself and calls `onSubmit` on the form's native submit event (so pressing Enter in a field submits, not just clicking the button) — callers supply only their `FormField`s as `children` and must not render their own `<form>` wrapper. `FormDialog` owns the submit button's disabled/loading state (from `submitting`) and the Cancel action.
 
-**`ConfirmDialog`** — composes `Modal` for destructive confirmations: `{ open, onClose, onConfirm, title, description, confirmLabel, confirming }`.
+**`ConfirmDialog`** — composes `Modal` for destructive confirmations:
+
+```ts
+export interface ConfirmDialogProps {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: () => void | Promise<void>;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  confirming?: boolean;
+}
+```
+
+`ConfirmDialog` owns the Cancel and Confirm actions; `confirming` disables both and exposes the pending state while `onConfirm` is in flight.
 
 **`DetailDrawer`** — the right-side overlay (§3): `{ open, onClose, title, children, widthClassName? }`, default width in the 360–480px range. `role="dialog"`, `aria-modal="true"` (same as `Modal` — sliding in from the side doesn't make it a `complementary` landmark), `aria-labelledby` pointing at its title. Unlike `Modal`, the backdrop is non-blocking *visually* (the background list stays visible so the user keeps spatial context) but is inert while open — no click, focus, or keyboard interaction reaches the content behind it; a click on the backdrop itself still closes the drawer.
 
-`DetailDrawer` is driven by state the caller owns, not internal state: each list page reads a `detail` search param (`useSearchParams`) to decide whether the drawer is open and for which row. Opening it (row click) does `router.push` to add `?detail=<id>` to the current URL — a new history entry, so browser Back closes the drawer and returns to the plain list URL. Closing (via `X`, Escape, or backdrop click) calls `router.back()` so that Back path is symmetric; if the drawer was entered directly (e.g. a shared `?detail=` link with no prior same-page history entry), closing falls back to `router.replace` with `detail` stripped from the URL instead. The list page (`page.tsx`) stays mounted underneath at all times — no parallel or intercepting Next.js routes are introduced for this.
+`DetailDrawer` is driven by state the caller owns, not internal state: each list page reads a `detail` search param (`useSearchParams`) to decide whether the drawer is open and for which row. Opening it (row click) does `router.push` to add `?detail=<id>` to the current URL — a new history entry, so browser Back closes the drawer and returns to the plain list URL.
+
+Closing behavior is a **requirement, not a prescribed mechanism** — M4 (Implementation Planning) chooses the safest way to satisfy it: closing via `X`, Escape, or backdrop click must return to the list URL with `detail` removed, whether the drawer was reached by row-click navigation (where the previous history entry is the same list page) or by a direct/shared `?detail=` link (where it isn't, and blindly calling `router.back()` could navigate somewhere outside the app entirely). A same-page-origin flag set at the moment the drawer is opened via row click, checked before deciding between `router.back()` and `router.replace`, is one reasonable implementation — not the only one, and not mandated here. The list page (`page.tsx`) stays mounted underneath at all times regardless of mechanism — no parallel or intercepting Next.js routes are introduced for this.
 
 **Feedback components**: `ToastProvider`/`useToast()` (mutation success/failure messages), `LoadingState`, `EmptyState` (message + optional action slot), `ErrorState` (message + optional retry action) — used both standalone (e.g. inside a `DetailDrawer` while its own query loads) and as what `DataTable` renders internally for its `loading`/`error`/empty-`rows` cases.
 
@@ -204,7 +222,7 @@ Built into `Modal`/`DetailDrawer` once, not per call site: Escape closes; focus 
 
 ### 4.7 Migration scope
 
-Each existing list+detail pair migrates as follows. "Five route groups" — Admin included — not four; see the note below.
+Each existing list+detail pair migrates as follows. The migration scope is bounded to exactly the existing Customers, Cleaners/Teams, Catalog, and Admin route areas.
 
 | Module | List page | Today's detail | Becomes |
 | --- | --- | --- | --- |
@@ -213,7 +231,7 @@ Each existing list+detail pair migrates as follows. "Five route groups" — Admi
 | Catalog (Services, Add-ons) | `/app/catalog`, `/app/catalog/add-ons` | `/catalog/[id]`, `/catalog/add-ons/[id]` (full pages) | `DetailDrawer`, same `?detail=` rule on each respective list page |
 | Admin (staff accounts) | `/app/admin` | inline create form, no detail view today | Create moves to `FormDialog`; list uses `DataTable`; no new detail view is introduced (out of scope — not requested) |
 
-Admin is a genuine fifth migration target, not folded into the other four — it gets the shell, `DataTable`, and `FormDialog` like the rest, it simply has no `DetailDrawer` because it has no detail view today and this spec doesn't add one.
+Admin migrates alongside the other three route areas — it gets the shell, `DataTable`, and `FormDialog` like the rest, it simply has no `DetailDrawer` because it has no detail view today and this spec doesn't add one.
 
 Each list page's inline "create" form (currently rendered directly on the page, e.g. `customers/page.tsx`) becomes a `FormDialog` opened from a "+ New X" header action, per §4.5.
 
@@ -243,7 +261,7 @@ This Draft may move to Accepted once Design Review (M3) confirms:
 - Every `packages/ui` primitive in §4.4 has a prop contract concrete enough to plan against without further design decisions at M4.
 - The `DataTable` extension is confirmed additive/non-breaking against its three existing call sites.
 - The `logout` mutation's necessity and shape (§4.3) is agreed as the intended, minimal exception to "no new GraphQL operations."
-- The migration scope (§4.7) is bounded to exactly the five existing route groups (Customers, Cleaners, Teams, Catalog, Admin) — no silent expansion to Bookings/Jobs/Quality, which don't exist yet.
+- The migration scope (§4.7) is bounded to exactly the existing Customers, Cleaners/Teams, Catalog, and Admin route areas — no silent expansion to Bookings/Jobs/Quality, which don't exist yet.
 - Old-path redirects (§4.1) and the login/logout flow (§4.3) are included in verification, not just the new screens — a stale bookmark or a failed logout are exactly the failure modes this migration risks introducing.
 - The shell, `DataTable`, `DetailDrawer`, `FormDialog`, and responsive behavior are demonstrated end-to-end on at least one migrated module (Customers) before this spec is considered implementation-ready — a single golden path: log in → land on `/app` (redirects to `/app/customers`) → create a customer via `FormDialog` → see it appear in the `DataTable` → click the row → `DetailDrawer` opens with `?detail=` in the URL → edit and see a success toast → close the drawer (Back) → log out → land on `/login`. Manual verification is sufficient (§7); no browser-automation suite is required.
 
