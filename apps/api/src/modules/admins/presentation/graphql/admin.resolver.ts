@@ -37,6 +37,13 @@ interface GqlContext {
   res: Response;
 }
 
+const SESSION_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'lax' as const,
+  path: '/',
+};
+
 // Exactly the 5 operations of spec §4.9 — no others. This is also the only
 // class in the codebase that depends on both `modules/admins`' application
 // services (`AdminsService`, `LoginService`) AND `platform/auth`'s
@@ -81,6 +88,14 @@ export class AdminResolver {
       success: true,
       admin: { id: principal.id, role: principal.role },
     };
+  }
+
+  // Public: no `AuthGuard`, no `@Roles()`. Callable without a session —
+  // idempotent, safe to call even if already logged out.
+  @Mutation(() => Boolean)
+  async logout(@Context() context: GqlContext): Promise<boolean> {
+    this.clearSessionCookie(context.res);
+    return true;
   }
 
   @Mutation(() => AdminType)
@@ -142,14 +157,15 @@ export class AdminResolver {
   private setSessionCookie(res: Response, token: string): void {
     const expiresIn = this.configService.get<string>('JWT_EXPIRES_IN', '8h');
     res.cookie(SESSION_COOKIE_NAME, token, {
-      httpOnly: true,
+      ...SESSION_COOKIE_OPTIONS,
       // Always true, never conditioned on `NODE_ENV` (brief) — a dev-only
       // plain-HTTP exception would be a second, environment-dependent
       // security posture to reason about.
-      secure: true,
-      sameSite: 'lax',
-      path: '/',
       maxAge: ms(expiresIn as Parameters<typeof ms>[0]),
     });
+  }
+
+  private clearSessionCookie(res: Response): void {
+    res.clearCookie(SESSION_COOKIE_NAME, SESSION_COOKIE_OPTIONS);
   }
 }
