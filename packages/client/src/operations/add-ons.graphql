@@ -1,0 +1,21 @@
+query AddOns {
+  addOns {
+    id
+    name
+    description
+    priceMinorUnits
+    active
+  }
+}
+
+mutation CreateAddOn($input: CreateAddOnInput!) {
+  createAddOn(input: $input) {
+    id
+  }
+}
+
+mutation UpdateAddOn($id: ID!, $input: UpdateAddOnInput!) {
+  updateAddOn(id: $id, input: $input) {
+    id
+  }
+}

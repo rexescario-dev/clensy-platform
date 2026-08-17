@@ -5,6 +5,12 @@ export type Incremental<T> = T | { [P in keyof T]?: P extends ' $fragmentName' |
 import { gql } from '@apollo/client';
 import * as Apollo from '@apollo/client';
 const defaultOptions = {} as const;
+export type CreateAddOnInput = {
+  description?: string | null | undefined;
+  name: string;
+  priceMinorUnits: number;
+};
+
 export type CreateAdminInput = {
   email: string;
   password: string;
@@ -25,6 +31,11 @@ export type CreateCustomerInput = {
   phone: string;
 };
 
+export type CreatePricingRuleInput = {
+  priceMinorUnits: number;
+  serviceId: string | number;
+};
+
 export type CreatePropertyInput = {
   accessNotes?: string | null | undefined;
   addressLine1: string;
@@ -33,6 +44,12 @@ export type CreatePropertyInput = {
   label: string;
   postalCode: string;
   region: string;
+};
+
+export type CreateServiceInput = {
+  description?: string | null | undefined;
+  durationMinutes: number;
+  name: string;
 };
 
 export type CreateTeamInput = {
@@ -51,6 +68,13 @@ export type Role =
   | 'OPS_MANAGER'
   | 'OWNER'
   | 'SCHEDULER';
+
+export type UpdateAddOnInput = {
+  active?: boolean | null | undefined;
+  description?: string | null | undefined;
+  name?: string | null | undefined;
+  priceMinorUnits?: number | null | undefined;
+};
 
 export type UpdateCleanerInput = {
   email?: string | null | undefined;
@@ -75,6 +99,33 @@ export type UpdatePropertyInput = {
   postalCode?: string | null | undefined;
   region?: string | null | undefined;
 };
+
+export type UpdateServiceInput = {
+  active?: boolean | null | undefined;
+  description?: string | null | undefined;
+  durationMinutes?: number | null | undefined;
+  name?: string | null | undefined;
+};
+
+export type AddOnsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type AddOnsQuery = { addOns: Array<{ id: string, name: string, description: string | null, priceMinorUnits: number, active: boolean }> };
+
+export type CreateAddOnMutationVariables = Exact<{
+  input: CreateAddOnInput;
+}>;
+
+
+export type CreateAddOnMutation = { createAddOn: { id: string } };
+
+export type UpdateAddOnMutationVariables = Exact<{
+  id: string | number;
+  input: UpdateAddOnInput;
+}>;
+
+
+export type UpdateAddOnMutation = { updateAddOn: { id: string } };
 
 export type AdminsQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -185,6 +236,40 @@ export type UpdatePropertyMutationVariables = Exact<{
 
 export type UpdatePropertyMutation = { updateProperty: { id: string } };
 
+export type ServicesQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type ServicesQuery = { services: Array<{ id: string, name: string, durationMinutes: number, active: boolean, activePricing: { priceMinorUnits: number } | null }> };
+
+export type ServiceQueryVariables = Exact<{
+  id: string | number;
+}>;
+
+
+export type ServiceQuery = { service: { id: string, name: string, description: string | null, durationMinutes: number, active: boolean, activePricing: { id: string, priceMinorUnits: number } | null } | null };
+
+export type CreateServiceMutationVariables = Exact<{
+  input: CreateServiceInput;
+}>;
+
+
+export type CreateServiceMutation = { createService: { id: string } };
+
+export type UpdateServiceMutationVariables = Exact<{
+  id: string | number;
+  input: UpdateServiceInput;
+}>;
+
+
+export type UpdateServiceMutation = { updateService: { id: string } };
+
+export type CreatePricingRuleMutationVariables = Exact<{
+  input: CreatePricingRuleInput;
+}>;
+
+
+export type CreatePricingRuleMutation = { createPricingRule: { id: string, priceMinorUnits: number } };
+
 export type TeamsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
@@ -205,6 +290,119 @@ export type CreateTeamMutationVariables = Exact<{
 export type CreateTeamMutation = { createTeam: { id: string } };
 
 
+export const AddOnsDocument = gql`
+    query AddOns {
+  addOns {
+    id
+    name
+    description
+    priceMinorUnits
+    active
+  }
+}
+    `;
+
+/**
+ * __useAddOnsQuery__
+ *
+ * To run a query within a React component, call `useAddOnsQuery` and pass it any options that fit your needs.
+ * When your component renders, `useAddOnsQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useAddOnsQuery({
+ *   variables: {
+ *   },
+ * });
+ */
+export function useAddOnsQuery(baseOptions?: Apollo.QueryHookOptions<AddOnsQuery, AddOnsQueryVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<AddOnsQuery, AddOnsQueryVariables>(AddOnsDocument, options);
+      }
+export function useAddOnsLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<AddOnsQuery, AddOnsQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<AddOnsQuery, AddOnsQueryVariables>(AddOnsDocument, options);
+        }
+// @ts-ignore
+export function useAddOnsSuspenseQuery(baseOptions?: Apollo.SuspenseQueryHookOptions<AddOnsQuery, AddOnsQueryVariables>): Apollo.UseSuspenseQueryResult<AddOnsQuery, AddOnsQueryVariables>;
+export function useAddOnsSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<AddOnsQuery, AddOnsQueryVariables>): Apollo.UseSuspenseQueryResult<AddOnsQuery | undefined, AddOnsQueryVariables>;
+export function useAddOnsSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<AddOnsQuery, AddOnsQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<AddOnsQuery, AddOnsQueryVariables>(AddOnsDocument, options);
+        }
+export type AddOnsQueryHookResult = ReturnType<typeof useAddOnsQuery>;
+export type AddOnsLazyQueryHookResult = ReturnType<typeof useAddOnsLazyQuery>;
+export type AddOnsSuspenseQueryHookResult = ReturnType<typeof useAddOnsSuspenseQuery>;
+export type AddOnsQueryResult = Apollo.QueryResult<AddOnsQuery, AddOnsQueryVariables>;
+export const CreateAddOnDocument = gql`
+    mutation CreateAddOn($input: CreateAddOnInput!) {
+  createAddOn(input: $input) {
+    id
+  }
+}
+    `;
+export type CreateAddOnMutationFn = Apollo.MutationFunction<CreateAddOnMutation, CreateAddOnMutationVariables>;
+
+/**
+ * __useCreateAddOnMutation__
+ *
+ * To run a mutation, you first call `useCreateAddOnMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useCreateAddOnMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [createAddOnMutation, { data, loading, error }] = useCreateAddOnMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useCreateAddOnMutation(baseOptions?: Apollo.MutationHookOptions<CreateAddOnMutation, CreateAddOnMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<CreateAddOnMutation, CreateAddOnMutationVariables>(CreateAddOnDocument, options);
+      }
+export type CreateAddOnMutationHookResult = ReturnType<typeof useCreateAddOnMutation>;
+export type CreateAddOnMutationResult = Apollo.MutationResult<CreateAddOnMutation>;
+export type CreateAddOnMutationOptions = Apollo.BaseMutationOptions<CreateAddOnMutation, CreateAddOnMutationVariables>;
+export const UpdateAddOnDocument = gql`
+    mutation UpdateAddOn($id: ID!, $input: UpdateAddOnInput!) {
+  updateAddOn(id: $id, input: $input) {
+    id
+  }
+}
+    `;
+export type UpdateAddOnMutationFn = Apollo.MutationFunction<UpdateAddOnMutation, UpdateAddOnMutationVariables>;
+
+/**
+ * __useUpdateAddOnMutation__
+ *
+ * To run a mutation, you first call `useUpdateAddOnMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useUpdateAddOnMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [updateAddOnMutation, { data, loading, error }] = useUpdateAddOnMutation({
+ *   variables: {
+ *      id: // value for 'id'
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useUpdateAddOnMutation(baseOptions?: Apollo.MutationHookOptions<UpdateAddOnMutation, UpdateAddOnMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<UpdateAddOnMutation, UpdateAddOnMutationVariables>(UpdateAddOnDocument, options);
+      }
+export type UpdateAddOnMutationHookResult = ReturnType<typeof useUpdateAddOnMutation>;
+export type UpdateAddOnMutationResult = Apollo.MutationResult<UpdateAddOnMutation>;
+export type UpdateAddOnMutationOptions = Apollo.BaseMutationOptions<UpdateAddOnMutation, UpdateAddOnMutationVariables>;
 export const AdminsDocument = gql`
     query Admins {
   admins {
@@ -840,6 +1038,206 @@ export function useUpdatePropertyMutation(baseOptions?: Apollo.MutationHookOptio
 export type UpdatePropertyMutationHookResult = ReturnType<typeof useUpdatePropertyMutation>;
 export type UpdatePropertyMutationResult = Apollo.MutationResult<UpdatePropertyMutation>;
 export type UpdatePropertyMutationOptions = Apollo.BaseMutationOptions<UpdatePropertyMutation, UpdatePropertyMutationVariables>;
+export const ServicesDocument = gql`
+    query Services {
+  services {
+    id
+    name
+    durationMinutes
+    active
+    activePricing {
+      priceMinorUnits
+    }
+  }
+}
+    `;
+
+/**
+ * __useServicesQuery__
+ *
+ * To run a query within a React component, call `useServicesQuery` and pass it any options that fit your needs.
+ * When your component renders, `useServicesQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useServicesQuery({
+ *   variables: {
+ *   },
+ * });
+ */
+export function useServicesQuery(baseOptions?: Apollo.QueryHookOptions<ServicesQuery, ServicesQueryVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<ServicesQuery, ServicesQueryVariables>(ServicesDocument, options);
+      }
+export function useServicesLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<ServicesQuery, ServicesQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<ServicesQuery, ServicesQueryVariables>(ServicesDocument, options);
+        }
+// @ts-ignore
+export function useServicesSuspenseQuery(baseOptions?: Apollo.SuspenseQueryHookOptions<ServicesQuery, ServicesQueryVariables>): Apollo.UseSuspenseQueryResult<ServicesQuery, ServicesQueryVariables>;
+export function useServicesSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<ServicesQuery, ServicesQueryVariables>): Apollo.UseSuspenseQueryResult<ServicesQuery | undefined, ServicesQueryVariables>;
+export function useServicesSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<ServicesQuery, ServicesQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<ServicesQuery, ServicesQueryVariables>(ServicesDocument, options);
+        }
+export type ServicesQueryHookResult = ReturnType<typeof useServicesQuery>;
+export type ServicesLazyQueryHookResult = ReturnType<typeof useServicesLazyQuery>;
+export type ServicesSuspenseQueryHookResult = ReturnType<typeof useServicesSuspenseQuery>;
+export type ServicesQueryResult = Apollo.QueryResult<ServicesQuery, ServicesQueryVariables>;
+export const ServiceDocument = gql`
+    query Service($id: ID!) {
+  service(id: $id) {
+    id
+    name
+    description
+    durationMinutes
+    active
+    activePricing {
+      id
+      priceMinorUnits
+    }
+  }
+}
+    `;
+
+/**
+ * __useServiceQuery__
+ *
+ * To run a query within a React component, call `useServiceQuery` and pass it any options that fit your needs.
+ * When your component renders, `useServiceQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useServiceQuery({
+ *   variables: {
+ *      id: // value for 'id'
+ *   },
+ * });
+ */
+export function useServiceQuery(baseOptions: Apollo.QueryHookOptions<ServiceQuery, ServiceQueryVariables> & ({ variables: ServiceQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<ServiceQuery, ServiceQueryVariables>(ServiceDocument, options);
+      }
+export function useServiceLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<ServiceQuery, ServiceQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<ServiceQuery, ServiceQueryVariables>(ServiceDocument, options);
+        }
+// @ts-ignore
+export function useServiceSuspenseQuery(baseOptions?: Apollo.SuspenseQueryHookOptions<ServiceQuery, ServiceQueryVariables>): Apollo.UseSuspenseQueryResult<ServiceQuery, ServiceQueryVariables>;
+export function useServiceSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<ServiceQuery, ServiceQueryVariables>): Apollo.UseSuspenseQueryResult<ServiceQuery | undefined, ServiceQueryVariables>;
+export function useServiceSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<ServiceQuery, ServiceQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<ServiceQuery, ServiceQueryVariables>(ServiceDocument, options);
+        }
+export type ServiceQueryHookResult = ReturnType<typeof useServiceQuery>;
+export type ServiceLazyQueryHookResult = ReturnType<typeof useServiceLazyQuery>;
+export type ServiceSuspenseQueryHookResult = ReturnType<typeof useServiceSuspenseQuery>;
+export type ServiceQueryResult = Apollo.QueryResult<ServiceQuery, ServiceQueryVariables>;
+export const CreateServiceDocument = gql`
+    mutation CreateService($input: CreateServiceInput!) {
+  createService(input: $input) {
+    id
+  }
+}
+    `;
+export type CreateServiceMutationFn = Apollo.MutationFunction<CreateServiceMutation, CreateServiceMutationVariables>;
+
+/**
+ * __useCreateServiceMutation__
+ *
+ * To run a mutation, you first call `useCreateServiceMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useCreateServiceMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [createServiceMutation, { data, loading, error }] = useCreateServiceMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useCreateServiceMutation(baseOptions?: Apollo.MutationHookOptions<CreateServiceMutation, CreateServiceMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<CreateServiceMutation, CreateServiceMutationVariables>(CreateServiceDocument, options);
+      }
+export type CreateServiceMutationHookResult = ReturnType<typeof useCreateServiceMutation>;
+export type CreateServiceMutationResult = Apollo.MutationResult<CreateServiceMutation>;
+export type CreateServiceMutationOptions = Apollo.BaseMutationOptions<CreateServiceMutation, CreateServiceMutationVariables>;
+export const UpdateServiceDocument = gql`
+    mutation UpdateService($id: ID!, $input: UpdateServiceInput!) {
+  updateService(id: $id, input: $input) {
+    id
+  }
+}
+    `;
+export type UpdateServiceMutationFn = Apollo.MutationFunction<UpdateServiceMutation, UpdateServiceMutationVariables>;
+
+/**
+ * __useUpdateServiceMutation__
+ *
+ * To run a mutation, you first call `useUpdateServiceMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useUpdateServiceMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [updateServiceMutation, { data, loading, error }] = useUpdateServiceMutation({
+ *   variables: {
+ *      id: // value for 'id'
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useUpdateServiceMutation(baseOptions?: Apollo.MutationHookOptions<UpdateServiceMutation, UpdateServiceMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<UpdateServiceMutation, UpdateServiceMutationVariables>(UpdateServiceDocument, options);
+      }
+export type UpdateServiceMutationHookResult = ReturnType<typeof useUpdateServiceMutation>;
+export type UpdateServiceMutationResult = Apollo.MutationResult<UpdateServiceMutation>;
+export type UpdateServiceMutationOptions = Apollo.BaseMutationOptions<UpdateServiceMutation, UpdateServiceMutationVariables>;
+export const CreatePricingRuleDocument = gql`
+    mutation CreatePricingRule($input: CreatePricingRuleInput!) {
+  createPricingRule(input: $input) {
+    id
+    priceMinorUnits
+  }
+}
+    `;
+export type CreatePricingRuleMutationFn = Apollo.MutationFunction<CreatePricingRuleMutation, CreatePricingRuleMutationVariables>;
+
+/**
+ * __useCreatePricingRuleMutation__
+ *
+ * To run a mutation, you first call `useCreatePricingRuleMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useCreatePricingRuleMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [createPricingRuleMutation, { data, loading, error }] = useCreatePricingRuleMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useCreatePricingRuleMutation(baseOptions?: Apollo.MutationHookOptions<CreatePricingRuleMutation, CreatePricingRuleMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<CreatePricingRuleMutation, CreatePricingRuleMutationVariables>(CreatePricingRuleDocument, options);
+      }
+export type CreatePricingRuleMutationHookResult = ReturnType<typeof useCreatePricingRuleMutation>;
+export type CreatePricingRuleMutationResult = Apollo.MutationResult<CreatePricingRuleMutation>;
+export type CreatePricingRuleMutationOptions = Apollo.BaseMutationOptions<CreatePricingRuleMutation, CreatePricingRuleMutationVariables>;
 export const TeamsDocument = gql`
     query Teams {
   teams {
