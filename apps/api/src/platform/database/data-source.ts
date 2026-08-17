@@ -6,6 +6,7 @@ import { CustomerEntity } from '../../modules/customers/infrastructure/persisten
 import { PropertyEntity } from '../../modules/customers/infrastructure/persistence/property.entity';
 import { TeamEntity } from '../../modules/cleaners/infrastructure/persistence/team.entity';
 import { CleanerEntity } from '../../modules/cleaners/infrastructure/persistence/cleaner.entity';
+import { AddOnEntity } from '../../modules/catalog/infrastructure/persistence/add-on.entity';
 import { ServiceEntity } from '../../modules/catalog/infrastructure/persistence/service.entity';
 import { AuditEventEntity } from '../audit/infrastructure/persistence/audit-event.entity';
 
@@ -28,6 +29,7 @@ export default new DataSource({
     TeamEntity,
     CleanerEntity,
     ServiceEntity,
+    AddOnEntity,
   ],
   migrations: [__dirname + '/migrations/*.ts'],
 });
