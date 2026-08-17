@@ -21,6 +21,8 @@
 
 **Authoritative-input rule:** the Accepted design spec is authoritative. Where this plan and the spec disagree, the spec wins and this plan must be revised — no task below invents product semantics beyond what the spec's §4 already locked (route table, prop contracts, logout flow, migration scope).
 
+**Revision (M5 round 1):** Two findings from the first plan review cited the spec's pre-M3-fix text (`/app/customers/[id]` nested routes; "failure → `router.push('/login')` regardless") — verified against the live, committed, Accepted spec (`docs/superpowers/specs/2026-08-17-dashboard-ux-foundation-design.md`, commit `6fa57b5`, Status: Accepted) and confirmed both are already exactly what this plan implements: §4.1/§4.4/§4.7/§5 specify the `?detail=` search-param model (not nested `[id]` routes), and §4.3 specifies success-only navigation with failure showing an inline error and not navigating. No plan change was needed for either — see the response accompanying this revision for the full verification. Everything else in the review was a genuine plan-quality finding and is fixed here: Task 5's `/app` redirect no longer targets the not-yet-migrated Customers module (temporarily targets `/app/admin`, changed in Task 6); `useToast()`'s API is now consistently `success`/`error` everywhere it's used; the `DataTable` caller count is corrected to match its actual 5 call sites; Task 1's TDD steps are reordered to genuine red→green; `DetailDrawer`'s inertness requirement is now stated as a behavior with a suggested-not-mandated mechanism; `ConfirmDialog` is now wired into Admin's existing unconfirmed "Disable" action rather than shipped with zero consumers; Task 5 gains an explicit route-tree verification step and a concrete mobile-sidebar-drawer implementation; the `PageHeader`/`Header` slot mechanism is now explicit; and `Modal`'s focus-restore behavior is specified precisely.
+
 ## 1. Delivery intent
 
 Implement exactly what the Accepted spec's §2 "In scope" describes: route reorganization under `/app/*` with permanent old-path redirects, a shared shell (sidebar/header/user menu/logout), the seven `packages/ui` primitives of §4.4, one new `logout` mutation, and migration of the Customers, Cleaners/Teams, Catalog, and Admin screens onto all of the above. Nothing here redesigns the product — it delivers the UX architecture the spec already decided.
@@ -34,7 +36,7 @@ Copied verbatim in meaning from the Accepted spec; every task below implicitly i
 - Entities that get a `DetailDrawer` SHALL NOT get an `/app/*` `[id]` route — old `[id]` paths redirect straight to `?detail=[id]` on the list page (spec §4.1, §4.4).
 - `middleware.ts` SHALL use a single `/app/:path*` matcher and SHALL NOT be extended with per-module entries again; it SHALL continue to check only cookie presence, never validity (spec §4.1).
 - SHALL NOT describe `/app/*` as security-enforced by the frontend anywhere in code comments or UI copy — `AuthGuard`/`@Roles()` remain the only authoritative layers (spec §4.1).
-- `DataTable`'s existing `{ columns, rows, rowKey, emptyMessage }` contract SHALL keep compiling unchanged for its three existing callers; all new props SHALL be optional (spec §4.4).
+- `DataTable`'s existing `{ columns, rows, rowKey, emptyMessage }` contract SHALL keep compiling unchanged for its 5 existing call sites (`admin`, `customers`, `cleaners`, `catalog`, `catalog/add-ons` list pages — spec §4.4's "`admin`, `customers`, `cleaners`, `catalog` list pages" names 4 modules, one of which has 2 physical files); all new props SHALL be optional (spec §4.4).
 - Interactive `DataTable` rows (`onRowClick` provided) SHALL be keyboard-reachable and Enter/Space-activatable (spec §4.4, §4.6).
 - `Modal` and `DetailDrawer` SHALL both use `role="dialog"`, `aria-modal="true"`, `aria-labelledby`; SHALL trap focus while open and restore it on close; SHALL close on Escape (spec §4.4, §4.6).
 - The `logout` mutation SHALL be the only new GraphQL operation; SHALL be resolved in `modules/admins/presentation/graphql/admin.resolver.ts` alongside `login`; SHALL require no guard/role and SHALL be idempotent for an invalid or missing session (spec §4.3).
@@ -122,29 +124,7 @@ Hard prerequisites: Task 3 needs `Modal` from Task 2. Task 5 needs the `logout` 
 - Produces: `logout(): Boolean!` GraphQL mutation, no arguments, no guard. Produces `useLogoutMutation()` in `@clensy/client` for Task 5 to consume.
 - Consumes: `SESSION_COOKIE_NAME` from `apps/api/src/platform/auth/auth.constants.ts` (existing).
 
-- [ ] **Step 1: Add the `logout` resolver method**, mirroring `login`'s cookie-handling structure exactly (spec §4.3 — idempotent, unauthenticated-safe):
-
-```ts
-@Mutation(() => Boolean)
-async logout(@Context() context: GqlContext): Promise<boolean> {
-  this.clearSessionCookie(context.res);
-  return true;
-}
-
-// Mirrors `setSessionCookie`'s exact cookie attributes (httpOnly/secure/
-// sameSite/path) — a browser only clears a cookie when `clearCookie`'s
-// options match the ones it was set with.
-private clearSessionCookie(res: Response): void {
-  res.clearCookie(SESSION_COOKIE_NAME, {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'lax',
-    path: '/',
-  });
-}
-```
-
-- [ ] **Step 2: Add the resolver unit test**, extending the existing `describe.each` guard/role table in `admin.resolver.spec.ts`:
+- [ ] **Step 1: Add the resolver unit test first** (RED — `logout` doesn't exist yet), extending the existing `describe.each` guard/role table in `admin.resolver.spec.ts`:
 
 ```ts
 describe('logout', () => {
@@ -157,11 +137,7 @@ describe('logout', () => {
 
 (Add `'logout'` to the `ResolverMethod` union at the top of the file.)
 
-- [ ] **Step 3: Run the unit test to verify it fails**, then implement Steps 1 confirms it passes:
-
-Run: `pnpm --filter api test -- admin.resolver.spec.ts`
-
-- [ ] **Step 4: Add the e2e test** in `admin-foundation.e2e-spec.ts`, following the file's existing `Set-Cookie`-capture convention:
+- [ ] **Step 2: Add the e2e test** in `admin-foundation.e2e-spec.ts` (also RED), following the file's existing `Set-Cookie`-capture convention:
 
 ```ts
 it('logout expires the session cookie and is idempotent without one', async () => {
@@ -191,9 +167,37 @@ it('logout expires the session cookie and is idempotent without one', async () =
 
 Adjust `LOGIN_MUTATION`/`SEED_OWNER_CREDENTIALS`/`extractSetCookie` to whatever names this file's existing login test already uses — do not invent parallel helpers.
 
-- [ ] **Step 5: Run e2e test, verify it fails then passes** after Step 1.
+- [ ] **Step 3: Run both tests, confirm they fail** (no `logout` field/method exists yet):
 
-Run: `pnpm --filter api test:e2e -- admin-foundation.e2e-spec.ts`
+Run: `pnpm --filter api test -- admin.resolver.spec.ts` and `pnpm --filter api test:e2e -- admin-foundation.e2e-spec.ts`
+Expected: both FAIL — the unit test on an undefined `logout` method, the e2e test on a GraphQL "Cannot query field 'logout'" error.
+
+- [ ] **Step 4: Implement the `logout` resolver method**, mirroring `login`'s cookie-handling structure exactly (spec §4.3 — idempotent, unauthenticated-safe):
+
+```ts
+@Mutation(() => Boolean)
+async logout(@Context() context: GqlContext): Promise<boolean> {
+  this.clearSessionCookie(context.res);
+  return true;
+}
+
+// Mirrors `setSessionCookie`'s exact cookie attributes (httpOnly/secure/
+// sameSite/path) — a browser only clears a cookie when `clearCookie`'s
+// options match the ones it was set with.
+private clearSessionCookie(res: Response): void {
+  res.clearCookie(SESSION_COOKIE_NAME, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax',
+    path: '/',
+  });
+}
+```
+
+- [ ] **Step 5: Re-run both tests, confirm they pass.**
+
+Run: `pnpm --filter api test -- admin.resolver.spec.ts` and `pnpm --filter api test:e2e -- admin-foundation.e2e-spec.ts`
+Expected: both PASS.
 
 - [ ] **Step 6: Add `packages/client/src/operations/logout.graphql`**:
 
@@ -233,7 +237,15 @@ git commit -m "feat(admins): add logout mutation"
 - Produces: `Modal({ open, onClose, title, children })`, `PageHeaderProps` exactly as spec §4.4, `ToastProvider`/`useToast()` (`success(message)`/`error(message)` methods, minimal), `LoadingState`, `EmptyState({ message, action? })`, `ErrorState({ message, onRetry? })`.
 - Consumes: nothing outside `packages/ui` and React.
 
-- [ ] **Step 1: Implement `Modal`** per spec §4.4: `role="dialog"`, `aria-modal="true"`, `aria-labelledby` pointing at a generated title id, closes on Escape (`keydown` listener while `open`) and backdrop click, traps focus (a minimal focus trap — cycle Tab/Shift+Tab within the dialog's focusable elements), restores focus to `document.activeElement` captured at open-time when `open` transitions back to `false`.
+- [ ] **Step 1: Implement `Modal`** per spec §4.4, with these precise behaviors (loose enough to cause subtly broken focus handling if left implicit):
+
+  - `role="dialog"`, `aria-modal="true"`, `aria-labelledby` pointing at a generated title id.
+  - Capture `document.activeElement` into a ref at the moment `open` transitions from `false` to `true` (the trigger element) — not read lazily later, since by the time a close effect runs, `document.activeElement` may already be inside the dialog.
+  - While `open`, trap Tab/Shift+Tab within the dialog's focusable descendants; if there are none, focus the dialog container itself (`tabIndex={-1}`) so focus doesn't silently fall back to `<body>`.
+  - On close, restore focus to the captured trigger element only if it is still attached to the DOM (`element.isConnected`); otherwise do nothing rather than throwing.
+  - Escape (`keydown` while `open`) calls `onClose`.
+  - A click on the backdrop calls `onClose`; a click anywhere inside the dialog content must not — stop propagation on the dialog content's own click handler, or check `event.target === event.currentTarget` on the backdrop element specifically, rather than a single document-level listener that can't distinguish the two.
+  - Do not run any of the trap/backdrop/Escape logic at all while `open` is `false`.
 
 - [ ] **Step 2: Implement `PageHeader`** — a simple `title`/`description?`/`actions?` layout, no logic.
 
@@ -241,7 +253,7 @@ git commit -m "feat(admins): add logout mutation"
 
 - [ ] **Step 4: Implement `LoadingState`, `EmptyState`, `ErrorState`** — small presentational components (spinner/message, message + optional action slot, message + optional retry button respectively), matching this package's existing visual style (see `packages/ui/src/data-table.tsx`'s Tailwind classes for the established look).
 
-- [ ] **Step 5: Export all six from `packages/ui/src/index.ts`**, following the existing `export { X } from './x'; export type { XProps } from './x';` pattern.
+- [ ] **Step 5: Export the primitives introduced by this task from `packages/ui/src/index.ts`** — `Modal`, `PageHeader`, `ToastProvider`, `useToast`, `LoadingState`, `EmptyState`, `ErrorState` (the last six are components; `useToast` is a hook, not a component, but is exported alongside them the same way) — following the existing `export { X } from './x'; export type { XProps } from './x';` pattern.
 
 - [ ] **Step 6: Type-check.**
 
@@ -275,7 +287,7 @@ git commit -m "feat(ui): add Modal, PageHeader, and feedback primitives"
 
 - [ ] **Step 2: Implement `ConfirmDialog`** composing `Modal`: renders `description`, owns Cancel and a `confirmLabel` button that calls `onConfirm` and is disabled (alongside Cancel) while `confirming`.
 
-- [ ] **Step 3: Implement `DetailDrawer`** per spec §4.4: `role="dialog"`, `aria-modal="true"`, `aria-labelledby`, slides in from the right at `widthClassName` (default within 360–480px), backdrop is visually non-blocking (background list visible) but inert (e.g. `pointer-events-none` plus `aria-hidden` applied to a wrapper around the page content while open, or an `inert` attribute where supported) — closes the same way as `Modal` (`X`/Escape/backdrop click) via `onClose`.
+- [ ] **Step 3: Implement `DetailDrawer`** per spec §4.4: `role="dialog"`, `aria-modal="true"`, `aria-labelledby`, slides in from the right at `widthClassName` (default within 360–480px). The behavioral requirement is that no click, focus, or keyboard interaction reaches the background content while open (spec §4.4) — reuse `Modal`'s own focus trap for this rather than inventing a second mechanism (a trapped focus already can't reach the background, and a transparent click-catching backdrop element — the same one `Modal` already uses, just visually non-opaque here instead of dimmed — already blocks background clicks). Do not apply `aria-hidden`/`inert` to a wrapper around the rest of the page; that targets a different problem (hiding content from assistive tech that focus-trapping and a click-catching backdrop don't already solve here) and risks hiding content a screen reader user still needs. Closes the same way as `Modal` (`X`/Escape/backdrop click) via `onClose`.
 
   **Note:** `DetailDrawer` itself does not decide *how* `onClose` updates the URL — that's the caller's job (see Task 5's `useDetailDrawer` hook). `DetailDrawer` only calls `onClose()`; it holds no routing knowledge.
 
@@ -311,7 +323,7 @@ git commit -m "feat(ui): add FormDialog, ConfirmDialog, DetailDrawer"
 
 - [ ] **Step 4: Render `pagination` when provided** — a simple prev/next + page-count control below the table body, calling `onPageChange`. Omit entirely when `pagination` is undefined.
 
-- [ ] **Step 5: Confirm the three existing call sites still compile unchanged** (`apps/web/app/admin/page.tsx`, `apps/web/app/customers/page.tsx`, `apps/web/app/cleaners/page.tsx`, `apps/web/app/catalog/page.tsx`, and its `add-ons` counterpart — none of them pass the new props, so none of their call sites should need edits at all).
+- [ ] **Step 5: Confirm all 5 existing call sites still compile unchanged** (`apps/web/app/admin/page.tsx`, `apps/web/app/customers/page.tsx`, `apps/web/app/cleaners/page.tsx`, `apps/web/app/catalog/page.tsx`, and `apps/web/app/catalog/add-ons/page.tsx` — none of them pass the new props, so none of their call sites should need edits at all).
 
 Run: `pnpm --filter web build` (or `tsc --noEmit` scoped to `apps/web`) — expect no new errors introduced by the `DataTable` change.
 
@@ -346,6 +358,10 @@ This is the first task to touch `apps/web/app/app/**` and is deliberately built 
 - Consumes: `useLogoutMutation` (Task 1), `Modal`/`ToastProvider`/`useToast`/`PageHeader` (Task 2), `FormDialog` (Task 3), extended `DataTable` (Task 4), existing `useCurrentAdminQuery` (`@clensy/client`, already used by the old `admin/page.tsx`).
 - Produces: `AppShell` (used by every subsequent migration task's `layout.tsx` — there is only one `layout.tsx` at `apps/web/app/app/layout.tsx`, so Tasks 6–8 do not create new layout files, only new page files under it).
 
+- [ ] **Step 0: Verify the route tree** this task's redirects and Tasks 6–8's redirects will depend on, against spec §4.1's table exactly (spec §6 requires the redirect map be "exhaustive against every route that exists in `apps/web/app` today"):
+
+Run: `find apps/web/app -maxdepth 3 -type d | sort` and confirm it matches exactly: `admin`, `catalog`, `catalog/[id]`, `catalog/add-ons`, `catalog/add-ons/[id]`, `cleaners`, `cleaners/[id]`, `cleaners/teams`, `cleaners/teams/[id]`, `customers`, `customers/[id]`, `login`. If the tree has drifted since the spec was written, stop and return to M2/M3 rather than silently adjusting the redirect map here.
+
 - [ ] **Step 1: `use-sidebar-collapsed.ts`** — the localStorage-backed collapse state (spec §4.2, key `clensy.sidebar.collapsed`):
 
 ```ts
@@ -371,9 +387,13 @@ export function useSidebarCollapsed(): [boolean, (value: boolean) => void] {
 }
 ```
 
-- [ ] **Step 2: `sidebar.tsx`** — grouped nav per spec §4.2: PEOPLE (Customers → `/app/customers`, Cleaners → `/app/cleaners`, Teams → `/app/cleaners/teams`), CATALOG (Services → `/app/catalog`, Add-ons → `/app/catalog/add-ons`), ADMINISTRATION (Staff → `/app/admin`). Uses `useSidebarCollapsed`; active-link highlight via `usePathname()` leading-segment match; renders as icon rail when collapsed, full labels when expanded.
+- [ ] **Step 2: `sidebar.tsx`** — grouped nav per spec §4.2: PEOPLE (Customers → `/app/customers`, Cleaners → `/app/cleaners`, Teams → `/app/cleaners/teams`), CATALOG (Services → `/app/catalog`, Add-ons → `/app/catalog/add-ons`), ADMINISTRATION (Staff → `/app/admin`). Active-link highlight via `usePathname()` leading-segment match.
 
-- [ ] **Step 3: `header.tsx`** — renders its `children` (the page's `PageHeader`, supplied via a layout slot — see Step 6) plus mounts `UserMenu`.
+  Two independent presentations, not one component doing both:
+  - **Desktop** (`md:` breakpoint and above): uses `useSidebarCollapsed`; renders as an icon rail when collapsed, full labels when expanded; the collapse toggle button lives in the sidebar itself.
+  - **Below `md:`**: the sidebar renders as a fixed-position off-canvas drawer, hidden by default (`translate-x-full` or unmounted), opened by a toggle button `Header` renders in its mobile view (Step 3) via a shared `mobileNavOpen` boolean state lifted into `AppShell` (Step 5) and passed down to both `Sidebar` and `Header`. A `useEffect` watching `usePathname()` closes it (`setMobileNavOpen(false)`) on every route change, satisfying spec §4.2's "closes automatically after a navigation."
+
+- [ ] **Step 3: `header.tsx`** — renders its `children` (a mobile nav-toggle button, visible only below `md:`, calling the `onMobileNavToggle` prop `AppShell` passes down) plus mounts `UserMenu`. `Header` does **not** render `PageHeader` — see Step 6's note on why that's a separate, page-level concern, not a header-owned slot.
 
 - [ ] **Step 4: `user-menu.tsx`** — calls `useCurrentAdminQuery` for identity/role display; **Log out** action implements the exact success/failure flow from spec §4.3:
 
@@ -387,7 +407,7 @@ import { useToast } from '@clensy/ui';
 export function UserMenu() {
   const apolloClient = useApolloClient();
   const router = useRouter();
-  const { showError } = useToast();
+  const { error: showError } = useToast();
   const { data } = useCurrentAdminQuery();
   const [logout, { loading }] = useLogoutMutation();
 
@@ -406,21 +426,25 @@ export function UserMenu() {
 }
 ```
 
-- [ ] **Step 5: `app-shell.tsx`** — composes `Sidebar` + `Header` + a content slot; wraps everything in `ToastProvider` (mounted once, here, for every `/app/*` page).
+- [ ] **Step 5: `app-shell.tsx`** — composes `Sidebar` + `Header` + a content slot; owns the `mobileNavOpen` boolean state (`useState`) and passes it plus its setter down to both `Sidebar` (to render/hide the drawer) and `Header` (to render the toggle button and close it after a click, in addition to `Sidebar`'s own route-change effect from Step 2); wraps everything in `ToastProvider` (mounted once, here, for every `/app/*` page).
 
 - [ ] **Step 6: `apps/web/app/app/layout.tsx`** — renders `AppShell`, passing `children` through to its content slot. This is the **only** layout file for the entire `/app/*` tree — Tasks 6–8 add pages under it, not new layouts.
 
-- [ ] **Step 7: `apps/web/app/app/page.tsx`** — the temporary `/app` redirect (spec §4.1, explicitly temporary through M8):
+  **`PageHeader` placement:** spec §4.2 describes it as living in "the header," but a Next.js layout's `children` slot has no natural mechanism for a child page to inject content into a *different* part of its parent layout (`Header`) without a context/slot abstraction this milestone doesn't need. This plan resolves it visually instead: each migrated page (Tasks 5 Step 8, 6, 7, 8) renders its own `<PageHeader>` as the first element of its own page content, immediately above its `DataTable` — visually it reads as "the page's header," even though structurally it's inside `{children}`, not inside the persistent `Header` component. `Header` (Step 3) owns only the user menu and the mobile nav toggle. This is a plan-level implementation decision, not a spec-level behavior change — the visual outcome (title near the top of every page, user menu always visible) is unchanged.
+
+- [ ] **Step 7: `apps/web/app/app/page.tsx`** — the `/app` redirect. **Temporarily** targets `/app/admin` in this task, since Admin is the only module Task 5 migrates — Task 6 changes this same file's destination to `/app/customers` once Customers exists, matching the spec's final `/app` → `/app/customers` default (spec §4.1). This keeps `/app` never pointing at a route that doesn't exist yet on `main` at any commit:
 
 ```ts
 import { redirect } from 'next/navigation';
 
 export default function AppIndexPage() {
-  redirect('/app/customers');
+  redirect('/app/admin'); // Task 6 changes this to '/app/customers'
 }
 ```
 
 - [ ] **Step 8: `apps/web/app/app/admin/page.tsx`** — port the existing `admin/page.tsx` content: same `useCurrentAdminQuery` auth/owner check, same `useAdminsQuery`/`useCreateAdminMutation`/`useDisableAdminMutation` logic, but the create form moves from an inline `<section>` into a `FormDialog` opened from a `PageHeader`'s `actions` slot ("+ New Staff Account" `Button`), and the list uses the now-extended `DataTable` (no `pagination` — this list has none today). No `DetailDrawer` — Admin has no detail view (spec §4.7).
+
+  **Wire the existing "Disable" action through `ConfirmDialog`.** Today's `admin/page.tsx` calls `handleDisable(row.id)` directly from the row's "Disable" button with no confirmation at all. Spec §4.5 establishes "Confirm a destructive action → `ConfirmDialog`" as the normative rule "for this and future milestones, so nothing reinvents its own interaction model" — disabling a staff account is exactly that kind of action, and it's already being touched by this migration. Route it through `ConfirmDialog` (title "Disable this staff account?", description naming the account, `confirmLabel` "Disable", `onConfirm` calling the existing `handleDisable`). This is the only consumer of `ConfirmDialog` in this milestone — none of the other three migrated modules (Customers, Cleaners/Teams, Catalog) have an existing destructive action to wire it to, and this plan does not invent one for them.
 
 - [ ] **Step 9: Delete `apps/web/app/admin/page.tsx`.**
 
@@ -436,7 +460,7 @@ export const config = {
 
 - [ ] **Step 11: `apps/web/app/login/page.tsx`** — change the success redirect from `router.push('/admin')` to `router.push('/app')` (spec §4.8).
 
-- [ ] **Step 12: `next.config.ts`** — add the Admin redirect (the only one this task is responsible for; Tasks 6–8 each add their own module's entries):
+- [ ] **Step 12: `next.config.ts`** — add the Admin redirect (the only one this task is responsible for). **Each of Tasks 6–8 appends its own module's entries to this same `redirects()` array — never replaces it.** Before committing, re-read the full array and confirm every entry added by an earlier task is still present:
 
 ```ts
 async redirects() {
@@ -446,7 +470,7 @@ async redirects() {
 }
 ```
 
-- [ ] **Step 13: Manual verification** (no automated test suite — §5): log in → land on `/app` → redirected to `/app/customers` (expected 404 until Task 6 — acceptable transient state within this branch, not on `main`; verify by temporarily pointing at `/app/admin` directly instead) → sidebar renders all groups, collapse toggle persists across a reload → visit `/app/admin` directly → staff list renders via `DataTable` → "+ New Staff Account" opens `FormDialog`, create succeeds, list refreshes → old `/admin` URL redirects to `/app/admin` → user menu shows identity/role → **Log out** clears the session and lands on `/login`; disconnect network and retry logout to confirm the failure path shows the inline error and does not navigate.
+- [ ] **Step 13: Manual verification** (no automated test suite — §5): log in → land on `/app` → redirected to `/app/admin` → sidebar renders all groups, collapse toggle persists across a reload → below the `md:` breakpoint, sidebar becomes a hidden drawer, opens via the header toggle, closes automatically on navigating to another link → visit `/app/admin` directly → staff list renders via `DataTable` → "+ New Staff Account" opens `FormDialog`, create succeeds, list refreshes → "Disable" on an active row opens `ConfirmDialog` before actually disabling; confirming disables it, canceling leaves it active → old `/admin` URL redirects to `/app/admin` → user menu shows identity/role → **Log out** clears the session and lands on `/login`; disconnect network and retry logout to confirm the failure path shows the inline error and does not navigate.
 
 - [ ] **Step 14: Commit.**
 
@@ -469,10 +493,11 @@ First task to introduce `DetailDrawer` — the proof point spec §6's golden pat
 - Create: `apps/web/app/app/customers/page.tsx`
 - Delete: `apps/web/app/customers/page.tsx`, `apps/web/app/customers/[id]/page.tsx`
 - Modify: `apps/web/next.config.ts`
+- Modify: `apps/web/app/app/page.tsx` (redirect target: `/app/admin` → `/app/customers`, finalizing spec §4.1's default now that Customers exists)
 
 **Interfaces:**
 - Produces: `useDetailDrawer(paramName?: string)` — reused by Tasks 7 and 8, not reimplemented per module.
-- Consumes: `DetailDrawer`, `FormDialog` (Task 3), extended `DataTable` (Task 4), `AppShell`/layout (Task 5, already mounted — this task adds only a page, no new layout).
+- Consumes: `DetailDrawer`, `FormDialog` (Task 3), `PageHeader`, `useToast` (Task 2), extended `DataTable` (Task 4), `AppShell`/layout (Task 5, already mounted — this task adds only a page, no new layout).
 
 - [ ] **Step 1: `use-detail-drawer.ts`** — implements the same-page-origin-flag mechanism spec §4.4 requires but deliberately left as a plan-level decision:
 
@@ -512,23 +537,25 @@ export function useDetailDrawer(paramName = 'detail') {
 }
 ```
 
-- [ ] **Step 2: `apps/web/app/app/customers/page.tsx`** — port the existing `customers/page.tsx` list/create logic: `useCustomersQuery`/`useCreateCustomerMutation` unchanged; inline create form moves into a `FormDialog`; list uses extended `DataTable` with `onRowClick` calling `useDetailDrawer().open(row.id)`; when `activeId` is set, render `DetailDrawer` with the customer's detail fields — port `customers/[id]/page.tsx`'s edit-form content (its `useUpdateCustomerMutation` logic) as the drawer's `children`, calling `useToast().showSuccess(...)` on save (new — the old full page had no toast) and `close()` on the drawer's `onClose`.
+- [ ] **Step 2: `apps/web/app/app/customers/page.tsx`** — port the existing `customers/page.tsx` list/create logic: `useCustomersQuery`/`useCreateCustomerMutation` unchanged; render a `PageHeader` (title "Customers", `actions` holding the "+ New Customer" trigger — see Task 5 Step 6's note: this page owns its own `PageHeader`, `Header` does not); inline create form moves into a `FormDialog`; list uses extended `DataTable` with `onRowClick` calling `useDetailDrawer().open(row.id)`; when `activeId` is set, render `DetailDrawer` with the customer's detail fields — port `customers/[id]/page.tsx`'s edit-form content (its `useUpdateCustomerMutation` logic) as the drawer's `children`, calling `useToast().success(...)` on save (new — the old full page had no toast) and `close()` on the drawer's `onClose`.
 
 - [ ] **Step 3: Delete `apps/web/app/customers/page.tsx` and `apps/web/app/customers/[id]/page.tsx`.**
 
-- [ ] **Step 4: `next.config.ts`** — append:
+- [ ] **Step 4: `next.config.ts`** — append (do not remove Task 5's `/admin` entry):
 
 ```ts
 { source: '/customers', destination: '/app/customers', permanent: true },
 { source: '/customers/:id', destination: '/app/customers?detail=:id', permanent: true },
 ```
 
-- [ ] **Step 5: Manual verification:** `/app` now correctly lands on `/app/customers` (Task 5's transient gap is closed) → create a customer via `FormDialog` → appears in `DataTable` → click row → `DetailDrawer` opens, URL shows `?detail=<id>` → edit and save → success toast → close via `X` → URL returns to `/app/customers` with no `detail` param → repeat close via browser Back after opening by row click, confirm it also returns cleanly → visit `/app/customers?detail=<id>` directly (simulating a shared link) → drawer opens correctly → close it → confirm it lands on the plain list URL, not somewhere outside the app → old `/customers/[id]` URL redirects to `/app/customers?detail=[id]`.
+- [ ] **Step 5: `apps/web/app/app/page.tsx`** — change the redirect target from `/app/admin` (Task 5's temporary value) to `/app/customers`, the spec's actual final default (spec §4.1).
 
-- [ ] **Step 6: Commit.**
+- [ ] **Step 6: Manual verification:** `/app` now lands on `/app/customers` → create a customer via `FormDialog` → appears in `DataTable` → click row → `DetailDrawer` opens, URL shows `?detail=<id>` → edit and save → success toast → close via `X` → URL returns to `/app/customers` with no `detail` param → repeat close via browser Back after opening by row click, confirm it also returns cleanly → visit `/app/customers?detail=<id>` directly (simulating a shared link) → drawer opens correctly → close it → confirm it lands on the plain list URL, not somewhere outside the app → old `/customers/[id]` URL redirects to `/app/customers?detail=[id]` → if any old customer URL is ever visited with an extra query string (e.g. `/customers/123?ref=email`), confirm Next.js's redirect either preserves it or drops it predictably — note the actual observed behavior in the task report; this plan does not assume one or the other.
+
+- [ ] **Step 7: Commit.**
 
 ```bash
-git add apps/web/lib/use-detail-drawer.ts apps/web/app/app/customers/page.tsx apps/web/next.config.ts
+git add apps/web/lib/use-detail-drawer.ts apps/web/app/app/customers/page.tsx apps/web/app/app/page.tsx apps/web/next.config.ts
 git rm apps/web/app/customers/page.tsx
 git rm -r apps/web/app/customers/\[id\]
 git commit -m "feat(web): migrate Customers to /app/customers with DetailDrawer"
@@ -552,7 +579,7 @@ git commit -m "feat(web): migrate Customers to /app/customers with DetailDrawer"
 
 - [ ] **Step 3: Delete the four old files.**
 
-- [ ] **Step 4: `next.config.ts`** — append:
+- [ ] **Step 4: `next.config.ts`** — append (do not remove any entry Tasks 5–6 already added):
 
 ```ts
 { source: '/cleaners', destination: '/app/cleaners', permanent: true },
@@ -561,7 +588,7 @@ git commit -m "feat(web): migrate Customers to /app/customers with DetailDrawer"
 { source: '/cleaners/teams/:id', destination: '/app/cleaners/teams?detail=:id', permanent: true },
 ```
 
-- [ ] **Step 5: Manual verification** — same checklist shape as Task 6 Step 5, run against both `/app/cleaners` and `/app/cleaners/teams` independently.
+- [ ] **Step 5: Manual verification** — same checklist shape as Task 6 Step 6, run against both `/app/cleaners` and `/app/cleaners/teams` independently.
 
 - [ ] **Step 6: Commit.**
 
@@ -594,7 +621,7 @@ git commit -m "feat(web): migrate Cleaners & Teams to /app/cleaners with DetailD
 
 - [ ] **Step 4: Delete the four old files** (and the old `format-price.ts` location if moved).
 
-- [ ] **Step 5: `next.config.ts`** — append:
+- [ ] **Step 5: `next.config.ts`** — append (do not remove any entry Tasks 5–7 already added):
 
 ```ts
 { source: '/catalog', destination: '/app/catalog', permanent: true },
@@ -603,7 +630,7 @@ git commit -m "feat(web): migrate Cleaners & Teams to /app/cleaners with DetailD
 { source: '/catalog/add-ons/:id', destination: '/app/catalog/add-ons?detail=:id', permanent: true },
 ```
 
-- [ ] **Step 6: Manual verification** — same checklist shape as Task 6 Step 5, run against both `/app/catalog` and `/app/catalog/add-ons`; additionally confirm price entry/display still round-trips correctly through `DetailDrawer` (money formatting is unchanged, but the surrounding container is new).
+- [ ] **Step 6: Manual verification** — same checklist shape as Task 6 Step 6, run against both `/app/catalog` and `/app/catalog/add-ons`; additionally confirm price entry/display still round-trips correctly through `DetailDrawer` (money formatting is unchanged, but the surrounding container is new).
 
 - [ ] **Step 7: Commit.**
 
