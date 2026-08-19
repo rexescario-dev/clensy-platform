@@ -41,6 +41,25 @@ export function useDialogBehavior(open: boolean, onClose: () => void) {
     } else {
       container.focus();
     }
+
+    // Restore focus to the triggering element when the dialog closes. This
+    // is a cleanup function (not a second `useEffect` keyed on `open`)
+    // deliberately: some callers (`DetailDrawer`, driven by a `?detail=`
+    // search param) close by unmounting the component entirely rather than
+    // flipping `open` to `false` while staying mounted — an `[open]`-effect
+    // that only checks "did open become false" never fires for an unmount,
+    // since there's no further render to observe the transition. A cleanup
+    // function returned from this effect fires in both cases: React runs it
+    // when `open`'s dependency changes (the `Modal`/`FormDialog` toggle
+    // case) and when the component unmounts outright (the `DetailDrawer`
+    // case) — one code path satisfies spec §4.6's "restored to the
+    // triggering element on close" for every current caller.
+    return () => {
+      const trigger = triggerRef.current;
+      if (trigger && (trigger as HTMLElement).isConnected) {
+        (trigger as HTMLElement).focus?.();
+      }
+    };
   }, [open]);
 
   useEffect(() => {
@@ -90,12 +109,6 @@ export function useDialogBehavior(open: boolean, onClose: () => void) {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [open, onClose]);
-
-  useEffect(() => {
-    if (open) return;
-    const trigger = triggerRef.current;
-    if (trigger && trigger.isConnected) (trigger as HTMLElement).focus?.();
-  }, [open]);
 
   function backdropProps() {
     return {
