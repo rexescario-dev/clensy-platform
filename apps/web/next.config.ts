@@ -31,6 +31,15 @@ const nextConfig: NextConfig = {
       { source: '/cleaners/teams', destination: '/app/cleaners/teams', permanent: true },
       { source: '/cleaners/teams/:id', destination: '/app/cleaners/teams?detail=:id', permanent: true },
       { source: '/cleaners/:id', destination: '/app/cleaners?detail=:id', permanent: true },
+      // Same `:id`-vs-literal-segment collision as `/cleaners/teams` above:
+      // `/catalog/add-ons` and `/catalog/add-ons/:id` must be listed before
+      // the more general `/catalog/:id`, or a request for `/catalog/add-ons`
+      // would match `/catalog/:id` first and redirect to
+      // `/app/catalog?detail=add-ons` instead of `/app/catalog/add-ons`.
+      { source: '/catalog', destination: '/app/catalog', permanent: true },
+      { source: '/catalog/add-ons', destination: '/app/catalog/add-ons', permanent: true },
+      { source: '/catalog/add-ons/:id', destination: '/app/catalog/add-ons?detail=:id', permanent: true },
+      { source: '/catalog/:id', destination: '/app/catalog?detail=:id', permanent: true },
     ];
   },
 };
