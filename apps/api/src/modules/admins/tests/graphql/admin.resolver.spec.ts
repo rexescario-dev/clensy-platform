@@ -12,7 +12,7 @@ import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
 import { AdminResolver } from '../../presentation/graphql/admin.resolver';
 
 type ResolverMethod =
-  'login' | 'createAdmin' | 'disableAdmin' | 'admins' | 'currentAdmin';
+  'login' | 'logout' | 'createAdmin' | 'disableAdmin' | 'admins' | 'currentAdmin';
 
 // Reads the method's own function value off `AdminResolver.prototype` via
 // `Object.getOwnPropertyDescriptor` rather than a plain member access — the
@@ -65,6 +65,13 @@ describe('AdminResolver', () => {
     it('has neither AuthGuard nor @Roles() — public operation', () => {
       expect(guardsOn('login')).toEqual([]);
       expect(rolesOn('login')).toBeUndefined();
+    });
+  });
+
+  describe('logout', () => {
+    it('has neither AuthGuard nor @Roles() — callable without a session', () => {
+      expect(guardsOn('logout')).toEqual([]);
+      expect(rolesOn('logout')).toBeUndefined();
     });
   });
 

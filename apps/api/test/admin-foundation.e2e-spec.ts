@@ -309,4 +309,28 @@ describe('Admin Foundation (e2e)', () => {
       'UNAUTHENTICATED',
     );
   });
+
+  it('logout expires the session cookie and is idempotent without one', async () => {
+    const owner = await seedOwner(adminUserRepository);
+    const loginResponse = await login(owner.email, owner.password);
+    expect(loginResponse.body.errors).toBeUndefined();
+    const loginCookie = extractSessionCookie(loginResponse);
+
+    const logoutResponse = await request(app.getHttpServer())
+      .post('/graphql')
+      .set('Cookie', loginCookie)
+      .send({ query: 'mutation { logout }' });
+
+    expect(logoutResponse.body.data.logout).toBe(true);
+    const clearedCookie = logoutResponse.headers['set-cookie']?.[0];
+    expect(clearedCookie).toBeDefined();
+    expect(clearedCookie).toMatch(/clensy_admin_session=;/); // cleared value
+    expect(clearedCookie).toMatch(/Expires=Thu, 01 Jan 1970/i); // clearCookie's expiry
+
+    // idempotent: no cookie at all still succeeds
+    const noCookieResponse = await request(app.getHttpServer())
+      .post('/graphql')
+      .send({ query: 'mutation { logout }' });
+    expect(noCookieResponse.body.data.logout).toBe(true);
+  });
 });

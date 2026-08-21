@@ -1,19 +1,41 @@
 'use client';
 
 import {
+  useCreateCustomerMutation,
   useCreatePropertyMutation,
   useCustomerQuery,
+  useCustomersQuery,
   useUpdateCustomerMutation,
   useUpdatePropertyMutation,
 } from '@clensy/client';
-import { Button, DataTable, FormField } from '@clensy/ui';
+import {
+  Button,
+  DataTable,
+  DetailDrawer,
+  ErrorState,
+  FormDialog,
+  FormField,
+  LoadingState,
+  PageHeader,
+  useToast,
+} from '@clensy/ui';
 import type { DataTableColumn } from '@clensy/ui';
-import { useParams } from 'next/navigation';
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, Suspense, useEffect, useState } from 'react';
+import { useDetailDrawer } from '../../../lib/use-detail-drawer';
 
 // `DataTable<T>` (packages/ui) constrains `T extends Record<string, unknown>`
 // — the index signature below satisfies that constraint while keeping the
 // named fields concretely typed.
+type CustomerRow = {
+  id: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  [key: string]: unknown;
+};
+
+// Same index-signature note as `CustomerRow` above — `DataTable<T>` requires
+// `T extends Record<string, unknown>`.
 type PropertyRow = {
   id: string;
   label: string;
@@ -24,6 +46,15 @@ type PropertyRow = {
   postalCode: string;
   accessNotes: string | null;
   [key: string]: unknown;
+};
+
+type CustomerDetail = {
+  id: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  notes: string | null;
+  properties: PropertyRow[];
 };
 
 type PropertyFormState = {
@@ -49,6 +80,8 @@ const EMPTY_PROPERTY_FORM: PropertyFormState = {
 // Optional fields (`addressLine2`, `accessNotes`) are cleared to `null`
 // rather than sent as an empty string, so the server's partial-update
 // merge (spec §4.2) actually clears them instead of retaining stale text.
+// Ported verbatim from the pre-migration `customers/[id]/page.tsx` — this is
+// a deliberate correctness detail, not incidental formatting.
 function toPropertyInput(form: PropertyFormState) {
   return {
     label: form.label,
@@ -61,68 +94,199 @@ function toPropertyInput(form: PropertyFormState) {
   };
 }
 
-export default function CustomerDetailPage() {
-  const params = useParams<{ id: string }>();
-  const id = params.id;
+// `useDetailDrawer` reads `useSearchParams()`, which Next.js requires to sit
+// under a `<Suspense>` boundary during prerendering (otherwise the whole
+// route bails out of static generation with a build-time warning/error).
+// The default export supplies that boundary; `CustomersPageContent` holds
+// the actual page — list, create dialog, and detail drawer.
+export default function CustomersPage() {
+  return (
+    <Suspense fallback={<LoadingState />}>
+      <CustomersPageContent />
+    </Suspense>
+  );
+}
 
+function CustomersPageContent() {
+  const { data, loading, error, refetch } = useCustomersQuery({ fetchPolicy: 'network-only' });
+  const [createCustomer, { loading: creating }] = useCreateCustomerMutation();
+  const { activeId, open: openDetail, close: closeDetail } = useDetailDrawer();
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [notes, setNotes] = useState('');
+  const [formError, setFormError] = useState<string | undefined>(undefined);
+
+  function resetForm() {
+    setFullName('');
+    setEmail('');
+    setPhone('');
+    setNotes('');
+    setFormError(undefined);
+  }
+
+  function openCreateForm() {
+    resetForm();
+    setFormOpen(true);
+  }
+
+  async function handleCreateSubmit() {
+    setFormError(undefined);
+    try {
+      await createCustomer({
+        variables: {
+          input: {
+            fullName,
+            email,
+            phone,
+            notes: notes.trim() === '' ? undefined : notes,
+          },
+        },
+      });
+      setFormOpen(false);
+      resetForm();
+      await refetch();
+    } catch {
+      setFormError('Unable to create customer.');
+    }
+  }
+
+  const columns: DataTableColumn<CustomerRow>[] = [
+    {
+      key: 'fullName',
+      header: 'Name',
+      render: (row) => <span className="font-medium text-slate-900">{row.fullName}</span>,
+    },
+    { key: 'email', header: 'Email' },
+    { key: 'phone', header: 'Phone' },
+  ];
+
+  const rows: CustomerRow[] = data?.customers ?? [];
+
+  return (
+    <div className="flex flex-col gap-8">
+      <PageHeader
+        title="Customers"
+        actions={
+          <Button type="button" onClick={openCreateForm}>
+            + New Customer
+          </Button>
+        }
+      />
+
+      <DataTable
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => row.id}
+        emptyMessage="No customers."
+        loading={loading}
+        error={error ? 'Unable to load customers.' : undefined}
+        onRowClick={(row) => openDetail(row.id)}
+      />
+
+      <FormDialog
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        title="Add customer"
+        onSubmit={handleCreateSubmit}
+        submitLabel={creating ? 'Creating…' : 'Add customer'}
+        submitting={creating}
+      >
+        <FormField
+          label="Full name"
+          name="new-fullName"
+          required
+          value={fullName}
+          onChange={(event) => setFullName(event.target.value)}
+        />
+        <FormField
+          label="Email"
+          name="new-email"
+          type="email"
+          required
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+        />
+        <FormField
+          label="Phone"
+          name="new-phone"
+          required
+          value={phone}
+          onChange={(event) => setPhone(event.target.value)}
+        />
+        <FormField
+          label="Notes"
+          name="new-notes"
+          value={notes}
+          onChange={(event) => setNotes(event.target.value)}
+        />
+        {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
+      </FormDialog>
+
+      {activeId ? (
+        <CustomerDetailDrawer id={activeId} onClose={closeDetail} onSaved={() => void refetch()} />
+      ) : null}
+    </div>
+  );
+}
+
+function CustomerDetailDrawer({
+  id,
+  onClose,
+  onSaved,
+}: {
+  id: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
   const { data, loading, error, refetch } = useCustomerQuery({
     variables: { id },
     fetchPolicy: 'network-only',
   });
 
-  if (loading) {
-    return (
-      <main className="p-6">
-        <p className="text-sm text-slate-500">Loading…</p>
-      </main>
-    );
-  }
+  const title = data?.customer?.fullName ?? 'Customer';
 
-  if (error) {
-    return (
-      <main className="p-6">
-        <p className="text-sm text-red-600">Unable to load customer.</p>
-      </main>
-    );
-  }
-
-  if (!data?.customer) {
-    return (
-      <main className="p-6">
+  return (
+    <DetailDrawer open onClose={onClose} title={title}>
+      {loading ? (
+        <LoadingState />
+      ) : error ? (
+        <ErrorState message="Unable to load customer." />
+      ) : !data?.customer ? (
         <p className="text-sm text-slate-700">Customer not found.</p>
-      </main>
-    );
-  }
-
-  return <CustomerDetail id={id} customer={data.customer} refetch={refetch} />;
+      ) : (
+        <div className="flex flex-col gap-8">
+          <CustomerEditForm customer={data.customer} refetch={refetch} onSaved={onSaved} />
+          <CustomerProperties
+            customerId={data.customer.id}
+            properties={data.customer.properties}
+            refetch={refetch}
+          />
+        </div>
+      )}
+    </DetailDrawer>
+  );
 }
 
-function CustomerDetail({
-  id,
+function CustomerEditForm({
   customer,
   refetch,
+  onSaved,
 }: {
-  id: string;
-  customer: {
-    id: string;
-    fullName: string;
-    email: string;
-    phone: string;
-    notes: string | null;
-    properties: PropertyRow[];
-  };
+  customer: CustomerDetail;
   refetch: () => Promise<unknown>;
+  onSaved: () => void;
 }) {
-  const [updateCustomer, { loading: updatingCustomer }] = useUpdateCustomerMutation();
-  const [createProperty, { loading: creatingProperty }] = useCreatePropertyMutation();
-  const [updateProperty, { loading: updatingProperty }] = useUpdatePropertyMutation();
+  const [updateCustomer, { loading: updating }] = useUpdateCustomerMutation();
+  const { success } = useToast();
 
-  // --- Customer edit form ---
   const [fullName, setFullName] = useState(customer.fullName);
   const [email, setEmail] = useState(customer.email);
   const [phone, setPhone] = useState(customer.phone);
   const [notes, setNotes] = useState(customer.notes ?? '');
-  const [customerFormError, setCustomerFormError] = useState<string | undefined>(undefined);
+  const [formError, setFormError] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     setFullName(customer.fullName);
@@ -131,13 +295,13 @@ function CustomerDetail({
     setNotes(customer.notes ?? '');
   }, [customer.fullName, customer.email, customer.phone, customer.notes]);
 
-  async function handleCustomerSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setCustomerFormError(undefined);
+    setFormError(undefined);
     try {
       await updateCustomer({
         variables: {
-          id,
+          id: customer.id,
           input: {
             fullName,
             email,
@@ -147,10 +311,72 @@ function CustomerDetail({
         },
       });
       await refetch();
+      onSaved();
+      success('Customer updated.');
     } catch {
-      setCustomerFormError('Unable to update customer.');
+      setFormError('Unable to update customer.');
     }
   }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <FormField
+        label="Full name"
+        name="fullName"
+        required
+        value={fullName}
+        onChange={(event) => setFullName(event.target.value)}
+      />
+      <FormField
+        label="Email"
+        name="email"
+        type="email"
+        required
+        value={email}
+        onChange={(event) => setEmail(event.target.value)}
+      />
+      <FormField
+        label="Phone"
+        name="phone"
+        required
+        value={phone}
+        onChange={(event) => setPhone(event.target.value)}
+      />
+      <FormField label="Notes" name="notes" value={notes} onChange={(event) => setNotes(event.target.value)} />
+      {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
+      <Button type="submit" disabled={updating}>
+        {updating ? 'Saving…' : 'Save customer'}
+      </Button>
+    </form>
+  );
+}
+
+// Ported from the pre-migration `customers/[id]/page.tsx`'s "Properties",
+// "Add property", and "Edit property" sections — ~verbatim logic, laid out
+// as always-visible inline sections stacked inside the drawer (rather than
+// as a nested `FormDialog`/`Modal`) for a specific reason: `Modal` and
+// `DetailDrawer` both close on Escape via a shared `useDialogBehavior` hook
+// that attaches its own `document`-level `keydown` listener whenever `open`
+// is `true`, with no awareness of other open dialogs. Nesting a second
+// `Modal`-based dialog inside this already-open `DetailDrawer` would mean an
+// Escape press meant to dismiss only the inner property form also fires the
+// drawer's own listener in the same event dispatch, closing the customer
+// drawer (and navigating the URL away via `useDetailDrawer`'s `close()`) at
+// the same time — a real, easy-to-trigger bug, not a hypothetical one. Two
+// inline sections avoid it entirely: there is exactly one dialog open
+// (the drawer itself) at any time.
+function CustomerProperties({
+  customerId,
+  properties,
+  refetch,
+}: {
+  customerId: string;
+  properties: PropertyRow[];
+  refetch: () => Promise<unknown>;
+}) {
+  const [createProperty, { loading: creatingProperty }] = useCreatePropertyMutation();
+  const [updateProperty, { loading: updatingProperty }] = useUpdatePropertyMutation();
+  const { success } = useToast();
 
   // --- Add property form ---
   const [newProperty, setNewProperty] = useState<PropertyFormState>(EMPTY_PROPERTY_FORM);
@@ -162,12 +388,13 @@ function CustomerDetail({
     try {
       await createProperty({
         variables: {
-          customerId: id,
+          customerId,
           input: toPropertyInput(newProperty),
         },
       });
       setNewProperty(EMPTY_PROPERTY_FORM);
       await refetch();
+      success('Property added.');
     } catch {
       setAddPropertyError('Unable to create property.');
     }
@@ -212,6 +439,7 @@ function CustomerDetail({
       setEditingPropertyId(null);
       setEditProperty(EMPTY_PROPERTY_FORM);
       await refetch();
+      success('Property updated.');
     } catch {
       setEditPropertyError('Unable to update property.');
     }
@@ -237,55 +465,20 @@ function CustomerDetail({
   ];
 
   return (
-    <main className="flex flex-col gap-8 p-6">
-      <h1 className="text-lg font-semibold text-slate-900">{customer.fullName}</h1>
-
-      <section className="max-w-sm rounded-lg border border-slate-200 p-4">
-        <h2 className="mb-4 text-sm font-semibold text-slate-900">Customer details</h2>
-        <form onSubmit={handleCustomerSubmit} className="flex flex-col gap-4">
-          <FormField
-            label="Full name"
-            name="fullName"
-            required
-            value={fullName}
-            onChange={(event) => setFullName(event.target.value)}
-          />
-          <FormField
-            label="Email"
-            name="email"
-            type="email"
-            required
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-          />
-          <FormField
-            label="Phone"
-            name="phone"
-            required
-            value={phone}
-            onChange={(event) => setPhone(event.target.value)}
-          />
-          <FormField label="Notes" name="notes" value={notes} onChange={(event) => setNotes(event.target.value)} />
-          {customerFormError ? <p className="text-sm text-red-600">{customerFormError}</p> : null}
-          <Button type="submit" disabled={updatingCustomer}>
-            {updatingCustomer ? 'Saving…' : 'Save customer'}
-          </Button>
-        </form>
-      </section>
-
-      <section>
-        <h2 className="mb-4 text-sm font-semibold text-slate-900">Properties</h2>
+    <div className="flex flex-col gap-6">
+      <div>
+        <h3 className="mb-4 text-sm font-semibold text-slate-900">Properties</h3>
         <DataTable
           columns={propertyColumns}
-          rows={customer.properties}
+          rows={properties}
           rowKey={(row) => row.id}
           emptyMessage="No properties."
         />
-      </section>
+      </div>
 
       {editingPropertyId ? (
-        <section className="max-w-sm rounded-lg border border-slate-200 p-4">
-          <h2 className="mb-4 text-sm font-semibold text-slate-900">Edit property</h2>
+        <div className="rounded-lg border border-slate-200 p-4">
+          <h3 className="mb-4 text-sm font-semibold text-slate-900">Edit property</h3>
           <form onSubmit={handleEditPropertySubmit} className="flex flex-col gap-4">
             <FormField
               label="Label"
@@ -344,11 +537,11 @@ function CustomerDetail({
               </Button>
             </div>
           </form>
-        </section>
+        </div>
       ) : null}
 
-      <section className="max-w-sm rounded-lg border border-slate-200 p-4">
-        <h2 className="mb-4 text-sm font-semibold text-slate-900">Add property</h2>
+      <div className="rounded-lg border border-slate-200 p-4">
+        <h3 className="mb-4 text-sm font-semibold text-slate-900">Add property</h3>
         <form onSubmit={handleAddPropertySubmit} className="flex flex-col gap-4">
           <FormField
             label="Label"
@@ -402,7 +595,7 @@ function CustomerDetail({
             {creatingProperty ? 'Creating…' : 'Add property'}
           </Button>
         </form>
-      </section>
-    </main>
+      </div>
+    </div>
   );
 }

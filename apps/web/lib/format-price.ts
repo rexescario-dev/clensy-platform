@@ -30,3 +30,22 @@ export function parsePesosToMinorUnits(input: string): number {
 export function toEditableAmount(minorUnits: number): string {
   return formatMinorUnits(minorUnits).replace('₱', '');
 }
+
+// Shared by every price-entry form (Catalog service pricing, Add-on
+// create/edit): parses a pesos-string input and reports a user-facing
+// error via the caller's own error-state setter on failure, instead of
+// each call site repeating the same try/catch/`instanceof Error` shape.
+// Returns `undefined` on failure — the caller should treat that as "stop,
+// the error is already set" (matching the previous per-call-site
+// `catch { ...; return; }` control flow).
+export function parsePriceOrReportError(
+  input: string,
+  setError: (message: string) => void,
+): number | undefined {
+  try {
+    return parsePesosToMinorUnits(input);
+  } catch (parseError) {
+    setError(parseError instanceof Error ? parseError.message : 'Enter a valid amount, e.g. 19.99');
+    return undefined;
+  }
+}
