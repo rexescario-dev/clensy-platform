@@ -3,10 +3,16 @@ dist/
 node_modules/
 build/
 .turbo/
+*.tsbuildinfo
 
 # Next.js build output and its auto-generated (do-not-edit) type-reference file
 .next/
 next-env.d.ts
+
+# `next dev`-generated agent-guidance file (regenerated automatically,
+# scoped to apps/web only since it's the sole Next.js app in this monorepo)
+apps/web/AGENTS.md
+apps/web/CLAUDE.md
 
 # generated GraphiQL bundle (esbuild — see scripts/build-graphiql.ts)
 public/
