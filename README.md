@@ -7,7 +7,9 @@ pnpm workspace + Turborepo monorepo:
 ```text
 apps/
 ├── api/      NestJS + TypeORM + GraphQL (code-first, Apollo) + REST
-├── web/      Next.js (App Router) web console — /login, /admin, /customers, /cleaners, /catalog
+├── web/      Next.js (App Router) web console — /login (public); /app, /app/admin,
+│             /app/customers, /app/cleaners, /app/cleaners/teams, /app/catalog,
+│             /app/catalog/add-ons (protected, under the shared /app shell)
 └── worker/   not yet implemented
 
 packages/
@@ -131,7 +133,7 @@ The same run also seeds a dev Owner `AdminUser` (needed to log into the web cons
 
 | | URL | Notes |
 | --- | --- | --- |
-| Web console | http://localhost:3001 | Next.js — `/login`, `/admin` (staff/roles, Owner-only), `/customers`, `/cleaners`, `/catalog` |
+| Web console | http://localhost:3001 | Next.js — `/login` (public); `/app/*` shell (protected): `/app`, `/app/admin` (staff/roles, Owner-only), `/app/customers`, `/app/cleaners`, `/app/cleaners/teams`, `/app/catalog`, `/app/catalog/add-ons` |
 | GraphQL API | http://localhost:3000/graphql | queries/mutations for `bookings`, `admins`, `customers`/`properties`, `cleaners`/`teams`, `catalog` (`services`/`addOns`/`activePricing`) — API only, no browser landing page |
 | GraphQL IDE (GraphiQL) | http://localhost:3000/graphiql | separate route, dev-only (see below) |
 | REST API | http://localhost:3000/bookings | full CRUD — `bookings` only; `admins`/`customers`/`cleaners`/`catalog` are GraphQL-only |

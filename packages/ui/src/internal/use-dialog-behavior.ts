@@ -21,9 +21,41 @@ function getFocusableElements(container: HTMLElement): HTMLElement[] {
   );
 }
 
+// Module-level stack of currently-open dialog instances, in the order they
+// became open. Every `useDialogBehavior` call gets a stable identity (an
+// opaque object created once via lazy `useRef` init) that it pushes onto
+// this stack while `open` and pops off when it closes/unmounts — see the
+// dedicated effect below. The Escape handler in the keydown effect consults
+// this stack so that, when dialogs are nested (e.g. a `ConfirmDialog` opened
+// from inside an already-open `DetailDrawer`), only the topmost instance
+// responds to a single Escape keypress instead of every open instance
+// closing at once.
+const openDialogStack: object[] = [];
+
 export function useDialogBehavior(open: boolean, onClose: () => void) {
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<Element | null>(null);
+  const instanceIdRef = useRef<object | null>(null);
+  if (instanceIdRef.current === null) {
+    instanceIdRef.current = {};
+  }
+
+  // Tracks this instance's membership in `openDialogStack`. Deliberately a
+  // separate effect from the focus-capture/restore one below (which this
+  // task must not refactor) — same `[open]` dependency, same "fires on
+  // `open` becoming true, cleans up on `open` becoming false OR on unmount"
+  // shape, so it stays correct for both the Modal/FormDialog/ConfirmDialog
+  // toggle pattern and the DetailDrawer mount/unmount pattern without
+  // touching the existing focus-management logic.
+  useEffect(() => {
+    if (!open) return;
+    const id = instanceIdRef.current;
+    openDialogStack.push(id as object);
+    return () => {
+      const index = openDialogStack.indexOf(id as object);
+      if (index !== -1) openDialogStack.splice(index, 1);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -66,7 +98,15 @@ export function useDialogBehavior(open: boolean, onClose: () => void) {
     if (!open) return;
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
-        onClose();
+        // Only the topmost dialog in the stack should respond to a single
+        // Escape press. Every currently-open instance has its own
+        // `document`-level listener firing on the same keydown event, so
+        // without this check one Escape press would close every open
+        // dialog at once instead of just the one on top.
+        const isTopmost = openDialogStack[openDialogStack.length - 1] === instanceIdRef.current;
+        if (isTopmost) {
+          onClose();
+        }
         return;
       }
       if (event.key !== 'Tab') return;

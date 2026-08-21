@@ -97,10 +97,17 @@ export function Sidebar({ mobileNavOpen, onMobileNavClose }: SidebarProps) {
         </div>
       </nav>
 
-      {/* Mobile off-canvas drawer (below md:). */}
+      {/* Mobile off-canvas drawer (below md:). `inert` (not just
+          `aria-hidden`) when closed: the nav `<Link>`s inside stay mounted
+          through the close transition, so they're still real, focusable DOM
+          nodes — `aria-hidden` alone hides them from assistive tech but
+          doesn't stop a keyboard user from Tabbing into them (WCAG 4.1.2).
+          `inert` makes the whole subtree both unfocusable and hidden from
+          assistive tech in one attribute; React supports it as a plain
+          boolean DOM attribute. */}
       <div
         className={`fixed inset-0 z-40 md:hidden ${mobileNavOpen ? '' : 'pointer-events-none'}`}
-        aria-hidden={!mobileNavOpen}
+        inert={!mobileNavOpen}
       >
         <div
           className={`absolute inset-0 bg-black/40 transition-opacity ${

@@ -5,6 +5,7 @@ import {
   Button,
   DataTable,
   DetailDrawer,
+  ErrorState,
   FormDialog,
   FormField,
   LoadingState,
@@ -173,7 +174,15 @@ function AddOnsPageContent() {
       </FormDialog>
 
       {activeId ? (
-        <AddOnDetailDrawer id={activeId} addOns={rows} refetch={refetch} onClose={closeDetail} onSaved={() => void refetch()} />
+        <AddOnDetailDrawer
+          id={activeId}
+          addOns={rows}
+          loading={loading}
+          error={Boolean(error)}
+          refetch={refetch}
+          onClose={closeDetail}
+          onSaved={() => void refetch()}
+        />
       ) : null}
     </div>
   );
@@ -187,15 +196,27 @@ function AddOnsPageContent() {
 // add-on. Reusing the parent's query/refetch (rather than issuing a second
 // `useAddOnsQuery` here) avoids a redundant network fetch every time the
 // drawer opens.
+//
+// `loading`/`error` are threaded down from the parent's `useAddOnsQuery`
+// too — `addOns` is `[]` while that query is still in flight, so without
+// these a cold `?detail=` load (e.g. a legacy `/catalog/add-ons/:id`
+// bookmark redirected here) would render "not found" for a moment before
+// the data arrives. Matches the loading/error/not-found/content branch
+// pattern every other drawer on this branch uses (see `CustomerDetailDrawer`
+// in `customers/page.tsx`).
 function AddOnDetailDrawer({
   id,
   addOns,
+  loading,
+  error,
   refetch,
   onClose,
   onSaved,
 }: {
   id: string;
   addOns: AddOnDetail[];
+  loading: boolean;
+  error: boolean;
   refetch: () => Promise<unknown>;
   onClose: () => void;
   onSaved: () => void;
@@ -206,7 +227,11 @@ function AddOnDetailDrawer({
 
   return (
     <DetailDrawer open onClose={onClose} title={title}>
-      {!addOn ? (
+      {loading ? (
+        <LoadingState />
+      ) : error ? (
+        <ErrorState message="Unable to load add-on." />
+      ) : !addOn ? (
         <p className="text-sm text-slate-700">Add-on not found.</p>
       ) : (
         <AddOnEditForm addOn={addOn} refetch={refetch} onSaved={onSaved} />

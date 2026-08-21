@@ -34,9 +34,17 @@ export function UserMenu() {
     <div className="flex flex-col items-end gap-1">
       <div className="flex items-center gap-3">
         {admin ? (
+          // Spec §4.2 calls for showing "the current admin's name/email and
+          // role," but `CurrentAdminType` (apps/api/src/modules/admins/
+          // presentation/graphql/current-admin.type.ts) only exposes `id`
+          // and `role` — no email or display name. Showing `admin.id` (a
+          // raw UUID) here instead reads as a bug, not a stand-in identity,
+          // so it's dropped rather than displayed. Whether/how to extend
+          // `CurrentAdminType` with an email field is a design decision for
+          // a follow-up task, not something to decide inside a fix-wave
+          // commit — this is a known, tracked gap versus the spec.
           <div className="text-right">
             <p className="text-sm font-medium text-slate-900">{admin.role}</p>
-            <p className="text-xs text-slate-500">{admin.id}</p>
           </div>
         ) : null}
         <Button variant="secondary" onClick={() => void handleLogout()} disabled={loading}>

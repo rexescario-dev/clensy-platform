@@ -376,6 +376,7 @@ function CustomerProperties({
 }) {
   const [createProperty, { loading: creatingProperty }] = useCreatePropertyMutation();
   const [updateProperty, { loading: updatingProperty }] = useUpdatePropertyMutation();
+  const { success } = useToast();
 
   // --- Add property form ---
   const [newProperty, setNewProperty] = useState<PropertyFormState>(EMPTY_PROPERTY_FORM);
@@ -393,6 +394,7 @@ function CustomerProperties({
       });
       setNewProperty(EMPTY_PROPERTY_FORM);
       await refetch();
+      success('Property added.');
     } catch {
       setAddPropertyError('Unable to create property.');
     }
@@ -437,6 +439,7 @@ function CustomerProperties({
       setEditingPropertyId(null);
       setEditProperty(EMPTY_PROPERTY_FORM);
       await refetch();
+      success('Property updated.');
     } catch {
       setEditPropertyError('Unable to update property.');
     }

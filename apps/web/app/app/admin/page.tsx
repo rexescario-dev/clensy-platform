@@ -91,6 +91,7 @@ function OwnerAdminConsole() {
   // button. `confirmTarget` holds the row pending confirmation; `ConfirmDialog`
   // is open whenever it is set.
   const [confirmTarget, setConfirmTarget] = useState<AdminRow | undefined>(undefined);
+  const [disableError, setDisableError] = useState<string | undefined>(undefined);
 
   function resetForm() {
     setEmail('');
@@ -123,8 +124,19 @@ function OwnerAdminConsole() {
 
   async function handleConfirmDisable() {
     if (!confirmTarget) return;
-    await handleDisable(confirmTarget.id);
-    setConfirmTarget(undefined);
+    setDisableError(undefined);
+    try {
+      await handleDisable(confirmTarget.id);
+    } catch {
+      // `ConfirmDialog` has no error-display slot in its contract, so the
+      // dialog still closes here (matching its prior always-closes
+      // behavior) and the failure surfaces as inline text on the page
+      // itself, below where the dialog was — visible once the overlay is
+      // gone, same idea as `formError` for the create form above.
+      setDisableError('Unable to disable staff account.');
+    } finally {
+      setConfirmTarget(undefined);
+    }
   }
 
   const columns: DataTableColumn<AdminRow>[] = [
@@ -145,7 +157,14 @@ function OwnerAdminConsole() {
       header: '',
       render: (row) =>
         row.isActive ? (
-          <Button variant="danger" disabled={disabling} onClick={() => setConfirmTarget(row)}>
+          <Button
+            variant="danger"
+            disabled={disabling}
+            onClick={() => {
+              setDisableError(undefined);
+              setConfirmTarget(row);
+            }}
+          >
             Disable
           </Button>
         ) : null,
@@ -221,7 +240,10 @@ function OwnerAdminConsole() {
 
       <ConfirmDialog
         open={Boolean(confirmTarget)}
-        onClose={() => setConfirmTarget(undefined)}
+        onClose={() => {
+          setConfirmTarget(undefined);
+          setDisableError(undefined);
+        }}
         onConfirm={handleConfirmDisable}
         title="Disable this staff account?"
         description={
@@ -232,6 +254,7 @@ function OwnerAdminConsole() {
         confirmLabel="Disable"
         confirming={disabling}
       />
+      {disableError ? <p className="text-sm text-red-600">{disableError}</p> : null}
     </div>
   );
 }
