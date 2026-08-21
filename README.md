@@ -13,7 +13,9 @@ apps/
 └── worker/   not yet implemented
 
 packages/
-├── ui/       shared React components: Button, DataTable, FormField, StatusBadge
+├── ui/       shared React components: Button, DataTable, FormField, StatusBadge,
+│             Modal, FormDialog, ConfirmDialog, DetailDrawer, PageHeader,
+│             ToastProvider/useToast, LoadingState, EmptyState, ErrorState
 ├── client/   Apollo Client + graphql-codegen-generated hooks against apps/api's schema
 ├── graphql/  not yet implemented
 ├── auth/     not yet implemented
