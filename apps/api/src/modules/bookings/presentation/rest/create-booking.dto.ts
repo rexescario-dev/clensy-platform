@@ -1,17 +1,24 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsDate, IsNotEmpty, IsString } from 'class-validator';
+import { IsDate, IsOptional, IsUUID } from 'class-validator';
 
 export class CreateBookingDto {
   @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
-  customerName!: string;
+  @IsUUID()
+  customerId!: string;
 
   @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
-  serviceType!: string;
+  @IsUUID()
+  propertyId!: string;
+
+  @ApiProperty()
+  @IsUUID()
+  serviceId!: string;
+
+  @ApiProperty({ required: false, nullable: true })
+  @IsOptional()
+  @IsUUID()
+  teamId?: string | null;
 
   @ApiProperty({ type: String, format: 'date-time' })
   @Type(() => Date)

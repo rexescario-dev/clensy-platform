@@ -14,6 +14,9 @@ import { BookingsService } from '../../application/services/bookings.service';
 import { CreateBookingDto } from './create-booking.dto';
 import { UpdateBookingDto } from './update-booking.dto';
 
+// No `AuthGuard`/`@Roles()`/audit on any route, reads or mutations alike
+// (spec §4.4, §5) — this is the project's original REST-vs-GraphQL
+// comparison artifact, retained as-is, not a production-safe surface.
 @ApiTags('bookings')
 @Controller('bookings')
 export class BookingController {
@@ -21,11 +24,10 @@ export class BookingController {
 
   @Post()
   create(@Body() dto: CreateBookingDto) {
-    const command: CreateBookingCommand = {
-      customerName: dto.customerName,
-      serviceType: dto.serviceType,
-      scheduledAt: dto.scheduledAt,
-    };
+    // `actorId: null` — REST has no `AuthGuard`/`@CurrentUser()`, and
+    // spec §4.4 requires this surface stay unaudited; `null` is the
+    // explicit signal `BookingsService` uses to skip its audit call.
+    const command: CreateBookingCommand = { ...dto, actorId: null };
     return this.bookingsService.create(command);
   }
 
@@ -41,17 +43,12 @@ export class BookingController {
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateBookingDto) {
-    const command: UpdateBookingCommand = {
-      customerName: dto.customerName,
-      serviceType: dto.serviceType,
-      scheduledAt: dto.scheduledAt,
-      status: dto.status,
-    };
+    const command: UpdateBookingCommand = { ...dto, actorId: null };
     return this.bookingsService.update(id, command);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.bookingsService.remove(id);
+    return this.bookingsService.remove(id, null);
   }
 }
