@@ -21,7 +21,7 @@ import {
 } from '@clensy/ui';
 import type { DataTableColumn } from '@clensy/ui';
 import { type FormEvent, Suspense, useEffect, useState } from 'react';
-import { formatMinorUnits, parsePesosToMinorUnits } from '../../../lib/format-price';
+import { formatMinorUnits, parsePriceOrReportError } from '../../../lib/format-price';
 import { useDetailDrawer } from '../../../lib/use-detail-drawer';
 
 // `DataTable<T>` (packages/ui) constrains `T extends Record<string, unknown>`
@@ -333,13 +333,8 @@ function ServicePricing({
   async function handlePriceSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPriceFormError(undefined);
-    let priceMinorUnits: number;
-    try {
-      priceMinorUnits = parsePesosToMinorUnits(newPrice);
-    } catch (parseError) {
-      setPriceFormError(parseError instanceof Error ? parseError.message : 'Enter a valid amount, e.g. 19.99');
-      return;
-    }
+    const priceMinorUnits = parsePriceOrReportError(newPrice, setPriceFormError);
+    if (priceMinorUnits === undefined) return;
     try {
       await createPricingRule({ variables: { input: { serviceId: service.id, priceMinorUnits } } });
       setNewPrice('');

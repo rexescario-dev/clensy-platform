@@ -33,7 +33,7 @@ type AdminRow = {
   [key: string]: unknown;
 };
 
-// Spec §4.5/§3: `middleware.ts` only checked whether the session cookie is
+// Spec §4.1: `middleware.ts` only checked whether the session cookie is
 // present, not whether it's still valid — an expired, invalid, or
 // disabled-account session sails past middleware and lands here. This page
 // is where that actually gets caught: `currentAdmin` is guarded on the API

@@ -35,10 +35,11 @@ const openDialogStack: object[] = [];
 export function useDialogBehavior(open: boolean, onClose: () => void) {
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<Element | null>(null);
-  const instanceIdRef = useRef<object | null>(null);
-  if (instanceIdRef.current === null) {
-    instanceIdRef.current = {};
-  }
+  // A stable, non-null per-instance identity — always initialized on first
+  // render (unlike `useState(() => ({}))`, a ref avoids a wasted re-render)
+  // — so the stack push/pop below never has to guard against or cast away
+  // a `null` that can't actually occur.
+  const instanceIdRef = useRef<object>({});
 
   // Tracks this instance's membership in `openDialogStack`. Deliberately a
   // separate effect from the focus-capture/restore one below (which this
@@ -50,9 +51,9 @@ export function useDialogBehavior(open: boolean, onClose: () => void) {
   useEffect(() => {
     if (!open) return;
     const id = instanceIdRef.current;
-    openDialogStack.push(id as object);
+    openDialogStack.push(id);
     return () => {
-      const index = openDialogStack.indexOf(id as object);
+      const index = openDialogStack.indexOf(id);
       if (index !== -1) openDialogStack.splice(index, 1);
     };
   }, [open]);

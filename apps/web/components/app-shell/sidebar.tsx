@@ -16,10 +16,7 @@ interface NavGroup {
 }
 
 // Spec §4.2's grouped nav. Order and hrefs mirror the route table verified
-// in Task 5 Step 0 — Customers/Cleaners/Catalog links point at routes that
-// don't exist yet under `/app/*` at this commit (Tasks 6-8 add them); they
-// render here regardless since the nav structure itself is fixed by the
-// spec, not gated on which module has been migrated so far.
+// in Task 5 Step 0.
 const NAV_GROUPS: NavGroup[] = [
   {
     label: 'People',

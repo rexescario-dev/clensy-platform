@@ -15,7 +15,7 @@ import {
 } from '@clensy/ui';
 import type { DataTableColumn } from '@clensy/ui';
 import { type FormEvent, Suspense, useEffect, useState } from 'react';
-import { parsePesosToMinorUnits, formatMinorUnits, toEditableAmount } from '../../../../lib/format-price';
+import { parsePriceOrReportError, formatMinorUnits, toEditableAmount } from '../../../../lib/format-price';
 import { useDetailDrawer } from '../../../../lib/use-detail-drawer';
 
 // `DataTable<T>` (packages/ui) constrains `T extends Record<string, unknown>`
@@ -76,13 +76,8 @@ function AddOnsPageContent() {
 
   async function handleCreateSubmit() {
     setFormError(undefined);
-    let priceMinorUnits: number;
-    try {
-      priceMinorUnits = parsePesosToMinorUnits(price);
-    } catch (parseError) {
-      setFormError(parseError instanceof Error ? parseError.message : 'Enter a valid amount, e.g. 19.99');
-      return;
-    }
+    const priceMinorUnits = parsePriceOrReportError(price, setFormError);
+    if (priceMinorUnits === undefined) return;
     try {
       await createAddOn({
         variables: {
@@ -268,13 +263,8 @@ function AddOnEditForm({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError(undefined);
-    let priceMinorUnits: number;
-    try {
-      priceMinorUnits = parsePesosToMinorUnits(price);
-    } catch (parseError) {
-      setFormError(parseError instanceof Error ? parseError.message : 'Enter a valid amount, e.g. 19.99');
-      return;
-    }
+    const priceMinorUnits = parsePriceOrReportError(price, setFormError);
+    if (priceMinorUnits === undefined) return;
     try {
       await updateAddOn({
         variables: {
