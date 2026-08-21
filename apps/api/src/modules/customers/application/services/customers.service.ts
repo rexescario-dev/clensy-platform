@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import type { AuditLogger } from '../../../../platform/audit/application/audit-logger.port';
 import { runAuditInTransaction } from '../../../../platform/audit/infrastructure/audit-logger.service';
@@ -96,6 +96,17 @@ export class CustomersService {
 
   listCustomers(): Promise<Customer[]> {
     return this.customerRepository.find();
+  }
+
+  // Bulk lookup for Bookings' GraphQL relation-batching loader (Bookings
+  // spec §4.5); deliberately not exposed over GraphQL directly. Returns
+  // exactly the rows that exist for the given ids — no synthetic entries
+  // for missing ones, the caller's loader handles gaps.
+  getCustomersByIds(ids: string[]): Promise<Customer[]> {
+    if (ids.length === 0) {
+      return Promise.resolve([]);
+    }
+    return this.customerRepository.findBy({ id: In(ids) });
   }
 
   // Application-layer validation (spec §4.7): the domain invariant for
