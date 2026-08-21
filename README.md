@@ -92,16 +92,7 @@ cp .env.example .env   # first time only
 docker compose up -d --build
 ```
 
-That's it — `docker compose up` builds and runs `apps/api` itself (not just Postgres), connecting to the `postgres` service over the container network. A `migrate` service runs the pending migrations once before `api` starts (`depends_on: condition: service_completed_successfully`); the table is then empty but schema-correct — see "Seeding fake data" below. `apps/web` has no `docker-compose.yml` service yet — this path gives you the API only; use the hot-reload path below to also run the web console.
-
-For local iteration with hot-reload instead (edits reflected immediately, no rebuild):
-
-```bash
-pnpm install
-docker compose up -d postgres   # Postgres only
-pnpm --filter api migration:run # apply migrations — first time only, or after a new one is added
-pnpm dev                         # apps/api AND apps/web in watch mode, in parallel (Turborepo)
-```
+That's it — `docker compose up` builds and runs `apps/api` (Dockerfile) and `apps/web` (Dockerfile.web) together, both connecting to the `postgres` service over the container network. A `migrate` service runs the pending migrations once before `api` starts (`depends_on: condition: service_completed_successfully`); the table is then empty but schema-correct — see "Seeding fake data" below. `apps/web`'s `NEXT_PUBLIC_API_URL` isn't set in `docker-compose.yml` — it falls back to `http://localhost:3000/graphql` (`packages/client/src/apollo-client.ts`), which is correct here since the browser reaches `api` via the host-mapped port, not the container network. `apps/worker` has no `docker-compose.yml` service — it's not yet implemented (see the tree above).
 
 ## Database migrations
 
@@ -125,7 +116,7 @@ Seeding is an explicit, separate step — it never runs automatically on boot, s
 pnpm db:seed
 ```
 
-Inserts (or re-applies, if already present) 3 fake bookings with fixed, deterministic ids (`00000000-…-0001`, `…0002`, `…0003`) via `INSERT ... ON CONFLICT (id) DO UPDATE` — safe to run as many times as you like, it never duplicates rows. Run it once after `docker compose up` (or after `pnpm dev`, against the same Postgres) to have data to look at in either API.
+Inserts (or re-applies, if already present) 3 fake bookings with fixed, deterministic ids (`00000000-…-0001`, `…0002`, `…0003`) via `INSERT ... ON CONFLICT (id) DO UPDATE` — safe to run as many times as you like, it never duplicates rows. Run it once after `docker compose up` to have data to look at in either API.
 
 Seed data lives at `apps/api/src/modules/bookings/infrastructure/persistence/seed/booking.seed-data.ts` (plain TypeScript, no TypeORM); `booking.seeder.ts` is what actually persists it. `apps/api/src/platform/database/seed.ts` is the runnable entrypoint — it boots a Nest application context (no HTTP server) and calls each module's seeder.
 
@@ -170,11 +161,12 @@ public/graphiql/
 ## Scripts (run from the repo root, via Turborepo)
 
 ```bash
-pnpm dev      # apps/api + apps/web in watch mode (Turborepo)
 pnpm build    # build all workspace packages that have a build script
 pnpm test     # run all workspace test suites
 pnpm lint     # lint all workspace packages that have a lint script
 pnpm db:seed  # insert/refresh fake bookings — see "Seeding fake data" above
 ```
+
+`docker compose up` (see "Setup" above) is the standard way to run `apps/api` and `apps/web` — it covers what `pnpm dev` used to.
 
 Package-specific commands can be run directly, e.g. `pnpm --filter api test:e2e`, `pnpm --filter api migration:generate ...` (see "Database migrations" above).

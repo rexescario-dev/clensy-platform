@@ -54,5 +54,16 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    ports:
+      - '3001:3001'
+    depends_on:
+      api:
+        condition: service_started
+
 volumes:
   clensy_postgres_data:
