@@ -459,7 +459,13 @@ describe('BookingsService (real Postgres)', () => {
         scheduledAt: new Date('2026-09-01T09:00:00Z'),
       });
 
-      await bookingsService.remove(booking.id, 'actor-1');
+      const removed = await bookingsService.remove(booking.id, 'actor-1');
+
+      // Regression guard against a real bug this level caught (a mocked
+      // unit test could not): TypeORM's `manager.remove()` strips the id
+      // off the entity it's given, so the returned value must still carry
+      // it, not the now-mutated object `manager.remove()` produced.
+      expect(removed.id).toBe(booking.id);
 
       expect(
         await dataSource

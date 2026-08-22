@@ -59,8 +59,17 @@ describe('BookingsService', () => {
       ),
       save: jest.fn((entity: unknown) => Promise.resolve(entity)),
       update: jest.fn().mockResolvedValue(undefined),
-      remove: jest.fn((_entityClass: unknown, entity: unknown) =>
-        Promise.resolve(entity),
+      // Replicates TypeORM's real `EntityManager.remove()` behavior, not a
+      // naive echo: it strips the id off the passed entity after removal.
+      // A mock that just echoed the entity back would hide the exact bug
+      // this test file caught only when tested against real Postgres/
+      // GraphQL (bookings.service.ts's `remove()` must snapshot the
+      // entity before calling this).
+      remove: jest.fn(
+        (_entityClass: unknown, entity: Record<string, unknown>) => {
+          delete entity.id;
+          return Promise.resolve(entity);
+        },
       ),
       findOneBy: jest.fn(),
       findOneByOrFail: jest.fn(),
@@ -268,9 +277,13 @@ describe('BookingsService', () => {
     it('hard-deletes and emits a booking.remove audit event when actorId is provided', async () => {
       manager.findOneBy.mockResolvedValue({ id: 'booking-1' });
 
-      await service.remove('booking-1', 'actor-1');
+      const result = await service.remove('booking-1', 'actor-1');
 
       expect(manager.remove).toHaveBeenCalled();
+      // Regression guard: `manager.remove()` strips the id off the entity
+      // it's given — the returned value must still carry it (snapshotted
+      // beforehand), not the now-stripped object `manager.remove()` mutated.
+      expect(result.id).toBe('booking-1');
       expect(auditLogger.log).toHaveBeenCalledWith({
         actorId: 'actor-1',
         action: 'booking.remove',

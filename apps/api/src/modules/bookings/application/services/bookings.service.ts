@@ -193,6 +193,14 @@ export class BookingsService {
           throw new NotFoundException(`Booking ${id} not found`);
         }
 
+        // `manager.remove()` strips the id (and other fields) from the
+        // passed entity after deletion — snapshot it first so the caller
+        // still gets back what was deleted. The exact same rule the
+        // pre-migration `BookingsService.remove()` already documented;
+        // reconfirmed the hard way (a mocked `manager.remove()` doesn't
+        // replicate this side effect, so it only surfaced against real
+        // Postgres/GraphQL, not the level-1 unit tests).
+        const removed: Booking = { ...existing };
         await manager.remove(BookingEntity, existing);
 
         if (actorId !== null) {
@@ -204,7 +212,7 @@ export class BookingsService {
           });
         }
 
-        return existing;
+        return removed;
       }),
     );
   }

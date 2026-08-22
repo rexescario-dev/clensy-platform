@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsDate, IsEnum, IsOptional, IsUUID } from 'class-validator';
+import { IsDate, IsEnum, IsOptional, IsString } from 'class-validator';
 import { BookingStatus } from '../../domain/booking-status';
 
 // Its own explicit shape, not `PartialType(CreateBookingDto)` — that would
@@ -21,6 +21,6 @@ export class UpdateBookingDto {
 
   @ApiProperty({ required: false, nullable: true })
   @IsOptional()
-  @IsUUID()
+  @IsString()
   teamId?: string | null;
 }
