@@ -41,8 +41,14 @@ function createTestDataSource(): DataSource {
 // the FK constraint (`pricing_rule_entity.serviceId → service_entity.id`)
 // exists. Shared by all three `describe` blocks below so none of them can
 // see residue left behind by another block earlier in the same file/process.
+// CASCADE (Bookings migration regression fix, plan §3): `booking_entity`
+// now carries its own FK into `service_entity`, a table outside this
+// TRUNCATE's list — Postgres refuses to truncate a referenced table unless
+// every referencing table is included or CASCADE is used, even an empty
+// one. Safe here for the same reason `bookings.service.e2e-spec.ts`
+// established: this file's own `beforeEach` re-seeds whatever it needs.
 const TRUNCATE_CATALOG_TABLES =
-  'TRUNCATE TABLE "pricing_rule_entity", "service_entity", "add_on_entity"';
+  'TRUNCATE TABLE "pricing_rule_entity", "service_entity", "add_on_entity" CASCADE';
 
 // Real Postgres, single connection — NOT mocked repositories. The
 // transactional-rollback assertions below ("the row does not exist
