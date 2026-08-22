@@ -58,7 +58,26 @@ describe('BookingsService', () => {
         }),
       ),
       save: jest.fn((entity: unknown) => Promise.resolve(entity)),
-      update: jest.fn().mockResolvedValue(undefined),
+      // Replicates TypeORM's real `EntityManager.update()` behavior for an
+      // empty partial: it throws, it does not silently no-op. Verified
+      // directly against real Postgres — a mock that always resolved
+      // would hide the exact regression this test file caught (a caller
+      // submitting only `id`, no other field, used to be a harmless no-op
+      // under the pre-migration `Object.assign`/`save()` implementation).
+      update: jest.fn(
+        (
+          _entityClass: unknown,
+          _criteria: unknown,
+          partial: Record<string, unknown>,
+        ) => {
+          if (Object.keys(partial).length === 0) {
+            throw new Error(
+              'Cannot perform update query because update values are not defined. Call "qb.set(...)" method to specify updated values.',
+            );
+          }
+          return Promise.resolve(undefined);
+        },
+      ),
       // Replicates TypeORM's real `EntityManager.remove()` behavior, not a
       // naive echo: it strips the id off the passed entity after removal.
       // A mock that just echoed the entity back would hide the exact bug
@@ -261,6 +280,28 @@ describe('BookingsService', () => {
       });
 
       expect(auditLogger.log).not.toHaveBeenCalled();
+    });
+
+    // Regression guard (M7 finding): a command carrying only `actorId` —
+    // no scheduledAt/status/teamId — is a valid UpdateBookingInput/Dto
+    // (every other field is optional), and must not crash. The
+    // pre-migration implementation tolerated this as a no-op; this
+    // manager.update()-based rewrite must too.
+    it('does not throw when the command has no fields to change beyond actorId', async () => {
+      manager.findOneBy.mockResolvedValue({ id: 'booking-1' });
+      manager.findOneByOrFail.mockResolvedValue({ id: 'booking-1' });
+
+      await expect(
+        service.update('booking-1', { actorId: 'actor-1' }),
+      ).resolves.toBeDefined();
+
+      expect(manager.update).not.toHaveBeenCalled();
+      expect(auditLogger.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'booking.update',
+          entityId: 'booking-1',
+        }),
+      );
     });
   });
 

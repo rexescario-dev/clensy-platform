@@ -340,6 +340,33 @@ describe('BookingsService (real Postgres)', () => {
   });
 
   describe('update', () => {
+    // Regression guard (M7 finding): a command carrying only `actorId` — no
+    // scheduledAt/status/teamId — is a valid UpdateBookingInput/Dto (every
+    // other field is optional), and must not throw. Real Postgres, not a
+    // mock: this is the level that originally caught TypeORM's real
+    // `manager.update()` throwing on an empty partial.
+    it('does not throw when the command has no fields to change beyond actorId', async () => {
+      const { customer, property, service } = await createFixture();
+      const booking = await bookingsService.create({
+        actorId: 'actor-1',
+        customerId: customer.id,
+        propertyId: property.id,
+        serviceId: service.id,
+        scheduledAt: new Date('2026-09-01T09:00:00Z'),
+      });
+
+      await expect(
+        bookingsService.update(booking.id, { actorId: 'actor-1' }),
+      ).resolves.toBeDefined();
+
+      expect(auditLogger.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'booking.update',
+          entityId: booking.id,
+        }),
+      );
+    });
+
     it('sets, clears, and preserves teamId across separate update calls', async () => {
       const { customer, property, service, team } = await createFixture();
       const booking = await bookingsService.create({

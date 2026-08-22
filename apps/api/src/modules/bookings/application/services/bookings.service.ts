@@ -169,7 +169,22 @@ export class BookingsService {
         }
 
         const { actorId, ...changes } = command;
-        await manager.update(BookingEntity, { id }, changes);
+        // `manager.update()` throws ("update values are not defined") when
+        // given an empty partial — reachable whenever a caller submits
+        // `UpdateBookingInput`/`UpdateBookingDto` with only `id` (every
+        // other field is optional at the schema/DTO level, so this is a
+        // valid request, not one class-validator rejects). Found by
+        // testing directly against real Postgres, not assumed: the
+        // pre-migration implementation (`Object.assign` + `save()`)
+        // tolerated an empty command as a harmless no-op; this
+        // `manager.update()`-based rewrite (§3's audit-unconditionality
+        // reason) does not, unless guarded explicitly. Skipping the call
+        // entirely for an empty `changes` still satisfies spec §4.4's
+        // "every successful call... emits its audit event unconditionally"
+        // — the call is still successful, it just has nothing to persist.
+        if (Object.keys(changes).length > 0) {
+          await manager.update(BookingEntity, { id }, changes);
+        }
 
         if (actorId !== null) {
           await this.auditLogger.log({
