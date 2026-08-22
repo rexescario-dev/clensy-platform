@@ -71,7 +71,16 @@ describe('TeamsService (real Postgres)', () => {
     // the referencing table is truncated in the *same* statement (this is
     // structural, not row-count-based: it fails even when `cleaner_entity`
     // is already empty). Both tables must be truncated together.
-    await dataSource.query('TRUNCATE TABLE "cleaner_entity", "team_entity"');
+    // CASCADE (Bookings migration regression fix, plan §3): `booking_entity`
+    // now carries its own FK into `team_entity`, a table outside this
+    // TRUNCATE's list — Postgres refuses to truncate a referenced table
+    // unless every referencing table is included or CASCADE is used, even
+    // an empty one. Safe here for the same reason
+    // `bookings.service.e2e-spec.ts` established: this file's own
+    // `beforeEach` re-seeds whatever it needs.
+    await dataSource.query(
+      'TRUNCATE TABLE "cleaner_entity", "team_entity" CASCADE',
+    );
     auditLogger = { log: jest.fn().mockResolvedValue(undefined) };
     service = new TeamsService(
       dataSource,
@@ -157,7 +166,16 @@ describe('CleanersService (real Postgres)', () => {
   beforeEach(async () => {
     // See the `TeamsService` block's `beforeEach` comment above: both
     // tables must be truncated together because of `fk_cleaner_team`.
-    await dataSource.query('TRUNCATE TABLE "cleaner_entity", "team_entity"');
+    // CASCADE (Bookings migration regression fix, plan §3): `booking_entity`
+    // now carries its own FK into `team_entity`, a table outside this
+    // TRUNCATE's list — Postgres refuses to truncate a referenced table
+    // unless every referencing table is included or CASCADE is used, even
+    // an empty one. Safe here for the same reason
+    // `bookings.service.e2e-spec.ts` established: this file's own
+    // `beforeEach` re-seeds whatever it needs.
+    await dataSource.query(
+      'TRUNCATE TABLE "cleaner_entity", "team_entity" CASCADE',
+    );
     auditLogger = { log: jest.fn().mockResolvedValue(undefined) };
     service = new CleanersService(
       dataSource,

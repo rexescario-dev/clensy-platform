@@ -1,3 +1,11 @@
+query CustomerProperties($customerId: ID!) {
+  customerProperties(customerId: $customerId) {
+    id
+    label
+    addressLine1
+  }
+}
+
 mutation CreateProperty($customerId: ID!, $input: CreatePropertyInput!) {
   createProperty(customerId: $customerId, input: $input) {
     id

@@ -34,15 +34,24 @@ function createTestDataSource(): DataSource {
 // regardless of table emptiness or clear-call order. Postgres requires
 // either both tables in the same TRUNCATE statement or CASCADE; a raw
 // multi-table TRUNCATE is used here instead of two `.clear()` calls.
-// `audit_event_entity` is deliberately NOT truncated — both describe blocks
-// below fake `auditLogger` as `{ log: jest.fn() }` and never read a real
-// `AuditEventEntity` row, so truncating it would only widen this file's
-// blast radius onto other spec files' audit-row assertions for no benefit.
+// `CASCADE` (added by the Bookings migration, plan §3's regression fix):
+// `booking_entity` now carries its own FKs into `customer_entity`/
+// `property_entity`, which is a table outside this TRUNCATE's list —
+// Postgres refuses to truncate a table referenced by a FK from any table
+// not itself included, even an empty one, without CASCADE. Safe here for
+// the same reason `bookings.service.e2e-spec.ts` established: this file's
+// own `beforeEach` already re-seeds whatever it needs, so a CASCADE-cleared
+// `booking_entity` between runs has no effect on this file's own
+// assertions. `audit_event_entity` is deliberately NOT truncated — both
+// describe blocks below fake `auditLogger` as `{ log: jest.fn() }` and
+// never read a real `AuditEventEntity` row, so truncating it would only
+// widen this file's blast radius onto other spec files' audit-row
+// assertions for no benefit.
 async function truncateCustomersAndProperties(
   dataSource: DataSource,
 ): Promise<void> {
   await dataSource.query(
-    'TRUNCATE TABLE "property_entity", "customer_entity"',
+    'TRUNCATE TABLE "property_entity", "customer_entity" CASCADE',
   );
 }
 
@@ -175,7 +184,9 @@ describe('CustomersService (real Postgres)', () => {
     });
 
     it('explicitly clears notes to null when the command sets notes: null', async () => {
-      const existing = await seedCustomer(dataSource, { notes: 'Some existing note' });
+      const existing = await seedCustomer(dataSource, {
+        notes: 'Some existing note',
+      });
 
       await service.update(existing.id, {
         actorId: 'actor-1',

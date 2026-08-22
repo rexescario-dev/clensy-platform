@@ -19,6 +19,10 @@ interface NavGroup {
 // in Task 5 Step 0.
 const NAV_GROUPS: NavGroup[] = [
   {
+    label: 'Operations',
+    items: [{ label: 'Bookings', href: '/app/bookings' }],
+  },
+  {
     label: 'People',
     items: [
       { label: 'Customers', href: '/app/customers' },
