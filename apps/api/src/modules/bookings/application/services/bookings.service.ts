@@ -68,17 +68,11 @@ export class BookingsService {
         );
         await manager.save(entity);
 
-        // `actorId === null` means "emit no audit event for this call" —
-        // not "emit one with a null/anonymous actor." Only the
-        // unauthenticated REST surface ever passes null (spec §4.4).
-        if (command.actorId !== null) {
-          await this.auditLogger.log({
-            actorId: command.actorId,
-            action: 'booking.create',
-            entityType: 'booking',
-            entityId: entity.id,
-          });
-        }
+        await this.logAuditIfAuthenticated(
+          command.actorId,
+          'booking.create',
+          entity.id,
+        );
 
         return entity;
       }),
@@ -202,14 +196,7 @@ export class BookingsService {
           await manager.update(BookingEntity, { id }, changes);
         }
 
-        if (actorId !== null) {
-          await this.auditLogger.log({
-            actorId,
-            action: 'booking.update',
-            entityType: 'booking',
-            entityId: id,
-          });
-        }
+        await this.logAuditIfAuthenticated(actorId, 'booking.update', id);
 
         return manager.findOneByOrFail(BookingEntity, { id });
       }),
@@ -234,17 +221,30 @@ export class BookingsService {
         const removed: Booking = { ...existing };
         await manager.remove(BookingEntity, existing);
 
-        if (actorId !== null) {
-          await this.auditLogger.log({
-            actorId,
-            action: 'booking.remove',
-            entityType: 'booking',
-            entityId: id,
-          });
-        }
+        await this.logAuditIfAuthenticated(actorId, 'booking.remove', id);
 
         return removed;
       }),
     );
+  }
+
+  // `actorId === null` means "emit no audit event for this call" — not
+  // "emit one with a null/anonymous actor." Only the unauthenticated REST
+  // surface ever passes null (spec §4.4). Single enforcement point for
+  // that rule, shared by `create`/`update`/`remove`.
+  private async logAuditIfAuthenticated(
+    actorId: string | null,
+    action: string,
+    entityId: string,
+  ): Promise<void> {
+    if (actorId === null) {
+      return;
+    }
+    await this.auditLogger.log({
+      actorId,
+      action,
+      entityType: 'booking',
+      entityId,
+    });
   }
 }
