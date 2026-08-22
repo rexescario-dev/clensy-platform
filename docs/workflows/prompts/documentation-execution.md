@@ -126,5 +126,5 @@ Also emit a [Slice Completion Report](../conventions/reporting-conventions.md) (
 - Redesigning Accepted specifications or plans under the guise of “clarification”
 - Inventing changelog/release artifacts the project does not use
 - Silently changing code or contracts when docs reveal inconsistency
-- M10 workflow-framework validation unless this issue is W1-10
+- M10 workflow-framework validation, unless this slice's own tracking issue is the workflow-framework's own setup/validation work
 - Tool-specific UI instructions
