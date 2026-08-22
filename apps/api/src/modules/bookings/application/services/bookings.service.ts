@@ -168,20 +168,36 @@ export class BookingsService {
           throw new NotFoundException(`Booking ${id} not found`);
         }
 
-        const { actorId, ...changes } = command;
+        const { actorId, ...rawChanges } = command;
         // `manager.update()` throws ("update values are not defined") when
-        // given an empty partial — reachable whenever a caller submits
-        // `UpdateBookingInput`/`UpdateBookingDto` with only `id` (every
-        // other field is optional at the schema/DTO level, so this is a
-        // valid request, not one class-validator rejects). Found by
-        // testing directly against real Postgres, not assumed: the
-        // pre-migration implementation (`Object.assign` + `save()`)
+        // every key it's given resolves to `undefined` — reachable
+        // whenever a caller submits `UpdateBookingInput`/`UpdateBookingDto`
+        // with only `id` (every other field is optional). This is not
+        // merely "changes is an empty object": `input`/`dto` here are real
+        // `class-transformer`-hydrated instances, and `plainToInstance`
+        // gives every *declared* class field its own property — present
+        // with value `undefined` — even when the caller never sent it, so
+        // `{ ...changes }` still carries `scheduledAt`/`status`/`teamId`
+        // as keys after destructuring `actorId` out. `Object.keys(changes)
+        // .length > 0` alone is therefore always true and does not detect
+        // this case — confirmed directly with `plainToInstance`, not
+        // assumed; a plain object literal (what this file's own tests used
+        // before this fix) does not reproduce that shape. Filtering to
+        // keys with a defined value is what both TypeORM needs (verified:
+        // it tolerates a *mix* of defined and undefined-valued keys fine,
+        // just not all-undefined) and what correctly detects "nothing to
+        // change" either way. Found by testing directly against real
+        // Postgres via an actual GraphQL request, not a hand-built object.
+        // The pre-migration implementation (`Object.assign` + `save()`)
         // tolerated an empty command as a harmless no-op; this
         // `manager.update()`-based rewrite (§3's audit-unconditionality
         // reason) does not, unless guarded explicitly. Skipping the call
-        // entirely for an empty `changes` still satisfies spec §4.4's
+        // entirely when nothing is defined still satisfies spec §4.4's
         // "every successful call... emits its audit event unconditionally"
         // — the call is still successful, it just has nothing to persist.
+        const changes = Object.fromEntries(
+          Object.entries(rawChanges).filter(([, value]) => value !== undefined),
+        );
         if (Object.keys(changes).length > 0) {
           await manager.update(BookingEntity, { id }, changes);
         }

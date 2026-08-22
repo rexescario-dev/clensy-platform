@@ -294,6 +294,24 @@ describe('Bookings (e2e)', () => {
       priceMinorUnits: 5000,
     });
 
+    // --- Step 2b: updateBooking with only `id` — no other field — does not
+    // crash (M7 finding). This is the level that actually caught the real
+    // bug: the resolver hands `BookingsService` a real, class-transformer-
+    // hydrated `UpdateBookingInput` where every untouched optional field is
+    // an explicit `undefined`-valued own property, not simply absent —
+    // level-1/level-2 tests built with plain object literals didn't
+    // reproduce that shape, only a genuine GraphQL request over real HTTP
+    // does. ---
+    const emptyUpdateResponse = await authedRequest(ownerSessionCookie).send({
+      query: UPDATE_BOOKING_MUTATION,
+      variables: { input: { id: bookingId } },
+    });
+    expect(emptyUpdateResponse.body.errors).toBeUndefined();
+    expect(emptyUpdateResponse.body.data.updateBooking).toMatchObject({
+      id: bookingId,
+      scheduledAt,
+    });
+
     // --- Step 3: status transition to CANCELLED is non-destructive — the
     // booking stays visible via `bookings`, every other field unchanged. ---
     const cancelResponse = await authedRequest(ownerSessionCookie).send({

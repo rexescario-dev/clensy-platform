@@ -282,17 +282,29 @@ describe('BookingsService', () => {
       expect(auditLogger.log).not.toHaveBeenCalled();
     });
 
-    // Regression guard (M7 finding): a command carrying only `actorId` —
-    // no scheduledAt/status/teamId — is a valid UpdateBookingInput/Dto
-    // (every other field is optional), and must not crash. The
-    // pre-migration implementation tolerated this as a no-op; this
-    // manager.update()-based rewrite must too.
-    it('does not throw when the command has no fields to change beyond actorId', async () => {
+    // Regression guard (M7 finding, tightened after an initial fix proved
+    // insufficient against the real app): a caller submitting only `id`
+    // is a valid UpdateBookingInput/Dto (every other field is optional),
+    // and must not crash. The command object below deliberately includes
+    // `scheduledAt`/`status`/`teamId` as explicit `undefined`-valued own
+    // properties, not simply omitted — that is the real shape
+    // `class-transformer`'s `plainToInstance` produces for an untouched
+    // optional field (confirmed directly, not assumed), which the
+    // resolver's/controller's `{ ...input, actorId }` spread then carries
+    // through unchanged. A command object that simply omits the keys
+    // (what this test used before) does not reproduce the bug that
+    // shipped past the first, insufficient version of this fix.
+    it('does not throw when every field but actorId is present-but-undefined (the real class-transformer shape)', async () => {
       manager.findOneBy.mockResolvedValue({ id: 'booking-1' });
       manager.findOneByOrFail.mockResolvedValue({ id: 'booking-1' });
 
       await expect(
-        service.update('booking-1', { actorId: 'actor-1' }),
+        service.update('booking-1', {
+          actorId: 'actor-1',
+          scheduledAt: undefined,
+          status: undefined,
+          teamId: undefined,
+        }),
       ).resolves.toBeDefined();
 
       expect(manager.update).not.toHaveBeenCalled();

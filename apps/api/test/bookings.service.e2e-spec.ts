@@ -340,12 +340,15 @@ describe('BookingsService (real Postgres)', () => {
   });
 
   describe('update', () => {
-    // Regression guard (M7 finding): a command carrying only `actorId` — no
-    // scheduledAt/status/teamId — is a valid UpdateBookingInput/Dto (every
-    // other field is optional), and must not throw. Real Postgres, not a
-    // mock: this is the level that originally caught TypeORM's real
-    // `manager.update()` throwing on an empty partial.
-    it('does not throw when the command has no fields to change beyond actorId', async () => {
+    // Regression guard (M7 finding, tightened): a real GraphQL/REST caller
+    // submitting only `id` produces `scheduledAt`/`status`/`teamId` as
+    // explicit `undefined`-valued own properties (class-transformer's
+    // `plainToInstance` shape, confirmed directly), not simply-omitted
+    // keys — the two are NOT equivalent for `manager.update()`. This test
+    // uses that real shape rather than a hand-built object with the keys
+    // left out entirely, which does not reproduce the bug that shipped
+    // past this test's own first, insufficient version.
+    it('does not throw when every field but actorId is present-but-undefined (the real class-transformer shape)', async () => {
       const { customer, property, service } = await createFixture();
       const booking = await bookingsService.create({
         actorId: 'actor-1',
@@ -356,7 +359,12 @@ describe('BookingsService (real Postgres)', () => {
       });
 
       await expect(
-        bookingsService.update(booking.id, { actorId: 'actor-1' }),
+        bookingsService.update(booking.id, {
+          actorId: 'actor-1',
+          scheduledAt: undefined,
+          status: undefined,
+          teamId: undefined,
+        }),
       ).resolves.toBeDefined();
 
       expect(auditLogger.log).toHaveBeenCalledWith(
