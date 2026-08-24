@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import type { AuditLogger } from '../../../../platform/audit/application/audit-logger.port';
 import { runAuditInTransaction } from '../../../../platform/audit/infrastructure/audit-logger.service';
@@ -119,6 +119,17 @@ export class ServicesService {
   // arguments; the full set, active and inactive alike.
   listServices(): Promise<Service[]> {
     return this.serviceRepository.find();
+  }
+
+  // Bulk lookup for Bookings' GraphQL relation-batching loader (Bookings
+  // spec §4.5); deliberately not exposed over GraphQL directly. Returns
+  // exactly the rows that exist for the given ids — no synthetic entries
+  // for missing ones, the caller's loader handles gaps.
+  getServicesByIds(ids: string[]): Promise<Service[]> {
+    if (ids.length === 0) {
+      return Promise.resolve([]);
+    }
+    return this.serviceRepository.findBy({ id: In(ids) });
   }
 
   // Case-insensitive name uniqueness pre-check (spec §3) — the application-

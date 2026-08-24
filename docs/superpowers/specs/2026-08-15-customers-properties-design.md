@@ -33,7 +33,7 @@
 ### Out of scope (normative)
 
 - Delete/deactivate for `Customer` or `Property` — the issue's Definition of Done lists no delete operation; only create/read/update exist in this slice.
-- Any relationship to `bookings` — `bookings` still holds a fake `customerName` string in Phase 1 until its own M5 milestone reworks it to hold a real `customerId`/`propertyId`. This slice does not touch `modules/bookings`.
+- Any relationship to `bookings` — at the time of this slice, `bookings` still held a fake `customerName` string, reworked to hold a real `customerId`/`propertyId` by its own M6 milestone (see the [Bookings spec](2026-08-22-bookings-design.md)). This slice does not touch `modules/bookings`.
 - Customer-facing accounts or authentication — a `Customer` is a record `apps/web` staff manage, not a principal who can log in. Distinct from `AdminUser` entirely.
 - Deduplication or uniqueness enforcement on customer email/phone — real households can share contact details; detecting/merging duplicate customer records is a deferred concern, not solved here.
 - Search, filtering, sorting, or pagination beyond a simple list — `ListCustomers` and `ListCustomerProperties` return the full set for their scope. Phase 1's customer volume does not yet justify pagination; revisit when it does.

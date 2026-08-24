@@ -226,4 +226,19 @@ describe('PropertiesService', () => {
       });
     });
   });
+
+  describe('getPropertiesByIds', () => {
+    it('returns exactly the rows found, with no synthetic entries for missing ids', async () => {
+      propertyRepository.findBy.mockResolvedValue([existingProperty]);
+
+      await expect(
+        service.getPropertiesByIds(['property-1', 'property-2']),
+      ).resolves.toEqual([existingProperty]);
+    });
+
+    it('returns an empty array without querying when ids is empty', async () => {
+      await expect(service.getPropertiesByIds([])).resolves.toEqual([]);
+      expect(propertyRepository.findBy).not.toHaveBeenCalled();
+    });
+  });
 });

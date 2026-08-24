@@ -2,7 +2,17 @@ import { NestFactory } from '@nestjs/core';
 import * as bcrypt from 'bcrypt';
 import { AppModule } from '../../app/app.module';
 import { AdminUserEntity } from '../../modules/admins/infrastructure/persistence/admin-user.entity';
+import {
+  bookingFixtureCustomer,
+  bookingFixtureProperty,
+  bookingFixtureService,
+  bookingFixtureTeam,
+} from '../../modules/bookings/infrastructure/persistence/seed/booking-fixtures.seed-data';
 import { BookingSeeder } from '../../modules/bookings/infrastructure/persistence/seed/booking.seeder';
+import { CustomerEntity } from '../../modules/customers/infrastructure/persistence/customer.entity';
+import { PropertyEntity } from '../../modules/customers/infrastructure/persistence/property.entity';
+import { ServiceEntity } from '../../modules/catalog/infrastructure/persistence/service.entity';
+import { TeamEntity } from '../../modules/cleaners/infrastructure/persistence/team.entity';
 import { Role } from '../auth/domain/role';
 import dataSource from './data-source';
 
@@ -54,10 +64,45 @@ async function seedDevOwner(): Promise<void> {
   }
 }
 
+// Upserts the Customer/Property/Service/Team fixtures `bookingSeedData`
+// (booking.seed-data.ts) references, via the plain CLI `DataSource` — the
+// same technique `seedDevOwner` already uses, not a new one (Bookings plan
+// §3). No other module has a seeder to depend on, and going through
+// `CustomersService.create`/etc. wouldn't be idempotent (plain inserts,
+// not upserts) — only a raw repository `.upsert([...], ['id'])` against a
+// fixed id is safe to run repeatedly. Must run BEFORE `BookingSeeder.seed()`:
+// `BookingEntity`'s FK constraints are enforced at insert time, so the
+// booking rows referencing these fixtures would fail without them.
+async function seedBookingFixtures(): Promise<void> {
+  await dataSource.initialize();
+  try {
+    await dataSource
+      .getRepository(CustomerEntity)
+      .upsert([bookingFixtureCustomer], ['id']);
+    await dataSource
+      .getRepository(ServiceEntity)
+      .upsert([bookingFixtureService], ['id']);
+    await dataSource
+      .getRepository(TeamEntity)
+      .upsert([bookingFixtureTeam], ['id']);
+    // Property last — its FK references the customer row above.
+    await dataSource
+      .getRepository(PropertyEntity)
+      .upsert([bookingFixtureProperty], ['id']);
+    console.log(
+      'Seeded booking fixtures: 1 customer, 1 property, 1 service, 1 team',
+    );
+  } finally {
+    await dataSource.destroy();
+  }
+}
+
 // Entrypoint for `pnpm db:seed`. Calls each module's seeder directly — add a
 // line here per module as more seeders exist, rather than pre-building an
 // orchestrator class for a single seeder.
 async function run(): Promise<void> {
+  await seedBookingFixtures();
+
   const app = await NestFactory.createApplicationContext(AppModule);
   try {
     await app.get(BookingSeeder).seed();

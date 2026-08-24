@@ -26,6 +26,7 @@ describe('CustomersService', () => {
   let customerRepository: {
     find: jest.Mock;
     findOneBy: jest.Mock;
+    findBy: jest.Mock;
   };
   let auditLogger: { log: jest.Mock };
 
@@ -45,6 +46,7 @@ describe('CustomersService', () => {
     customerRepository = {
       find: jest.fn(),
       findOneBy: jest.fn(),
+      findBy: jest.fn(),
     };
     auditLogger = { log: jest.fn().mockResolvedValue(undefined) };
 
@@ -202,6 +204,32 @@ describe('CustomersService', () => {
       customerRepository.find.mockResolvedValue([]);
 
       await expect(service.listCustomers()).resolves.toEqual([]);
+    });
+  });
+
+  describe('getCustomersByIds', () => {
+    it('returns exactly the rows found, with no synthetic entries for missing ids', async () => {
+      const customers = [
+        {
+          id: 'customer-1',
+          fullName: 'Jane Doe',
+          email: 'jane@example.com',
+          phone: '555-0100',
+          notes: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ];
+      customerRepository.findBy.mockResolvedValue(customers);
+
+      await expect(
+        service.getCustomersByIds(['customer-1', 'customer-2']),
+      ).resolves.toEqual(customers);
+    });
+
+    it('returns an empty array without querying when ids is empty', async () => {
+      await expect(service.getCustomersByIds([])).resolves.toEqual([]);
+      expect(customerRepository.findBy).not.toHaveBeenCalled();
     });
   });
 });

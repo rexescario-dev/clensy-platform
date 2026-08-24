@@ -31,6 +31,7 @@ describe('ServicesService', () => {
   let serviceRepository: {
     find: jest.Mock;
     findOneBy: jest.Mock;
+    findBy: jest.Mock;
   };
   let auditLogger: { log: jest.Mock };
   let nameQueryBuilder: {
@@ -65,6 +66,7 @@ describe('ServicesService', () => {
     serviceRepository = {
       find: jest.fn(),
       findOneBy: jest.fn(),
+      findBy: jest.fn(),
     };
     auditLogger = { log: jest.fn().mockResolvedValue(undefined) };
 
@@ -225,6 +227,32 @@ describe('ServicesService', () => {
 
       expect(manager.update).not.toHaveBeenCalled();
       expect(auditLogger.log).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getServicesByIds', () => {
+    it('returns exactly the rows found, with no synthetic entries for missing ids', async () => {
+      const services = [
+        {
+          id: 'service-1',
+          name: 'Standard Clean',
+          description: null,
+          durationMinutes: 60,
+          active: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ];
+      serviceRepository.findBy.mockResolvedValue(services);
+
+      await expect(
+        service.getServicesByIds(['service-1', 'service-2']),
+      ).resolves.toEqual(services);
+    });
+
+    it('returns an empty array without querying when ids is empty', async () => {
+      await expect(service.getServicesByIds([])).resolves.toEqual([]);
+      expect(serviceRepository.findBy).not.toHaveBeenCalled();
     });
   });
 });

@@ -32,4 +32,18 @@ export default tseslint.config(
       "prettier/prettier": ["error", { endOfLine: "auto" }],
     },
   },
+  {
+    // supertest's `Response.body` is typed `any` by design — every e2e spec
+    // reads GraphQL/REST response bodies through it, so these rules fire on
+    // every assertion rather than catching a real type hole. Scoped to e2e
+    // specs only; production code keeps the strict recommendedTypeChecked
+    // rules.
+    files: ['test/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+    },
+  },
 );
