@@ -107,7 +107,10 @@ describe('Bookings (e2e)', () => {
 });
 
 describe('GraphQL (e2e)', () => {
-  let app: INestApplication<App>;
+  // `NestExpressApplication`, not the base `INestApplication<App>` this
+  // suite's other describe block uses — `useStaticAssets()` below is
+  // Express-specific and isn't on the base interface.
+  let app: NestExpressApplication;
   let adminUserRepository: Repository<AdminUserEntity>;
 
   beforeEach(async () => {
