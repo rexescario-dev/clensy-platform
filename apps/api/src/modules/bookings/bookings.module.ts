@@ -18,9 +18,11 @@ import { BookingController } from './presentation/rest/booking.controller';
 // (`CustomersService`/`PropertiesService`, `ServicesService`/
 // `PricingRulesService`, `TeamsService`) for its cross-module validation
 // chain (spec §4.2) — never those modules' entities/repositories directly
-// (spec §2.6). No new entity/repository token is registered here; the
-// seeder's own cross-module fixture data lives in
-// `platform/database/seed.ts` instead (plan §3, Task 5).
+// (spec §2.6). Exports `BookingsService` so Jobs can consume `findOne` /
+// `getBookingsByIds` (Jobs spec §2) without a reverse import. No new
+// entity/repository token is registered here; the seeder's own
+// cross-module fixture data lives in `platform/database/seed.ts` instead
+// (plan §3, Task 5).
 @Module({
   imports: [
     TypeOrmModule.forFeature([BookingEntity]),
@@ -36,5 +38,6 @@ import { BookingController } from './presentation/rest/booking.controller';
     BookingSeeder,
     BookingRelationLoaders,
   ],
+  exports: [BookingsService],
 })
 export class BookingsModule {}

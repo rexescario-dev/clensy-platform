@@ -1,11 +1,12 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, QueryFailedError, Repository } from 'typeorm';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import type { AuditLogger } from '../../../../platform/audit/application/audit-logger.port';
 import { runAuditInTransaction } from '../../../../platform/audit/infrastructure/audit-logger.service';
@@ -21,6 +22,8 @@ import { BookingStatus } from '../../domain/booking-status';
 import { BookingEntity } from '../../infrastructure/persistence/booking.entity';
 import { CreateBookingCommand } from '../commands/create-booking.command';
 import { UpdateBookingCommand } from '../commands/update-booking.command';
+
+const POSTGRES_FOREIGN_KEY_VIOLATION = '23503';
 
 @Injectable()
 export class BookingsService {
@@ -130,6 +133,16 @@ export class BookingsService {
     return this.bookingRepository.find();
   }
 
+  // Bulk lookup for Jobs' GraphQL relation-batching loader (Jobs spec §2 /
+  // §4.5). Empty-array short-circuit and "return only the rows found"
+  // match `getCustomersByIds` / `getTeamsByIds`. Not exposed over GraphQL.
+  getBookingsByIds(ids: string[]): Promise<Booking[]> {
+    if (ids.length === 0) {
+      return Promise.resolve([]);
+    }
+    return this.bookingRepository.findBy({ id: In(ids) });
+  }
+
   private async findEntity(id: string): Promise<BookingEntity> {
     const booking = await this.bookingRepository.findOneBy({ id });
     if (!booking) {
@@ -219,13 +232,36 @@ export class BookingsService {
         // replicate this side effect, so it only surfaced against real
         // Postgres/GraphQL, not the level-1 unit tests).
         const removed: Booking = { ...existing };
-        await manager.remove(BookingEntity, existing);
+        try {
+          await manager.remove(BookingEntity, existing);
+        } catch (error) {
+          this.conflictIfForeignKeyRestricted(error);
+          throw error;
+        }
 
         await this.logAuditIfAuthenticated(actorId, 'booking.remove', id);
 
         return removed;
       }),
     );
+  }
+
+  // Additive error-contract (Jobs spec §2 / §4.1): any Postgres FK
+  // restriction (`23503`), regardless of constraint name, becomes this
+  // generic ConflictException. Inspects `QueryFailedError.driverError.code`
+  // and falls back to `error.code` so unit tests can use a `{ code }`
+  // shape without reconstructing TypeORM internals (real driver path is
+  // Task 2). Non-23503 errors are left for the caller to rethrow.
+  private conflictIfForeignKeyRestricted(error: unknown): void {
+    const code =
+      (error instanceof QueryFailedError
+        ? (error.driverError as { code?: string } | undefined)?.code
+        : undefined) ?? (error as { code?: string }).code;
+    if (code === POSTGRES_FOREIGN_KEY_VIOLATION) {
+      throw new ConflictException(
+        'Booking cannot be deleted because other records reference it',
+      );
+    }
   }
 
   // `actorId === null` means "emit no audit event for this call" — not
