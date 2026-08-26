@@ -20,7 +20,7 @@ interface NavGroup {
 const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Operations',
-    items: [{ label: 'Bookings', href: '/app/bookings' }],
+    items: [{ label: 'Bookings', href: '/app/bookings' }, { label: 'Jobs', href: '/app/jobs' }],
   },
   {
     label: 'People',

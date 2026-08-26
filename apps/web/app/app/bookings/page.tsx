@@ -4,14 +4,17 @@ import {
   useBookingQuery,
   useBookingsQuery,
   useCreateBookingMutation,
+  useCreateJobFromBookingMutation,
   useCustomerPropertiesQuery,
   useCustomersQuery,
+  useJobsQuery,
   useRemoveBookingMutation,
   useServicesQuery,
   useTeamsQuery,
   useUpdateBookingMutation,
 } from '@clensy/client';
 import type { BookingStatus } from '@clensy/client';
+import { useRouter } from 'next/navigation';
 import {
   Button,
   ConfirmDialog,
@@ -304,13 +307,18 @@ function BookingDetailDrawer({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const router = useRouter();
   const { data, loading, error, refetch } = useBookingQuery({
     variables: { id },
     fetchPolicy: 'network-only',
   });
   const { data: teamsData } = useTeamsQuery({ fetchPolicy: 'network-only' });
+  const { data: jobsData, refetch: refetchJobs } = useJobsQuery({
+    fetchPolicy: 'network-only',
+  });
   const [updateBooking, { loading: updating }] = useUpdateBookingMutation();
   const [removeBooking, { loading: removing }] = useRemoveBookingMutation();
+  const [createJob, { loading: creatingJob }] = useCreateJobFromBookingMutation();
   const { success } = useToast();
 
   const [editScheduledAt, setEditScheduledAt] = useState<string | undefined>(undefined);
@@ -320,9 +328,13 @@ function BookingDetailDrawer({
 
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | undefined>(undefined);
+  const [jobError, setJobError] = useState<string | undefined>(undefined);
 
   const booking = data?.booking;
   const teams = teamsData?.teams ?? [];
+  const existingJob = booking
+    ? (jobsData?.jobs ?? []).find((job) => job.booking.id === booking.id)
+    : undefined;
 
   // Local edit state initializes from the loaded booking on first render
   // of each field, then tracks the user's own edits from there.
@@ -371,6 +383,23 @@ function BookingDetailDrawer({
     }
   }
 
+  async function handleCreateJob() {
+    if (!booking) return;
+    setJobError(undefined);
+    try {
+      const result = await createJob({
+        variables: { input: { bookingId: booking.id } },
+      });
+      const newId = result.data?.createJobFromBooking.id;
+      await refetchJobs();
+      if (newId) {
+        router.push(`/app/jobs?detail=${newId}`);
+      }
+    } catch {
+      setJobError('Unable to create job.');
+    }
+  }
+
   const title = booking ? `${booking.customer.fullName} — ${booking.service.name}` : 'Booking';
 
   return (
@@ -395,6 +424,28 @@ function BookingDetailDrawer({
               {formatMinorUnits(booking.pricingSnapshot.priceMinorUnits)}
             </dd>
           </dl>
+
+          <div>
+            {existingJob ? (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => router.push(`/app/jobs?detail=${existingJob.id}`)}
+              >
+                View job
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={creatingJob}
+                onClick={() => void handleCreateJob()}
+              >
+                {creatingJob ? 'Creating…' : 'Create job'}
+              </Button>
+            )}
+            {jobError ? <p className="mt-2 text-sm text-red-600">{jobError}</p> : null}
+          </div>
 
           <form onSubmit={(event) => void handleEditSubmit(event)} className="flex flex-col gap-4">
             <FormField

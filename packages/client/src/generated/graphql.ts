@@ -5,11 +5,25 @@ export type Incremental<T> = T | { [P in keyof T]?: P extends ' $fragmentName' |
 import { gql } from '@apollo/client';
 import * as Apollo from '@apollo/client';
 const defaultOptions = {} as const;
+export type AssignTeamToJobInput = {
+  jobId: string | number;
+  teamId: string | number;
+};
+
 export type BookingStatus =
   | 'CANCELLED'
   | 'COMPLETED'
   | 'CONFIRMED'
   | 'PENDING';
+
+export type CompleteChecklistItemInput = {
+  itemId: string | number;
+  jobId: string | number;
+};
+
+export type CompleteJobInput = {
+  id: string | number;
+};
 
 export type CreateAddOnInput = {
   description?: string | null | undefined;
@@ -45,6 +59,10 @@ export type CreateCustomerInput = {
   phone: string;
 };
 
+export type CreateJobFromBookingInput = {
+  bookingId: string | number;
+};
+
 export type CreatePricingRuleInput = {
   priceMinorUnits: number;
   serviceId: string | number;
@@ -69,6 +87,11 @@ export type CreateServiceInput = {
 export type CreateTeamInput = {
   name: string;
 };
+
+export type JobStatus =
+  | 'COMPLETED'
+  | 'IN_PROGRESS'
+  | 'PENDING';
 
 export type LoginInput = {
   email: string;
@@ -267,6 +290,48 @@ export type DisableAdminMutationVariables = Exact<{
 
 export type DisableAdminMutation = { disableAdmin: { id: string, email: string, role: Role, isActive: boolean } };
 
+export type JobFieldsFragment = { id: string, scheduledAt: unknown, status: JobStatus, createdAt: unknown, updatedAt: unknown, booking: { id: string, scheduledAt: unknown, status: BookingStatus, customer: { id: string, fullName: string }, property: { id: string, addressLine1: string }, service: { id: string, name: string }, team: { id: string, name: string } | null }, team: { id: string, name: string } | null, checklist: { id: string, items: Array<{ id: string, label: string, position: number, completed: boolean, completedAt: unknown }> } };
+
+export type JobsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type JobsQuery = { jobs: Array<{ id: string, scheduledAt: unknown, status: JobStatus, createdAt: unknown, updatedAt: unknown, booking: { id: string, scheduledAt: unknown, status: BookingStatus, customer: { id: string, fullName: string }, property: { id: string, addressLine1: string }, service: { id: string, name: string }, team: { id: string, name: string } | null }, team: { id: string, name: string } | null, checklist: { id: string, items: Array<{ id: string, label: string, position: number, completed: boolean, completedAt: unknown }> } }> };
+
+export type JobQueryVariables = Exact<{
+  id: string | number;
+}>;
+
+
+export type JobQuery = { job: { id: string, scheduledAt: unknown, status: JobStatus, createdAt: unknown, updatedAt: unknown, booking: { id: string, scheduledAt: unknown, status: BookingStatus, customer: { id: string, fullName: string }, property: { id: string, addressLine1: string }, service: { id: string, name: string }, team: { id: string, name: string } | null }, team: { id: string, name: string } | null, checklist: { id: string, items: Array<{ id: string, label: string, position: number, completed: boolean, completedAt: unknown }> } } | null };
+
+export type CreateJobFromBookingMutationVariables = Exact<{
+  input: CreateJobFromBookingInput;
+}>;
+
+
+export type CreateJobFromBookingMutation = { createJobFromBooking: { id: string, scheduledAt: unknown, status: JobStatus, createdAt: unknown, updatedAt: unknown, booking: { id: string, scheduledAt: unknown, status: BookingStatus, customer: { id: string, fullName: string }, property: { id: string, addressLine1: string }, service: { id: string, name: string }, team: { id: string, name: string } | null }, team: { id: string, name: string } | null, checklist: { id: string, items: Array<{ id: string, label: string, position: number, completed: boolean, completedAt: unknown }> } } };
+
+export type AssignTeamToJobMutationVariables = Exact<{
+  input: AssignTeamToJobInput;
+}>;
+
+
+export type AssignTeamToJobMutation = { assignTeamToJob: { id: string, scheduledAt: unknown, status: JobStatus, createdAt: unknown, updatedAt: unknown, booking: { id: string, scheduledAt: unknown, status: BookingStatus, customer: { id: string, fullName: string }, property: { id: string, addressLine1: string }, service: { id: string, name: string }, team: { id: string, name: string } | null }, team: { id: string, name: string } | null, checklist: { id: string, items: Array<{ id: string, label: string, position: number, completed: boolean, completedAt: unknown }> } } };
+
+export type CompleteChecklistItemMutationVariables = Exact<{
+  input: CompleteChecklistItemInput;
+}>;
+
+
+export type CompleteChecklistItemMutation = { completeChecklistItem: { id: string, scheduledAt: unknown, status: JobStatus, createdAt: unknown, updatedAt: unknown, booking: { id: string, scheduledAt: unknown, status: BookingStatus, customer: { id: string, fullName: string }, property: { id: string, addressLine1: string }, service: { id: string, name: string }, team: { id: string, name: string } | null }, team: { id: string, name: string } | null, checklist: { id: string, items: Array<{ id: string, label: string, position: number, completed: boolean, completedAt: unknown }> } } };
+
+export type CompleteJobMutationVariables = Exact<{
+  input: CompleteJobInput;
+}>;
+
+
+export type CompleteJobMutation = { completeJob: { id: string, scheduledAt: unknown, status: JobStatus, createdAt: unknown, updatedAt: unknown, booking: { id: string, scheduledAt: unknown, status: BookingStatus, customer: { id: string, fullName: string }, property: { id: string, addressLine1: string }, service: { id: string, name: string }, team: { id: string, name: string } | null }, team: { id: string, name: string } | null, checklist: { id: string, items: Array<{ id: string, label: string, position: number, completed: boolean, completedAt: unknown }> } } };
+
 export type LoginMutationVariables = Exact<{
   loginInput: LoginInput;
 }>;
@@ -355,7 +420,50 @@ export type CreateTeamMutationVariables = Exact<{
 
 export type CreateTeamMutation = { createTeam: { id: string } };
 
-
+export const JobFieldsFragmentDoc = gql`
+    fragment JobFields on CleaningJob {
+  id
+  scheduledAt
+  status
+  createdAt
+  updatedAt
+  booking {
+    id
+    scheduledAt
+    status
+    customer {
+      id
+      fullName
+    }
+    property {
+      id
+      addressLine1
+    }
+    service {
+      id
+      name
+    }
+    team {
+      id
+      name
+    }
+  }
+  team {
+    id
+    name
+  }
+  checklist {
+    id
+    items {
+      id
+      label
+      position
+      completed
+      completedAt
+    }
+  }
+}
+    `;
 export const AddOnsDocument = gql`
     query AddOns {
   addOns {
@@ -1225,6 +1333,223 @@ export function useDisableAdminMutation(baseOptions?: Apollo.MutationHookOptions
 export type DisableAdminMutationHookResult = ReturnType<typeof useDisableAdminMutation>;
 export type DisableAdminMutationResult = Apollo.MutationResult<DisableAdminMutation>;
 export type DisableAdminMutationOptions = Apollo.BaseMutationOptions<DisableAdminMutation, DisableAdminMutationVariables>;
+export const JobsDocument = gql`
+    query Jobs {
+  jobs {
+    ...JobFields
+  }
+}
+    ${JobFieldsFragmentDoc}`;
+
+/**
+ * __useJobsQuery__
+ *
+ * To run a query within a React component, call `useJobsQuery` and pass it any options that fit your needs.
+ * When your component renders, `useJobsQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useJobsQuery({
+ *   variables: {
+ *   },
+ * });
+ */
+export function useJobsQuery(baseOptions?: Apollo.QueryHookOptions<JobsQuery, JobsQueryVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<JobsQuery, JobsQueryVariables>(JobsDocument, options);
+      }
+export function useJobsLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<JobsQuery, JobsQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<JobsQuery, JobsQueryVariables>(JobsDocument, options);
+        }
+// @ts-ignore
+export function useJobsSuspenseQuery(baseOptions?: Apollo.SuspenseQueryHookOptions<JobsQuery, JobsQueryVariables>): Apollo.UseSuspenseQueryResult<JobsQuery, JobsQueryVariables>;
+export function useJobsSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<JobsQuery, JobsQueryVariables>): Apollo.UseSuspenseQueryResult<JobsQuery | undefined, JobsQueryVariables>;
+export function useJobsSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<JobsQuery, JobsQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<JobsQuery, JobsQueryVariables>(JobsDocument, options);
+        }
+export type JobsQueryHookResult = ReturnType<typeof useJobsQuery>;
+export type JobsLazyQueryHookResult = ReturnType<typeof useJobsLazyQuery>;
+export type JobsSuspenseQueryHookResult = ReturnType<typeof useJobsSuspenseQuery>;
+export type JobsQueryResult = Apollo.QueryResult<JobsQuery, JobsQueryVariables>;
+export const JobDocument = gql`
+    query Job($id: ID!) {
+  job(id: $id) {
+    ...JobFields
+  }
+}
+    ${JobFieldsFragmentDoc}`;
+
+/**
+ * __useJobQuery__
+ *
+ * To run a query within a React component, call `useJobQuery` and pass it any options that fit your needs.
+ * When your component renders, `useJobQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useJobQuery({
+ *   variables: {
+ *      id: // value for 'id'
+ *   },
+ * });
+ */
+export function useJobQuery(baseOptions: Apollo.QueryHookOptions<JobQuery, JobQueryVariables> & ({ variables: JobQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<JobQuery, JobQueryVariables>(JobDocument, options);
+      }
+export function useJobLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<JobQuery, JobQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<JobQuery, JobQueryVariables>(JobDocument, options);
+        }
+// @ts-ignore
+export function useJobSuspenseQuery(baseOptions?: Apollo.SuspenseQueryHookOptions<JobQuery, JobQueryVariables>): Apollo.UseSuspenseQueryResult<JobQuery, JobQueryVariables>;
+export function useJobSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<JobQuery, JobQueryVariables>): Apollo.UseSuspenseQueryResult<JobQuery | undefined, JobQueryVariables>;
+export function useJobSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<JobQuery, JobQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<JobQuery, JobQueryVariables>(JobDocument, options);
+        }
+export type JobQueryHookResult = ReturnType<typeof useJobQuery>;
+export type JobLazyQueryHookResult = ReturnType<typeof useJobLazyQuery>;
+export type JobSuspenseQueryHookResult = ReturnType<typeof useJobSuspenseQuery>;
+export type JobQueryResult = Apollo.QueryResult<JobQuery, JobQueryVariables>;
+export const CreateJobFromBookingDocument = gql`
+    mutation CreateJobFromBooking($input: CreateJobFromBookingInput!) {
+  createJobFromBooking(input: $input) {
+    ...JobFields
+  }
+}
+    ${JobFieldsFragmentDoc}`;
+export type CreateJobFromBookingMutationFn = Apollo.MutationFunction<CreateJobFromBookingMutation, CreateJobFromBookingMutationVariables>;
+
+/**
+ * __useCreateJobFromBookingMutation__
+ *
+ * To run a mutation, you first call `useCreateJobFromBookingMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useCreateJobFromBookingMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [createJobFromBookingMutation, { data, loading, error }] = useCreateJobFromBookingMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useCreateJobFromBookingMutation(baseOptions?: Apollo.MutationHookOptions<CreateJobFromBookingMutation, CreateJobFromBookingMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<CreateJobFromBookingMutation, CreateJobFromBookingMutationVariables>(CreateJobFromBookingDocument, options);
+      }
+export type CreateJobFromBookingMutationHookResult = ReturnType<typeof useCreateJobFromBookingMutation>;
+export type CreateJobFromBookingMutationResult = Apollo.MutationResult<CreateJobFromBookingMutation>;
+export type CreateJobFromBookingMutationOptions = Apollo.BaseMutationOptions<CreateJobFromBookingMutation, CreateJobFromBookingMutationVariables>;
+export const AssignTeamToJobDocument = gql`
+    mutation AssignTeamToJob($input: AssignTeamToJobInput!) {
+  assignTeamToJob(input: $input) {
+    ...JobFields
+  }
+}
+    ${JobFieldsFragmentDoc}`;
+export type AssignTeamToJobMutationFn = Apollo.MutationFunction<AssignTeamToJobMutation, AssignTeamToJobMutationVariables>;
+
+/**
+ * __useAssignTeamToJobMutation__
+ *
+ * To run a mutation, you first call `useAssignTeamToJobMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useAssignTeamToJobMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [assignTeamToJobMutation, { data, loading, error }] = useAssignTeamToJobMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useAssignTeamToJobMutation(baseOptions?: Apollo.MutationHookOptions<AssignTeamToJobMutation, AssignTeamToJobMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<AssignTeamToJobMutation, AssignTeamToJobMutationVariables>(AssignTeamToJobDocument, options);
+      }
+export type AssignTeamToJobMutationHookResult = ReturnType<typeof useAssignTeamToJobMutation>;
+export type AssignTeamToJobMutationResult = Apollo.MutationResult<AssignTeamToJobMutation>;
+export type AssignTeamToJobMutationOptions = Apollo.BaseMutationOptions<AssignTeamToJobMutation, AssignTeamToJobMutationVariables>;
+export const CompleteChecklistItemDocument = gql`
+    mutation CompleteChecklistItem($input: CompleteChecklistItemInput!) {
+  completeChecklistItem(input: $input) {
+    ...JobFields
+  }
+}
+    ${JobFieldsFragmentDoc}`;
+export type CompleteChecklistItemMutationFn = Apollo.MutationFunction<CompleteChecklistItemMutation, CompleteChecklistItemMutationVariables>;
+
+/**
+ * __useCompleteChecklistItemMutation__
+ *
+ * To run a mutation, you first call `useCompleteChecklistItemMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useCompleteChecklistItemMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [completeChecklistItemMutation, { data, loading, error }] = useCompleteChecklistItemMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useCompleteChecklistItemMutation(baseOptions?: Apollo.MutationHookOptions<CompleteChecklistItemMutation, CompleteChecklistItemMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<CompleteChecklistItemMutation, CompleteChecklistItemMutationVariables>(CompleteChecklistItemDocument, options);
+      }
+export type CompleteChecklistItemMutationHookResult = ReturnType<typeof useCompleteChecklistItemMutation>;
+export type CompleteChecklistItemMutationResult = Apollo.MutationResult<CompleteChecklistItemMutation>;
+export type CompleteChecklistItemMutationOptions = Apollo.BaseMutationOptions<CompleteChecklistItemMutation, CompleteChecklistItemMutationVariables>;
+export const CompleteJobDocument = gql`
+    mutation CompleteJob($input: CompleteJobInput!) {
+  completeJob(input: $input) {
+    ...JobFields
+  }
+}
+    ${JobFieldsFragmentDoc}`;
+export type CompleteJobMutationFn = Apollo.MutationFunction<CompleteJobMutation, CompleteJobMutationVariables>;
+
+/**
+ * __useCompleteJobMutation__
+ *
+ * To run a mutation, you first call `useCompleteJobMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useCompleteJobMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [completeJobMutation, { data, loading, error }] = useCompleteJobMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useCompleteJobMutation(baseOptions?: Apollo.MutationHookOptions<CompleteJobMutation, CompleteJobMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<CompleteJobMutation, CompleteJobMutationVariables>(CompleteJobDocument, options);
+      }
+export type CompleteJobMutationHookResult = ReturnType<typeof useCompleteJobMutation>;
+export type CompleteJobMutationResult = Apollo.MutationResult<CompleteJobMutation>;
+export type CompleteJobMutationOptions = Apollo.BaseMutationOptions<CompleteJobMutation, CompleteJobMutationVariables>;
 export const LoginDocument = gql`
     mutation Login($loginInput: LoginInput!) {
   login(loginInput: $loginInput) {
