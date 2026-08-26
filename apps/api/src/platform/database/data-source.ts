@@ -1,6 +1,9 @@
 import 'dotenv/config';
 import { DataSource } from 'typeorm';
 import { BookingEntity } from '../../modules/bookings/infrastructure/persistence/booking.entity';
+import { CleaningJobEntity } from '../../modules/jobs/infrastructure/persistence/cleaning-job.entity';
+import { ChecklistEntity } from '../../modules/jobs/infrastructure/persistence/checklist.entity';
+import { ChecklistItemEntity } from '../../modules/jobs/infrastructure/persistence/checklist-item.entity';
 import { AdminUserEntity } from '../../modules/admins/infrastructure/persistence/admin-user.entity';
 import { CustomerEntity } from '../../modules/customers/infrastructure/persistence/customer.entity';
 import { PropertyEntity } from '../../modules/customers/infrastructure/persistence/property.entity';
@@ -32,6 +35,9 @@ export default new DataSource({
     ServiceEntity,
     AddOnEntity,
     PricingRuleEntity,
+    CleaningJobEntity,
+    ChecklistEntity,
+    ChecklistItemEntity,
   ],
   migrations: [__dirname + '/migrations/*.ts'],
 });
