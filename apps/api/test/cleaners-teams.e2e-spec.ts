@@ -4,7 +4,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { Repository } from 'typeorm';
+import { DataSource } from 'typeorm';
 import { AppModule } from '../src/app/app.module';
 import { AuditEventEntity } from '../src/platform/audit/infrastructure/persistence/audit-event.entity';
 import { AdminUserEntity } from '../src/modules/admins/infrastructure/persistence/admin-user.entity';
@@ -12,6 +12,10 @@ import { CleanersService } from '../src/modules/cleaners/application/services/cl
 import { TeamsService } from '../src/modules/cleaners/application/services/teams.service';
 import { Role } from '../src/platform/auth/domain/role';
 import { applyPlatformPipes } from '../src/platform/graphql/apply-platform-pipes';
+import {
+  assertNoPerParentChildSelect,
+  withCapturedSql,
+} from './helpers/capture-sql';
 import { seedOwner } from './helpers/seed-owner';
 
 // Proves plan task-6 brief's full 13-step Cleaners & Teams E2E acceptance
@@ -47,6 +51,7 @@ describe('Cleaners & Teams (e2e)', () => {
   let auditEventRepository: Repository<AuditEventEntity>;
   let teamsService: TeamsService;
   let cleanersService: CleanersService;
+  let dataSource: DataSource;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -70,6 +75,7 @@ describe('Cleaners & Teams (e2e)', () => {
     );
     teamsService = moduleFixture.get(TeamsService);
     cleanersService = moduleFixture.get(CleanersService);
+    dataSource = moduleFixture.get(DataSource);
   });
 
   afterAll(async () => {
@@ -153,8 +159,10 @@ describe('Cleaners & Teams (e2e)', () => {
   const CLEANERS_QUERY = `
     query Cleaners {
       cleaners {
-        id
-        team { id name }
+        nodes {
+          id
+          team { id name }
+        }
       }
     }
   `;
@@ -162,9 +170,11 @@ describe('Cleaners & Teams (e2e)', () => {
   const TEAMS_QUERY = `
     query Teams {
       teams {
-        id
-        name
-        cleaners { id }
+        nodes {
+          id
+          name
+          cleaners { nodes { id } }
+        }
       }
     }
   `;
@@ -310,11 +320,11 @@ describe('Cleaners & Teams (e2e)', () => {
     const teamsAfterAssign: Array<{
       id: string;
       name: string;
-      cleaners: Array<{ id: string }>;
-    }> = teamsAfterAssignResponse.body.data.teams;
+      cleaners: { nodes: Array<{ id: string }> };
+    }> = teamsAfterAssignResponse.body.data.teams.nodes;
     const teamAlphaRow = teamsAfterAssign.find((t) => t.id === teamId);
     expect(teamAlphaRow).toBeDefined();
-    expect(teamAlphaRow?.cleaners).toEqual(
+    expect(teamAlphaRow?.cleaners.nodes).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: cleanerId })]),
     );
 
@@ -434,7 +444,7 @@ describe('Cleaners & Teams (e2e)', () => {
     const cleanersFixtureRows: Array<{
       id: string;
       team: { id: string; name: string } | null;
-    }> = cleanersFixtureResponse.body.data.cleaners;
+    }> = cleanersFixtureResponse.body.data.cleaners.nodes;
     const byId = new Map(cleanersFixtureRows.map((row) => [row.id, row]));
     expect(byId.get(teamACleaner1Id)?.team).toMatchObject({ id: teamAId });
     expect(byId.get(teamACleaner2Id)?.team).toMatchObject({ id: teamAId });
@@ -447,16 +457,16 @@ describe('Cleaners & Teams (e2e)', () => {
     expect(teamsFixtureResponse.body.errors).toBeUndefined();
     const teamsFixtureRows: Array<{
       id: string;
-      cleaners: Array<{ id: string }>;
-    }> = teamsFixtureResponse.body.data.teams;
+      cleaners: { nodes: Array<{ id: string }> };
+    }> = teamsFixtureResponse.body.data.teams.nodes;
     const teamsById = new Map(teamsFixtureRows.map((row) => [row.id, row]));
-    expect(new Set(teamsById.get(teamAId)?.cleaners.map((c) => c.id))).toEqual(
+    expect(new Set(teamsById.get(teamAId)?.cleaners.nodes.map((c) => c.id))).toEqual(
       new Set([teamACleaner1Id, teamACleaner2Id]),
     );
-    expect(new Set(teamsById.get(teamBId)?.cleaners.map((c) => c.id))).toEqual(
+    expect(new Set(teamsById.get(teamBId)?.cleaners.nodes.map((c) => c.id))).toEqual(
       new Set([teamBCleaner1Id]),
     );
-    expect(teamsById.get(teamCId)?.cleaners).toEqual([]);
+    expect(teamsById.get(teamCId)?.cleaners.nodes).toEqual([]);
 
     // --- Step 5: Batching/query-count proof, distinct from step 4. Spies
     // wrap the REAL implementation (no `.mockImplementation`) so the actual
@@ -469,10 +479,6 @@ describe('Cleaners & Teams (e2e)', () => {
     // gets its own fresh loader/spy-call regardless of the wrapping — the
     // spy only counts calls, it does not share state across requests. ---
     const getTeamsByIdsSpy = jest.spyOn(teamsService, 'getTeamsByIds');
-    const listCleanersByTeamIdsSpy = jest.spyOn(
-      cleanersService,
-      'listCleanersByTeamIds',
-    );
 
     const cleanersBatchResponse = await authedRequest(ownerSessionCookie).send({
       query: CLEANERS_QUERY,
@@ -480,7 +486,7 @@ describe('Cleaners & Teams (e2e)', () => {
     expect(cleanersBatchResponse.body.errors).toBeUndefined();
     expect(getTeamsByIdsSpy).toHaveBeenCalledTimes(1);
     const expectedTeamIdsForCleanersQuery = (
-      cleanersBatchResponse.body.data.cleaners as Array<{
+      cleanersBatchResponse.body.data.cleaners.nodes as Array<{
         team: { id: string } | null;
       }>
     )
@@ -494,15 +500,9 @@ describe('Cleaners & Teams (e2e)', () => {
       query: TEAMS_QUERY,
     });
     expect(teamsBatchResponse.body.errors).toBeUndefined();
-    expect(listCleanersByTeamIdsSpy).toHaveBeenCalledTimes(1);
     const expectedTeamIdsForTeamsQuery = (
-      teamsBatchResponse.body.data.teams as Array<{ id: string }>
+      teamsBatchResponse.body.data.teams.nodes as Array<{ id: string }>
     ).map((row) => row.id);
-    expect(new Set(listCleanersByTeamIdsSpy.mock.calls[0][0])).toEqual(
-      new Set(expectedTeamIdsForTeamsQuery),
-    );
-    // Team C's id (an empty-result key) must still appear in the batch
-    // call's argument set.
     expect(expectedTeamIdsForTeamsQuery).toContain(teamCId);
 
     // --- Step 6: Request-isolation proof. Two genuinely separate Supertest
@@ -529,16 +529,16 @@ describe('Cleaners & Teams (e2e)', () => {
     expect(beforeReassignResponse.body.errors).toBeUndefined();
     const teamsBeforeReassign: Array<{
       id: string;
-      cleaners: Array<{ id: string }>;
-    }> = beforeReassignResponse.body.data.teams;
+      cleaners: { nodes: Array<{ id: string }> };
+    }> = beforeReassignResponse.body.data.teams.nodes;
     const teamsBeforeReassignById = new Map(
       teamsBeforeReassign.map((row) => [row.id, row]),
     );
     expect(
-      new Set(teamsBeforeReassignById.get(teamAId)?.cleaners.map((c) => c.id)),
+      new Set(teamsBeforeReassignById.get(teamAId)?.cleaners.nodes.map((c) => c.id)),
     ).toEqual(new Set([teamACleaner1Id, teamACleaner2Id]));
     expect(
-      new Set(teamsBeforeReassignById.get(teamBId)?.cleaners.map((c) => c.id)),
+      new Set(teamsBeforeReassignById.get(teamBId)?.cleaners.nodes.map((c) => c.id)),
     ).toEqual(new Set([teamBCleaner1Id]));
 
     await assignFixture(teamACleaner1Id, teamBId);
@@ -549,16 +549,16 @@ describe('Cleaners & Teams (e2e)', () => {
     expect(afterReassignResponse.body.errors).toBeUndefined();
     const teamsAfterReassign: Array<{
       id: string;
-      cleaners: Array<{ id: string }>;
-    }> = afterReassignResponse.body.data.teams;
+      cleaners: { nodes: Array<{ id: string }> };
+    }> = afterReassignResponse.body.data.teams.nodes;
     const teamsAfterReassignById = new Map(
       teamsAfterReassign.map((row) => [row.id, row]),
     );
     expect(
-      new Set(teamsAfterReassignById.get(teamAId)?.cleaners.map((c) => c.id)),
+      new Set(teamsAfterReassignById.get(teamAId)?.cleaners.nodes.map((c) => c.id)),
     ).toEqual(new Set([teamACleaner2Id]));
     expect(
-      new Set(teamsAfterReassignById.get(teamBId)?.cleaners.map((c) => c.id)),
+      new Set(teamsAfterReassignById.get(teamBId)?.cleaners.nodes.map((c) => c.id)),
     ).toEqual(new Set([teamBCleaner1Id, teamACleaner1Id]));
 
     // --- Step 7: Owner creates a Scheduler, Customer Support, Finance, and
@@ -635,7 +635,7 @@ describe('Cleaners & Teams (e2e)', () => {
     ).send({ query: CLEANERS_QUERY });
     expect(schedulerCleanersResponse.body.errors).toBeUndefined();
     const schedulerCleanerIds: string[] =
-      schedulerCleanersResponse.body.data.cleaners.map(
+      schedulerCleanersResponse.body.data.cleaners.nodes.map(
         (c: { id: string }) => c.id,
       );
     expect(schedulerCleanerIds).toContain(cleanerId);
@@ -671,7 +671,7 @@ describe('Cleaners & Teams (e2e)', () => {
     ).send({ query: CLEANERS_QUERY });
     expect(analystCleanersResponse.body.errors).toBeUndefined();
     const analystCleanerIds: string[] =
-      analystCleanersResponse.body.data.cleaners.map(
+      analystCleanersResponse.body.data.cleaners.nodes.map(
         (c: { id: string }) => c.id,
       );
     expect(analystCleanerIds).toContain(cleanerId);
@@ -803,8 +803,89 @@ describe('Cleaners & Teams (e2e)', () => {
     ).send({ query: TEAMS_QUERY });
     expect(teamsAfterDuplicateResponse.body.errors).toBeUndefined();
     const teamsNamedTeamName = (
-      teamsAfterDuplicateResponse.body.data.teams as Array<{ name: string }>
+      teamsAfterDuplicateResponse.body.data.teams.nodes as Array<{ name: string }>
     ).filter((t) => t.name === teamName);
     expect(teamsNamedTeamName).toHaveLength(1);
   });
+
+  it('pages root collections and loads nested team.cleaners in O(1)', async () => {
+    const owner = await seedOwner(adminUserRepository);
+    const ownerLogin = await login(owner.email, owner.password);
+    expect(ownerLogin.body.errors).toBeUndefined();
+    const cookie = extractSessionCookie(ownerLogin);
+    const runId = owner.id;
+
+    const teamIds: string[] = [];
+    for (let index = 0; index < 6; index += 1) {
+      const team = await teamsService.createTeam({
+        actorId: owner.id,
+        name: `Nest ${runId}-${index}`,
+      });
+      teamIds.push(team.id);
+      const cleaner = await cleanersService.createCleaner({
+        actorId: owner.id,
+        fullName: `Nested ${runId}-${index}`,
+        phone: '555-0400',
+        email: `nested-${runId}-${index}@example.com`,
+      });
+      await cleanersService.assignCleanerToTeam({
+        actorId: owner.id,
+        cleanerId: cleaner.id,
+        teamId: team.id,
+      });
+    }
+
+    const listParentQuery = `query ListParents($ids: [ID!]!) {
+      teams(filter: { id: { in: $ids } }, paging: { limit: 20 }) {
+        nodes {
+          id
+          cleaners { nodes { id } pageInfo { hasNextPage } }
+        }
+      }
+    }`;
+
+    const captureAtN = async (parentN: number, ids: string[]) => {
+      const { result, queries } = await withCapturedSql(dataSource, () =>
+        authedRequest(cookie).send({
+          query: listParentQuery,
+          variables: { ids },
+        }),
+      );
+      expect(result.body.errors).toBeUndefined();
+      expect(result.body.data.teams.nodes).toHaveLength(parentN);
+      assertNoPerParentChildSelect(queries, parentN, 'cleaner_entity');
+      return queries.length;
+    };
+
+    const atSix = await captureAtN(6, teamIds);
+
+    for (let index = 6; index < 12; index += 1) {
+      const team = await teamsService.createTeam({
+        actorId: owner.id,
+        name: `Nest ${runId}-${index}`,
+      });
+      teamIds.push(team.id);
+      const cleaner = await cleanersService.createCleaner({
+        actorId: owner.id,
+        fullName: `Nested ${runId}-${index}`,
+        phone: '555-0400',
+        email: `nested-${runId}-${index}@example.com`,
+      });
+      await cleanersService.assignCleanerToTeam({
+        actorId: owner.id,
+        cleanerId: cleaner.id,
+        teamId: team.id,
+      });
+    }
+
+    const atTwelve = await captureAtN(12, teamIds);
+    const delta = Math.abs(atTwelve - atSix);
+    expect(delta === 0 || delta <= 2).toBe(true);
+
+    const omitted = await authedRequest(cookie).send({
+      query: `query { teams { nodes { id } } }`,
+    });
+    expect(omitted.body.errors).toBeUndefined();
+    expect(omitted.body.data.teams.nodes.length).toBeLessThanOrEqual(20);
+  }, 120000);
 });

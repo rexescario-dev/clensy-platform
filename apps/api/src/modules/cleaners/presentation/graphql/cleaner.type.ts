@@ -1,31 +1,51 @@
+import { SortDirection } from '@ptc-org/nestjs-query-core';
+import {
+  FilterableField,
+  IDField,
+  PagingStrategies,
+  QueryOptions,
+} from '@ptc-org/nestjs-query-graphql';
 import { Field, ID, ObjectType } from '@nestjs/graphql';
+import {
+  PLATFORM_PAGE_DEFAULT,
+  PLATFORM_PAGE_MAX,
+} from '../../../../platform/graphql/paging';
+import { Role } from '../../../../platform/auth/domain/role';
 import { TeamType } from './team.type';
 
-// Explicit, hand-defined presentation type — never `Cleaner` (the domain
-// interface) or `CleanerEntity` (the TypeORM entity) returned directly as a
-// GraphQL type (spec §4.5). Deliberately no `@Field()` for `teamId`: GraphQL
-// schema/introspection exposure is controlled entirely by `@Field()`
-// decorators, so `teamId` never appears in the public schema even though
-// `toCleanerType()` (mappers.ts) still puts it on the runtime object for
-// `team`'s `@ResolveField()` to read. `team` is presentation-layer-only
-// computed data, populated exclusively by `CleanerResolver.team()`'s
-// `@ResolveField(() => TeamType, { nullable: true })` method — the base
-// `cleaner`/`cleaners`/`createCleaner`/`updateCleaner`/`assignCleanerToTeam`
-// methods return an object typed `Omit<CleanerType, 'team'>` cast to
-// `CleanerType`, since Apollo calls the field resolver for `team`
-// independently of whatever the parent object carries for that key.
+export const VIEW_ROLES = [
+  Role.OWNER,
+  Role.OPS_MANAGER,
+  Role.SCHEDULER,
+  Role.ANALYST,
+];
+
+// Explicit, hand-defined presentation type — never `Cleaner` or
+// `CleanerEntity` returned directly as a GraphQL type. Deliberately no
+// `@Field()` for `teamId`. `team` stays a Clensy `@ResolveField` object
+// (not a FilterableRelation and not a collection).
 @ObjectType('Cleaner')
+@QueryOptions({
+  pagingStrategy: PagingStrategies.OFFSET,
+  enableTotalCount: true,
+  defaultResultSize: PLATFORM_PAGE_DEFAULT,
+  maxResultsSize: PLATFORM_PAGE_MAX,
+  defaultSort: [
+    { field: 'createdAt', direction: SortDirection.DESC },
+    { field: 'id', direction: SortDirection.ASC },
+  ],
+})
 export class CleanerType {
-  @Field(() => ID)
+  @IDField(() => ID)
   id!: string;
 
-  @Field()
+  @FilterableField()
   fullName!: string;
 
   @Field()
   phone!: string;
 
-  @Field()
+  @FilterableField()
   email!: string;
 
   @Field(() => String, { nullable: true })
@@ -34,7 +54,7 @@ export class CleanerType {
   @Field(() => TeamType, { nullable: true })
   team!: TeamType | null;
 
-  @Field()
+  @FilterableField()
   createdAt!: Date;
 
   @Field()

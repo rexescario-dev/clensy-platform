@@ -234,7 +234,10 @@ function JobDetailDrawer({
     variables: { id },
     fetchPolicy: 'network-only',
   });
-  const { data: teamsData } = useTeamsQuery({ fetchPolicy: 'network-only' });
+  const { data: teamsData } = useTeamsQuery({
+    fetchPolicy: 'network-only',
+    variables: { paging: { limit: 100 } },
+  });
   const [assignTeam, { loading: assigning }] = useAssignTeamToJobMutation();
   const [completeItem] = useCompleteChecklistItemMutation();
   const [completeJob, { loading: completing }] = useCompleteJobMutation();
@@ -243,7 +246,7 @@ function JobDetailDrawer({
   const [actionError, setActionError] = useState<string | undefined>(undefined);
 
   const job = data?.job;
-  const teams = teamsData?.teams ?? [];
+  const teams = teamsData?.teams.nodes ?? [];
   const teamIdValue = teamId ?? job?.team?.id ?? '';
   const items = job?.checklist.items ?? [];
   const allItemsComplete = items.length > 0 && items.every((item) => item.completed);

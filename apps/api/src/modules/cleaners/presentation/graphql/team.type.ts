@@ -1,27 +1,67 @@
-import { FilterableField } from '@ptc-org/nestjs-query-graphql';
+import { SortDirection } from '@ptc-org/nestjs-query-core';
+import {
+  FilterableField,
+  IDField,
+  OffsetConnection,
+  PagingStrategies,
+  QueryOptions,
+} from '@ptc-org/nestjs-query-graphql';
 import { Field, ID, ObjectType } from '@nestjs/graphql';
-import { CleanerType } from './cleaner.type';
+import {
+  PLATFORM_PAGE_DEFAULT,
+  PLATFORM_PAGE_MAX,
+} from '../../../../platform/graphql/paging';
+import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
+import { Role } from '../../../../platform/auth/domain/role';
+import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
 
-// Explicit, hand-defined presentation type — never `Team` (the domain
-// interface) or `TeamEntity` (the TypeORM entity) returned directly as a
-// GraphQL type (spec §4.5). `cleaners` is presentation-layer-only computed
-// data, populated exclusively by `TeamResolver.cleaners()`'s
-// `@ResolveField(() => [CleanerType])` method; the base `team`/`teams`/
-// `createTeam` methods return an object typed `Omit<TeamType, 'cleaners'>`
-// cast to `TeamType`, since Apollo calls the field resolver for `cleaners`
-// independently of whatever the parent object carries for that key.
+const VIEW_ROLES = [
+  Role.OWNER,
+  Role.OPS_MANAGER,
+  Role.SCHEDULER,
+  Role.ANALYST,
+];
+
+function cleanerDto() {
+  // Lazy thunk: CleanerType imports TeamType.
+  return require('./cleaner.type').CleanerType;
+}
+
+// Nested `cleaners` is Relatable-owned; do not add a Clensy `@ResolveField`.
 @ObjectType('Team')
+@QueryOptions({
+  pagingStrategy: PagingStrategies.OFFSET,
+  enableTotalCount: true,
+  defaultResultSize: PLATFORM_PAGE_DEFAULT,
+  maxResultsSize: PLATFORM_PAGE_MAX,
+  defaultSort: [
+    { field: 'createdAt', direction: SortDirection.DESC },
+    { field: 'id', direction: SortDirection.ASC },
+  ],
+})
+@OffsetConnection('cleaners', cleanerDto, {
+  nullable: false,
+  enableTotalCount: false,
+  relationName: 'cleaners',
+  defaultResultSize: PLATFORM_PAGE_DEFAULT,
+  maxResultsSize: PLATFORM_PAGE_MAX,
+  defaultSort: [
+    { field: 'createdAt', direction: SortDirection.DESC },
+    { field: 'id', direction: SortDirection.ASC },
+  ],
+  guards: [AuthGuard],
+  decorators: [Roles(...VIEW_ROLES)],
+  update: { enabled: false },
+  remove: { enabled: false },
+})
 export class TeamType {
-  @FilterableField(() => ID)
+  @IDField(() => ID)
   id!: string;
 
   @FilterableField()
   name!: string;
 
-  @Field(() => [CleanerType])
-  cleaners!: CleanerType[];
-
-  @Field()
+  @FilterableField()
   createdAt!: Date;
 
   @Field()

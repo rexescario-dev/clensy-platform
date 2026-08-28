@@ -1,12 +1,19 @@
-query Cleaners {
-  cleaners {
-    id
-    fullName
-    phone
-    email
-    team {
+query Cleaners($paging: OffsetPaging, $filter: CleanerFilter, $sorting: [CleanerSort!]) {
+  cleaners(paging: $paging, filter: $filter, sorting: $sorting) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+    }
+    nodes {
       id
-      name
+      fullName
+      phone
+      email
+      team {
+        id
+        name
+      }
     }
   }
 }

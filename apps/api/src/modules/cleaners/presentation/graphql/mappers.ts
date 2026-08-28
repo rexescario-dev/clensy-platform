@@ -42,14 +42,12 @@ export function toCleanerType(cleaner: Cleaner): CleanerType {
   } as CleanerType;
 }
 
-// Returns `Omit<TeamType, 'cleaners'>` cast to `TeamType` — `cleaners` is
-// presentation-layer-only computed data, populated exclusively by
-// `TeamResolver.cleaners()`'s `@ResolveField`.
+// Returns `Omit<TeamType, never>` — nested `cleaners` is Relatable-owned.
 export function toTeamType(team: Team): TeamType {
   return {
     id: team.id,
     name: team.name,
     createdAt: team.createdAt,
     updatedAt: team.updatedAt,
-  } as TeamType;
+  };
 }

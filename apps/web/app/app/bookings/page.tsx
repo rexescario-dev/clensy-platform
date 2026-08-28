@@ -95,7 +95,10 @@ function BookingsPageContent() {
     variables: { paging: { limit: 100 } },
   });
   const { data: servicesData } = useServicesQuery({ fetchPolicy: 'network-only' });
-  const { data: teamsData } = useTeamsQuery({ fetchPolicy: 'network-only' });
+  const { data: teamsData } = useTeamsQuery({
+    fetchPolicy: 'network-only',
+    variables: { paging: { limit: 100 } },
+  });
 
   const [formOpen, setFormOpen] = useState(false);
   const [customerId, setCustomerId] = useState('');
@@ -170,7 +173,7 @@ function BookingsPageContent() {
   const customers = customersData?.customers.nodes ?? [];
   const properties = propertiesData?.customerProperties.nodes ?? [];
   const activeServices = (servicesData?.services ?? []).filter((service) => service.active);
-  const teams = teamsData?.teams ?? [];
+  const teams = teamsData?.teams.nodes ?? [];
 
   return (
     <div className="flex flex-col gap-8">
@@ -326,7 +329,10 @@ function BookingDetailDrawer({
     variables: { id },
     fetchPolicy: 'network-only',
   });
-  const { data: teamsData } = useTeamsQuery({ fetchPolicy: 'network-only' });
+  const { data: teamsData } = useTeamsQuery({
+    fetchPolicy: 'network-only',
+    variables: { paging: { limit: 100 } },
+  });
   const { data: jobsData, refetch: refetchJobs } = useJobsQuery({
     fetchPolicy: 'network-only',
   });
@@ -345,7 +351,7 @@ function BookingDetailDrawer({
   const [jobError, setJobError] = useState<string | undefined>(undefined);
 
   const booking = data?.booking;
-  const teams = teamsData?.teams ?? [];
+  const teams = teamsData?.teams.nodes ?? [];
   const existingJob = booking
     ? (jobsData?.jobs ?? []).find((job) => job.booking.id === booking.id)
     : undefined;
