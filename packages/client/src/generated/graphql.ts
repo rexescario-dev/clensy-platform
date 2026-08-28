@@ -5,6 +5,27 @@ export type Incremental<T> = T | { [P in keyof T]?: P extends ' $fragmentName' |
 import { gql } from '@apollo/client';
 import * as Apollo from '@apollo/client';
 const defaultOptions = {} as const;
+export type AddOnFilter = {
+  active?: BooleanFieldComparison | null | undefined;
+  and?: Array<AddOnFilter> | null | undefined;
+  createdAt?: DateFieldComparison | null | undefined;
+  id?: IdFilterComparison | null | undefined;
+  name?: StringFieldComparison | null | undefined;
+  or?: Array<AddOnFilter> | null | undefined;
+};
+
+export type AddOnSort = {
+  direction: SortDirection;
+  field: AddOnSortFields;
+  nulls?: SortNulls | null | undefined;
+};
+
+export type AddOnSortFields =
+  | 'active'
+  | 'createdAt'
+  | 'id'
+  | 'name';
+
 export type AssignTeamToJobInput = {
   jobId: string | number;
   teamId: string | number;
@@ -25,6 +46,7 @@ export type BookingFilter = {
 
 export type BookingFilterCustomerFilter = {
   and?: Array<BookingFilterCustomerFilter> | null | undefined;
+  createdAt?: DateFieldComparison | null | undefined;
   fullName?: StringFieldComparison | null | undefined;
   id?: IdFilterComparison | null | undefined;
   or?: Array<BookingFilterCustomerFilter> | null | undefined;
@@ -33,12 +55,16 @@ export type BookingFilterCustomerFilter = {
 export type BookingFilterPropertyFilter = {
   addressLine1?: StringFieldComparison | null | undefined;
   and?: Array<BookingFilterPropertyFilter> | null | undefined;
+  createdAt?: DateFieldComparison | null | undefined;
+  customerId?: IdFilterComparison | null | undefined;
   id?: IdFilterComparison | null | undefined;
   or?: Array<BookingFilterPropertyFilter> | null | undefined;
 };
 
 export type BookingFilterServiceFilter = {
+  active?: BooleanFieldComparison | null | undefined;
   and?: Array<BookingFilterServiceFilter> | null | undefined;
+  createdAt?: DateFieldComparison | null | undefined;
   id?: IdFilterComparison | null | undefined;
   name?: StringFieldComparison | null | undefined;
   or?: Array<BookingFilterServiceFilter> | null | undefined;
@@ -46,6 +72,7 @@ export type BookingFilterServiceFilter = {
 
 export type BookingFilterTeamFilter = {
   and?: Array<BookingFilterTeamFilter> | null | undefined;
+  createdAt?: DateFieldComparison | null | undefined;
   id?: IdFilterComparison | null | undefined;
   name?: StringFieldComparison | null | undefined;
   or?: Array<BookingFilterTeamFilter> | null | undefined;
@@ -85,6 +112,63 @@ export type BookingStatusFilterComparison = {
   notIn?: Array<BookingStatus> | null | undefined;
   notLike?: BookingStatus | null | undefined;
 };
+
+export type BooleanFieldComparison = {
+  is?: boolean | null | undefined;
+  isNot?: boolean | null | undefined;
+};
+
+export type CleanerFilter = {
+  and?: Array<CleanerFilter> | null | undefined;
+  createdAt?: DateFieldComparison | null | undefined;
+  email?: StringFieldComparison | null | undefined;
+  fullName?: StringFieldComparison | null | undefined;
+  id?: IdFilterComparison | null | undefined;
+  or?: Array<CleanerFilter> | null | undefined;
+};
+
+export type CleanerSort = {
+  direction: SortDirection;
+  field: CleanerSortFields;
+  nulls?: SortNulls | null | undefined;
+};
+
+export type CleanerSortFields =
+  | 'createdAt'
+  | 'email'
+  | 'fullName'
+  | 'id';
+
+export type CleaningJobFilter = {
+  and?: Array<CleaningJobFilter> | null | undefined;
+  booking?: CleaningJobFilterBookingFilter | null | undefined;
+  createdAt?: DateFieldComparison | null | undefined;
+  id?: IdFilterComparison | null | undefined;
+  or?: Array<CleaningJobFilter> | null | undefined;
+  scheduledAt?: DateFieldComparison | null | undefined;
+  status?: JobStatusFilterComparison | null | undefined;
+};
+
+export type CleaningJobFilterBookingFilter = {
+  and?: Array<CleaningJobFilterBookingFilter> | null | undefined;
+  createdAt?: DateFieldComparison | null | undefined;
+  id?: IdFilterComparison | null | undefined;
+  or?: Array<CleaningJobFilterBookingFilter> | null | undefined;
+  scheduledAt?: DateFieldComparison | null | undefined;
+  status?: BookingStatusFilterComparison | null | undefined;
+};
+
+export type CleaningJobSort = {
+  direction: SortDirection;
+  field: CleaningJobSortFields;
+  nulls?: SortNulls | null | undefined;
+};
+
+export type CleaningJobSortFields =
+  | 'createdAt'
+  | 'id'
+  | 'scheduledAt'
+  | 'status';
 
 export type CompleteChecklistItemInput = {
   itemId: string | number;
@@ -158,6 +242,25 @@ export type CreateTeamInput = {
   name: string;
 };
 
+export type CustomerFilter = {
+  and?: Array<CustomerFilter> | null | undefined;
+  createdAt?: DateFieldComparison | null | undefined;
+  fullName?: StringFieldComparison | null | undefined;
+  id?: IdFilterComparison | null | undefined;
+  or?: Array<CustomerFilter> | null | undefined;
+};
+
+export type CustomerSort = {
+  direction: SortDirection;
+  field: CustomerSortFields;
+  nulls?: SortNulls | null | undefined;
+};
+
+export type CustomerSortFields =
+  | 'createdAt'
+  | 'fullName'
+  | 'id';
+
 export type DateFieldComparison = {
   between?: DateFieldComparisonBetween | null | undefined;
   eq?: unknown;
@@ -200,6 +303,23 @@ export type JobStatus =
   | 'IN_PROGRESS'
   | 'PENDING';
 
+export type JobStatusFilterComparison = {
+  eq?: JobStatus | null | undefined;
+  gt?: JobStatus | null | undefined;
+  gte?: JobStatus | null | undefined;
+  iLike?: JobStatus | null | undefined;
+  in?: Array<JobStatus> | null | undefined;
+  is?: boolean | null | undefined;
+  isNot?: boolean | null | undefined;
+  like?: JobStatus | null | undefined;
+  lt?: JobStatus | null | undefined;
+  lte?: JobStatus | null | undefined;
+  neq?: JobStatus | null | undefined;
+  notILike?: JobStatus | null | undefined;
+  notIn?: Array<JobStatus> | null | undefined;
+  notLike?: JobStatus | null | undefined;
+};
+
 export type LoginInput = {
   email: string;
   password: string;
@@ -212,6 +332,15 @@ export type OffsetPaging = {
   offset?: number | null | undefined;
 };
 
+export type PropertyFilter = {
+  addressLine1?: StringFieldComparison | null | undefined;
+  and?: Array<PropertyFilter> | null | undefined;
+  createdAt?: DateFieldComparison | null | undefined;
+  customerId?: IdFilterComparison | null | undefined;
+  id?: IdFilterComparison | null | undefined;
+  or?: Array<PropertyFilter> | null | undefined;
+};
+
 export type Role =
   | 'ANALYST'
   | 'CUSTOMER_SUPPORT'
@@ -219,6 +348,27 @@ export type Role =
   | 'OPS_MANAGER'
   | 'OWNER'
   | 'SCHEDULER';
+
+export type ServiceFilter = {
+  active?: BooleanFieldComparison | null | undefined;
+  and?: Array<ServiceFilter> | null | undefined;
+  createdAt?: DateFieldComparison | null | undefined;
+  id?: IdFilterComparison | null | undefined;
+  name?: StringFieldComparison | null | undefined;
+  or?: Array<ServiceFilter> | null | undefined;
+};
+
+export type ServiceSort = {
+  direction: SortDirection;
+  field: ServiceSortFields;
+  nulls?: SortNulls | null | undefined;
+};
+
+export type ServiceSortFields =
+  | 'active'
+  | 'createdAt'
+  | 'id'
+  | 'name';
 
 /** Sort Directions */
 export type SortDirection =
@@ -246,6 +396,25 @@ export type StringFieldComparison = {
   notIn?: Array<string> | null | undefined;
   notLike?: string | null | undefined;
 };
+
+export type TeamFilter = {
+  and?: Array<TeamFilter> | null | undefined;
+  createdAt?: DateFieldComparison | null | undefined;
+  id?: IdFilterComparison | null | undefined;
+  name?: StringFieldComparison | null | undefined;
+  or?: Array<TeamFilter> | null | undefined;
+};
+
+export type TeamSort = {
+  direction: SortDirection;
+  field: TeamSortFields;
+  nulls?: SortNulls | null | undefined;
+};
+
+export type TeamSortFields =
+  | 'createdAt'
+  | 'id'
+  | 'name';
 
 export type UpdateAddOnInput = {
   active?: boolean | null | undefined;
@@ -292,10 +461,14 @@ export type UpdateServiceInput = {
   name?: string | null | undefined;
 };
 
-export type AddOnsQueryVariables = Exact<{ [key: string]: never; }>;
+export type AddOnsQueryVariables = Exact<{
+  paging?: OffsetPaging | null | undefined;
+  filter?: AddOnFilter | null | undefined;
+  sorting?: Array<AddOnSort> | AddOnSort | null | undefined;
+}>;
 
 
-export type AddOnsQuery = { addOns: Array<{ id: string, name: string, description: string | null, priceMinorUnits: number, active: boolean }> };
+export type AddOnsQuery = { addOns: { totalCount: number, pageInfo: { hasNextPage: boolean | null, hasPreviousPage: boolean | null }, nodes: Array<{ id: string, name: string, description: string | null, priceMinorUnits: number, active: boolean }> } };
 
 export type CreateAddOnMutationVariables = Exact<{
   input: CreateAddOnInput;
@@ -354,10 +527,14 @@ export type RemoveBookingMutationVariables = Exact<{
 
 export type RemoveBookingMutation = { removeBooking: { id: string } };
 
-export type CleanersQueryVariables = Exact<{ [key: string]: never; }>;
+export type CleanersQueryVariables = Exact<{
+  paging?: OffsetPaging | null | undefined;
+  filter?: CleanerFilter | null | undefined;
+  sorting?: Array<CleanerSort> | CleanerSort | null | undefined;
+}>;
 
 
-export type CleanersQuery = { cleaners: Array<{ id: string, fullName: string, phone: string, email: string, team: { id: string, name: string } | null }> };
+export type CleanersQuery = { cleaners: { totalCount: number, pageInfo: { hasNextPage: boolean | null, hasPreviousPage: boolean | null }, nodes: Array<{ id: string, fullName: string, phone: string, email: string, team: { id: string, name: string } | null }> } };
 
 export type CleanerQueryVariables = Exact<{
   id: string | number;
@@ -401,17 +578,21 @@ export type CurrentAdminQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type CurrentAdminQuery = { currentAdmin: { id: string, role: Role } };
 
-export type CustomersQueryVariables = Exact<{ [key: string]: never; }>;
+export type CustomersQueryVariables = Exact<{
+  paging?: OffsetPaging | null | undefined;
+  filter?: CustomerFilter | null | undefined;
+  sorting?: Array<CustomerSort> | CustomerSort | null | undefined;
+}>;
 
 
-export type CustomersQuery = { customers: Array<{ id: string, fullName: string, email: string, phone: string }> };
+export type CustomersQuery = { customers: { totalCount: number, pageInfo: { hasNextPage: boolean | null, hasPreviousPage: boolean | null }, nodes: Array<{ id: string, fullName: string, email: string, phone: string }> } };
 
 export type CustomerQueryVariables = Exact<{
   id: string | number;
 }>;
 
 
-export type CustomerQuery = { customer: { id: string, fullName: string, email: string, phone: string, notes: string | null, properties: Array<{ id: string, label: string, addressLine1: string, addressLine2: string | null, city: string, region: string, postalCode: string, accessNotes: string | null }> } | null };
+export type CustomerQuery = { customer: { id: string, fullName: string, email: string, phone: string, notes: string | null, properties: { nodes: Array<{ id: string, label: string, addressLine1: string, addressLine2: string | null, city: string, region: string, postalCode: string, accessNotes: string | null }>, pageInfo: { hasNextPage: boolean | null } } } | null };
 
 export type CreateCustomerMutationVariables = Exact<{
   input: CreateCustomerInput;
@@ -435,47 +616,58 @@ export type DisableAdminMutationVariables = Exact<{
 
 export type DisableAdminMutation = { disableAdmin: { id: string, email: string, role: Role, isActive: boolean } };
 
-export type JobFieldsFragment = { id: string, scheduledAt: unknown, status: JobStatus, createdAt: unknown, updatedAt: unknown, booking: { id: string, scheduledAt: unknown, status: BookingStatus, customer: { id: string, fullName: string }, property: { id: string, addressLine1: string }, service: { id: string, name: string }, team: { id: string, name: string } | null }, team: { id: string, name: string } | null, checklist: { id: string, items: Array<{ id: string, label: string, position: number, completed: boolean, completedAt: unknown }> } };
+export type JobFieldsFragment = { id: string, scheduledAt: unknown, status: JobStatus, createdAt: unknown, updatedAt: unknown, booking: { id: string, scheduledAt: unknown, status: BookingStatus, customer: { id: string, fullName: string }, property: { id: string, addressLine1: string }, service: { id: string, name: string }, team: { id: string, name: string } | null }, team: { id: string, name: string } | null, checklist: { id: string, items: { nodes: Array<{ id: string, label: string, position: number, completed: boolean, completedAt: unknown }>, pageInfo: { hasNextPage: boolean | null } } } };
 
-export type JobsQueryVariables = Exact<{ [key: string]: never; }>;
+export type JobsQueryVariables = Exact<{
+  paging?: OffsetPaging | null | undefined;
+  filter?: CleaningJobFilter | null | undefined;
+  sorting?: Array<CleaningJobSort> | CleaningJobSort | null | undefined;
+}>;
 
 
-export type JobsQuery = { jobs: Array<{ id: string, scheduledAt: unknown, status: JobStatus, createdAt: unknown, updatedAt: unknown, booking: { id: string, scheduledAt: unknown, status: BookingStatus, customer: { id: string, fullName: string }, property: { id: string, addressLine1: string }, service: { id: string, name: string }, team: { id: string, name: string } | null }, team: { id: string, name: string } | null, checklist: { id: string, items: Array<{ id: string, label: string, position: number, completed: boolean, completedAt: unknown }> } }> };
+export type JobsQuery = { jobs: { totalCount: number, pageInfo: { hasNextPage: boolean | null, hasPreviousPage: boolean | null }, nodes: Array<{ id: string, scheduledAt: unknown, status: JobStatus, createdAt: unknown, updatedAt: unknown, booking: { id: string, scheduledAt: unknown, status: BookingStatus, customer: { id: string, fullName: string }, property: { id: string, addressLine1: string }, service: { id: string, name: string }, team: { id: string, name: string } | null }, team: { id: string, name: string } | null, checklist: { id: string, items: { nodes: Array<{ id: string, label: string, position: number, completed: boolean, completedAt: unknown }>, pageInfo: { hasNextPage: boolean | null } } } }> } };
 
 export type JobQueryVariables = Exact<{
   id: string | number;
 }>;
 
 
-export type JobQuery = { job: { id: string, scheduledAt: unknown, status: JobStatus, createdAt: unknown, updatedAt: unknown, booking: { id: string, scheduledAt: unknown, status: BookingStatus, customer: { id: string, fullName: string }, property: { id: string, addressLine1: string }, service: { id: string, name: string }, team: { id: string, name: string } | null }, team: { id: string, name: string } | null, checklist: { id: string, items: Array<{ id: string, label: string, position: number, completed: boolean, completedAt: unknown }> } } | null };
+export type JobQuery = { job: { id: string, scheduledAt: unknown, status: JobStatus, createdAt: unknown, updatedAt: unknown, booking: { id: string, scheduledAt: unknown, status: BookingStatus, customer: { id: string, fullName: string }, property: { id: string, addressLine1: string }, service: { id: string, name: string }, team: { id: string, name: string } | null }, team: { id: string, name: string } | null, checklist: { id: string, items: { nodes: Array<{ id: string, label: string, position: number, completed: boolean, completedAt: unknown }>, pageInfo: { hasNextPage: boolean | null } } } } | null };
+
+export type JobByBookingQueryVariables = Exact<{
+  bookingId: string | number;
+}>;
+
+
+export type JobByBookingQuery = { jobs: { nodes: Array<{ id: string }> } };
 
 export type CreateJobFromBookingMutationVariables = Exact<{
   input: CreateJobFromBookingInput;
 }>;
 
 
-export type CreateJobFromBookingMutation = { createJobFromBooking: { id: string, scheduledAt: unknown, status: JobStatus, createdAt: unknown, updatedAt: unknown, booking: { id: string, scheduledAt: unknown, status: BookingStatus, customer: { id: string, fullName: string }, property: { id: string, addressLine1: string }, service: { id: string, name: string }, team: { id: string, name: string } | null }, team: { id: string, name: string } | null, checklist: { id: string, items: Array<{ id: string, label: string, position: number, completed: boolean, completedAt: unknown }> } } };
+export type CreateJobFromBookingMutation = { createJobFromBooking: { id: string, scheduledAt: unknown, status: JobStatus, createdAt: unknown, updatedAt: unknown, booking: { id: string, scheduledAt: unknown, status: BookingStatus, customer: { id: string, fullName: string }, property: { id: string, addressLine1: string }, service: { id: string, name: string }, team: { id: string, name: string } | null }, team: { id: string, name: string } | null, checklist: { id: string, items: { nodes: Array<{ id: string, label: string, position: number, completed: boolean, completedAt: unknown }>, pageInfo: { hasNextPage: boolean | null } } } } };
 
 export type AssignTeamToJobMutationVariables = Exact<{
   input: AssignTeamToJobInput;
 }>;
 
 
-export type AssignTeamToJobMutation = { assignTeamToJob: { id: string, scheduledAt: unknown, status: JobStatus, createdAt: unknown, updatedAt: unknown, booking: { id: string, scheduledAt: unknown, status: BookingStatus, customer: { id: string, fullName: string }, property: { id: string, addressLine1: string }, service: { id: string, name: string }, team: { id: string, name: string } | null }, team: { id: string, name: string } | null, checklist: { id: string, items: Array<{ id: string, label: string, position: number, completed: boolean, completedAt: unknown }> } } };
+export type AssignTeamToJobMutation = { assignTeamToJob: { id: string, scheduledAt: unknown, status: JobStatus, createdAt: unknown, updatedAt: unknown, booking: { id: string, scheduledAt: unknown, status: BookingStatus, customer: { id: string, fullName: string }, property: { id: string, addressLine1: string }, service: { id: string, name: string }, team: { id: string, name: string } | null }, team: { id: string, name: string } | null, checklist: { id: string, items: { nodes: Array<{ id: string, label: string, position: number, completed: boolean, completedAt: unknown }>, pageInfo: { hasNextPage: boolean | null } } } } };
 
 export type CompleteChecklistItemMutationVariables = Exact<{
   input: CompleteChecklistItemInput;
 }>;
 
 
-export type CompleteChecklistItemMutation = { completeChecklistItem: { id: string, scheduledAt: unknown, status: JobStatus, createdAt: unknown, updatedAt: unknown, booking: { id: string, scheduledAt: unknown, status: BookingStatus, customer: { id: string, fullName: string }, property: { id: string, addressLine1: string }, service: { id: string, name: string }, team: { id: string, name: string } | null }, team: { id: string, name: string } | null, checklist: { id: string, items: Array<{ id: string, label: string, position: number, completed: boolean, completedAt: unknown }> } } };
+export type CompleteChecklistItemMutation = { completeChecklistItem: { id: string, scheduledAt: unknown, status: JobStatus, createdAt: unknown, updatedAt: unknown, booking: { id: string, scheduledAt: unknown, status: BookingStatus, customer: { id: string, fullName: string }, property: { id: string, addressLine1: string }, service: { id: string, name: string }, team: { id: string, name: string } | null }, team: { id: string, name: string } | null, checklist: { id: string, items: { nodes: Array<{ id: string, label: string, position: number, completed: boolean, completedAt: unknown }>, pageInfo: { hasNextPage: boolean | null } } } } };
 
 export type CompleteJobMutationVariables = Exact<{
   input: CompleteJobInput;
 }>;
 
 
-export type CompleteJobMutation = { completeJob: { id: string, scheduledAt: unknown, status: JobStatus, createdAt: unknown, updatedAt: unknown, booking: { id: string, scheduledAt: unknown, status: BookingStatus, customer: { id: string, fullName: string }, property: { id: string, addressLine1: string }, service: { id: string, name: string }, team: { id: string, name: string } | null }, team: { id: string, name: string } | null, checklist: { id: string, items: Array<{ id: string, label: string, position: number, completed: boolean, completedAt: unknown }> } } };
+export type CompleteJobMutation = { completeJob: { id: string, scheduledAt: unknown, status: JobStatus, createdAt: unknown, updatedAt: unknown, booking: { id: string, scheduledAt: unknown, status: BookingStatus, customer: { id: string, fullName: string }, property: { id: string, addressLine1: string }, service: { id: string, name: string }, team: { id: string, name: string } | null }, team: { id: string, name: string } | null, checklist: { id: string, items: { nodes: Array<{ id: string, label: string, position: number, completed: boolean, completedAt: unknown }>, pageInfo: { hasNextPage: boolean | null } } } } };
 
 export type LoginMutationVariables = Exact<{
   loginInput: LoginInput;
@@ -491,10 +683,12 @@ export type LogoutMutation = { logout: boolean };
 
 export type CustomerPropertiesQueryVariables = Exact<{
   customerId: string | number;
+  paging?: OffsetPaging | null | undefined;
+  filter?: PropertyFilter | null | undefined;
 }>;
 
 
-export type CustomerPropertiesQuery = { customerProperties: Array<{ id: string, label: string, addressLine1: string }> };
+export type CustomerPropertiesQuery = { customerProperties: { totalCount: number, pageInfo: { hasNextPage: boolean | null, hasPreviousPage: boolean | null }, nodes: Array<{ id: string, label: string, addressLine1: string }> } };
 
 export type CreatePropertyMutationVariables = Exact<{
   customerId: string | number;
@@ -512,10 +706,14 @@ export type UpdatePropertyMutationVariables = Exact<{
 
 export type UpdatePropertyMutation = { updateProperty: { id: string } };
 
-export type ServicesQueryVariables = Exact<{ [key: string]: never; }>;
+export type ServicesQueryVariables = Exact<{
+  paging?: OffsetPaging | null | undefined;
+  filter?: ServiceFilter | null | undefined;
+  sorting?: Array<ServiceSort> | ServiceSort | null | undefined;
+}>;
 
 
-export type ServicesQuery = { services: Array<{ id: string, name: string, durationMinutes: number, active: boolean, activePricing: { priceMinorUnits: number } | null }> };
+export type ServicesQuery = { services: { totalCount: number, pageInfo: { hasNextPage: boolean | null, hasPreviousPage: boolean | null }, nodes: Array<{ id: string, name: string, durationMinutes: number, active: boolean, activePricing: { priceMinorUnits: number } | null }> } };
 
 export type ServiceQueryVariables = Exact<{
   id: string | number;
@@ -546,17 +744,21 @@ export type CreatePricingRuleMutationVariables = Exact<{
 
 export type CreatePricingRuleMutation = { createPricingRule: { id: string, priceMinorUnits: number } };
 
-export type TeamsQueryVariables = Exact<{ [key: string]: never; }>;
+export type TeamsQueryVariables = Exact<{
+  paging?: OffsetPaging | null | undefined;
+  filter?: TeamFilter | null | undefined;
+  sorting?: Array<TeamSort> | TeamSort | null | undefined;
+}>;
 
 
-export type TeamsQuery = { teams: Array<{ id: string, name: string, cleaners: Array<{ id: string }> }> };
+export type TeamsQuery = { teams: { totalCount: number, pageInfo: { hasNextPage: boolean | null, hasPreviousPage: boolean | null }, nodes: Array<{ id: string, name: string, cleaners: { nodes: Array<{ id: string }>, pageInfo: { hasNextPage: boolean | null } } }> } };
 
 export type TeamQueryVariables = Exact<{
   id: string | number;
 }>;
 
 
-export type TeamQuery = { team: { id: string, name: string, cleaners: Array<{ id: string, fullName: string, phone: string, email: string }> } | null };
+export type TeamQuery = { team: { id: string, name: string, cleaners: { nodes: Array<{ id: string, fullName: string, phone: string, email: string }>, pageInfo: { hasNextPage: boolean | null } } } | null };
 
 export type CreateTeamMutationVariables = Exact<{
   input: CreateTeamInput;
@@ -599,24 +801,36 @@ export const JobFieldsFragmentDoc = gql`
   }
   checklist {
     id
-    items {
-      id
-      label
-      position
-      completed
-      completedAt
+    items(paging: { limit: 20 }) {
+      nodes {
+        id
+        label
+        position
+        completed
+        completedAt
+      }
+      pageInfo {
+        hasNextPage
+      }
     }
   }
 }
     `;
 export const AddOnsDocument = gql`
-    query AddOns {
-  addOns {
-    id
-    name
-    description
-    priceMinorUnits
-    active
+    query AddOns($paging: OffsetPaging, $filter: AddOnFilter, $sorting: [AddOnSort!]) {
+  addOns(paging: $paging, filter: $filter, sorting: $sorting) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+    }
+    nodes {
+      id
+      name
+      description
+      priceMinorUnits
+      active
+    }
   }
 }
     `;
@@ -633,6 +847,9 @@ export const AddOnsDocument = gql`
  * @example
  * const { data, loading, error } = useAddOnsQuery({
  *   variables: {
+ *      paging: // value for 'paging'
+ *      filter: // value for 'filter'
+ *      sorting: // value for 'sorting'
  *   },
  * });
  */
@@ -1004,15 +1221,22 @@ export type RemoveBookingMutationHookResult = ReturnType<typeof useRemoveBooking
 export type RemoveBookingMutationResult = Apollo.MutationResult<RemoveBookingMutation>;
 export type RemoveBookingMutationOptions = Apollo.BaseMutationOptions<RemoveBookingMutation, RemoveBookingMutationVariables>;
 export const CleanersDocument = gql`
-    query Cleaners {
-  cleaners {
-    id
-    fullName
-    phone
-    email
-    team {
+    query Cleaners($paging: OffsetPaging, $filter: CleanerFilter, $sorting: [CleanerSort!]) {
+  cleaners(paging: $paging, filter: $filter, sorting: $sorting) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+    }
+    nodes {
       id
-      name
+      fullName
+      phone
+      email
+      team {
+        id
+        name
+      }
     }
   }
 }
@@ -1030,6 +1254,9 @@ export const CleanersDocument = gql`
  * @example
  * const { data, loading, error } = useCleanersQuery({
  *   variables: {
+ *      paging: // value for 'paging'
+ *      filter: // value for 'filter'
+ *      sorting: // value for 'sorting'
  *   },
  * });
  */
@@ -1284,12 +1511,19 @@ export type CurrentAdminLazyQueryHookResult = ReturnType<typeof useCurrentAdminL
 export type CurrentAdminSuspenseQueryHookResult = ReturnType<typeof useCurrentAdminSuspenseQuery>;
 export type CurrentAdminQueryResult = Apollo.QueryResult<CurrentAdminQuery, CurrentAdminQueryVariables>;
 export const CustomersDocument = gql`
-    query Customers {
-  customers {
-    id
-    fullName
-    email
-    phone
+    query Customers($paging: OffsetPaging, $filter: CustomerFilter, $sorting: [CustomerSort!]) {
+  customers(paging: $paging, filter: $filter, sorting: $sorting) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+    }
+    nodes {
+      id
+      fullName
+      email
+      phone
+    }
   }
 }
     `;
@@ -1306,6 +1540,9 @@ export const CustomersDocument = gql`
  * @example
  * const { data, loading, error } = useCustomersQuery({
  *   variables: {
+ *      paging: // value for 'paging'
+ *      filter: // value for 'filter'
+ *      sorting: // value for 'sorting'
  *   },
  * });
  */
@@ -1336,15 +1573,20 @@ export const CustomerDocument = gql`
     email
     phone
     notes
-    properties {
-      id
-      label
-      addressLine1
-      addressLine2
-      city
-      region
-      postalCode
-      accessNotes
+    properties(paging: { limit: 100 }) {
+      nodes {
+        id
+        label
+        addressLine1
+        addressLine2
+        city
+        region
+        postalCode
+        accessNotes
+      }
+      pageInfo {
+        hasNextPage
+      }
     }
   }
 }
@@ -1489,9 +1731,16 @@ export type DisableAdminMutationHookResult = ReturnType<typeof useDisableAdminMu
 export type DisableAdminMutationResult = Apollo.MutationResult<DisableAdminMutation>;
 export type DisableAdminMutationOptions = Apollo.BaseMutationOptions<DisableAdminMutation, DisableAdminMutationVariables>;
 export const JobsDocument = gql`
-    query Jobs {
-  jobs {
-    ...JobFields
+    query Jobs($paging: OffsetPaging, $filter: CleaningJobFilter, $sorting: [CleaningJobSort!]) {
+  jobs(paging: $paging, filter: $filter, sorting: $sorting) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+    }
+    nodes {
+      ...JobFields
+    }
   }
 }
     ${JobFieldsFragmentDoc}`;
@@ -1508,6 +1757,9 @@ export const JobsDocument = gql`
  * @example
  * const { data, loading, error } = useJobsQuery({
  *   variables: {
+ *      paging: // value for 'paging'
+ *      filter: // value for 'filter'
+ *      sorting: // value for 'sorting'
  *   },
  * });
  */
@@ -1573,6 +1825,51 @@ export type JobQueryHookResult = ReturnType<typeof useJobQuery>;
 export type JobLazyQueryHookResult = ReturnType<typeof useJobLazyQuery>;
 export type JobSuspenseQueryHookResult = ReturnType<typeof useJobSuspenseQuery>;
 export type JobQueryResult = Apollo.QueryResult<JobQuery, JobQueryVariables>;
+export const JobByBookingDocument = gql`
+    query JobByBooking($bookingId: ID!) {
+  jobs(filter: { booking: { id: { eq: $bookingId } } }, paging: { limit: 1 }) {
+    nodes {
+      id
+    }
+  }
+}
+    `;
+
+/**
+ * __useJobByBookingQuery__
+ *
+ * To run a query within a React component, call `useJobByBookingQuery` and pass it any options that fit your needs.
+ * When your component renders, `useJobByBookingQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useJobByBookingQuery({
+ *   variables: {
+ *      bookingId: // value for 'bookingId'
+ *   },
+ * });
+ */
+export function useJobByBookingQuery(baseOptions: Apollo.QueryHookOptions<JobByBookingQuery, JobByBookingQueryVariables> & ({ variables: JobByBookingQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<JobByBookingQuery, JobByBookingQueryVariables>(JobByBookingDocument, options);
+      }
+export function useJobByBookingLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<JobByBookingQuery, JobByBookingQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<JobByBookingQuery, JobByBookingQueryVariables>(JobByBookingDocument, options);
+        }
+// @ts-ignore
+export function useJobByBookingSuspenseQuery(baseOptions?: Apollo.SuspenseQueryHookOptions<JobByBookingQuery, JobByBookingQueryVariables>): Apollo.UseSuspenseQueryResult<JobByBookingQuery, JobByBookingQueryVariables>;
+export function useJobByBookingSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<JobByBookingQuery, JobByBookingQueryVariables>): Apollo.UseSuspenseQueryResult<JobByBookingQuery | undefined, JobByBookingQueryVariables>;
+export function useJobByBookingSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<JobByBookingQuery, JobByBookingQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<JobByBookingQuery, JobByBookingQueryVariables>(JobByBookingDocument, options);
+        }
+export type JobByBookingQueryHookResult = ReturnType<typeof useJobByBookingQuery>;
+export type JobByBookingLazyQueryHookResult = ReturnType<typeof useJobByBookingLazyQuery>;
+export type JobByBookingSuspenseQueryHookResult = ReturnType<typeof useJobByBookingSuspenseQuery>;
+export type JobByBookingQueryResult = Apollo.QueryResult<JobByBookingQuery, JobByBookingQueryVariables>;
 export const CreateJobFromBookingDocument = gql`
     mutation CreateJobFromBooking($input: CreateJobFromBookingInput!) {
   createJobFromBooking(input: $input) {
@@ -1773,11 +2070,18 @@ export type LogoutMutationHookResult = ReturnType<typeof useLogoutMutation>;
 export type LogoutMutationResult = Apollo.MutationResult<LogoutMutation>;
 export type LogoutMutationOptions = Apollo.BaseMutationOptions<LogoutMutation, LogoutMutationVariables>;
 export const CustomerPropertiesDocument = gql`
-    query CustomerProperties($customerId: ID!) {
-  customerProperties(customerId: $customerId) {
-    id
-    label
-    addressLine1
+    query CustomerProperties($customerId: ID!, $paging: OffsetPaging, $filter: PropertyFilter) {
+  customerProperties(customerId: $customerId, paging: $paging, filter: $filter) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+    }
+    nodes {
+      id
+      label
+      addressLine1
+    }
   }
 }
     `;
@@ -1795,6 +2099,8 @@ export const CustomerPropertiesDocument = gql`
  * const { data, loading, error } = useCustomerPropertiesQuery({
  *   variables: {
  *      customerId: // value for 'customerId'
+ *      paging: // value for 'paging'
+ *      filter: // value for 'filter'
  *   },
  * });
  */
@@ -1886,14 +2192,21 @@ export type UpdatePropertyMutationHookResult = ReturnType<typeof useUpdateProper
 export type UpdatePropertyMutationResult = Apollo.MutationResult<UpdatePropertyMutation>;
 export type UpdatePropertyMutationOptions = Apollo.BaseMutationOptions<UpdatePropertyMutation, UpdatePropertyMutationVariables>;
 export const ServicesDocument = gql`
-    query Services {
-  services {
-    id
-    name
-    durationMinutes
-    active
-    activePricing {
-      priceMinorUnits
+    query Services($paging: OffsetPaging, $filter: ServiceFilter, $sorting: [ServiceSort!]) {
+  services(paging: $paging, filter: $filter, sorting: $sorting) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+    }
+    nodes {
+      id
+      name
+      durationMinutes
+      active
+      activePricing {
+        priceMinorUnits
+      }
     }
   }
 }
@@ -1911,6 +2224,9 @@ export const ServicesDocument = gql`
  * @example
  * const { data, loading, error } = useServicesQuery({
  *   variables: {
+ *      paging: // value for 'paging'
+ *      filter: // value for 'filter'
+ *      sorting: // value for 'sorting'
  *   },
  * });
  */
@@ -2086,12 +2402,24 @@ export type CreatePricingRuleMutationHookResult = ReturnType<typeof useCreatePri
 export type CreatePricingRuleMutationResult = Apollo.MutationResult<CreatePricingRuleMutation>;
 export type CreatePricingRuleMutationOptions = Apollo.BaseMutationOptions<CreatePricingRuleMutation, CreatePricingRuleMutationVariables>;
 export const TeamsDocument = gql`
-    query Teams {
-  teams {
-    id
-    name
-    cleaners {
+    query Teams($paging: OffsetPaging, $filter: TeamFilter, $sorting: [TeamSort!]) {
+  teams(paging: $paging, filter: $filter, sorting: $sorting) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+    }
+    nodes {
       id
+      name
+      cleaners(paging: { limit: 100 }) {
+        nodes {
+          id
+        }
+        pageInfo {
+          hasNextPage
+        }
+      }
     }
   }
 }
@@ -2109,6 +2437,9 @@ export const TeamsDocument = gql`
  * @example
  * const { data, loading, error } = useTeamsQuery({
  *   variables: {
+ *      paging: // value for 'paging'
+ *      filter: // value for 'filter'
+ *      sorting: // value for 'sorting'
  *   },
  * });
  */
@@ -2136,11 +2467,16 @@ export const TeamDocument = gql`
   team(id: $id) {
     id
     name
-    cleaners {
-      id
-      fullName
-      phone
-      email
+    cleaners(paging: { limit: 100 }) {
+      nodes {
+        id
+        fullName
+        phone
+        email
+      }
+      pageInfo {
+        hasNextPage
+      }
     }
   }
 }
