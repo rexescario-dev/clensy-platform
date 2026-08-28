@@ -13,8 +13,8 @@ import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
 import type { AuthenticatedPrincipal } from '../../../../platform/auth/domain/authenticated-principal';
 import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
-import { toBookingType } from '../../../bookings/presentation/graphql/mappers';
-import { BookingType } from '../../../bookings/presentation/graphql/booking.type';
+import { toBookingDto } from '../../../bookings/presentation/graphql/mappers';
+import { BookingDTO } from '../../../bookings/presentation/graphql/booking.dto';
 import { toTeamType } from '../../../cleaners/presentation/graphql/mappers';
 import { TeamType } from '../../../cleaners/presentation/graphql/team.type';
 import { JobsService } from '../../application/services/jobs.service';
@@ -127,12 +127,12 @@ export class JobResolver {
     return toCleaningJobType(job);
   }
 
-  @ResolveField(() => BookingType)
+  @ResolveField(() => BookingDTO)
   async booking(
     @Parent() job: Pick<CleaningJob, 'bookingId'>,
-  ): Promise<BookingType> {
+  ): Promise<BookingDTO> {
     const booking = await this.loaders.bookingLoader.load(job.bookingId);
-    return toBookingType(booking!);
+    return toBookingDto(booking!);
   }
 
   @ResolveField(() => TeamType, { nullable: true })

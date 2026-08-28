@@ -1,3 +1,4 @@
+import { FilterableField } from '@ptc-org/nestjs-query-graphql';
 import { Field, ID, Int, ObjectType } from '@nestjs/graphql';
 import { PricingRuleType } from './pricing-rule.type';
 
@@ -13,10 +14,10 @@ import { PricingRuleType } from './pricing-rule.type';
 // parent object carries for that key.
 @ObjectType('Service')
 export class ServiceType {
-  @Field(() => ID)
+  @FilterableField(() => ID)
   id!: string;
 
-  @Field()
+  @FilterableField()
   name!: string;
 
   @Field(() => String, { nullable: true })

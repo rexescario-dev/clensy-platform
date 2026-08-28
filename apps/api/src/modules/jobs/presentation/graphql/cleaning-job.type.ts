@@ -1,5 +1,5 @@
 import { Field, ID, ObjectType, registerEnumType } from '@nestjs/graphql';
-import { BookingType } from '../../../bookings/presentation/graphql/booking.type';
+import { BookingDTO } from '../../../bookings/presentation/graphql/booking.dto';
 import { TeamType } from '../../../cleaners/presentation/graphql/team.type';
 import { JobStatus } from '../../domain/job-status';
 import { ChecklistType } from './checklist.type';
@@ -26,8 +26,8 @@ export class CleaningJobType {
   @Field()
   updatedAt!: Date;
 
-  @Field(() => BookingType)
-  booking!: BookingType;
+  @Field(() => BookingDTO)
+  booking!: BookingDTO;
 
   @Field(() => TeamType, { nullable: true })
   team!: TeamType | null;

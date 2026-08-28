@@ -1,4 +1,5 @@
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
+import { NestjsQueryGraphQLModule } from '@ptc-org/nestjs-query-graphql';
 import { Module } from '@nestjs/common';
 import { GraphQLModule as NestGraphQLModule } from '@nestjs/graphql';
 import type { Request, Response } from 'express';
@@ -34,6 +35,7 @@ const isProduction = process.env.NODE_ENV === 'production';
         res,
       }),
     }),
+    NestjsQueryGraphQLModule.forRoot({}),
   ],
   controllers: isProduction ? [] : [GraphiqlController],
 })

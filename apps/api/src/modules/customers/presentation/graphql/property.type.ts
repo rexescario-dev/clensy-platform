@@ -1,3 +1,4 @@
+import { FilterableField } from '@ptc-org/nestjs-query-graphql';
 import { Field, ID, ObjectType } from '@nestjs/graphql';
 
 // Explicit, hand-defined presentation type — never `Property` (the domain
@@ -5,7 +6,7 @@ import { Field, ID, ObjectType } from '@nestjs/graphql';
 // GraphQL type (spec §4.5).
 @ObjectType('Property')
 export class PropertyType {
-  @Field(() => ID)
+  @FilterableField(() => ID)
   id!: string;
 
   @Field(() => ID)
@@ -14,7 +15,7 @@ export class PropertyType {
   @Field()
   label!: string;
 
-  @Field()
+  @FilterableField()
   addressLine1!: string;
 
   @Field(() => String, { nullable: true })

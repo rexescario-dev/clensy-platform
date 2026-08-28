@@ -4,8 +4,9 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { AppModule } from '../src/app/app.module';
+import { countSqlMentioning, withCapturedSql } from './helpers/capture-sql';
 import { BookingsService } from '../src/modules/bookings/application/services/bookings.service';
 import { TeamsService } from '../src/modules/cleaners/application/services/teams.service';
 import { CustomersService } from '../src/modules/customers/application/services/customers.service';
@@ -30,6 +31,7 @@ describe('Jobs (e2e)', () => {
   let teamsService: TeamsService;
   let bookingsService: BookingsService;
   let jobsService: JobsService;
+  let dataSource: DataSource;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -56,6 +58,7 @@ describe('Jobs (e2e)', () => {
     teamsService = moduleFixture.get(TeamsService);
     bookingsService = moduleFixture.get(BookingsService);
     jobsService = moduleFixture.get(JobsService, { strict: false });
+    dataSource = moduleFixture.get(DataSource);
   }, 30000);
 
   afterAll(async () => {
@@ -500,6 +503,25 @@ describe('Jobs (e2e)', () => {
     getTeamsByIdsSpy.mockRestore();
     getChecklistsByJobIdsSpy.mockRestore();
     getChecklistItemsByChecklistIdsSpy.mockRestore();
+
+    const { result: nestedCustomerResponse, queries: nestedCustomerQueries } =
+      await withCapturedSql(dataSource, () =>
+        authedRequest(ownerSessionCookie).send({
+          query: `query JobsNestedBookingCustomer {
+        jobs { booking { customer { fullName } } }
+      }`,
+        }),
+      );
+    expect(nestedCustomerResponse.body.errors).toBeUndefined();
+    const nestedJobCount = nestedCustomerResponse.body.data.jobs
+      .length as number;
+    expect(nestedJobCount).toBeGreaterThanOrEqual(2);
+    const customerSqlCount = countSqlMentioning(
+      nestedCustomerQueries,
+      'customer_entity',
+    );
+    expect(customerSqlCount).toBeGreaterThan(0);
+    expect(customerSqlCount).toBeLessThan(nestedJobCount);
 
     // --- Step 5: RBAC — view all six roles; create Owner/Ops/Scheduler/CS;
     // assign/complete Owner/Ops/Scheduler only (spec §4.3). ---

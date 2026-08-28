@@ -13,7 +13,8 @@ import { CustomerResolver } from '../../../customers/presentation/graphql/custom
 import { PropertyResolver } from '../../../customers/presentation/graphql/property.resolver';
 import { ServiceResolver } from '../../../catalog/presentation/graphql/service.resolver';
 import { TeamResolver } from '../../../cleaners/presentation/graphql/team.resolver';
-import { BookingResolver } from '../../../bookings/presentation/graphql/booking.resolver';
+import { BookingReadResolver } from '../../../bookings/presentation/graphql/booking-read.resolver';
+import { BookingMutationResolver } from '../../../bookings/presentation/graphql/booking.resolver';
 import { ChecklistResolver } from '../../presentation/graphql/checklist.resolver';
 import { JobResolver } from '../../presentation/graphql/job.resolver';
 
@@ -97,7 +98,8 @@ describe('JobResolver', () => {
       const schema = await schemaFactory.create([
         JobResolver,
         ChecklistResolver,
-        BookingResolver,
+        BookingReadResolver,
+        BookingMutationResolver,
         CustomerResolver,
         PropertyResolver,
         ServiceResolver,

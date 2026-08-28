@@ -4,15 +4,17 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { AppModule } from '../src/app/app.module';
 import { AuditEventEntity } from '../src/platform/audit/infrastructure/persistence/audit-event.entity';
 import { AdminUserEntity } from '../src/modules/admins/infrastructure/persistence/admin-user.entity';
+import { BookingsService } from '../src/modules/bookings/application/services/bookings.service';
 import { CustomersService } from '../src/modules/customers/application/services/customers.service';
 import { PropertiesService } from '../src/modules/customers/application/services/properties.service';
 import { ServicesService } from '../src/modules/catalog/application/services/services.service';
 import { TeamsService } from '../src/modules/cleaners/application/services/teams.service';
 import { Role } from '../src/platform/auth/domain/role';
+import { countSqlMentioning, withCapturedSql } from './helpers/capture-sql';
 import { seedOwner } from './helpers/seed-owner';
 
 // Proves the resolver -> guard -> service -> loader -> database wiring
@@ -41,6 +43,8 @@ describe('Bookings (e2e)', () => {
   let propertiesService: PropertiesService;
   let servicesService: ServicesService;
   let teamsService: TeamsService;
+  let bookingsService: BookingsService;
+  let dataSource: DataSource;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -68,6 +72,8 @@ describe('Bookings (e2e)', () => {
     propertiesService = moduleFixture.get(PropertiesService);
     servicesService = moduleFixture.get(ServicesService);
     teamsService = moduleFixture.get(TeamsService);
+    bookingsService = moduleFixture.get(BookingsService);
+    dataSource = moduleFixture.get(DataSource);
   });
 
   afterAll(async () => {
@@ -141,6 +147,40 @@ describe('Bookings (e2e)', () => {
       }
     }
   `;
+
+  const BOOKINGS_BATCH_QUERY = `
+    query BookingsBatch($customerId: ID!) {
+      bookings(filter: { customer: { id: { eq: $customerId } } }) {
+        id
+        customer { fullName }
+        property { addressLine1 }
+        service { name }
+        team { name }
+      }
+    }
+  `;
+
+  const BOOKINGS_NO_TEAM_QUERY = `
+    query BookingsNoTeam($customerId: ID!) {
+      bookings(filter: { customer: { id: { eq: $customerId } } }) {
+        id
+        customer { fullName }
+      }
+    }
+  `;
+
+  const MISSING_BOOKING_QUERY = `
+    query MissingBooking {
+      booking(id: "00000000-0000-0000-0000-000000000099") { id }
+    }
+  `;
+
+  const RELATION_TABLES = [
+    'customer_entity',
+    'property_entity',
+    'service_entity',
+    'team_entity',
+  ] as const;
 
   function extractSessionCookie(response: request.Response): string {
     const setCookieHeader = response.headers['set-cookie'] as unknown as
@@ -384,39 +424,85 @@ describe('Bookings (e2e)', () => {
     });
     expect(omitTeamResponse.body.data.updateBooking.team).toBeNull();
 
-    // --- Step 5: batching/query-count proof (spec §4.5) — spies wrap the
-    // REAL implementations so the actual batched DB calls happen; only call
-    // count/arguments are inspected. The bulk methods aren't exposed as
-    // named exports on a single loaders object the way Catalog's is, so
-    // each owning module's own service is spied on directly. ---
-    const getCustomersByIdsSpy = jest.spyOn(
-      customersService,
-      'getCustomersByIds',
-    );
-    const getPropertiesByIdsSpy = jest.spyOn(
-      propertiesService,
-      'getPropertiesByIds',
-    );
-    const getServicesByIdsSpy = jest.spyOn(servicesService, 'getServicesByIds');
-    const getTeamsByIdsSpy = jest.spyOn(teamsService, 'getTeamsByIds');
-
-    const bookingsBatchResponse = await authedRequest(ownerSessionCookie).send({
-      query: BOOKINGS_QUERY,
+    // --- Step 5: SQL O(1) in N (spec §4.8) — same four-relation list at
+    // N=6 and N=12. Counts must be constant in N, not per-parent. ---
+    const batchFixture = await createFixture(`${runId}-batch`, 5500);
+    const batchPricing = await authedRequest(ownerSessionCookie).send({
+      query: `mutation CreatePricingRule($input: CreatePricingRuleInput!) {
+        createPricingRule(input: $input) { id }
+      }`,
+      variables: {
+        input: { serviceId: batchFixture.service.id, priceMinorUnits: 5500 },
+      },
     });
-    expect(bookingsBatchResponse.body.errors).toBeUndefined();
-    const bookingsRows: Array<{ id: string }> =
-      bookingsBatchResponse.body.data.bookings;
-    expect(bookingsRows.length).toBeGreaterThanOrEqual(2);
+    expect(batchPricing.body.errors).toBeUndefined();
 
-    expect(getCustomersByIdsSpy).toHaveBeenCalledTimes(1);
-    expect(getPropertiesByIdsSpy).toHaveBeenCalledTimes(1);
-    expect(getServicesByIdsSpy).toHaveBeenCalledTimes(1);
-    expect(getTeamsByIdsSpy).toHaveBeenCalledTimes(1);
+    const seedBatchBookings = async (count: number, dayOffset: number) => {
+      for (let index = 0; index < count; index += 1) {
+        const day = String(dayOffset + index + 1).padStart(2, '0');
+        await bookingsService.create({
+          actorId: owner.id,
+          customerId: batchFixture.customer.id,
+          propertyId: batchFixture.property.id,
+          serviceId: batchFixture.service.id,
+          teamId: batchFixture.team.id,
+          scheduledAt: new Date(`2026-10-${day}T09:00:00.000Z`),
+        });
+      }
+    };
 
-    getCustomersByIdsSpy.mockRestore();
-    getPropertiesByIdsSpy.mockRestore();
-    getServicesByIdsSpy.mockRestore();
-    getTeamsByIdsSpy.mockRestore();
+    await seedBatchBookings(6, 0);
+
+    const captureAtN = async (expectedN: number) => {
+      const { result: response, queries } = await withCapturedSql(
+        dataSource,
+        () =>
+          authedRequest(ownerSessionCookie).send({
+            query: BOOKINGS_BATCH_QUERY,
+            variables: { customerId: batchFixture.customer.id },
+          }),
+      );
+      expect(response.body.errors).toBeUndefined();
+      expect(response.body.data.bookings).toHaveLength(expectedN);
+      return {
+        queries,
+        counts: Object.fromEntries(
+          RELATION_TABLES.map((table) => [
+            table,
+            countSqlMentioning(queries, table),
+          ]),
+        ) as Record<(typeof RELATION_TABLES)[number], number>,
+      };
+    };
+
+    const atSix = await captureAtN(6);
+    await seedBatchBookings(6, 6);
+    const atTwelve = await captureAtN(12);
+
+    for (const table of RELATION_TABLES) {
+      expect(atSix.counts[table]).toBeGreaterThan(0);
+      expect(atTwelve.counts[table]).toBe(atSix.counts[table]);
+      expect(atSix.counts[table]).toBeLessThan(6);
+      expect(atTwelve.counts[table]).toBeLessThan(12);
+    }
+
+    const { result: noTeamResponse, queries: noTeamQueries } =
+      await withCapturedSql(dataSource, () =>
+        authedRequest(ownerSessionCookie).send({
+          query: BOOKINGS_NO_TEAM_QUERY,
+          variables: { customerId: batchFixture.customer.id },
+        }),
+      );
+    expect(noTeamResponse.body.errors).toBeUndefined();
+    expect(countSqlMentioning(noTeamQueries, 'team_entity')).toBe(0);
+
+    const missingBookingResponse = await authedRequest(ownerSessionCookie).send(
+      {
+        query: MISSING_BOOKING_QUERY,
+      },
+    );
+    expect(missingBookingResponse.body.errors?.length).toBeGreaterThan(0);
+    expect(missingBookingResponse.body.data?.booking ?? null).toBeNull();
 
     // --- Step 6: negative validation cases — each rejected, no row
     // persisted, none reaching the next validation step. ---
@@ -617,5 +703,5 @@ describe('Bookings (e2e)', () => {
         'FORBIDDEN',
       );
     }
-  });
+  }, 120000);
 });

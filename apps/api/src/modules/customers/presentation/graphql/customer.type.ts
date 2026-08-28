@@ -1,3 +1,4 @@
+import { FilterableField } from '@ptc-org/nestjs-query-graphql';
 import { Field, ID, ObjectType } from '@nestjs/graphql';
 import { PropertyType } from './property.type';
 
@@ -12,10 +13,10 @@ import { PropertyType } from './property.type';
 // independently of whatever the parent object carries for that key.
 @ObjectType('Customer')
 export class CustomerType {
-  @Field(() => ID)
+  @FilterableField(() => ID)
   id!: string;
 
-  @Field()
+  @FilterableField()
   fullName!: string;
 
   @Field()
