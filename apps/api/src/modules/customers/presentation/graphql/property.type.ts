@@ -4,6 +4,7 @@ import {
   IDField,
   OffsetConnection,
   PagingStrategies,
+  QueryArgsType,
   QueryOptions,
 } from '@ptc-org/nestjs-query-graphql';
 import { Field, ID, ObjectType } from '@nestjs/graphql';
@@ -30,6 +31,11 @@ function bookingDto() {
     .BookingDTO;
 }
 
+const PROPERTY_SORT = [
+  { field: 'createdAt' as const, direction: SortDirection.DESC },
+  { field: 'id' as const, direction: SortDirection.ASC },
+];
+
 // Explicit, hand-defined presentation type — never `Property` (the domain
 // interface) or `PropertyEntity` (the TypeORM entity) returned directly as a
 // GraphQL type (spec §4.5). Nested `bookings` is Relatable-owned; do not add
@@ -40,10 +46,7 @@ function bookingDto() {
   enableTotalCount: false,
   defaultResultSize: PLATFORM_PAGE_DEFAULT,
   maxResultsSize: PLATFORM_PAGE_MAX,
-  defaultSort: [
-    { field: 'createdAt', direction: SortDirection.DESC },
-    { field: 'id', direction: SortDirection.ASC },
-  ],
+  defaultSort: PROPERTY_SORT,
 })
 @OffsetConnection('bookings', bookingDto, {
   nullable: false,
@@ -64,7 +67,7 @@ export class PropertyType {
   @IDField(() => ID)
   id!: string;
 
-  @Field(() => ID)
+  @FilterableField(() => ID)
   customerId!: string;
 
   @Field()
@@ -94,3 +97,18 @@ export class PropertyType {
   @Field()
   updatedAt!: Date;
 }
+
+/**
+ * Root `customerProperties` page args — 9.5.0 QueryArgsType + ConnectionType.
+ * `customerId` is a sibling GraphQL argument (not a QueryArgs field): a
+ * subclass extra field is rejected by the global whitelist ValidationPipe
+ * because Nest validates the generated parent QueryArgs class.
+ */
+export const CustomerPropertiesQueryArgs = QueryArgsType(PropertyType, {
+  connectionName: 'PropertyConnection',
+  pagingStrategy: PagingStrategies.OFFSET,
+  enableTotalCount: true,
+  defaultResultSize: PLATFORM_PAGE_DEFAULT,
+  maxResultsSize: PLATFORM_PAGE_MAX,
+  defaultSort: PROPERTY_SORT,
+});

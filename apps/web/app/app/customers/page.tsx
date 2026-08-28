@@ -54,7 +54,6 @@ type CustomerDetail = {
   email: string;
   phone: string;
   notes: string | null;
-  properties: PropertyRow[];
 };
 
 type PropertyFormState = {
@@ -108,7 +107,12 @@ export default function CustomersPage() {
 }
 
 function CustomersPageContent() {
-  const { data, loading, error, refetch } = useCustomersQuery({ fetchPolicy: 'network-only' });
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
+  const { data, loading, error, refetch } = useCustomersQuery({
+    fetchPolicy: 'network-only',
+    variables: { paging: { limit: pageSize, offset: (page - 1) * pageSize } },
+  });
   const [createCustomer, { loading: creating }] = useCreateCustomerMutation();
   const { activeId, open: openDetail, close: closeDetail } = useDetailDrawer();
 
@@ -163,7 +167,7 @@ function CustomersPageContent() {
     { key: 'phone', header: 'Phone' },
   ];
 
-  const rows: CustomerRow[] = data?.customers ?? [];
+  const rows: CustomerRow[] = (data?.customers.nodes ?? []) as CustomerRow[];
 
   return (
     <div className="flex flex-col gap-8">
@@ -184,6 +188,12 @@ function CustomersPageContent() {
         loading={loading}
         error={error ? 'Unable to load customers.' : undefined}
         onRowClick={(row) => openDetail(row.id)}
+        pagination={{
+          page,
+          pageSize,
+          totalCount: data?.customers.totalCount ?? 0,
+          onPageChange: setPage,
+        }}
       />
 
       <FormDialog
@@ -261,7 +271,7 @@ function CustomerDetailDrawer({
           <CustomerEditForm customer={data.customer} refetch={refetch} onSaved={onSaved} />
           <CustomerProperties
             customerId={data.customer.id}
-            properties={data.customer.properties}
+            properties={data.customer.properties.nodes as PropertyRow[]}
             refetch={refetch}
           />
         </div>

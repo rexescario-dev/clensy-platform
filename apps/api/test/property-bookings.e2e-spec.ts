@@ -200,8 +200,10 @@ describe('property.bookings nested connection (e2e)', () => {
     const listParentQuery = `query ListParents($id: ID!) {
       customer(id: $id) {
         properties {
-          id
-          bookings { nodes { id } pageInfo { hasNextPage } }
+          nodes {
+            id
+            bookings { nodes { id } pageInfo { hasNextPage } }
+          }
         }
       }
     }`;
@@ -214,7 +216,7 @@ describe('property.bookings nested connection (e2e)', () => {
         }),
       );
       expect(result.body.errors).toBeUndefined();
-      expect(result.body.data.customer.properties).toHaveLength(parentN);
+      expect(result.body.data.customer.properties.nodes).toHaveLength(parentN);
       assertNoPerParentChildSelect(queries, parentN, 'booking_entity');
       return queries.length;
     };

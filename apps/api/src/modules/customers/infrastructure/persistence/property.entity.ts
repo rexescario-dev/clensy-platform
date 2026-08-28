@@ -3,23 +3,19 @@ import {
   CreateDateColumn,
   Entity,
   Index,
+  JoinColumn,
+  ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { BookingEntity } from '../../../bookings/infrastructure/persistence/booking.entity';
+import { CustomerEntity } from './customer.entity';
 import { Property } from '../../domain/property';
 
-// `customerId` is a plain column with no relation decorator — the FK
-// constraint is enforced at the database layer entirely via the hand-edited
-// migration (spec §3), not via TypeORM relation metadata. Do not add a
-// `@ManyToOne` here; that would let a future `migration:generate` regenerate
-// the FK from entity metadata, contradicting the migration being the sole
-// authoritative source of it.
-//
-// `bookings` is persistence-only inverse metadata for Relatable nested
-// GraphQL (collections spec §4.3). Not on the domain object; application
-// writes MUST NOT read or assign it. Non-eager, no cascade, no lazy: true.
+// Dual UUID `customerId` + `@ManyToOne` (Booking pattern). Application
+// writes keep using the scalar. `bookings` / `customer` are persistence-only
+// inverse metadata for Relatable. Non-eager, no cascade, no lazy: true.
 @Entity()
 export class PropertyEntity implements Property {
   @PrimaryGeneratedColumn('uuid')
@@ -28,6 +24,17 @@ export class PropertyEntity implements Property {
   @Column({ type: 'uuid' })
   @Index()
   customerId!: string;
+
+  @ManyToOne(() => CustomerEntity, (customer) => customer.properties, {
+    nullable: false,
+    eager: false,
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({
+    name: 'customerId',
+    foreignKeyConstraintName: 'fk_property_customer',
+  })
+  customer!: CustomerEntity;
 
   @Column()
   label!: string;

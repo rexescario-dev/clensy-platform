@@ -4,13 +4,19 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { Repository } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { AppModule } from '../src/app/app.module';
 import { AuditEventEntity } from '../src/platform/audit/infrastructure/persistence/audit-event.entity';
 import { AdminUserEntity } from '../src/modules/admins/infrastructure/persistence/admin-user.entity';
 import { PropertyEntity } from '../src/modules/customers/infrastructure/persistence/property.entity';
+import { CustomersService } from '../src/modules/customers/application/services/customers.service';
+import { PropertiesService } from '../src/modules/customers/application/services/properties.service';
 import { Role } from '../src/platform/auth/domain/role';
 import { applyPlatformPipes } from '../src/platform/graphql/apply-platform-pipes';
+import {
+  assertNoPerParentChildSelect,
+  withCapturedSql,
+} from './helpers/capture-sql';
 import { seedOwner } from './helpers/seed-owner';
 
 // Proves plan task-6 brief's full 8-step Customers/Properties E2E acceptance
@@ -40,6 +46,9 @@ describe('Customers & Properties (e2e)', () => {
   let adminUserRepository: Repository<AdminUserEntity>;
   let auditEventRepository: Repository<AuditEventEntity>;
   let propertyRepository: Repository<PropertyEntity>;
+  let customersService: CustomersService;
+  let propertiesService: PropertiesService;
+  let dataSource: DataSource;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -62,6 +71,9 @@ describe('Customers & Properties (e2e)', () => {
       getRepositoryToken(AuditEventEntity),
     );
     propertyRepository = moduleFixture.get(getRepositoryToken(PropertyEntity));
+    customersService = moduleFixture.get(CustomersService);
+    propertiesService = moduleFixture.get(PropertiesService);
+    dataSource = moduleFixture.get(DataSource);
   });
 
   afterAll(async () => {
@@ -146,8 +158,10 @@ describe('Customers & Properties (e2e)', () => {
         phone
         notes
         properties {
-          id
-          label
+          nodes {
+            id
+            label
+          }
         }
       }
     }
@@ -156,7 +170,7 @@ describe('Customers & Properties (e2e)', () => {
   const CUSTOMERS_QUERY = `
     query {
       customers {
-        id
+        nodes { id }
       }
     }
   `;
@@ -180,14 +194,17 @@ describe('Customers & Properties (e2e)', () => {
   const CUSTOMER_PROPERTIES_QUERY = `
     query CustomerProperties($customerId: ID!) {
       customerProperties(customerId: $customerId) {
-        id
-        label
-        addressLine1
-        addressLine2
-        city
-        region
-        postalCode
-        accessNotes
+        totalCount
+        nodes {
+          id
+          label
+          addressLine1
+          addressLine2
+          city
+          region
+          postalCode
+          accessNotes
+        }
       }
     }
   `;
@@ -344,7 +361,7 @@ describe('Customers & Properties (e2e)', () => {
     expect(customerAfterCreateResponse.body.errors).toBeUndefined();
     const fetchedCustomer = customerAfterCreateResponse.body.data.customer;
     expect(fetchedCustomer.id).toBe(customerId);
-    expect(fetchedCustomer.properties).toEqual(
+    expect(fetchedCustomer.properties.nodes).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: propertyId, label: 'Home' }),
       ]),
@@ -354,7 +371,7 @@ describe('Customers & Properties (e2e)', () => {
       query: CUSTOMERS_QUERY,
     });
     expect(customersListResponse.body.errors).toBeUndefined();
-    const customerIds: string[] = customersListResponse.body.data.customers.map(
+    const customerIds: string[] = customersListResponse.body.data.customers.nodes.map(
       (c: { id: string }) => c.id,
     );
     expect(customerIds).toContain(customerId);
@@ -435,7 +452,7 @@ describe('Customers & Properties (e2e)', () => {
     });
     expect(customerPropertiesResponse.body.errors).toBeUndefined();
     const properties: Array<Record<string, unknown>> =
-      customerPropertiesResponse.body.data.customerProperties;
+      customerPropertiesResponse.body.data.customerProperties.nodes;
     const refetchedProperty = properties.find((p) => p.id === propertyId);
     expect(refetchedProperty).toMatchObject({
       id: propertyId,
@@ -522,7 +539,7 @@ describe('Customers & Properties (e2e)', () => {
     ).send({ query: CUSTOMERS_QUERY });
     expect(schedulerCustomersResponse.body.errors).toBeUndefined();
     const schedulerCustomerIds: string[] =
-      schedulerCustomersResponse.body.data.customers.map(
+      schedulerCustomersResponse.body.data.customers.nodes.map(
         (c: { id: string }) => c.id,
       );
     expect(schedulerCustomerIds).toContain(customerId);
@@ -559,7 +576,7 @@ describe('Customers & Properties (e2e)', () => {
     ).send({ query: CUSTOMERS_QUERY });
     expect(analystCustomersResponse.body.errors).toBeUndefined();
     const analystCustomerIds: string[] =
-      analystCustomersResponse.body.data.customers.map(
+      analystCustomersResponse.body.data.customers.nodes.map(
         (c: { id: string }) => c.id,
       );
     expect(analystCustomerIds).toContain(customerId);
@@ -672,4 +689,169 @@ describe('Customers & Properties (e2e)', () => {
     });
     expect(persistedRow).toBeNull();
   });
+
+  it('scopes customerProperties to the argument, pages, and loads nested properties in O(1)', async () => {
+    const owner = await seedOwner(adminUserRepository);
+    const ownerLogin = await login(owner.email, owner.password);
+    expect(ownerLogin.body.errors).toBeUndefined();
+    const cookie = extractSessionCookie(ownerLogin);
+    const runId = owner.id;
+
+    const customerA = await customersService.create({
+      actorId: owner.id,
+      fullName: `Scope A ${runId}`,
+      email: `scope-a-${runId}@example.com`,
+      phone: '555-0300',
+    });
+    const customerB = await customersService.create({
+      actorId: owner.id,
+      fullName: `Scope B ${runId}`,
+      email: `scope-b-${runId}@example.com`,
+      phone: '555-0301',
+    });
+    const propertyA = await propertiesService.create({
+      actorId: owner.id,
+      customerId: customerA.id,
+      label: 'A-home',
+      addressLine1: `${runId}-A St`,
+      city: 'City',
+      region: 'Region',
+      postalCode: '00000',
+    });
+    const extraA = await propertiesService.create({
+      actorId: owner.id,
+      customerId: customerA.id,
+      label: 'A-extra',
+      addressLine1: `${runId}-A2 St`,
+      city: 'City',
+      region: 'Region',
+      postalCode: '00000',
+    });
+    await propertiesService.create({
+      actorId: owner.id,
+      customerId: customerB.id,
+      label: 'B-home',
+      addressLine1: `${runId}-B St`,
+      city: 'City',
+      region: 'Region',
+      postalCode: '00000',
+    });
+
+    const scoped = await authedRequest(cookie).send({
+      query: `query Scoped($customerId: ID!, $filter: PropertyFilter) {
+        customerProperties(customerId: $customerId, filter: $filter) {
+          totalCount
+          nodes { id customerId }
+        }
+      }`,
+      variables: {
+        customerId: customerA.id,
+        filter: { customerId: { eq: customerB.id } },
+      },
+    });
+    expect(scoped.body.errors).toBeUndefined();
+    const scopedIds = scoped.body.data.customerProperties.nodes.map(
+      (row: { id: string }) => row.id,
+    );
+    expect(scopedIds).toEqual(
+      expect.arrayContaining([propertyA.id, extraA.id]),
+    );
+    expect(scopedIds).not.toContain(
+      scoped.body.data.customerProperties.nodes.find(
+        (row: { customerId: string }) => row.customerId === customerB.id,
+      )?.id,
+    );
+    expect(
+      scoped.body.data.customerProperties.nodes.every(
+        (row: { customerId: string }) => row.customerId === customerA.id,
+      ),
+    ).toBe(true);
+    expect(scoped.body.data.customerProperties.totalCount).toBe(2);
+
+    const paged = await authedRequest(cookie).send({
+      query: `query Paged($customerId: ID!, $paging: OffsetPaging) {
+        customerProperties(customerId: $customerId, paging: $paging) {
+          totalCount
+          nodes { id }
+        }
+      }`,
+      variables: {
+        customerId: customerA.id,
+        paging: { limit: 1, offset: 0 },
+      },
+    });
+    expect(paged.body.errors).toBeUndefined();
+    expect(paged.body.data.customerProperties.nodes).toHaveLength(1);
+    expect(paged.body.data.customerProperties.totalCount).toBe(2);
+
+    const omitted = await authedRequest(cookie).send({
+      query: CUSTOMER_PROPERTIES_QUERY,
+      variables: { customerId: customerA.id },
+    });
+    expect(omitted.body.errors).toBeUndefined();
+    expect(
+      omitted.body.data.customerProperties.nodes.length,
+    ).toBeLessThanOrEqual(20);
+
+    const blank = await authedRequest(cookie).send({
+      query: CUSTOMER_PROPERTIES_QUERY,
+      variables: { customerId: '   ' },
+    });
+    expect(blank.body.errors?.length).toBeGreaterThan(0);
+    expect(blank.body.data?.customerProperties ?? null).toBeNull();
+
+    const nestedIds: string[] = [];
+    const seedCustomers = async (start: number, count: number) => {
+      for (let index = start; index < start + count; index += 1) {
+        const customer = await customersService.create({
+          actorId: owner.id,
+          fullName: `O1 ${runId} ${index}`,
+          email: `o1-${runId}-${index}@example.com`,
+          phone: '555-0400',
+        });
+        nestedIds.push(customer.id);
+        await propertiesService.create({
+          actorId: owner.id,
+          customerId: customer.id,
+          label: `O1-p-${index}`,
+          addressLine1: `${runId}-O1-${index} St`,
+          city: 'City',
+          region: 'Region',
+          postalCode: '00000',
+        });
+      }
+    };
+
+    await seedCustomers(0, 6);
+    const nestedQuery = `query NestedNodes($filter: CustomerFilter, $paging: OffsetPaging) {
+      customers(filter: $filter, paging: $paging) {
+        nodes {
+          properties(paging: { limit: 20 }) {
+            nodes { id }
+            pageInfo { hasNextPage }
+          }
+        }
+      }
+    }`;
+    const capture = async (parentN: number) => {
+      const { result, queries } = await withCapturedSql(dataSource, () =>
+        authedRequest(cookie).send({
+          query: nestedQuery,
+          variables: {
+            filter: { id: { in: nestedIds } },
+            paging: { limit: 20, offset: 0 },
+          },
+        }),
+      );
+      expect(result.body.errors).toBeUndefined();
+      expect(result.body.data.customers.nodes).toHaveLength(parentN);
+      assertNoPerParentChildSelect(queries, parentN, 'property_entity');
+      return queries.length;
+    };
+    const atSix = await capture(6);
+    await seedCustomers(6, 6);
+    const atTwelve = await capture(12);
+    const delta = Math.abs(atTwelve - atSix);
+    expect(delta === 0 || delta <= 2).toBe(true);
+  }, 120000);
 });

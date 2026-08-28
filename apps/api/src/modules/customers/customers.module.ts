@@ -7,7 +7,9 @@ import { CustomersService } from './application/services/customers.service';
 import { PropertiesService } from './application/services/properties.service';
 import { CustomerEntity } from './infrastructure/persistence/customer.entity';
 import { PropertyEntity } from './infrastructure/persistence/property.entity';
+import { CustomerReadResolver } from './presentation/graphql/customer-read.resolver';
 import { CustomerResolver } from './presentation/graphql/customer.resolver';
+import { CustomerType } from './presentation/graphql/customer.type';
 import { PropertyReadResolver } from './presentation/graphql/property-read.resolver';
 import { PropertyResolver } from './presentation/graphql/property.resolver';
 import { PropertyType } from './presentation/graphql/property.type';
@@ -23,9 +25,9 @@ import { PropertyType } from './presentation/graphql/property.type';
 @Module({
   imports: [
     TypeOrmModule.forFeature([CustomerEntity, PropertyEntity]),
-    NestjsQueryTypeOrmModule.forFeature([PropertyEntity]),
+    NestjsQueryTypeOrmModule.forFeature([CustomerEntity, PropertyEntity]),
     NestjsQueryGraphQLModule.forFeature({
-      dtos: [{ DTOClass: PropertyType }],
+      dtos: [{ DTOClass: CustomerType }, { DTOClass: PropertyType }],
     }),
     AuditModule,
   ],
@@ -33,6 +35,7 @@ import { PropertyType } from './presentation/graphql/property.type';
     CustomersService,
     PropertiesService,
     CustomerResolver,
+    CustomerReadResolver,
     PropertyResolver,
     PropertyReadResolver,
   ],

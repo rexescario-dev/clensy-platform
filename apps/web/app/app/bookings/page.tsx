@@ -90,7 +90,10 @@ function BookingsPageContent() {
   const [createBooking, { loading: creating }] = useCreateBookingMutation();
   const { activeId, open: openDetail, close: closeDetail } = useDetailDrawer();
 
-  const { data: customersData } = useCustomersQuery({ fetchPolicy: 'network-only' });
+  const { data: customersData } = useCustomersQuery({
+    fetchPolicy: 'network-only',
+    variables: { paging: { limit: 100 } },
+  });
   const { data: servicesData } = useServicesQuery({ fetchPolicy: 'network-only' });
   const { data: teamsData } = useTeamsQuery({ fetchPolicy: 'network-only' });
 
@@ -103,7 +106,7 @@ function BookingsPageContent() {
   const [formError, setFormError] = useState<string | undefined>(undefined);
 
   const { data: propertiesData } = useCustomerPropertiesQuery({
-    variables: { customerId },
+    variables: { customerId, paging: { limit: 100 } },
     skip: customerId === '',
     fetchPolicy: 'network-only',
   });
@@ -164,8 +167,8 @@ function BookingsPageContent() {
   ];
 
   const rows: BookingRow[] = (data?.bookings.nodes ?? []) as BookingRow[];
-  const customers = customersData?.customers ?? [];
-  const properties = propertiesData?.customerProperties ?? [];
+  const customers = customersData?.customers.nodes ?? [];
+  const properties = propertiesData?.customerProperties.nodes ?? [];
   const activeServices = (servicesData?.services ?? []).filter((service) => service.active);
   const teams = teamsData?.teams ?? [];
 

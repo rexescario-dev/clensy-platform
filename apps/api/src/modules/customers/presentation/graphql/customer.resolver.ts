@@ -1,15 +1,6 @@
 import { UseGuards } from '@nestjs/common';
-import {
-  Args,
-  ID,
-  Mutation,
-  Parent,
-  Query,
-  ResolveField,
-  Resolver,
-} from '@nestjs/graphql';
+import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { CustomersService } from '../../application/services/customers.service';
-import { PropertiesService } from '../../application/services/properties.service';
 import { CreateCustomerCommand } from '../../application/commands/create-customer.command';
 import { UpdateCustomerCommand } from '../../application/commands/update-customer.command';
 import { CurrentUser } from '../../../../platform/auth/decorators/current-user.decorator';
@@ -19,17 +10,14 @@ import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
 import { CreateCustomerInput } from './create-customer.input';
 import { CustomerType } from './customer.type';
-import { toCustomerType, toPropertyType } from './mappers';
-import { PropertyType } from './property.type';
+import { toCustomerType } from './mappers';
 import { UpdateCustomerInput } from './update-customer.input';
 
-// Exactly the `Customer`-scoped operations of spec §4.5 — no others.
+// Clensy nullable get-by-id plus writes. Root `customers` and nested
+// `properties` are Relatable / ReadResolver owned.
 @Resolver(() => CustomerType)
 export class CustomerResolver {
-  constructor(
-    private readonly customersService: CustomersService,
-    private readonly propertiesService: PropertiesService,
-  ) {}
+  constructor(private readonly customersService: CustomersService) {}
 
   @Query(() => CustomerType, { name: 'customer', nullable: true })
   @UseGuards(AuthGuard)
@@ -47,20 +35,6 @@ export class CustomerResolver {
     return customer ? toCustomerType(customer) : null;
   }
 
-  @Query(() => [CustomerType], { name: 'customers' })
-  @UseGuards(AuthGuard)
-  @Roles(
-    Role.OWNER,
-    Role.OPS_MANAGER,
-    Role.SCHEDULER,
-    Role.CUSTOMER_SUPPORT,
-    Role.ANALYST,
-  )
-  async customers(): Promise<CustomerType[]> {
-    const customers = await this.customersService.listCustomers();
-    return customers.map(toCustomerType);
-  }
-
   @Mutation(() => CustomerType)
   @UseGuards(AuthGuard)
   @Roles(Role.OWNER, Role.OPS_MANAGER, Role.CUSTOMER_SUPPORT)
@@ -68,9 +42,6 @@ export class CustomerResolver {
     @Args('input') input: CreateCustomerInput,
     @CurrentUser() currentUser: AuthenticatedPrincipal,
   ): Promise<CustomerType> {
-    // Object spread, never manual field-by-field listing (task brief) — kept
-    // consistent with `updateCustomer` below even though every
-    // `CreateCustomerInput` field is required.
     const command: CreateCustomerCommand = {
       ...input,
       actorId: currentUser.id,
@@ -87,30 +58,11 @@ export class CustomerResolver {
     @Args('input') input: UpdateCustomerInput,
     @CurrentUser() currentUser: AuthenticatedPrincipal,
   ): Promise<CustomerType> {
-    // Object spread (task brief, spec §4.2) — `input` only carries keys the
-    // caller actually provided, so an omitted field retains its current
-    // value once `CustomersService.update` does `Object.assign(entity,
-    // fields)`. Manually re-listing fields here would silently break that
-    // partial-update guarantee.
     const command: UpdateCustomerCommand = {
       ...input,
       actorId: currentUser.id,
     };
     const customer = await this.customersService.update(id, command);
     return toCustomerType(customer);
-  }
-
-  // Presentation-layer-only computed field (spec §4.5) — `customer` here is
-  // whatever `toCustomerType()`-mapped object the base `customer`/
-  // `customers`/`createCustomer`/`updateCustomer` methods returned; only its
-  // `id` is used. Calls the same `PropertiesService.listCustomerProperties`
-  // the standalone `customerProperties` query uses (§4.5) — the GraphQL
-  // layer is the only place the two are connected.
-  @ResolveField(() => [PropertyType])
-  async properties(@Parent() customer: CustomerType): Promise<PropertyType[]> {
-    const properties = await this.propertiesService.listCustomerProperties(
-      customer.id,
-    );
-    return properties.map(toPropertyType);
   }
 }

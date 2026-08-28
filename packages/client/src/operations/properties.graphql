@@ -1,8 +1,15 @@
-query CustomerProperties($customerId: ID!) {
-  customerProperties(customerId: $customerId) {
-    id
-    label
-    addressLine1
+query CustomerProperties($customerId: ID!, $paging: OffsetPaging, $filter: PropertyFilter) {
+  customerProperties(customerId: $customerId, paging: $paging, filter: $filter) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+    }
+    nodes {
+      id
+      label
+      addressLine1
+    }
   }
 }
 
