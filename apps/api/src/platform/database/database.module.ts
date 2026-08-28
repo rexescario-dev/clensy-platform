@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { isAppDebugEnabled } from '../config/app-debug';
 
 @Module({
   imports: [
@@ -17,6 +18,9 @@ import { TypeOrmModule } from '@nestjs/typeorm';
         autoLoadEntities: true,
         // Schema comes from migrations now (pnpm migration:run), not runtime sync.
         synchronize: false,
+        logging: isAppDebugEnabled(config.get('APP_DEBUG'))
+          ? ['query']
+          : false,
       }),
     }),
   ],
