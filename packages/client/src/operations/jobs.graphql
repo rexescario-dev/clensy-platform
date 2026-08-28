@@ -1,0 +1,78 @@
+fragment JobFields on CleaningJob {
+  id
+  scheduledAt
+  status
+  createdAt
+  updatedAt
+  booking {
+    id
+    scheduledAt
+    status
+    customer {
+      id
+      fullName
+    }
+    property {
+      id
+      addressLine1
+    }
+    service {
+      id
+      name
+    }
+    team {
+      id
+      name
+    }
+  }
+  team {
+    id
+    name
+  }
+  checklist {
+    id
+    items {
+      id
+      label
+      position
+      completed
+      completedAt
+    }
+  }
+}
+
+query Jobs {
+  jobs {
+    ...JobFields
+  }
+}
+
+query Job($id: ID!) {
+  job(id: $id) {
+    ...JobFields
+  }
+}
+
+mutation CreateJobFromBooking($input: CreateJobFromBookingInput!) {
+  createJobFromBooking(input: $input) {
+    ...JobFields
+  }
+}
+
+mutation AssignTeamToJob($input: AssignTeamToJobInput!) {
+  assignTeamToJob(input: $input) {
+    ...JobFields
+  }
+}
+
+mutation CompleteChecklistItem($input: CompleteChecklistItemInput!) {
+  completeChecklistItem(input: $input) {
+    ...JobFields
+  }
+}
+
+mutation CompleteJob($input: CompleteJobInput!) {
+  completeJob(input: $input) {
+    ...JobFields
+  }
+}

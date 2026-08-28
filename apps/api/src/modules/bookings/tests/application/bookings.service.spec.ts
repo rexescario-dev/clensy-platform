@@ -1,4 +1,8 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
@@ -32,6 +36,7 @@ describe('BookingsService', () => {
     findOneByOrFail: jest.Mock;
   };
   let dataSource: { transaction: jest.Mock };
+  let bookingRepository: { findBy: jest.Mock };
   let customersService: { getCustomer: jest.Mock };
   let propertiesService: { getProperty: jest.Mock };
   let servicesService: { getService: jest.Mock };
@@ -96,6 +101,7 @@ describe('BookingsService', () => {
     dataSource = {
       transaction: jest.fn((fn: (manager: unknown) => unknown) => fn(manager)),
     };
+    bookingRepository = { findBy: jest.fn() };
     customersService = { getCustomer: jest.fn().mockResolvedValue(customer) };
     propertiesService = { getProperty: jest.fn().mockResolvedValue(property) };
     servicesService = {
@@ -111,7 +117,10 @@ describe('BookingsService', () => {
       providers: [
         BookingsService,
         { provide: DataSource, useValue: dataSource },
-        { provide: getRepositoryToken(BookingEntity), useValue: {} },
+        {
+          provide: getRepositoryToken(BookingEntity),
+          useValue: bookingRepository,
+        },
         { provide: CustomersService, useValue: customersService },
         { provide: PropertiesService, useValue: propertiesService },
         { provide: ServicesService, useValue: servicesService },
@@ -351,6 +360,44 @@ describe('BookingsService', () => {
       await service.remove('booking-1', null);
 
       expect(auditLogger.log).not.toHaveBeenCalled();
+    });
+
+    // Additive error-contract only (Jobs spec §2 / plan Task 1). Fake driver
+    // shape `{ code }`, not a reconstructed TypeORM QueryFailedError — the
+    // real 23503 path is proven against Postgres in Task 2.
+    it('maps a 23503 driver code to ConflictException without deleting', async () => {
+      manager.findOneBy.mockResolvedValue({ id: 'booking-1' });
+      manager.remove.mockRejectedValue({ code: '23503' });
+
+      await expect(service.remove('booking-1', 'actor-1')).rejects.toThrow(
+        new ConflictException(
+          'Booking cannot be deleted because other records reference it',
+        ),
+      );
+      expect(auditLogger.log).not.toHaveBeenCalled();
+    });
+
+    it('rethrows a non-23503 driver error unchanged', async () => {
+      manager.findOneBy.mockResolvedValue({ id: 'booking-1' });
+      const other = { code: '23505' };
+      manager.remove.mockRejectedValue(other);
+
+      await expect(service.remove('booking-1', 'actor-1')).rejects.toBe(other);
+    });
+  });
+
+  describe('getBookingsByIds', () => {
+    it('returns an empty array without querying when ids is empty', async () => {
+      await expect(service.getBookingsByIds([])).resolves.toEqual([]);
+      expect(bookingRepository.findBy).not.toHaveBeenCalled();
+    });
+
+    it('returns exactly the rows found, with no synthetic entries for missing ids', async () => {
+      const found = [{ id: 'a' }];
+      bookingRepository.findBy.mockResolvedValue(found);
+
+      await expect(service.getBookingsByIds(['a', 'b'])).resolves.toBe(found);
+      expect(bookingRepository.findBy).toHaveBeenCalled();
     });
   });
 });
