@@ -1,3 +1,5 @@
+import { NestjsQueryGraphQLModule } from '@ptc-org/nestjs-query-graphql';
+import { NestjsQueryTypeOrmModule } from '@ptc-org/nestjs-query-typeorm';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuditModule } from '../../platform/audit/audit.module';
@@ -5,8 +7,12 @@ import { CustomersService } from './application/services/customers.service';
 import { PropertiesService } from './application/services/properties.service';
 import { CustomerEntity } from './infrastructure/persistence/customer.entity';
 import { PropertyEntity } from './infrastructure/persistence/property.entity';
+import { CustomerReadResolver } from './presentation/graphql/customer-read.resolver';
 import { CustomerResolver } from './presentation/graphql/customer.resolver';
+import { CustomerType } from './presentation/graphql/customer.type';
+import { PropertyReadResolver } from './presentation/graphql/property-read.resolver';
 import { PropertyResolver } from './presentation/graphql/property.resolver';
+import { PropertyType } from './presentation/graphql/property.type';
 
 // Imports `AuditModule` directly (mirroring `admins.module.ts:35` exactly)
 // so `AUDIT_LOGGER` is DI-visible to `CustomersService`/`PropertiesService`:
@@ -19,13 +25,19 @@ import { PropertyResolver } from './presentation/graphql/property.resolver';
 @Module({
   imports: [
     TypeOrmModule.forFeature([CustomerEntity, PropertyEntity]),
+    NestjsQueryTypeOrmModule.forFeature([CustomerEntity, PropertyEntity]),
+    NestjsQueryGraphQLModule.forFeature({
+      dtos: [{ DTOClass: CustomerType }, { DTOClass: PropertyType }],
+    }),
     AuditModule,
   ],
   providers: [
     CustomersService,
     PropertiesService,
     CustomerResolver,
+    CustomerReadResolver,
     PropertyResolver,
+    PropertyReadResolver,
   ],
   exports: [CustomersService, PropertiesService],
 })

@@ -1,3 +1,4 @@
+import { getQueryServiceToken } from '@ptc-org/nestjs-query-core';
 import { Global, Module } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -55,11 +56,30 @@ describe('JobsModule — module-internal DI wiring', () => {
       .overrideModule(CleanersModule)
       .useModule(FakeCleanersModule)
       .overrideProvider(getRepositoryToken(CleaningJobEntity))
-      .useValue({ find: jest.fn(), findOneBy: jest.fn(), findBy: jest.fn() })
+      .useValue({
+        find: jest.fn(),
+        findOneBy: jest.fn(),
+        findBy: jest.fn(),
+        metadata: { columns: [] },
+      })
       .overrideProvider(getRepositoryToken(ChecklistEntity))
-      .useValue({ findBy: jest.fn(), findOneBy: jest.fn() })
+      .useValue({
+        findBy: jest.fn(),
+        findOneBy: jest.fn(),
+        metadata: { columns: [] },
+      })
       .overrideProvider(getRepositoryToken(ChecklistItemEntity))
-      .useValue({ findBy: jest.fn(), findOneBy: jest.fn() })
+      .useValue({
+        findBy: jest.fn(),
+        findOneBy: jest.fn(),
+        metadata: { columns: [] },
+      })
+      .overrideProvider(getQueryServiceToken(CleaningJobEntity))
+      .useValue({ query: jest.fn(), queryRelations: jest.fn() })
+      .overrideProvider(getQueryServiceToken(ChecklistEntity))
+      .useValue({ query: jest.fn(), queryRelations: jest.fn() })
+      .overrideProvider(getQueryServiceToken(ChecklistItemEntity))
+      .useValue({ query: jest.fn() })
       .overrideProvider(getRepositoryToken(AuditEventEntity))
       .useValue({ create: jest.fn(), save: jest.fn() })
       .compile();

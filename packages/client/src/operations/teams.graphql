@@ -1,9 +1,21 @@
-query Teams {
-  teams {
-    id
-    name
-    cleaners {
+query Teams($paging: OffsetPaging, $filter: TeamFilter, $sorting: [TeamSort!]) {
+  teams(paging: $paging, filter: $filter, sorting: $sorting) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+    }
+    nodes {
       id
+      name
+      cleaners(paging: { limit: 100 }) {
+        nodes {
+          id
+        }
+        pageInfo {
+          hasNextPage
+        }
+      }
     }
   }
 }
@@ -12,11 +24,16 @@ query Team($id: ID!) {
   team(id: $id) {
     id
     name
-    cleaners {
-      id
-      fullName
-      phone
-      email
+    cleaners(paging: { limit: 100 }) {
+      nodes {
+        id
+        fullName
+        phone
+        email
+      }
+      pageInfo {
+        hasNextPage
+      }
     }
   }
 }

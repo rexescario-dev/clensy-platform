@@ -1,4 +1,4 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -13,6 +13,7 @@ import { CustomersService } from '../src/modules/customers/application/services/
 import { PropertiesService } from '../src/modules/customers/application/services/properties.service';
 import { ServicesService } from '../src/modules/catalog/application/services/services.service';
 import { PricingRulesService } from '../src/modules/catalog/application/services/pricing-rules.service';
+import { applyPlatformPipes } from '../src/platform/graphql/apply-platform-pipes';
 import { seedOwner } from './helpers/seed-owner';
 
 describe('Bookings (e2e)', () => {
@@ -25,13 +26,7 @@ describe('Bookings (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     // Mirrors main.ts's bootstrap(), which this test doesn't go through.
-    app.useGlobalPipes(
-      new ValidationPipe({
-        transform: true,
-        whitelist: true,
-        forbidNonWhitelisted: true,
-      }),
-    );
+    applyPlatformPipes(app);
     await app.init();
   });
 
@@ -156,10 +151,10 @@ describe('GraphQL (e2e)', () => {
     await request(app.getHttpServer())
       .post('/graphql')
       .set('Cookie', sessionCookie!)
-      .send({ query: '{ bookings { id } }' })
+      .send({ query: '{ bookings { nodes { id } } }' })
       .expect(200)
       .expect((res) => {
-        expect(Array.isArray(res.body.data.bookings)).toBe(true);
+        expect(Array.isArray(res.body.data.bookings.nodes)).toBe(true);
       });
   });
 
@@ -170,7 +165,7 @@ describe('GraphQL (e2e)', () => {
   it('POST /graphql — bookings query is rejected without a session', () => {
     return request(app.getHttpServer())
       .post('/graphql')
-      .send({ query: '{ bookings { id } }' })
+      .send({ query: '{ bookings { nodes { id } } }' })
       .expect(200)
       .expect((res) => {
         expect(res.body.data).toBeNull();

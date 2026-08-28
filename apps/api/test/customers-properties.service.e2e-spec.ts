@@ -3,6 +3,10 @@ import { DataSource } from 'typeorm';
 import { AuditEventEntity } from '../src/platform/audit/infrastructure/persistence/audit-event.entity';
 import { CustomersService } from '../src/modules/customers/application/services/customers.service';
 import { PropertiesService } from '../src/modules/customers/application/services/properties.service';
+import { BookingEntity } from '../src/modules/bookings/infrastructure/persistence/booking.entity';
+import { ServiceEntity } from '../src/modules/catalog/infrastructure/persistence/service.entity';
+import { CleanerEntity } from '../src/modules/cleaners/infrastructure/persistence/cleaner.entity';
+import { TeamEntity } from '../src/modules/cleaners/infrastructure/persistence/team.entity';
 import { CustomerEntity } from '../src/modules/customers/infrastructure/persistence/customer.entity';
 import { PropertyEntity } from '../src/modules/customers/infrastructure/persistence/property.entity';
 import {
@@ -23,7 +27,17 @@ function createTestDataSource(): DataSource {
     username: process.env.DB_USERNAME ?? 'clensy',
     password: process.env.DB_PASSWORD ?? 'clensy_dev',
     database: process.env.DB_NAME ?? 'clensy',
-    entities: [CustomerEntity, PropertyEntity, AuditEventEntity],
+    entities: [
+      CustomerEntity,
+      PropertyEntity,
+      // PropertyEntity#bookings inverse requires BookingEntity and its
+      // ManyToOne targets; TeamEntity#cleaners requires CleanerEntity.
+      BookingEntity,
+      ServiceEntity,
+      TeamEntity,
+      CleanerEntity,
+      AuditEventEntity,
+    ],
   });
 }
 

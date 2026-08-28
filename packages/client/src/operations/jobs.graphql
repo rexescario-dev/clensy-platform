@@ -31,25 +31,45 @@ fragment JobFields on CleaningJob {
   }
   checklist {
     id
-    items {
-      id
-      label
-      position
-      completed
-      completedAt
+    items(paging: { limit: 20 }) {
+      nodes {
+        id
+        label
+        position
+        completed
+        completedAt
+      }
+      pageInfo {
+        hasNextPage
+      }
     }
   }
 }
 
-query Jobs {
-  jobs {
-    ...JobFields
+query Jobs($paging: OffsetPaging, $filter: CleaningJobFilter, $sorting: [CleaningJobSort!]) {
+  jobs(paging: $paging, filter: $filter, sorting: $sorting) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+    }
+    nodes {
+      ...JobFields
+    }
   }
 }
 
 query Job($id: ID!) {
   job(id: $id) {
     ...JobFields
+  }
+}
+
+query JobByBooking($bookingId: ID!) {
+  jobs(filter: { booking: { id: { eq: $bookingId } } }, paging: { limit: 1 }) {
+    nodes {
+      id
+    }
   }
 }
 

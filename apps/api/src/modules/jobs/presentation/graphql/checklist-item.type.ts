@@ -1,14 +1,15 @@
+import { FilterableField, IDField } from '@ptc-org/nestjs-query-graphql';
 import { Field, ID, Int, ObjectType } from '@nestjs/graphql';
 
 @ObjectType('ChecklistItem')
 export class ChecklistItemType {
-  @Field(() => ID)
+  @IDField(() => ID)
   id!: string;
 
   @Field()
   label!: string;
 
-  @Field(() => Int)
+  @FilterableField(() => Int)
   position!: number;
 
   @Field()

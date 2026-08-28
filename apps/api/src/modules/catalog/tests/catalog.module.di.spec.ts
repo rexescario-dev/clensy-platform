@@ -1,3 +1,4 @@
+import { getQueryServiceToken } from '@ptc-org/nestjs-query-core';
 import { Global, Module } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -43,9 +44,21 @@ describe('CatalogModule — module-internal DI wiring (real AuditModule)', () =>
       imports: [FakeGlobalDataSourceModule, CatalogModule],
     })
       .overrideProvider(getRepositoryToken(ServiceEntity))
-      .useValue({ find: jest.fn(), findOneBy: jest.fn() })
+      .useValue({
+        find: jest.fn(),
+        findOneBy: jest.fn(),
+        metadata: { columns: [] },
+      })
       .overrideProvider(getRepositoryToken(AddOnEntity))
-      .useValue({ find: jest.fn(), findOneBy: jest.fn() })
+      .useValue({
+        find: jest.fn(),
+        findOneBy: jest.fn(),
+        metadata: { columns: [] },
+      })
+      .overrideProvider(getQueryServiceToken(ServiceEntity))
+      .useValue({ query: jest.fn() })
+      .overrideProvider(getQueryServiceToken(AddOnEntity))
+      .useValue({ query: jest.fn() })
       .overrideProvider(getRepositoryToken(PricingRuleEntity))
       .useValue({ findOneBy: jest.fn(), findBy: jest.fn() })
       .overrideProvider(getRepositoryToken(AuditEventEntity))

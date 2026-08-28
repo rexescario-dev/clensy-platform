@@ -81,13 +81,27 @@ export default function BookingsPage() {
 }
 
 function BookingsPageContent() {
-  const { data, loading, error, refetch } = useBookingsQuery({ fetchPolicy: 'network-only' });
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
+  const { data, loading, error, refetch } = useBookingsQuery({
+    fetchPolicy: 'network-only',
+    variables: { paging: { limit: pageSize, offset: (page - 1) * pageSize } },
+  });
   const [createBooking, { loading: creating }] = useCreateBookingMutation();
   const { activeId, open: openDetail, close: closeDetail } = useDetailDrawer();
 
-  const { data: customersData } = useCustomersQuery({ fetchPolicy: 'network-only' });
-  const { data: servicesData } = useServicesQuery({ fetchPolicy: 'network-only' });
-  const { data: teamsData } = useTeamsQuery({ fetchPolicy: 'network-only' });
+  const { data: customersData } = useCustomersQuery({
+    fetchPolicy: 'network-only',
+    variables: { paging: { limit: 100 } },
+  });
+  const { data: servicesData } = useServicesQuery({
+    fetchPolicy: 'network-only',
+    variables: { paging: { limit: 100 } },
+  });
+  const { data: teamsData } = useTeamsQuery({
+    fetchPolicy: 'network-only',
+    variables: { paging: { limit: 100 } },
+  });
 
   const [formOpen, setFormOpen] = useState(false);
   const [customerId, setCustomerId] = useState('');
@@ -98,7 +112,7 @@ function BookingsPageContent() {
   const [formError, setFormError] = useState<string | undefined>(undefined);
 
   const { data: propertiesData } = useCustomerPropertiesQuery({
-    variables: { customerId },
+    variables: { customerId, paging: { limit: 100 } },
     skip: customerId === '',
     fetchPolicy: 'network-only',
   });
@@ -158,11 +172,13 @@ function BookingsPageContent() {
     },
   ];
 
-  const rows: BookingRow[] = (data?.bookings ?? []) as BookingRow[];
-  const customers = customersData?.customers ?? [];
-  const properties = propertiesData?.customerProperties ?? [];
-  const activeServices = (servicesData?.services ?? []).filter((service) => service.active);
-  const teams = teamsData?.teams ?? [];
+  const rows: BookingRow[] = (data?.bookings.nodes ?? []) as BookingRow[];
+  const customers = customersData?.customers.nodes ?? [];
+  const properties = propertiesData?.customerProperties.nodes ?? [];
+  const activeServices = (servicesData?.services.nodes ?? []).filter(
+    (service) => service.active,
+  );
+  const teams = teamsData?.teams.nodes ?? [];
 
   return (
     <div className="flex flex-col gap-8">
@@ -183,6 +199,12 @@ function BookingsPageContent() {
         loading={loading}
         error={error ? 'Unable to load bookings.' : undefined}
         onRowClick={(row) => openDetail(row.id)}
+        pagination={{
+          page,
+          pageSize,
+          totalCount: data?.bookings.totalCount ?? 0,
+          onPageChange: setPage,
+        }}
       />
 
       <FormDialog
@@ -312,9 +334,17 @@ function BookingDetailDrawer({
     variables: { id },
     fetchPolicy: 'network-only',
   });
-  const { data: teamsData } = useTeamsQuery({ fetchPolicy: 'network-only' });
+  const { data: teamsData } = useTeamsQuery({
+    fetchPolicy: 'network-only',
+    variables: { paging: { limit: 100 } },
+  });
   const { data: jobsData, refetch: refetchJobs } = useJobsQuery({
     fetchPolicy: 'network-only',
+    skip: !id,
+    variables: {
+      filter: { booking: { id: { eq: id } } },
+      paging: { limit: 1 },
+    },
   });
   const [updateBooking, { loading: updating }] = useUpdateBookingMutation();
   const [removeBooking, { loading: removing }] = useRemoveBookingMutation();
@@ -331,10 +361,8 @@ function BookingDetailDrawer({
   const [jobError, setJobError] = useState<string | undefined>(undefined);
 
   const booking = data?.booking;
-  const teams = teamsData?.teams ?? [];
-  const existingJob = booking
-    ? (jobsData?.jobs ?? []).find((job) => job.booking.id === booking.id)
-    : undefined;
+  const teams = teamsData?.teams.nodes ?? [];
+  const existingJob = jobsData?.jobs.nodes[0];
 
   // Local edit state initializes from the loaded booking on first render
   // of each field, then tracks the user's own edits from there.

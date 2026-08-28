@@ -9,20 +9,10 @@ import { GraphQLObjectType } from 'graphql';
 import { ROLES_KEY } from '../../../../platform/auth/decorators/roles.decorator';
 import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
+import { AddOnReadResolver } from '../../presentation/graphql/add-on-read.resolver';
 import { AddOnResolver } from '../../presentation/graphql/add-on.resolver';
 
-type ResolverMethod = 'addOns' | 'createAddOn' | 'updateAddOn';
-
-// View matrix per spec §4.3: deliberately BROADER than the Cleaners
-// module's — all six roles, not just Owner/Ops Manager/Scheduler/Analyst.
-const VIEW_ROLES = [
-  Role.OWNER,
-  Role.OPS_MANAGER,
-  Role.SCHEDULER,
-  Role.CUSTOMER_SUPPORT,
-  Role.FINANCE,
-  Role.ANALYST,
-];
+type ResolverMethod = 'createAddOn' | 'updateAddOn';
 
 const WRITE_ROLES = [Role.OWNER, Role.OPS_MANAGER];
 
@@ -46,16 +36,6 @@ describe('AddOnResolver', () => {
   function rolesOn(method: ResolverMethod): Role[] | undefined {
     return reflector.get<Role[] | undefined>(ROLES_KEY, methodRef(method));
   }
-
-  describe.each([['addOns', VIEW_ROLES]] as const)(
-    '%s',
-    (method, expectedRoles) => {
-      it(`is guarded by AuthGuard and @Roles(${expectedRoles.join(', ')}) — view matrix`, () => {
-        expect(guardsOn(method)).toContain(AuthGuard);
-        expect(rolesOn(method)).toEqual(expectedRoles);
-      });
-    },
-  );
 
   describe.each([
     ['createAddOn', WRITE_ROLES],
@@ -82,7 +62,10 @@ describe('AddOnResolver', () => {
         imports: [GraphQLSchemaBuilderModule],
       }).compile();
       const schemaFactory = moduleRef.get(GraphQLSchemaFactory);
-      const schema = await schemaFactory.create([AddOnResolver]);
+      const schema = await schemaFactory.create([
+        AddOnReadResolver,
+        AddOnResolver,
+      ]);
 
       const addOnType = schema.getType('AddOn') as GraphQLObjectType;
       expect(addOnType).toBeDefined();

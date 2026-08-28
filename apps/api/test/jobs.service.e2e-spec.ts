@@ -17,6 +17,7 @@ import { PricingRulesService } from '../src/modules/catalog/application/services
 import { ServiceEntity } from '../src/modules/catalog/infrastructure/persistence/service.entity';
 import { PricingRuleEntity } from '../src/modules/catalog/infrastructure/persistence/pricing-rule.entity';
 import { TeamsService } from '../src/modules/cleaners/application/services/teams.service';
+import { CleanerEntity } from '../src/modules/cleaners/infrastructure/persistence/cleaner.entity';
 import { TeamEntity } from '../src/modules/cleaners/infrastructure/persistence/team.entity';
 import { JobsService } from '../src/modules/jobs/application/services/jobs.service';
 import { DEFAULT_CHECKLIST_ITEMS } from '../src/modules/jobs/domain/default-checklist-items';
@@ -47,6 +48,7 @@ function createTestDataSource(): DataSource {
       ServiceEntity,
       PricingRuleEntity,
       TeamEntity,
+      CleanerEntity, // TeamEntity#cleaners inverse metadata
       AuditEventEntity,
     ],
   });

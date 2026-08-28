@@ -46,7 +46,7 @@ type JobRow = {
     service: { id: string; name: string };
   };
   team: { id: string; name: string } | null;
-  checklist: { id: string; items: ChecklistItemRow[] };
+  checklist: { id: string; items: { nodes: ChecklistItemRow[] } };
   [key: string]: unknown;
 };
 
@@ -74,8 +74,16 @@ export default function JobsPage() {
 }
 
 function JobsPageContent() {
-  const jobsQuery = useJobsQuery({ fetchPolicy: 'network-only' });
-  const { data: bookingsData } = useBookingsQuery({ fetchPolicy: 'network-only' });
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
+  const jobsQuery = useJobsQuery({
+    fetchPolicy: 'network-only',
+    variables: { paging: { limit: pageSize, offset: (page - 1) * pageSize } },
+  });
+  const { data: bookingsData } = useBookingsQuery({
+    fetchPolicy: 'network-only',
+    variables: { paging: { limit: 100 } },
+  });
   const [createJob, { loading: creating }] = useCreateJobFromBookingMutation();
   const { activeId, open: openDetail, close: closeDetail } = useDetailDrawer();
 
@@ -147,15 +155,12 @@ function JobsPageContent() {
     {
       key: 'progress',
       header: 'Checklist',
-      render: (row) => checklistProgress(row.checklist.items),
+      render: (row) => checklistProgress(row.checklist.items.nodes),
     },
   ];
 
-  const rows: JobRow[] = (jobsQuery.data?.jobs ?? []) as JobRow[];
-  const bookingIdsWithJobs = new Set(rows.map((row) => row.booking.id));
-  const availableBookings = (bookingsData?.bookings ?? []).filter(
-    (booking) => !bookingIdsWithJobs.has(booking.id),
-  );
+  const rows: JobRow[] = (jobsQuery.data?.jobs.nodes ?? []) as JobRow[];
+  const availableBookings = bookingsData?.bookings.nodes ?? [];
 
   return (
     <div className="flex flex-col gap-8">
@@ -176,6 +181,12 @@ function JobsPageContent() {
         loading={jobsQuery.loading}
         error={jobsQuery.error ? 'Unable to load jobs.' : undefined}
         onRowClick={(row) => openDetail(row.id)}
+        pagination={{
+          page,
+          pageSize,
+          totalCount: jobsQuery.data?.jobs.totalCount ?? 0,
+          onPageChange: setPage,
+        }}
       />
 
       <FormDialog
@@ -234,7 +245,10 @@ function JobDetailDrawer({
     variables: { id },
     fetchPolicy: 'network-only',
   });
-  const { data: teamsData } = useTeamsQuery({ fetchPolicy: 'network-only' });
+  const { data: teamsData } = useTeamsQuery({
+    fetchPolicy: 'network-only',
+    variables: { paging: { limit: 100 } },
+  });
   const [assignTeam, { loading: assigning }] = useAssignTeamToJobMutation();
   const [completeItem] = useCompleteChecklistItemMutation();
   const [completeJob, { loading: completing }] = useCompleteJobMutation();
@@ -243,9 +257,9 @@ function JobDetailDrawer({
   const [actionError, setActionError] = useState<string | undefined>(undefined);
 
   const job = data?.job;
-  const teams = teamsData?.teams ?? [];
+  const teams = teamsData?.teams.nodes ?? [];
   const teamIdValue = teamId ?? job?.team?.id ?? '';
-  const items = job?.checklist.items ?? [];
+  const items = job?.checklist.items.nodes ?? [];
   const allItemsComplete = items.length > 0 && items.every((item) => item.completed);
   const isCompleted = job?.status === 'COMPLETED';
   const canCompleteJob = allItemsComplete && !isCompleted;

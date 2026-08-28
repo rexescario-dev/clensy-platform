@@ -1,3 +1,4 @@
+import { SortDirection } from '@ptc-org/nestjs-query-core';
 import {
   FilterableField,
   FilterableRelation,
@@ -6,6 +7,10 @@ import {
   QueryOptions,
 } from '@ptc-org/nestjs-query-graphql';
 import { Field, ID, ObjectType, registerEnumType } from '@nestjs/graphql';
+import {
+  PLATFORM_PAGE_DEFAULT,
+  PLATFORM_PAGE_MAX,
+} from '../../../../platform/graphql/paging';
 import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
 import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
@@ -35,7 +40,16 @@ const relationReadOpts = {
 };
 
 @ObjectType('Booking')
-@QueryOptions({ pagingStrategy: PagingStrategies.NONE })
+@QueryOptions({
+  pagingStrategy: PagingStrategies.OFFSET,
+  enableTotalCount: true,
+  defaultResultSize: PLATFORM_PAGE_DEFAULT,
+  maxResultsSize: PLATFORM_PAGE_MAX,
+  defaultSort: [
+    { field: 'scheduledAt', direction: SortDirection.DESC },
+    { field: 'id', direction: SortDirection.ASC },
+  ],
+})
 @FilterableRelation('customer', () => CustomerType, {
   nullable: false,
   ...relationReadOpts,

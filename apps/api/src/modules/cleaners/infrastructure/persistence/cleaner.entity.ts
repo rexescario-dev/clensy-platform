@@ -3,17 +3,17 @@ import {
   CreateDateColumn,
   Entity,
   Index,
+  JoinColumn,
+  ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { Cleaner } from '../../domain/cleaner';
+import { TeamEntity } from './team.entity';
 
-// `teamId` is a plain column with no relation decorator — the FK constraint
-// is enforced at the database layer entirely via the hand-edited migration
-// (spec §3), not via TypeORM relation metadata. Do not add a `@ManyToOne`
-// here; that would let a future `migration:generate` regenerate the FK from
-// entity metadata, contradicting the migration being the sole authoritative
-// source of it. Mirrors `PropertyEntity.customerId`'s precedent exactly.
+// Dual UUID `teamId` + `@ManyToOne` (Booking / Property pattern). Application
+// writes keep using the scalar. `team` is persistence-only metadata for
+// Relatable. Non-eager, no cascade, no lazy: true.
 @Entity()
 export class CleanerEntity implements Cleaner {
   @PrimaryGeneratedColumn('uuid')
@@ -34,6 +34,17 @@ export class CleanerEntity implements Cleaner {
   @Column({ type: 'uuid', nullable: true })
   @Index()
   teamId!: string | null;
+
+  @ManyToOne(() => TeamEntity, (team) => team.cleaners, {
+    nullable: true,
+    eager: false,
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({
+    name: 'teamId',
+    foreignKeyConstraintName: 'fk_cleaner_team',
+  })
+  team!: TeamEntity | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;

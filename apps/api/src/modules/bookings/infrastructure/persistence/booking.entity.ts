@@ -15,12 +15,13 @@ import { Booking } from '../../domain/booking';
 import { BookingStatus } from '../../domain/booking-status';
 import { BookingPricingSnapshotEmbeddable } from './booking-pricing-snapshot.embeddable';
 
-// Dual UUID columns + unidirectional @ManyToOne (nestjs-query GraphQL Reads
-// spec §4.1). Application/REST/commands keep writing customerId (etc.)
-// scalars. GraphQL relation reads use the ORM relations. Relations are
-// persistence metadata only — BookingEntity may import foreign entities;
-// BookingsModule MUST NOT register them on forFeature. Non-eager, no
-// cascade, no inverses, no TypeORM lazy: true.
+// Dual UUID columns + @ManyToOne (nestjs-query GraphQL Reads spec §4.1).
+// Application/REST/commands keep writing customerId (etc.) scalars. GraphQL
+// relation reads use the ORM relations. Relations are persistence metadata
+// only — BookingEntity may import foreign entities; BookingsModule MUST NOT
+// register them on forFeature. Non-eager, no cascade, no TypeORM lazy: true.
+// Inverse `@OneToMany` lives on PropertyEntity (`bookings`) for nested
+// GraphQL; application code MUST NOT use that collection.
 @Entity()
 export class BookingEntity implements Booking {
   @PrimaryGeneratedColumn('uuid')
@@ -45,7 +46,7 @@ export class BookingEntity implements Booking {
   @Index()
   propertyId!: string;
 
-  @ManyToOne(() => PropertyEntity, {
+  @ManyToOne(() => PropertyEntity, (property) => property.bookings, {
     nullable: false,
     eager: false,
     onDelete: 'RESTRICT',

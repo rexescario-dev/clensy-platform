@@ -21,7 +21,7 @@ import { ActivePricingLoader } from './active-pricing.loader';
 import { CreateServiceInput } from './create-service.input';
 import { toPricingRuleType, toServiceType } from './mappers';
 import { PricingRuleType } from './pricing-rule.type';
-import { ServiceType } from './service.type';
+import { ServiceType, VIEW_ROLES } from './service.type';
 import { UpdateServiceInput } from './update-service.input';
 
 // Exactly the `Service`-scoped operations of spec §4.5 — no others.
@@ -36,34 +36,12 @@ export class ServiceResolver {
   // module's: all six roles, not just Owner/Ops Manager/Scheduler/Analyst.
   @Query(() => ServiceType, { name: 'service', nullable: true })
   @UseGuards(AuthGuard)
-  @Roles(
-    Role.OWNER,
-    Role.OPS_MANAGER,
-    Role.SCHEDULER,
-    Role.CUSTOMER_SUPPORT,
-    Role.FINANCE,
-    Role.ANALYST,
-  )
+  @Roles(...VIEW_ROLES)
   async service(
     @Args('id', { type: () => ID }) id: string,
   ): Promise<ServiceType | null> {
     const service = await this.servicesService.getService(id);
     return service ? toServiceType(service) : null;
-  }
-
-  @Query(() => [ServiceType], { name: 'services' })
-  @UseGuards(AuthGuard)
-  @Roles(
-    Role.OWNER,
-    Role.OPS_MANAGER,
-    Role.SCHEDULER,
-    Role.CUSTOMER_SUPPORT,
-    Role.FINANCE,
-    Role.ANALYST,
-  )
-  async services(): Promise<ServiceType[]> {
-    const services = await this.servicesService.listServices();
-    return services.map(toServiceType);
   }
 
   @Mutation(() => ServiceType)

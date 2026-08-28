@@ -12,15 +12,18 @@ import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
 import { CustomerResolver } from '../../../customers/presentation/graphql/customer.resolver';
 import { PropertyResolver } from '../../../customers/presentation/graphql/property.resolver';
 import { ServiceResolver } from '../../../catalog/presentation/graphql/service.resolver';
+import { PropertyReadResolver } from '../../../customers/presentation/graphql/property-read.resolver';
+import { ServiceReadResolver } from '../../../catalog/presentation/graphql/service-read.resolver';
+import { TeamReadResolver } from '../../../cleaners/presentation/graphql/team-read.resolver';
 import { TeamResolver } from '../../../cleaners/presentation/graphql/team.resolver';
 import { BookingReadResolver } from '../../../bookings/presentation/graphql/booking-read.resolver';
 import { BookingMutationResolver } from '../../../bookings/presentation/graphql/booking.resolver';
-import { ChecklistResolver } from '../../presentation/graphql/checklist.resolver';
+import { ChecklistReadResolver } from '../../presentation/graphql/checklist-read.resolver';
+import { JobReadResolver } from '../../presentation/graphql/job-read.resolver';
 import { JobResolver } from '../../presentation/graphql/job.resolver';
 
 type ResolverMethod =
   | 'job'
-  | 'jobs'
   | 'createJobFromBooking'
   | 'assignTeamToJob'
   | 'completeChecklistItem'
@@ -63,10 +66,7 @@ describe('JobResolver', () => {
     return reflector.get<Role[] | undefined>(ROLES_KEY, methodRef(method));
   }
 
-  describe.each([
-    ['job', VIEW_ROLES],
-    ['jobs', VIEW_ROLES],
-  ] as const)('%s', (method, expectedRoles) => {
+  describe.each([['job', VIEW_ROLES]] as const)('%s', (method, expectedRoles) => {
     it(`is guarded by AuthGuard and @Roles(${expectedRoles.join(', ')}) — view matrix`, () => {
       expect(guardsOn(method)).toContain(AuthGuard);
       expect(rolesOn(method)).toEqual(expectedRoles);
@@ -96,25 +96,44 @@ describe('JobResolver', () => {
       }).compile();
       const schemaFactory = moduleRef.get(GraphQLSchemaFactory);
       const schema = await schemaFactory.create([
+        JobReadResolver,
         JobResolver,
-        ChecklistResolver,
+        ChecklistReadResolver,
         BookingReadResolver,
         BookingMutationResolver,
         CustomerResolver,
+        PropertyReadResolver,
         PropertyResolver,
+        ServiceReadResolver,
         ServiceResolver,
+        TeamReadResolver,
         TeamResolver,
       ]);
 
       const queryFields = Object.keys(schema.getQueryType()!.getFields());
       expect(
-        queryFields.filter((name) => name === 'job' || name === 'jobs'),
+        queryFields.filter((name) => name === 'job' || name === 'jobs').sort(),
       ).toEqual(['job', 'jobs']);
       expect(schema.getQueryType()!.getFields().job.type.toString()).toBe(
         'CleaningJob',
       );
       expect(schema.getQueryType()!.getFields().jobs.type.toString()).toBe(
-        '[CleaningJob!]!',
+        'CleaningJobConnection!',
+      );
+      expect(
+        schema.getQueryType()!.getFields().jobs.args.map((arg) => arg.name),
+      ).toEqual(expect.arrayContaining(['paging', 'filter']));
+      const filterArg = schema
+        .getQueryType()!
+        .getFields()
+        .jobs.args.find((arg) => arg.name === 'filter');
+      expect(filterArg?.type.toString()).toMatch(/CleaningJobFilter/);
+
+      const jobConnection = schema.getType(
+        'CleaningJobConnection',
+      ) as GraphQLObjectType;
+      expect(Object.keys(jobConnection.getFields()).sort()).toEqual(
+        ['nodes', 'pageInfo', 'totalCount'].sort(),
       );
 
       const mutationFields = Object.keys(schema.getMutationType()!.getFields());
@@ -161,8 +180,17 @@ describe('JobResolver', () => {
       expect(jobType.getFields().checklist.type.toString()).toBe('Checklist!');
 
       const checklistType = schema.getType('Checklist') as GraphQLObjectType;
-      expect(checklistType.getFields().items.type.toString()).toBe(
-        '[ChecklistItem!]!',
+      const itemsField = checklistType.getFields().items;
+      expect(itemsField.type.toString()).toMatch(/Connection!$/);
+      expect(itemsField.args.map((arg) => arg.name)).toContain('paging');
+      const nestedItemsType = schema.getType(
+        itemsField.type.toString().replace(/!$/, ''),
+      ) as GraphQLObjectType;
+      expect(Object.keys(nestedItemsType.getFields())).toEqual(
+        expect.arrayContaining(['nodes', 'pageInfo']),
+      );
+      expect(Object.keys(nestedItemsType.getFields())).not.toContain(
+        'totalCount',
       );
 
       const itemType = schema.getType('ChecklistItem') as GraphQLObjectType;

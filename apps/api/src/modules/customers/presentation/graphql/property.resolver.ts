@@ -1,5 +1,12 @@
-import { UseGuards } from '@nestjs/common';
+import { UseGuards, BadRequestException } from '@nestjs/common';
 import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
+import {
+  InjectQueryService,
+  QueryService,
+  getFilterOmitting,
+  mergeFilter,
+  mergeQuery,
+} from '@ptc-org/nestjs-query-core';
 import { PropertiesService } from '../../application/services/properties.service';
 import { CreatePropertyCommand } from '../../application/commands/create-property.command';
 import { UpdatePropertyCommand } from '../../application/commands/update-property.command';
@@ -8,25 +15,39 @@ import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
 import type { AuthenticatedPrincipal } from '../../../../platform/auth/domain/authenticated-principal';
 import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
+import { PLATFORM_PAGE_DEFAULT } from '../../../../platform/graphql/paging';
+import { PropertyEntity } from '../../infrastructure/persistence/property.entity';
 import { CreatePropertyInput } from './create-property.input';
 import { toPropertyType } from './mappers';
-import { PropertyType } from './property.type';
+import {
+  CustomerPropertiesQueryArgs,
+  PropertyType,
+} from './property.type';
 import { UpdatePropertyInput } from './update-property.input';
 
+const VIEW_ROLES = [
+  Role.OWNER,
+  Role.OPS_MANAGER,
+  Role.SCHEDULER,
+  Role.CUSTOMER_SUPPORT,
+  Role.ANALYST,
+];
+
 // Exactly the `Property`-scoped operations of spec §4.5 — no others.
+// `customerProperties` keeps its Clensy name and required `customerId`, and
+// builds the page through 9.5.0 QueryArgsType / ConnectionType.createFromPromise
+// / QueryService (not a hand-rolled connection).
 @Resolver(() => PropertyType)
 export class PropertyResolver {
-  constructor(private readonly propertiesService: PropertiesService) {}
+  constructor(
+    private readonly propertiesService: PropertiesService,
+    @InjectQueryService(PropertyEntity)
+    private readonly propertyQueryService: QueryService<PropertyType>,
+  ) {}
 
   @Query(() => PropertyType, { name: 'property', nullable: true })
   @UseGuards(AuthGuard)
-  @Roles(
-    Role.OWNER,
-    Role.OPS_MANAGER,
-    Role.SCHEDULER,
-    Role.CUSTOMER_SUPPORT,
-    Role.ANALYST,
-  )
+  @Roles(...VIEW_ROLES)
   async property(
     @Args('id', { type: () => ID }) id: string,
   ): Promise<PropertyType | null> {
@@ -34,21 +55,51 @@ export class PropertyResolver {
     return property ? toPropertyType(property) : null;
   }
 
-  @Query(() => [PropertyType], { name: 'customerProperties' })
+  @Query(() => CustomerPropertiesQueryArgs.ConnectionType, {
+    name: 'customerProperties',
+  })
   @UseGuards(AuthGuard)
-  @Roles(
-    Role.OWNER,
-    Role.OPS_MANAGER,
-    Role.SCHEDULER,
-    Role.CUSTOMER_SUPPORT,
-    Role.ANALYST,
-  )
+  @Roles(...VIEW_ROLES)
   async customerProperties(
     @Args('customerId', { type: () => ID }) customerId: string,
-  ): Promise<PropertyType[]> {
-    const properties =
-      await this.propertiesService.listCustomerProperties(customerId);
-    return properties.map(toPropertyType);
+    @Args('paging', {
+      type: () => CustomerPropertiesQueryArgs.PageType,
+      nullable: true,
+      defaultValue: { limit: PLATFORM_PAGE_DEFAULT },
+    })
+    paging?: InstanceType<typeof CustomerPropertiesQueryArgs.PageType>,
+    @Args('filter', {
+      type: () => CustomerPropertiesQueryArgs.FilterType,
+      nullable: true,
+    })
+    filter?: InstanceType<typeof CustomerPropertiesQueryArgs.FilterType>,
+    @Args('sorting', {
+      type: () => [CustomerPropertiesQueryArgs.SortType],
+      nullable: true,
+    })
+    sorting?: InstanceType<typeof CustomerPropertiesQueryArgs.SortType>[],
+  ) {
+    if (!customerId.trim()) {
+      throw new BadRequestException('customerId is required');
+    }
+    const withoutClientScope = {
+      paging: paging ?? { limit: PLATFORM_PAGE_DEFAULT },
+      sorting,
+      filter: getFilterOmitting(filter ?? {}, 'customerId'),
+    };
+    const scoped = mergeQuery(withoutClientScope, {
+      filter: { customerId: { eq: customerId } },
+    });
+    return CustomerPropertiesQueryArgs.ConnectionType.createFromPromise(
+      (pageQuery) => this.propertyQueryService.query(pageQuery),
+      scoped,
+      (countFilter) =>
+        this.propertyQueryService.count(
+          mergeFilter(getFilterOmitting(countFilter ?? {}, 'customerId'), {
+            customerId: { eq: customerId },
+          }),
+        ),
+    );
   }
 
   @Mutation(() => PropertyType)
@@ -59,13 +110,6 @@ export class PropertyResolver {
     @Args('input') input: CreatePropertyInput,
     @CurrentUser() currentUser: AuthenticatedPrincipal,
   ): Promise<PropertyType> {
-    // Object spread, never manual field-by-field listing (task brief) — a
-    // fully-optional `PartialType` input re-listed field-by-field would
-    // materialize explicit `key: undefined` for every omitted field, and
-    // `PropertiesService.update`'s `Object.assign(entity, fields)` would
-    // then overwrite the entity's existing value with `undefined`. Not load
-    // -bearing for `createProperty` (all `CreatePropertyInput` fields are
-    // required), but kept consistent with `updateProperty` below.
     const command: CreatePropertyCommand = {
       ...input,
       customerId,
@@ -83,11 +127,6 @@ export class PropertyResolver {
     @Args('input') input: UpdatePropertyInput,
     @CurrentUser() currentUser: AuthenticatedPrincipal,
   ): Promise<PropertyType> {
-    // Object spread (task brief, spec §4.2) — `input` only carries keys the
-    // caller actually provided, so an omitted field retains its current
-    // value once `PropertiesService.update` does `Object.assign(entity,
-    // fields)`. Manually re-listing fields here would silently break that
-    // partial-update guarantee.
     const command: UpdatePropertyCommand = {
       ...input,
       actorId: currentUser.id,

@@ -1,10 +1,11 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { Repository } from 'typeorm';
 import { AppModule } from '../src/app/app.module';
+import { applyPlatformPipes } from '../src/platform/graphql/apply-platform-pipes';
 import { AuditEventEntity } from '../src/platform/audit/infrastructure/persistence/audit-event.entity';
 import { CustomersService } from '../src/modules/customers/application/services/customers.service';
 import { PropertiesService } from '../src/modules/customers/application/services/properties.service';
@@ -30,13 +31,7 @@ describe('Bookings REST (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(
-      new ValidationPipe({
-        transform: true,
-        whitelist: true,
-        forbidNonWhitelisted: true,
-      }),
-    );
+    applyPlatformPipes(app);
     await app.init();
 
     auditEventRepository = moduleFixture.get(

@@ -5,14 +5,8 @@ import { PropertyType } from './property.type';
 
 // Never expose `Customer`/`Property` (the domain interfaces) or their
 // TypeORM entities as GraphQL values — every service result is mapped
-// through one of these before leaving a resolver.
-
-// Returns `Omit<CustomerType, 'properties'>` cast to `CustomerType` —
-// `properties` is presentation-layer-only computed data (spec §4.5),
-// populated exclusively by `CustomerResolver.properties()`'s
-// `@ResolveField`; Apollo calls that field resolver for the `properties`
-// key independently of whatever this mapper's return value carries for it,
-// so no caller of `toCustomerType()` needs to (or can) populate it here.
+// through one of these before leaving a resolver. Nested `properties` /
+// `bookings` are Relatable-owned and are not populated here.
 export function toCustomerType(customer: Customer): CustomerType {
   return {
     id: customer.id,

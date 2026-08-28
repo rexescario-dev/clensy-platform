@@ -1,4 +1,4 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import cookieParser from 'cookie-parser';
@@ -15,6 +15,7 @@ import { ServicesService } from '../src/modules/catalog/application/services/ser
 import { TeamsService } from '../src/modules/cleaners/application/services/teams.service';
 import { Role } from '../src/platform/auth/domain/role';
 import { countSqlMentioning, withCapturedSql } from './helpers/capture-sql';
+import { applyPlatformPipes } from '../src/platform/graphql/apply-platform-pipes';
 import { seedOwner } from './helpers/seed-owner';
 
 // Proves the resolver -> guard -> service -> loader -> database wiring
@@ -53,13 +54,7 @@ describe('Bookings (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     app.use(cookieParser());
-    app.useGlobalPipes(
-      new ValidationPipe({
-        transform: true,
-        whitelist: true,
-        forbidNonWhitelisted: true,
-      }),
-    );
+    applyPlatformPipes(app);
     await app.init();
 
     adminUserRepository = moduleFixture.get(
@@ -139,11 +134,14 @@ describe('Bookings (e2e)', () => {
   const BOOKINGS_QUERY = `
     query Bookings {
       bookings {
-        id
-        customer { fullName }
-        property { addressLine1 }
-        service { name }
-        team { name }
+        totalCount
+        nodes {
+          id
+          customer { fullName }
+          property { addressLine1 }
+          service { name }
+          team { name }
+        }
       }
     }
   `;
@@ -151,11 +149,13 @@ describe('Bookings (e2e)', () => {
   const BOOKINGS_BATCH_QUERY = `
     query BookingsBatch($customerId: ID!) {
       bookings(filter: { customer: { id: { eq: $customerId } } }) {
-        id
-        customer { fullName }
-        property { addressLine1 }
-        service { name }
-        team { name }
+        nodes {
+          id
+          customer { fullName }
+          property { addressLine1 }
+          service { name }
+          team { name }
+        }
       }
     }
   `;
@@ -163,8 +163,10 @@ describe('Bookings (e2e)', () => {
   const BOOKINGS_NO_TEAM_QUERY = `
     query BookingsNoTeam($customerId: ID!) {
       bookings(filter: { customer: { id: { eq: $customerId } } }) {
-        id
-        customer { fullName }
+        nodes {
+          id
+          customer { fullName }
+        }
       }
     }
   `;
@@ -463,7 +465,7 @@ describe('Bookings (e2e)', () => {
           }),
       );
       expect(response.body.errors).toBeUndefined();
-      expect(response.body.data.bookings).toHaveLength(expectedN);
+      expect(response.body.data.bookings.nodes).toHaveLength(expectedN);
       return {
         queries,
         counts: Object.fromEntries(
@@ -595,9 +597,10 @@ describe('Bookings (e2e)', () => {
     const afterRemoveResponse = await authedRequest(ownerSessionCookie).send({
       query: BOOKINGS_QUERY,
     });
-    const afterRemoveIds: string[] = afterRemoveResponse.body.data.bookings.map(
-      (b: { id: string }) => b.id,
-    );
+    const afterRemoveIds: string[] =
+      afterRemoveResponse.body.data.bookings.nodes.map(
+        (b: { id: string }) => b.id,
+      );
     expect(afterRemoveIds).not.toContain(secondBookingId);
 
     const bookingRemoveAuditEvent = await auditEventRepository.findOneBy({
@@ -703,5 +706,123 @@ describe('Bookings (e2e)', () => {
         'FORBIDDEN',
       );
     }
+  }, 120000);
+
+  it('clamps bookings paging.limit above 100, defaults omitted paging to 20, and sorts equal scheduledAt by id ASC', async () => {
+    const owner = await seedOwner(adminUserRepository);
+    const ownerLoginResponse = await login(owner.email, owner.password);
+    expect(ownerLoginResponse.body.errors).toBeUndefined();
+    const ownerSessionCookie = extractSessionCookie(ownerLoginResponse);
+
+    const fixture = await createFixture(`paging-${owner.id}`, 5000);
+    const pricing = await authedRequest(ownerSessionCookie).send({
+      query: `mutation CreatePricingRule($input: CreatePricingRuleInput!) {
+        createPricingRule(input: $input) { id }
+      }`,
+      variables: {
+        input: { serviceId: fixture.service.id, priceMinorUnits: 5000 },
+      },
+    });
+    expect(pricing.body.errors).toBeUndefined();
+
+    const sameScheduledAt = new Date('2026-11-15T09:00:00.000Z');
+    const created: { id: string }[] = [];
+    for (let index = 0; index < 21; index += 1) {
+      created.push(
+        await bookingsService.create({
+          actorId: owner.id,
+          customerId: fixture.customer.id,
+          propertyId: fixture.property.id,
+          serviceId: fixture.service.id,
+          teamId: fixture.team.id,
+          scheduledAt:
+            index < 2
+              ? sameScheduledAt
+              : new Date(`2026-12-${String(index).padStart(2, '0')}T09:00:00.000Z`),
+        }),
+      );
+    }
+
+    const clampResponse = await authedRequest(ownerSessionCookie).send({
+      query: `query Clamp($paging: OffsetPaging) {
+        bookings(paging: $paging) {
+          totalCount
+          nodes { id }
+        }
+      }`,
+      variables: { paging: { limit: 1000, offset: 0 } },
+    });
+    expect(clampResponse.body.errors).toBeUndefined();
+    expect(clampResponse.body.data.bookings.nodes.length).toBe(
+      Math.min(100, clampResponse.body.data.bookings.totalCount),
+    );
+    expect(clampResponse.body.data.bookings.nodes.length).toBeLessThanOrEqual(
+      100,
+    );
+
+    const defaultResponse = await authedRequest(ownerSessionCookie).send({
+      query: `query DefaultPage {
+        bookings {
+          totalCount
+          nodes { id }
+        }
+      }`,
+    });
+    expect(defaultResponse.body.errors).toBeUndefined();
+    expect(defaultResponse.body.data.bookings.nodes).toHaveLength(20);
+    expect(defaultResponse.body.data.bookings.totalCount).toBeGreaterThanOrEqual(
+      21,
+    );
+
+    const page0 = await authedRequest(ownerSessionCookie).send({
+      query: `query SortPage($paging: OffsetPaging) {
+        bookings(paging: $paging) { nodes { id scheduledAt } }
+      }`,
+      variables: { paging: { limit: 1, offset: 0 } },
+    });
+    const page1 = await authedRequest(ownerSessionCookie).send({
+      query: `query SortPage($paging: OffsetPaging) {
+        bookings(paging: $paging) { nodes { id scheduledAt } }
+      }`,
+      variables: { paging: { limit: 1, offset: 1 } },
+    });
+    expect(page0.body.errors).toBeUndefined();
+    expect(page1.body.errors).toBeUndefined();
+    const first = page0.body.data.bookings.nodes[0];
+    const second = page1.body.data.bookings.nodes[0];
+    expect(first.id).not.toBe(second.id);
+    if (first.scheduledAt === second.scheduledAt) {
+      expect(first.id < second.id).toBe(true);
+    }
+
+    const tiedIds = [created[0].id, created[1].id].sort();
+    const tiedPage0 = await authedRequest(ownerSessionCookie).send({
+      query: `query Tied($filter: BookingFilter, $paging: OffsetPaging) {
+        bookings(
+          filter: $filter
+          paging: $paging
+        ) { nodes { id } }
+      }`,
+      variables: {
+        filter: { id: { in: tiedIds } },
+        paging: { limit: 1, offset: 0 },
+      },
+    });
+    const tiedPage1 = await authedRequest(ownerSessionCookie).send({
+      query: `query Tied($filter: BookingFilter, $paging: OffsetPaging) {
+        bookings(
+          filter: $filter
+          paging: $paging
+        ) { nodes { id } }
+      }`,
+      variables: {
+        filter: { id: { in: tiedIds } },
+        paging: { limit: 1, offset: 1 },
+      },
+    });
+    expect(tiedPage0.body.errors).toBeUndefined();
+    expect(tiedPage1.body.errors).toBeUndefined();
+    expect(tiedPage0.body.data.bookings.nodes[0].id).toBe(tiedIds[0]);
+    expect(tiedPage1.body.data.bookings.nodes[0].id).toBe(tiedIds[1]);
   }, 120000);
 });

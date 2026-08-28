@@ -3,21 +3,19 @@ import {
   CreateDateColumn,
   Entity,
   Index,
+  JoinColumn,
+  ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { BookingEntity } from '../../../bookings/infrastructure/persistence/booking.entity';
 import { CleaningJob } from '../../domain/cleaning-job';
 import { JobStatus } from '../../domain/job-status';
 
-// `bookingId`/`teamId` carry no TypeORM relation decorator — each is a
-// plain `@Column`, with the FK constraint hand-added in the migration's
-// raw SQL (spec §4.1), matching `BookingEntity.teamId` / `CleanerEntity
-// .teamId`. Do not add a relation decorator here; that would let a future
-// `migration:generate` regenerate the FK from entity metadata.
-//
-// No `@Column({ unique: true })` on `bookingId` — the unique constraint
-// name `UQ_cleaning_job_booking_id` is spec-mandated and is hand-added in
-// the migration. `unique: true` would let TypeORM invent a different name.
+// Dual UUID `bookingId` + `@ManyToOne` so Relatable can filter
+// `jobs(filter: { booking: { id: { eq } } })` (plan §3.6 mechanism 1).
+// Application writes keep using the scalar. No inverse on BookingEntity
+// (`booking.jobs` is out of inventory). Non-eager, no cascade, no lazy.
 @Entity()
 export class CleaningJobEntity implements CleaningJob {
   @PrimaryGeneratedColumn('uuid')
@@ -25,6 +23,17 @@ export class CleaningJobEntity implements CleaningJob {
 
   @Column({ type: 'uuid' })
   bookingId!: string;
+
+  @ManyToOne(() => BookingEntity, {
+    nullable: false,
+    eager: false,
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({
+    name: 'bookingId',
+    foreignKeyConstraintName: 'fk_cleaning_job_booking',
+  })
+  booking!: BookingEntity;
 
   @Column({ type: 'uuid', nullable: true })
   @Index()

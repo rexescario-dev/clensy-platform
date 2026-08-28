@@ -13,29 +13,19 @@ import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
 import type { AuthenticatedPrincipal } from '../../../../platform/auth/domain/authenticated-principal';
 import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
-import { toBookingDto } from '../../../bookings/presentation/graphql/mappers';
-import { BookingDTO } from '../../../bookings/presentation/graphql/booking.dto';
 import { toTeamType } from '../../../cleaners/presentation/graphql/mappers';
 import { TeamType } from '../../../cleaners/presentation/graphql/team.type';
 import { JobsService } from '../../application/services/jobs.service';
 import { CleaningJob } from '../../domain/cleaning-job';
 import { AssignTeamToJobInput } from './assign-team-to-job.input';
 import { ChecklistType } from './checklist.type';
-import { CleaningJobType } from './cleaning-job.type';
+import { CleaningJobType, VIEW_ROLES } from './cleaning-job.type';
 import { CompleteChecklistItemInput } from './complete-checklist-item.input';
 import { CompleteJobInput } from './complete-job.input';
 import { CreateJobFromBookingInput } from './create-job-from-booking.input';
 import { JobRelationLoaders } from './job-relation.loaders';
 import { toChecklistType, toCleaningJobType } from './mappers';
 
-const VIEW_ROLES = [
-  Role.OWNER,
-  Role.OPS_MANAGER,
-  Role.SCHEDULER,
-  Role.CUSTOMER_SUPPORT,
-  Role.FINANCE,
-  Role.ANALYST,
-];
 const CREATE_ROLES = [
   Role.OWNER,
   Role.OPS_MANAGER,
@@ -59,14 +49,6 @@ export class JobResolver {
   ): Promise<CleaningJobType | null> {
     const found = await this.jobsService.getJob(id);
     return found ? toCleaningJobType(found) : null;
-  }
-
-  @Query(() => [CleaningJobType], { name: 'jobs' })
-  @UseGuards(AuthGuard)
-  @Roles(...VIEW_ROLES)
-  async jobs(): Promise<CleaningJobType[]> {
-    const jobs = await this.jobsService.listJobs();
-    return jobs.map(toCleaningJobType);
   }
 
   @Mutation(() => CleaningJobType)
@@ -125,14 +107,6 @@ export class JobResolver {
       jobId: input.id,
     });
     return toCleaningJobType(job);
-  }
-
-  @ResolveField(() => BookingDTO)
-  async booking(
-    @Parent() job: Pick<CleaningJob, 'bookingId'>,
-  ): Promise<BookingDTO> {
-    const booking = await this.loaders.bookingLoader.load(job.bookingId);
-    return toBookingDto(booking!);
   }
 
   @ResolveField(() => TeamType, { nullable: true })

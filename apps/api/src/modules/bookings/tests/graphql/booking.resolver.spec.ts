@@ -7,7 +7,8 @@ import {
   GraphQLSchemaFactory,
 } from '@nestjs/graphql';
 import { Test } from '@nestjs/testing';
-import { GraphQLObjectType } from 'graphql';
+import { GraphQLEnumType, GraphQLObjectType } from 'graphql';
+import { PLATFORM_PAGE_DEFAULT } from '../../../../platform/graphql/paging';
 import { ROLES_KEY } from '../../../../platform/auth/decorators/roles.decorator';
 import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
@@ -103,7 +104,7 @@ describe('Booking GraphQL reads and mutations', () => {
   });
 
   describe('schema allowlist', () => {
-    it('exposes Booking fields, Booking!, filter/sorting, and only Clensy booking mutations', async () => {
+    it('exposes Booking fields, Booking!, BookingConnection with offset paging, and only Clensy booking mutations', async () => {
       const moduleRef = await Test.createTestingModule({
         imports: [GraphQLSchemaBuilderModule],
       }).compile();
@@ -151,10 +152,30 @@ describe('Booking GraphQL reads and mutations', () => {
       expect(bookingQuery.type.toString()).toBe('Booking!');
 
       const bookingsQuery = schema.getQueryType()!.getFields().bookings;
-      expect(bookingsQuery.type.toString()).toBe('[Booking!]!');
+      expect(bookingsQuery.type.toString()).toBe('BookingConnection!');
       const argNames = bookingsQuery.args.map((arg) => arg.name).sort();
-      expect(argNames).toEqual(['filter', 'sorting']);
-      expect(argNames).not.toContain('paging');
+      expect(argNames).toEqual(['filter', 'paging', 'sorting']);
+
+      const connection = schema.getType('BookingConnection') as GraphQLObjectType;
+      expect(connection).toBeDefined();
+      expect(Object.keys(connection.getFields()).sort()).toEqual(
+        ['nodes', 'pageInfo', 'totalCount'].sort(),
+      );
+      expect(connection.getFields()).not.toHaveProperty('edges');
+
+      const pagingArg = bookingsQuery.args.find((arg) => arg.name === 'paging');
+      expect(pagingArg?.type.toString()).toMatch(/OffsetPaging/);
+      expect(pagingArg?.defaultValue).toEqual({
+        limit: PLATFORM_PAGE_DEFAULT,
+      });
+      expect(schema.getType('OffsetPageInfo')).toBeDefined();
+      expect(schema.getType('PageInfo')).toBeUndefined();
+      expect(schema.getType('CursorPaging')).toBeUndefined();
+
+      const sortFields = schema.getType('BookingSortFields') as GraphQLEnumType;
+      expect(sortFields).toBeDefined();
+      const sortFieldNames = sortFields.getValues().map((value) => value.name);
+      expect(sortFieldNames).toEqual(expect.arrayContaining(['id', 'scheduledAt']));
 
       const queryNames = Object.keys(schema.getQueryType()!.getFields());
       for (const name of queryNames) {

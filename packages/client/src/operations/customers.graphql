@@ -1,9 +1,16 @@
-query Customers {
-  customers {
-    id
-    fullName
-    email
-    phone
+query Customers($paging: OffsetPaging, $filter: CustomerFilter, $sorting: [CustomerSort!]) {
+  customers(paging: $paging, filter: $filter, sorting: $sorting) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+    }
+    nodes {
+      id
+      fullName
+      email
+      phone
+    }
   }
 }
 
@@ -14,15 +21,20 @@ query Customer($id: ID!) {
     email
     phone
     notes
-    properties {
-      id
-      label
-      addressLine1
-      addressLine2
-      city
-      region
-      postalCode
-      accessNotes
+    properties(paging: { limit: 100 }) {
+      nodes {
+        id
+        label
+        addressLine1
+        addressLine2
+        city
+        region
+        postalCode
+        accessNotes
+      }
+      pageInfo {
+        hasNextPage
+      }
     }
   }
 }

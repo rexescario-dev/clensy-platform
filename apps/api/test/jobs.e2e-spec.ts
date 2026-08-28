@@ -1,4 +1,4 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import cookieParser from 'cookie-parser';
@@ -6,8 +6,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { DataSource, Repository } from 'typeorm';
 import { AppModule } from '../src/app/app.module';
-import { countSqlMentioning, withCapturedSql } from './helpers/capture-sql';
-import { BookingsService } from '../src/modules/bookings/application/services/bookings.service';
+import { assertNoPerParentChildSelect, countSqlMentioning, withCapturedSql } from './helpers/capture-sql';
 import { TeamsService } from '../src/modules/cleaners/application/services/teams.service';
 import { CustomersService } from '../src/modules/customers/application/services/customers.service';
 import { PropertiesService } from '../src/modules/customers/application/services/properties.service';
@@ -16,6 +15,7 @@ import { JobsService } from '../src/modules/jobs/application/services/jobs.servi
 import { DEFAULT_CHECKLIST_ITEMS } from '../src/modules/jobs/domain/default-checklist-items';
 import { AdminUserEntity } from '../src/modules/admins/infrastructure/persistence/admin-user.entity';
 import { Role } from '../src/platform/auth/domain/role';
+import { applyPlatformPipes } from '../src/platform/graphql/apply-platform-pipes';
 import { seedOwner } from './helpers/seed-owner';
 
 // GraphQL e2e against AppModule (plan Task 6): golden path, RBAC, missing
@@ -29,7 +29,6 @@ describe('Jobs (e2e)', () => {
   let propertiesService: PropertiesService;
   let servicesService: ServicesService;
   let teamsService: TeamsService;
-  let bookingsService: BookingsService;
   let jobsService: JobsService;
   let dataSource: DataSource;
 
@@ -40,13 +39,7 @@ describe('Jobs (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     app.use(cookieParser());
-    app.useGlobalPipes(
-      new ValidationPipe({
-        transform: true,
-        whitelist: true,
-        forbidNonWhitelisted: true,
-      }),
-    );
+    applyPlatformPipes(app);
     await app.init();
 
     adminUserRepository = moduleFixture.get(
@@ -56,7 +49,6 @@ describe('Jobs (e2e)', () => {
     propertiesService = moduleFixture.get(PropertiesService);
     servicesService = moduleFixture.get(ServicesService);
     teamsService = moduleFixture.get(TeamsService);
-    bookingsService = moduleFixture.get(BookingsService);
     jobsService = moduleFixture.get(JobsService, { strict: false });
     dataSource = moduleFixture.get(DataSource);
   }, 30000);
@@ -116,7 +108,7 @@ describe('Jobs (e2e)', () => {
     team { id name }
     checklist {
       id
-      items { id label position completed completedAt }
+      items { nodes { id label position completed completedAt } }
     }
   `;
 
@@ -152,16 +144,18 @@ describe('Jobs (e2e)', () => {
 
   const JOBS_QUERY = `
     query Jobs {
-      jobs { ${JOB_FIELDS} }
+      jobs { nodes { ${JOB_FIELDS} } }
     }
   `;
 
   const JOBS_N_PLUS_ONE_QUERY = `
     query JobsNPlusOne {
       jobs {
-        booking { id }
-        team { name }
-        checklist { items { label } }
+        nodes {
+          booking { id }
+          team { name }
+          checklist { items { nodes { label } } }
+        }
       }
     }
   `;
@@ -293,9 +287,9 @@ describe('Jobs (e2e)', () => {
       id: golden.team.id,
       name: golden.team.name,
     });
-    expect(createdJob.checklist.items).toHaveLength(3);
+    expect(createdJob.checklist.items.nodes).toHaveLength(3);
     expect(
-      createdJob.checklist.items.map(
+      createdJob.checklist.items.nodes.map(
         (item: { position: number; label: string; completed: boolean }) => ({
           position: item.position,
           label: item.label,
@@ -310,7 +304,7 @@ describe('Jobs (e2e)', () => {
       })),
     );
     const jobId: string = createdJob.id;
-    const itemIds: string[] = createdJob.checklist.items.map(
+    const itemIds: string[] = createdJob.checklist.items.nodes.map(
       (item: { id: string }) => item.id,
     );
 
@@ -326,7 +320,7 @@ describe('Jobs (e2e)', () => {
       currentJob = completeItemResponse.body.data.completeChecklistItem;
       expect(currentJob.status).toBe('IN_PROGRESS');
       expect(
-        currentJob.checklist.items.filter(
+        currentJob.checklist.items.nodes.filter(
           (item: { completed: boolean }) => item.completed,
         ),
       ).toHaveLength(index + 1);
@@ -340,7 +334,7 @@ describe('Jobs (e2e)', () => {
     const completedJob = completeJobResponse.body.data.completeJob;
     expect(completedJob.status).toBe('COMPLETED');
     expect(
-      completedJob.checklist.items.every(
+      completedJob.checklist.items.nodes.every(
         (item: { completed: boolean }) => item.completed === true,
       ),
     ).toBe(true);
@@ -463,15 +457,10 @@ describe('Jobs (e2e)', () => {
     const n1aJob = n1aJobResponse.body.data.createJobFromBooking;
     const n1bJob = n1bJobResponse.body.data.createJobFromBooking;
 
-    const getBookingsByIdsSpy = jest.spyOn(bookingsService, 'getBookingsByIds');
     const getTeamsByIdsSpy = jest.spyOn(teamsService, 'getTeamsByIds');
     const getChecklistsByJobIdsSpy = jest.spyOn(
       jobsService,
       'getChecklistsByJobIds',
-    );
-    const getChecklistItemsByChecklistIdsSpy = jest.spyOn(
-      jobsService,
-      'getChecklistItemsByChecklistIds',
     );
 
     const nPlusOneResponse = await authedRequest(ownerSessionCookie).send({
@@ -479,13 +468,9 @@ describe('Jobs (e2e)', () => {
     });
     expect(nPlusOneResponse.body.errors).toBeUndefined();
     const jobsRows: Array<{ booking: { id: string } }> =
-      nPlusOneResponse.body.data.jobs;
+      nPlusOneResponse.body.data.jobs.nodes;
     expect(jobsRows.length).toBeGreaterThanOrEqual(2);
 
-    expect(getBookingsByIdsSpy).toHaveBeenCalledTimes(1);
-    expect(getBookingsByIdsSpy.mock.calls[0][0]).toEqual(
-      expect.arrayContaining([n1a.bookingId, n1b.bookingId]),
-    );
     expect(getTeamsByIdsSpy).toHaveBeenCalledTimes(1);
     expect(getTeamsByIdsSpy.mock.calls[0][0]).toEqual(
       expect.arrayContaining([n1a.team.id, n1b.team.id]),
@@ -494,26 +479,20 @@ describe('Jobs (e2e)', () => {
     expect(getChecklistsByJobIdsSpy.mock.calls[0][0]).toEqual(
       expect.arrayContaining([n1aJob.id, n1bJob.id]),
     );
-    expect(getChecklistItemsByChecklistIdsSpy).toHaveBeenCalledTimes(1);
-    expect(getChecklistItemsByChecklistIdsSpy.mock.calls[0][0]).toEqual(
-      expect.arrayContaining([n1aJob.checklist.id, n1bJob.checklist.id]),
-    );
 
-    getBookingsByIdsSpy.mockRestore();
     getTeamsByIdsSpy.mockRestore();
     getChecklistsByJobIdsSpy.mockRestore();
-    getChecklistItemsByChecklistIdsSpy.mockRestore();
 
     const { result: nestedCustomerResponse, queries: nestedCustomerQueries } =
       await withCapturedSql(dataSource, () =>
         authedRequest(ownerSessionCookie).send({
           query: `query JobsNestedBookingCustomer {
-        jobs { booking { customer { fullName } } }
+        jobs { nodes { booking { customer { fullName } } } }
       }`,
         }),
       );
     expect(nestedCustomerResponse.body.errors).toBeUndefined();
-    const nestedJobCount = nestedCustomerResponse.body.data.jobs
+    const nestedJobCount = nestedCustomerResponse.body.data.jobs.nodes
       .length as number;
     expect(nestedJobCount).toBeGreaterThanOrEqual(2);
     const customerSqlCount = countSqlMentioning(
@@ -584,7 +563,7 @@ describe('Jobs (e2e)', () => {
         query: JOBS_QUERY,
       });
       expect(readResponse.body.errors).toBeUndefined();
-      expect(Array.isArray(readResponse.body.data.jobs)).toBe(true);
+      expect(Array.isArray(readResponse.body.data.jobs.nodes)).toBe(true);
     }
 
     const createAllowed = [
@@ -616,7 +595,7 @@ describe('Jobs (e2e)', () => {
       createdByRole[tag] = {
         jobId: writeResponse.body.data.createJobFromBooking.id,
         itemId:
-          writeResponse.body.data.createJobFromBooking.checklist.items[0].id,
+          writeResponse.body.data.createJobFromBooking.checklist.items.nodes[0].id,
         teamId: source.team.id,
       };
     }
@@ -707,5 +686,87 @@ describe('Jobs (e2e)', () => {
         'FORBIDDEN',
       );
     }
+  }, 120000);
+
+  it('filters jobs by booking relation (mechanism 1) with limit 1 and loads nested items in O(1)', async () => {
+    const owner = await seedOwner(adminUserRepository);
+    const ownerLogin = await login(owner.email, owner.password);
+    expect(ownerLogin.body.errors).toBeUndefined();
+    const cookie = extractSessionCookie(ownerLogin);
+    const runId = owner.id;
+
+    const first = await createPricedBooking(cookie, `${runId}-exist-a`);
+    const created = await authedRequest(cookie).send({
+      query: CREATE_JOB_MUTATION,
+      variables: { input: { bookingId: first.bookingId } },
+    });
+    expect(created.body.errors).toBeUndefined();
+    const jobId = created.body.data.createJobFromBooking.id as string;
+
+    const { result: existence, queries } = await withCapturedSql(dataSource, () =>
+      authedRequest(cookie).send({
+        query: `query JobByBooking($bookingId: ID!) {
+          jobs(filter: { booking: { id: { eq: $bookingId } } }, paging: { limit: 1 }) {
+            nodes { id }
+          }
+        }`,
+        variables: { bookingId: first.bookingId },
+      }),
+    );
+    expect(existence.body.errors).toBeUndefined();
+    expect(existence.body.data.jobs.nodes).toHaveLength(1);
+    expect(existence.body.data.jobs.nodes[0].id).toBe(jobId);
+    expect(queries.some((sql) => /\blimit\b/i.test(sql))).toBe(true);
+
+    const jobIds: string[] = [jobId];
+    for (let index = 1; index < 6; index += 1) {
+      const source = await createPricedBooking(cookie, `${runId}-items-${index}`);
+      const jobResponse = await authedRequest(cookie).send({
+        query: CREATE_JOB_MUTATION,
+        variables: { input: { bookingId: source.bookingId } },
+      });
+      expect(jobResponse.body.errors).toBeUndefined();
+      jobIds.push(jobResponse.body.data.createJobFromBooking.id);
+    }
+
+    const listParentQuery = `query ListJobs($ids: [ID!]!) {
+      jobs(filter: { id: { in: $ids } }, paging: { limit: 20 }) {
+        nodes {
+          id
+          checklist {
+            items { nodes { id } pageInfo { hasNextPage } }
+          }
+        }
+      }
+    }`;
+
+    const captureAtN = async (parentN: number, ids: string[]) => {
+      const { result, queries: captured } = await withCapturedSql(
+        dataSource,
+        () =>
+          authedRequest(cookie).send({
+            query: listParentQuery,
+            variables: { ids },
+          }),
+      );
+      expect(result.body.errors).toBeUndefined();
+      expect(result.body.data.jobs.nodes).toHaveLength(parentN);
+      assertNoPerParentChildSelect(captured, parentN, 'checklist_item_entity');
+      return captured.length;
+    };
+
+    const atSix = await captureAtN(6, jobIds);
+    for (let index = 6; index < 12; index += 1) {
+      const source = await createPricedBooking(cookie, `${runId}-items-${index}`);
+      const jobResponse = await authedRequest(cookie).send({
+        query: CREATE_JOB_MUTATION,
+        variables: { input: { bookingId: source.bookingId } },
+      });
+      expect(jobResponse.body.errors).toBeUndefined();
+      jobIds.push(jobResponse.body.data.createJobFromBooking.id);
+    }
+    const atTwelve = await captureAtN(12, jobIds);
+    const delta = Math.abs(atTwelve - atSix);
+    expect(delta === 0 || delta <= 2).toBe(true);
   }, 120000);
 });

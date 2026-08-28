@@ -2,14 +2,16 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { PropertyEntity } from './property.entity';
 import { Customer } from '../../domain/customer';
 
-// No relation decorator to `PropertyEntity` — `Customer.properties` is
-// presentation-layer computed data only, not a domain/ORM relation (spec
-// §4.1, §4.5). Do not add one preemptively.
+// `properties` is persistence-only inverse metadata for Relatable nested
+// GraphQL. Not on the domain object; application writes MUST NOT read or
+// assign it. Non-eager, no cascade, no lazy: true.
 @Entity()
 export class CustomerEntity implements Customer {
   @PrimaryGeneratedColumn('uuid')
@@ -26,6 +28,9 @@ export class CustomerEntity implements Customer {
 
   @Column({ type: 'text', nullable: true })
   notes!: string | null;
+
+  @OneToMany(() => PropertyEntity, (property) => property.customer)
+  properties!: PropertyEntity[];
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;

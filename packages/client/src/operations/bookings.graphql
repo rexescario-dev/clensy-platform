@@ -1,26 +1,33 @@
-query Bookings {
-  bookings {
-    id
-    scheduledAt
-    status
-    pricingSnapshot {
-      priceMinorUnits
+query Bookings($paging: OffsetPaging, $filter: BookingFilter, $sorting: [BookingSort!]) {
+  bookings(paging: $paging, filter: $filter, sorting: $sorting) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
     }
-    customer {
+    nodes {
       id
-      fullName
-    }
-    property {
-      id
-      addressLine1
-    }
-    service {
-      id
-      name
-    }
-    team {
-      id
-      name
+      scheduledAt
+      status
+      pricingSnapshot {
+        priceMinorUnits
+      }
+      customer {
+        id
+        fullName
+      }
+      property {
+        id
+        addressLine1
+      }
+      service {
+        id
+        name
+      }
+      team {
+        id
+        name
+      }
     }
   }
 }

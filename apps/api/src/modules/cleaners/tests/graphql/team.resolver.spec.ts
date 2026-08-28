@@ -10,9 +10,11 @@ import { ROLES_KEY } from '../../../../platform/auth/decorators/roles.decorator'
 import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
 import { CleanerResolver } from '../../presentation/graphql/cleaner.resolver';
+import { CleanerReadResolver } from '../../presentation/graphql/cleaner-read.resolver';
 import { TeamResolver } from '../../presentation/graphql/team.resolver';
+import { TeamReadResolver } from '../../presentation/graphql/team-read.resolver';
 
-type ResolverMethod = 'team' | 'teams' | 'createTeam';
+type ResolverMethod = 'team' | 'createTeam';
 
 // View matrix per spec §4.3: Customer Support and Finance excluded.
 const VIEW_ROLES = [Role.OWNER, Role.OPS_MANAGER, Role.SCHEDULER, Role.ANALYST];
@@ -40,10 +42,7 @@ describe('TeamResolver', () => {
     return reflector.get<Role[] | undefined>(ROLES_KEY, methodRef(method));
   }
 
-  describe.each([
-    ['team', VIEW_ROLES],
-    ['teams', VIEW_ROLES],
-  ] as const)('%s', (method, expectedRoles) => {
+  describe.each([['team', VIEW_ROLES]] as const)('%s', (method, expectedRoles) => {
     it(`is guarded by AuthGuard and @Roles(${expectedRoles.join(', ')}) — view matrix`, () => {
       expect(guardsOn(method)).toContain(AuthGuard);
       expect(rolesOn(method)).toEqual(expectedRoles);
@@ -75,7 +74,9 @@ describe('TeamResolver', () => {
       }).compile();
       const schemaFactory = moduleRef.get(GraphQLSchemaFactory);
       const schema = await schemaFactory.create([
+        CleanerReadResolver,
         CleanerResolver,
+        TeamReadResolver,
         TeamResolver,
       ]);
 
@@ -90,35 +91,10 @@ describe('TeamResolver', () => {
   });
 
   describe('cleaners', () => {
-    it('loads cleaners via loaders.teamCleanersLoader mapped through toCleanerType', async () => {
-      const cleaner = {
-        id: 'cleaner-1',
-        fullName: 'Jane Doe',
-        phone: '555-1234',
-        email: 'jane@example.com',
-        notes: null,
-        teamId: 'team-1',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      const loaders = {
-        teamLoader: { load: jest.fn() },
-        teamCleanersLoader: { load: jest.fn().mockResolvedValue([cleaner]) },
-      };
-      const resolver = new TeamResolver({} as never, loaders as never);
-
-      const result = await resolver.cleaners({
-        id: 'team-1',
-        name: 'Team A',
-        cleaners: [],
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-
-      expect(loaders.teamCleanersLoader.load).toHaveBeenCalledWith('team-1');
-      expect(result).toEqual([
-        expect.objectContaining({ id: 'cleaner-1', fullName: 'Jane Doe' }),
-      ]);
+    it('is a nested offset connection field, not a Clensy ResolveField array', () => {
+      expect(
+        Object.getOwnPropertyDescriptor(TeamResolver.prototype, 'cleaners'),
+      ).toBeUndefined();
     });
   });
 });

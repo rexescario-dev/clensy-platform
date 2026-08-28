@@ -10,11 +10,12 @@ import { ROLES_KEY } from '../../../../platform/auth/decorators/roles.decorator'
 import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
 import { CleanerResolver } from '../../presentation/graphql/cleaner.resolver';
+import { CleanerReadResolver } from '../../presentation/graphql/cleaner-read.resolver';
 import { TeamResolver } from '../../presentation/graphql/team.resolver';
+import { TeamReadResolver } from '../../presentation/graphql/team-read.resolver';
 
 type ResolverMethod =
   | 'cleaner'
-  | 'cleaners'
   | 'createCleaner'
   | 'updateCleaner'
   | 'assignCleanerToTeam';
@@ -51,10 +52,7 @@ describe('CleanerResolver', () => {
     return reflector.get<Role[] | undefined>(ROLES_KEY, methodRef(method));
   }
 
-  describe.each([
-    ['cleaner', VIEW_ROLES],
-    ['cleaners', VIEW_ROLES],
-  ] as const)('%s', (method, expectedRoles) => {
+  describe.each([['cleaner', VIEW_ROLES]] as const)('%s', (method, expectedRoles) => {
     it(`is guarded by AuthGuard and @Roles(${expectedRoles.join(', ')}) — view matrix`, () => {
       expect(guardsOn(method)).toContain(AuthGuard);
       expect(rolesOn(method)).toEqual(expectedRoles);
@@ -83,7 +81,9 @@ describe('CleanerResolver', () => {
       }).compile();
       const schemaFactory = moduleRef.get(GraphQLSchemaFactory);
       const schema = await schemaFactory.create([
+        CleanerReadResolver,
         CleanerResolver,
+        TeamReadResolver,
         TeamResolver,
       ]);
 

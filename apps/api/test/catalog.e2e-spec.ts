@@ -1,4 +1,4 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import cookieParser from 'cookie-parser';
@@ -11,6 +11,7 @@ import { AdminUserEntity } from '../src/modules/admins/infrastructure/persistenc
 import { PricingRulesService } from '../src/modules/catalog/application/services/pricing-rules.service';
 import { PricingRuleEntity } from '../src/modules/catalog/infrastructure/persistence/pricing-rule.entity';
 import { Role } from '../src/platform/auth/domain/role';
+import { applyPlatformPipes } from '../src/platform/graphql/apply-platform-pipes';
 import { seedOwner } from './helpers/seed-owner';
 
 // Proves plan task-7 brief's full 11-step Catalog E2E acceptance scenario
@@ -56,13 +57,7 @@ describe('Catalog (e2e)', () => {
     // extractor reads `req.cookies[SESSION_COOKIE_NAME]`, which is only
     // populated when this middleware runs ahead of it.
     app.use(cookieParser());
-    app.useGlobalPipes(
-      new ValidationPipe({
-        transform: true,
-        whitelist: true,
-        forbidNonWhitelisted: true,
-      }),
-    );
+    applyPlatformPipes(app);
     await app.init();
 
     adminUserRepository = moduleFixture.get(
@@ -162,10 +157,12 @@ describe('Catalog (e2e)', () => {
   const SERVICES_QUERY = `
     query Services {
       services {
-        id
-        name
-        active
-        activePricing { priceMinorUnits }
+        nodes {
+          id
+          name
+          active
+          activePricing { priceMinorUnits }
+        }
       }
     }
   `;
@@ -173,9 +170,11 @@ describe('Catalog (e2e)', () => {
   const ADD_ONS_QUERY = `
     query AddOns {
       addOns {
-        id
-        name
-        priceMinorUnits
+        nodes {
+          id
+          name
+          priceMinorUnits
+        }
       }
     }
   `;
@@ -336,7 +335,7 @@ describe('Catalog (e2e)', () => {
     const servicesAfterPricing: Array<{
       id: string;
       activePricing: { priceMinorUnits: number } | null;
-    }> = servicesAfterPricingResponse.body.data.services;
+    }> = servicesAfterPricingResponse.body.data.services.nodes;
     const serviceRowAfterPricing = servicesAfterPricing.find(
       (s) => s.id === serviceId,
     );
@@ -349,7 +348,7 @@ describe('Catalog (e2e)', () => {
     ).send({ query: ADD_ONS_QUERY });
     expect(addOnsAfterCreateResponse.body.errors).toBeUndefined();
     const addOnIdsAfterCreate: string[] =
-      addOnsAfterCreateResponse.body.data.addOns.map(
+      addOnsAfterCreateResponse.body.data.addOns.nodes.map(
         (a: { id: string }) => a.id,
       );
     expect(addOnIdsAfterCreate).toContain(addOnId);
@@ -440,12 +439,12 @@ describe('Catalog (e2e)', () => {
     ).send({ query: SERVICES_QUERY });
     expect(servicesAfterDeactivateResponse.body.errors).toBeUndefined();
     const servicesAfterDeactivateIds: string[] =
-      servicesAfterDeactivateResponse.body.data.services.map(
+      servicesAfterDeactivateResponse.body.data.services.nodes.map(
         (s: { id: string }) => s.id,
       );
     expect(servicesAfterDeactivateIds).toContain(serviceId);
     const deactivatedServiceRow =
-      servicesAfterDeactivateResponse.body.data.services.find(
+      servicesAfterDeactivateResponse.body.data.services.nodes.find(
         (s: { id: string }) => s.id === serviceId,
       );
     expect(deactivatedServiceRow.active).toBe(false);
@@ -476,7 +475,7 @@ describe('Catalog (e2e)', () => {
       ownerSessionCookie,
     ).send({ query: ADD_ONS_QUERY });
     expect(addOnsAfterUpdateResponse.body.errors).toBeUndefined();
-    const addOnRowAfterUpdate = addOnsAfterUpdateResponse.body.data.addOns.find(
+    const addOnRowAfterUpdate = addOnsAfterUpdateResponse.body.data.addOns.nodes.find(
       (a: { id: string }) => a.id === addOnId,
     );
     expect(addOnRowAfterUpdate).toMatchObject({
@@ -529,7 +528,7 @@ describe('Catalog (e2e)', () => {
     const servicesFixtureRows: Array<{
       id: string;
       activePricing: { priceMinorUnits: number } | null;
-    }> = servicesFixtureResponse.body.data.services;
+    }> = servicesFixtureResponse.body.data.services.nodes;
     const servicesFixtureById = new Map(
       servicesFixtureRows.map((row) => [row.id, row]),
     );
@@ -564,7 +563,7 @@ describe('Catalog (e2e)', () => {
     });
     expect(servicesBatchResponse.body.errors).toBeUndefined();
     const expectedServiceIds: string[] = (
-      servicesBatchResponse.body.data.services as Array<{ id: string }>
+      servicesBatchResponse.body.data.services.nodes as Array<{ id: string }>
     ).map((row) => row.id);
     // Sanity check: the complete set of N service ids includes the unpriced
     // fixture service — otherwise the exact-set assertion below would be
@@ -672,7 +671,7 @@ describe('Catalog (e2e)', () => {
         query: SERVICES_QUERY,
       });
       expect(servicesResponse.body.errors).toBeUndefined();
-      const roleServiceIds: string[] = servicesResponse.body.data.services.map(
+      const roleServiceIds: string[] = servicesResponse.body.data.services.nodes.map(
         (s: { id: string }) => s.id,
       );
       expect(roleServiceIds).toContain(serviceId);
@@ -681,7 +680,7 @@ describe('Catalog (e2e)', () => {
         query: ADD_ONS_QUERY,
       });
       expect(addOnsResponse.body.errors).toBeUndefined();
-      const roleAddOnIds: string[] = addOnsResponse.body.data.addOns.map(
+      const roleAddOnIds: string[] = addOnsResponse.body.data.addOns.nodes.map(
         (a: { id: string }) => a.id,
       );
       expect(roleAddOnIds).toContain(addOnId);
@@ -803,7 +802,7 @@ describe('Catalog (e2e)', () => {
     ).send({ query: SERVICES_QUERY });
     expect(servicesAfterDuplicateResponse.body.errors).toBeUndefined();
     const servicesMatchingNameCaseInsensitive = (
-      servicesAfterDuplicateResponse.body.data.services as Array<{
+      servicesAfterDuplicateResponse.body.data.services.nodes as Array<{
         name: string;
       }>
     ).filter((s) => s.name.toLowerCase() === serviceName.toLowerCase());
@@ -829,7 +828,7 @@ describe('Catalog (e2e)', () => {
     ).send({ query: ADD_ONS_QUERY });
     expect(addOnsAfterDuplicateResponse.body.errors).toBeUndefined();
     const addOnsMatchingNameCaseInsensitive = (
-      addOnsAfterDuplicateResponse.body.data.addOns as Array<{
+      addOnsAfterDuplicateResponse.body.data.addOns.nodes as Array<{
         name: string;
       }>
     ).filter((a) => a.name.toLowerCase() === addOnName.toLowerCase());

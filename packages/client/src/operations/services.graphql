@@ -1,11 +1,18 @@
-query Services {
-  services {
-    id
-    name
-    durationMinutes
-    active
-    activePricing {
-      priceMinorUnits
+query Services($paging: OffsetPaging, $filter: ServiceFilter, $sorting: [ServiceSort!]) {
+  services(paging: $paging, filter: $filter, sorting: $sorting) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+    }
+    nodes {
+      id
+      name
+      durationMinutes
+      active
+      activePricing {
+        priceMinorUnits
+      }
     }
   }
 }

@@ -21,7 +21,7 @@ import { useDetailDrawer } from '../../../../lib/use-detail-drawer';
 type TeamRow = {
   id: string;
   name: string;
-  cleaners: { id: string }[];
+  cleaners: { nodes: { id: string }[]; pageInfo: { hasNextPage: boolean } };
   [key: string]: unknown;
 };
 
@@ -56,7 +56,12 @@ export default function TeamsPage() {
 }
 
 function TeamsPageContent() {
-  const { data, loading, error, refetch } = useTeamsQuery({ fetchPolicy: 'network-only' });
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
+  const { data, loading, error, refetch } = useTeamsQuery({
+    fetchPolicy: 'network-only',
+    variables: { paging: { limit: pageSize, offset: (page - 1) * pageSize } },
+  });
   const [createTeam, { loading: creating }] = useCreateTeamMutation();
   const { activeId, open: openDetail, close: closeDetail } = useDetailDrawer();
 
@@ -95,11 +100,14 @@ function TeamsPageContent() {
     {
       key: 'memberCount',
       header: 'Members',
-      render: (row) => row.cleaners.length,
+      render: (row) =>
+        row.cleaners.pageInfo.hasNextPage
+          ? `${row.cleaners.nodes.length}+`
+          : String(row.cleaners.nodes.length),
     },
   ];
 
-  const rows: TeamRow[] = data?.teams ?? [];
+  const rows: TeamRow[] = (data?.teams.nodes ?? []) as TeamRow[];
 
   return (
     <div className="flex flex-col gap-8">
@@ -120,6 +128,12 @@ function TeamsPageContent() {
         loading={loading}
         error={error ? 'Unable to load teams.' : undefined}
         onRowClick={(row) => openDetail(row.id)}
+        pagination={{
+          page,
+          pageSize,
+          totalCount: data?.teams.totalCount ?? 0,
+          onPageChange: setPage,
+        }}
       />
 
       <FormDialog
@@ -171,7 +185,7 @@ function TeamDetailDrawer({ id, onClose }: { id: string; onClose: () => void }) 
             <h3 className="mb-4 text-sm font-semibold text-slate-900">Members</h3>
             <DataTable
               columns={memberColumns}
-              rows={data.team.cleaners}
+              rows={data.team.cleaners.nodes}
               rowKey={(row) => row.id}
               emptyMessage="No members."
             />

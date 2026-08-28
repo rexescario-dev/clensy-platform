@@ -58,7 +58,12 @@ export default function CleanersPage() {
 }
 
 function CleanersPageContent() {
-  const { data, loading, error, refetch } = useCleanersQuery({ fetchPolicy: 'network-only' });
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
+  const { data, loading, error, refetch } = useCleanersQuery({
+    fetchPolicy: 'network-only',
+    variables: { paging: { limit: pageSize, offset: (page - 1) * pageSize } },
+  });
   const [createCleaner, { loading: creating }] = useCreateCleanerMutation();
   const { activeId, open: openDetail, close: closeDetail } = useDetailDrawer();
 
@@ -118,7 +123,7 @@ function CleanersPageContent() {
     },
   ];
 
-  const rows: CleanerRow[] = data?.cleaners ?? [];
+  const rows: CleanerRow[] = (data?.cleaners.nodes ?? []) as CleanerRow[];
 
   return (
     <div className="flex flex-col gap-8">
@@ -139,6 +144,12 @@ function CleanersPageContent() {
         loading={loading}
         error={error ? 'Unable to load cleaners.' : undefined}
         onRowClick={(row) => openDetail(row.id)}
+        pagination={{
+          page,
+          pageSize,
+          totalCount: data?.cleaners.totalCount ?? 0,
+          onPageChange: setPage,
+        }}
       />
 
       <FormDialog
@@ -319,7 +330,10 @@ function CleanerTeamAssignment({
   refetch: () => Promise<unknown>;
   onSaved: () => void;
 }) {
-  const { data: teamsData } = useTeamsQuery({ fetchPolicy: 'network-only' });
+  const { data: teamsData } = useTeamsQuery({
+    fetchPolicy: 'network-only',
+    variables: { paging: { limit: 100 } },
+  });
   const [assignCleanerToTeam, { loading: assigning }] = useAssignCleanerToTeamMutation();
   const { success } = useToast();
   const [teamAssignError, setTeamAssignError] = useState<string | undefined>(undefined);
@@ -338,7 +352,7 @@ function CleanerTeamAssignment({
     }
   }
 
-  const teams = teamsData?.teams ?? [];
+  const teams = teamsData?.teams.nodes ?? [];
 
   return (
     <div className="rounded-lg border border-slate-200 p-4">

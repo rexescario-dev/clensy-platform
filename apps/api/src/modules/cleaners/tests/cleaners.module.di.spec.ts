@@ -1,3 +1,4 @@
+import { getQueryServiceToken } from '@ptc-org/nestjs-query-core';
 import { Global, Module } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -44,9 +45,23 @@ describe('CleanersModule — module-internal DI wiring (real AuditModule)', () =
       imports: [FakeGlobalDataSourceModule, CleanersModule],
     })
       .overrideProvider(getRepositoryToken(TeamEntity))
-      .useValue({ find: jest.fn(), findOneBy: jest.fn(), findBy: jest.fn() })
+      .useValue({
+        find: jest.fn(),
+        findOneBy: jest.fn(),
+        findBy: jest.fn(),
+        metadata: { columns: [] },
+      })
       .overrideProvider(getRepositoryToken(CleanerEntity))
-      .useValue({ find: jest.fn(), findOneBy: jest.fn(), findBy: jest.fn() })
+      .useValue({
+        find: jest.fn(),
+        findOneBy: jest.fn(),
+        findBy: jest.fn(),
+        metadata: { columns: [] },
+      })
+      .overrideProvider(getQueryServiceToken(TeamEntity))
+      .useValue({ query: jest.fn(), queryRelations: jest.fn() })
+      .overrideProvider(getQueryServiceToken(CleanerEntity))
+      .useValue({ query: jest.fn(), queryRelations: jest.fn() })
       .overrideProvider(getRepositoryToken(AuditEventEntity))
       .useValue({ create: jest.fn(), save: jest.fn() })
       .compile();
