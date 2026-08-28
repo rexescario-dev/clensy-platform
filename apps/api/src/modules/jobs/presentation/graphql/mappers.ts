@@ -24,7 +24,6 @@ export function toCleaningJobType(job: CleaningJob): CleaningJobType {
 export function toChecklistType(checklist: Checklist): ChecklistType {
   return {
     id: checklist.id,
-    items: [],
   };
 }
 

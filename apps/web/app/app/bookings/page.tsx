@@ -340,6 +340,11 @@ function BookingDetailDrawer({
   });
   const { data: jobsData, refetch: refetchJobs } = useJobsQuery({
     fetchPolicy: 'network-only',
+    skip: !id,
+    variables: {
+      filter: { booking: { id: { eq: id } } },
+      paging: { limit: 1 },
+    },
   });
   const [updateBooking, { loading: updating }] = useUpdateBookingMutation();
   const [removeBooking, { loading: removing }] = useRemoveBookingMutation();
@@ -357,9 +362,7 @@ function BookingDetailDrawer({
 
   const booking = data?.booking;
   const teams = teamsData?.teams.nodes ?? [];
-  const existingJob = booking
-    ? (jobsData?.jobs ?? []).find((job) => job.booking.id === booking.id)
-    : undefined;
+  const existingJob = jobsData?.jobs.nodes[0];
 
   // Local edit state initializes from the loaded booking on first render
   // of each field, then tracks the user's own edits from there.
