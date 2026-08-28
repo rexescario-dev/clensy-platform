@@ -1,4 +1,4 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import cookieParser from 'cookie-parser';
@@ -11,6 +11,7 @@ import { AdminUserEntity } from '../src/modules/admins/infrastructure/persistenc
 import { CleanersService } from '../src/modules/cleaners/application/services/cleaners.service';
 import { TeamsService } from '../src/modules/cleaners/application/services/teams.service';
 import { Role } from '../src/platform/auth/domain/role';
+import { applyPlatformPipes } from '../src/platform/graphql/apply-platform-pipes';
 import { seedOwner } from './helpers/seed-owner';
 
 // Proves plan task-6 brief's full 13-step Cleaners & Teams E2E acceptance
@@ -58,13 +59,7 @@ describe('Cleaners & Teams (e2e)', () => {
     // extractor reads `req.cookies[SESSION_COOKIE_NAME]`, which is only
     // populated when this middleware runs ahead of it.
     app.use(cookieParser());
-    app.useGlobalPipes(
-      new ValidationPipe({
-        transform: true,
-        whitelist: true,
-        forbidNonWhitelisted: true,
-      }),
-    );
+    applyPlatformPipes(app);
     await app.init();
 
     adminUserRepository = moduleFixture.get(

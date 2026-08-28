@@ -153,7 +153,7 @@ function JobsPageContent() {
 
   const rows: JobRow[] = (jobsQuery.data?.jobs ?? []) as JobRow[];
   const bookingIdsWithJobs = new Set(rows.map((row) => row.booking.id));
-  const availableBookings = (bookingsData?.bookings ?? []).filter(
+  const availableBookings = (bookingsData?.bookings.nodes ?? []).filter(
     (booking) => !bookingIdsWithJobs.has(booking.id),
   );
 

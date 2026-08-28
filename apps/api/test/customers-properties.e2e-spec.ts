@@ -1,4 +1,4 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import cookieParser from 'cookie-parser';
@@ -10,6 +10,7 @@ import { AuditEventEntity } from '../src/platform/audit/infrastructure/persisten
 import { AdminUserEntity } from '../src/modules/admins/infrastructure/persistence/admin-user.entity';
 import { PropertyEntity } from '../src/modules/customers/infrastructure/persistence/property.entity';
 import { Role } from '../src/platform/auth/domain/role';
+import { applyPlatformPipes } from '../src/platform/graphql/apply-platform-pipes';
 import { seedOwner } from './helpers/seed-owner';
 
 // Proves plan task-6 brief's full 8-step Customers/Properties E2E acceptance
@@ -51,13 +52,7 @@ describe('Customers & Properties (e2e)', () => {
     // extractor reads `req.cookies[SESSION_COOKIE_NAME]`, which is only
     // populated when this middleware runs ahead of it.
     app.use(cookieParser());
-    app.useGlobalPipes(
-      new ValidationPipe({
-        transform: true,
-        whitelist: true,
-        forbidNonWhitelisted: true,
-      }),
-    );
+    applyPlatformPipes(app);
     await app.init();
 
     adminUserRepository = moduleFixture.get(

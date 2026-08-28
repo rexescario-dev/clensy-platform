@@ -81,7 +81,12 @@ export default function BookingsPage() {
 }
 
 function BookingsPageContent() {
-  const { data, loading, error, refetch } = useBookingsQuery({ fetchPolicy: 'network-only' });
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
+  const { data, loading, error, refetch } = useBookingsQuery({
+    fetchPolicy: 'network-only',
+    variables: { paging: { limit: pageSize, offset: (page - 1) * pageSize } },
+  });
   const [createBooking, { loading: creating }] = useCreateBookingMutation();
   const { activeId, open: openDetail, close: closeDetail } = useDetailDrawer();
 
@@ -158,7 +163,7 @@ function BookingsPageContent() {
     },
   ];
 
-  const rows: BookingRow[] = (data?.bookings ?? []) as BookingRow[];
+  const rows: BookingRow[] = (data?.bookings.nodes ?? []) as BookingRow[];
   const customers = customersData?.customers ?? [];
   const properties = propertiesData?.customerProperties ?? [];
   const activeServices = (servicesData?.services ?? []).filter((service) => service.active);
@@ -183,6 +188,12 @@ function BookingsPageContent() {
         loading={loading}
         error={error ? 'Unable to load bookings.' : undefined}
         onRowClick={(row) => openDetail(row.id)}
+        pagination={{
+          page,
+          pageSize,
+          totalCount: data?.bookings.totalCount ?? 0,
+          onPageChange: setPage,
+        }}
       />
 
       <FormDialog

@@ -10,11 +10,81 @@ export type AssignTeamToJobInput = {
   teamId: string | number;
 };
 
+export type BookingFilter = {
+  and?: Array<BookingFilter> | null | undefined;
+  createdAt?: DateFieldComparison | null | undefined;
+  customer?: BookingFilterCustomerFilter | null | undefined;
+  id?: IdFilterComparison | null | undefined;
+  or?: Array<BookingFilter> | null | undefined;
+  property?: BookingFilterPropertyFilter | null | undefined;
+  scheduledAt?: DateFieldComparison | null | undefined;
+  service?: BookingFilterServiceFilter | null | undefined;
+  status?: BookingStatusFilterComparison | null | undefined;
+  team?: BookingFilterTeamFilter | null | undefined;
+};
+
+export type BookingFilterCustomerFilter = {
+  and?: Array<BookingFilterCustomerFilter> | null | undefined;
+  fullName?: StringFieldComparison | null | undefined;
+  id?: IdFilterComparison | null | undefined;
+  or?: Array<BookingFilterCustomerFilter> | null | undefined;
+};
+
+export type BookingFilterPropertyFilter = {
+  addressLine1?: StringFieldComparison | null | undefined;
+  and?: Array<BookingFilterPropertyFilter> | null | undefined;
+  id?: IdFilterComparison | null | undefined;
+  or?: Array<BookingFilterPropertyFilter> | null | undefined;
+};
+
+export type BookingFilterServiceFilter = {
+  and?: Array<BookingFilterServiceFilter> | null | undefined;
+  id?: IdFilterComparison | null | undefined;
+  name?: StringFieldComparison | null | undefined;
+  or?: Array<BookingFilterServiceFilter> | null | undefined;
+};
+
+export type BookingFilterTeamFilter = {
+  and?: Array<BookingFilterTeamFilter> | null | undefined;
+  id?: IdFilterComparison | null | undefined;
+  name?: StringFieldComparison | null | undefined;
+  or?: Array<BookingFilterTeamFilter> | null | undefined;
+};
+
+export type BookingSort = {
+  direction: SortDirection;
+  field: BookingSortFields;
+  nulls?: SortNulls | null | undefined;
+};
+
+export type BookingSortFields =
+  | 'createdAt'
+  | 'id'
+  | 'scheduledAt'
+  | 'status';
+
 export type BookingStatus =
   | 'CANCELLED'
   | 'COMPLETED'
   | 'CONFIRMED'
   | 'PENDING';
+
+export type BookingStatusFilterComparison = {
+  eq?: BookingStatus | null | undefined;
+  gt?: BookingStatus | null | undefined;
+  gte?: BookingStatus | null | undefined;
+  iLike?: BookingStatus | null | undefined;
+  in?: Array<BookingStatus> | null | undefined;
+  is?: boolean | null | undefined;
+  isNot?: boolean | null | undefined;
+  like?: BookingStatus | null | undefined;
+  lt?: BookingStatus | null | undefined;
+  lte?: BookingStatus | null | undefined;
+  neq?: BookingStatus | null | undefined;
+  notILike?: BookingStatus | null | undefined;
+  notIn?: Array<BookingStatus> | null | undefined;
+  notLike?: BookingStatus | null | undefined;
+};
 
 export type CompleteChecklistItemInput = {
   itemId: string | number;
@@ -88,6 +158,43 @@ export type CreateTeamInput = {
   name: string;
 };
 
+export type DateFieldComparison = {
+  between?: DateFieldComparisonBetween | null | undefined;
+  eq?: unknown;
+  gt?: unknown;
+  gte?: unknown;
+  in?: Array<unknown> | null | undefined;
+  is?: boolean | null | undefined;
+  isNot?: boolean | null | undefined;
+  lt?: unknown;
+  lte?: unknown;
+  neq?: unknown;
+  notBetween?: DateFieldComparisonBetween | null | undefined;
+  notIn?: Array<unknown> | null | undefined;
+};
+
+export type DateFieldComparisonBetween = {
+  lower: unknown;
+  upper: unknown;
+};
+
+export type IdFilterComparison = {
+  eq?: string | number | null | undefined;
+  gt?: string | number | null | undefined;
+  gte?: string | number | null | undefined;
+  iLike?: string | number | null | undefined;
+  in?: Array<string | number> | null | undefined;
+  is?: boolean | null | undefined;
+  isNot?: boolean | null | undefined;
+  like?: string | number | null | undefined;
+  lt?: string | number | null | undefined;
+  lte?: string | number | null | undefined;
+  neq?: string | number | null | undefined;
+  notILike?: string | number | null | undefined;
+  notIn?: Array<string | number> | null | undefined;
+  notLike?: string | number | null | undefined;
+};
+
 export type JobStatus =
   | 'COMPLETED'
   | 'IN_PROGRESS'
@@ -98,6 +205,13 @@ export type LoginInput = {
   password: string;
 };
 
+export type OffsetPaging = {
+  /** Limit the number of records returned */
+  limit?: number | null | undefined;
+  /** Offset to start returning records from */
+  offset?: number | null | undefined;
+};
+
 export type Role =
   | 'ANALYST'
   | 'CUSTOMER_SUPPORT'
@@ -105,6 +219,33 @@ export type Role =
   | 'OPS_MANAGER'
   | 'OWNER'
   | 'SCHEDULER';
+
+/** Sort Directions */
+export type SortDirection =
+  | 'ASC'
+  | 'DESC';
+
+/** Sort Nulls Options */
+export type SortNulls =
+  | 'NULLS_FIRST'
+  | 'NULLS_LAST';
+
+export type StringFieldComparison = {
+  eq?: string | null | undefined;
+  gt?: string | null | undefined;
+  gte?: string | null | undefined;
+  iLike?: string | null | undefined;
+  in?: Array<string> | null | undefined;
+  is?: boolean | null | undefined;
+  isNot?: boolean | null | undefined;
+  like?: string | null | undefined;
+  lt?: string | null | undefined;
+  lte?: string | null | undefined;
+  neq?: string | null | undefined;
+  notILike?: string | null | undefined;
+  notIn?: Array<string> | null | undefined;
+  notLike?: string | null | undefined;
+};
 
 export type UpdateAddOnInput = {
   active?: boolean | null | undefined;
@@ -176,10 +317,14 @@ export type AdminsQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type AdminsQuery = { admins: Array<{ id: string, email: string, role: Role, isActive: boolean }> };
 
-export type BookingsQueryVariables = Exact<{ [key: string]: never; }>;
+export type BookingsQueryVariables = Exact<{
+  paging?: OffsetPaging | null | undefined;
+  filter?: BookingFilter | null | undefined;
+  sorting?: Array<BookingSort> | BookingSort | null | undefined;
+}>;
 
 
-export type BookingsQuery = { bookings: Array<{ id: string, scheduledAt: unknown, status: BookingStatus, pricingSnapshot: { priceMinorUnits: number }, customer: { id: string, fullName: string }, property: { id: string, addressLine1: string }, service: { id: string, name: string }, team: { id: string, name: string } | null }> };
+export type BookingsQuery = { bookings: { totalCount: number, pageInfo: { hasNextPage: boolean | null, hasPreviousPage: boolean | null }, nodes: Array<{ id: string, scheduledAt: unknown, status: BookingStatus, pricingSnapshot: { priceMinorUnits: number }, customer: { id: string, fullName: string }, property: { id: string, addressLine1: string }, service: { id: string, name: string }, team: { id: string, name: string } | null }> } };
 
 export type BookingQueryVariables = Exact<{
   id: string | number;
@@ -623,29 +768,36 @@ export type AdminsLazyQueryHookResult = ReturnType<typeof useAdminsLazyQuery>;
 export type AdminsSuspenseQueryHookResult = ReturnType<typeof useAdminsSuspenseQuery>;
 export type AdminsQueryResult = Apollo.QueryResult<AdminsQuery, AdminsQueryVariables>;
 export const BookingsDocument = gql`
-    query Bookings {
-  bookings {
-    id
-    scheduledAt
-    status
-    pricingSnapshot {
-      priceMinorUnits
+    query Bookings($paging: OffsetPaging, $filter: BookingFilter, $sorting: [BookingSort!]) {
+  bookings(paging: $paging, filter: $filter, sorting: $sorting) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
     }
-    customer {
+    nodes {
       id
-      fullName
-    }
-    property {
-      id
-      addressLine1
-    }
-    service {
-      id
-      name
-    }
-    team {
-      id
-      name
+      scheduledAt
+      status
+      pricingSnapshot {
+        priceMinorUnits
+      }
+      customer {
+        id
+        fullName
+      }
+      property {
+        id
+        addressLine1
+      }
+      service {
+        id
+        name
+      }
+      team {
+        id
+        name
+      }
     }
   }
 }
@@ -663,6 +815,9 @@ export const BookingsDocument = gql`
  * @example
  * const { data, loading, error } = useBookingsQuery({
  *   variables: {
+ *      paging: // value for 'paging'
+ *      filter: // value for 'filter'
+ *      sorting: // value for 'sorting'
  *   },
  * });
  */

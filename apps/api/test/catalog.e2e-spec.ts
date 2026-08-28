@@ -1,4 +1,4 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import cookieParser from 'cookie-parser';
@@ -11,6 +11,7 @@ import { AdminUserEntity } from '../src/modules/admins/infrastructure/persistenc
 import { PricingRulesService } from '../src/modules/catalog/application/services/pricing-rules.service';
 import { PricingRuleEntity } from '../src/modules/catalog/infrastructure/persistence/pricing-rule.entity';
 import { Role } from '../src/platform/auth/domain/role';
+import { applyPlatformPipes } from '../src/platform/graphql/apply-platform-pipes';
 import { seedOwner } from './helpers/seed-owner';
 
 // Proves plan task-7 brief's full 11-step Catalog E2E acceptance scenario
@@ -56,13 +57,7 @@ describe('Catalog (e2e)', () => {
     // extractor reads `req.cookies[SESSION_COOKIE_NAME]`, which is only
     // populated when this middleware runs ahead of it.
     app.use(cookieParser());
-    app.useGlobalPipes(
-      new ValidationPipe({
-        transform: true,
-        whitelist: true,
-        forbidNonWhitelisted: true,
-      }),
-    );
+    applyPlatformPipes(app);
     await app.init();
 
     adminUserRepository = moduleFixture.get(
