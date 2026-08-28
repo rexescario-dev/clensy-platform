@@ -1,3 +1,4 @@
+import { FilterableField } from '@ptc-org/nestjs-query-graphql';
 import { Field, ID, ObjectType } from '@nestjs/graphql';
 import { CleanerType } from './cleaner.type';
 
@@ -11,10 +12,10 @@ import { CleanerType } from './cleaner.type';
 // independently of whatever the parent object carries for that key.
 @ObjectType('Team')
 export class TeamType {
-  @Field(() => ID)
+  @FilterableField(() => ID)
   id!: string;
 
-  @Field()
+  @FilterableField()
   name!: string;
 
   @Field(() => [CleanerType])

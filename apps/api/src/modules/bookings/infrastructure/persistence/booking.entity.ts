@@ -3,18 +3,24 @@ import {
   CreateDateColumn,
   Entity,
   Index,
+  JoinColumn,
+  ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { CustomerEntity } from '../../../customers/infrastructure/persistence/customer.entity';
+import { PropertyEntity } from '../../../customers/infrastructure/persistence/property.entity';
+import { ServiceEntity } from '../../../catalog/infrastructure/persistence/service.entity';
+import { TeamEntity } from '../../../cleaners/infrastructure/persistence/team.entity';
 import { Booking } from '../../domain/booking';
 import { BookingStatus } from '../../domain/booking-status';
 import { BookingPricingSnapshotEmbeddable } from './booking-pricing-snapshot.embeddable';
 
-// `customerId`/`propertyId`/`serviceId`/`teamId` carry no TypeORM relation
-// decorator — each is a plain `@Column`, with the FK constraint hand-added
-// in the migration's raw SQL (spec §4.1), matching `PropertyEntity
-// .customerId`/`PricingRuleEntity.serviceId`/`CleanerEntity.teamId`'s
-// precedent exactly. Do not add a relation decorator here; that would let
-// a future `migration:generate` regenerate the FK from entity metadata.
+// Dual UUID columns + unidirectional @ManyToOne (nestjs-query GraphQL Reads
+// spec §4.1). Application/REST/commands keep writing customerId (etc.)
+// scalars. GraphQL relation reads use the ORM relations. Relations are
+// persistence metadata only — BookingEntity may import foreign entities;
+// BookingsModule MUST NOT register them on forFeature. Non-eager, no
+// cascade, no inverses, no TypeORM lazy: true.
 @Entity()
 export class BookingEntity implements Booking {
   @PrimaryGeneratedColumn('uuid')
@@ -24,17 +30,58 @@ export class BookingEntity implements Booking {
   @Index()
   customerId!: string;
 
+  @ManyToOne(() => CustomerEntity, {
+    nullable: false,
+    eager: false,
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({
+    name: 'customerId',
+    foreignKeyConstraintName: 'fk_booking_customer',
+  })
+  customer!: CustomerEntity;
+
   @Column({ type: 'uuid' })
   @Index()
   propertyId!: string;
+
+  @ManyToOne(() => PropertyEntity, {
+    nullable: false,
+    eager: false,
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({
+    name: 'propertyId',
+    foreignKeyConstraintName: 'fk_booking_property',
+  })
+  property!: PropertyEntity;
 
   @Column({ type: 'uuid' })
   @Index()
   serviceId!: string;
 
+  @ManyToOne(() => ServiceEntity, {
+    nullable: false,
+    eager: false,
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({
+    name: 'serviceId',
+    foreignKeyConstraintName: 'fk_booking_service',
+  })
+  service!: ServiceEntity;
+
   @Column({ type: 'uuid', nullable: true })
   @Index()
   teamId!: string | null;
+
+  @ManyToOne(() => TeamEntity, {
+    nullable: true,
+    eager: false,
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({ name: 'teamId', foreignKeyConstraintName: 'fk_booking_team' })
+  team!: TeamEntity | null;
 
   @Column({ type: 'timestamptz' })
   scheduledAt!: Date;

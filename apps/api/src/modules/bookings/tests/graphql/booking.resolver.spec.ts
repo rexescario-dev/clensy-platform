@@ -1,9 +1,10 @@
+import { readFileSync, readdirSync, statSync } from 'fs';
+import { join } from 'path';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
 import {
   GraphQLSchemaBuilderModule,
   GraphQLSchemaFactory,
-  TypeMetadataStorage,
 } from '@nestjs/graphql';
 import { Test } from '@nestjs/testing';
 import { GraphQLObjectType } from 'graphql';
@@ -14,11 +15,11 @@ import { CustomerResolver } from '../../../customers/presentation/graphql/custom
 import { PropertyResolver } from '../../../customers/presentation/graphql/property.resolver';
 import { ServiceResolver } from '../../../catalog/presentation/graphql/service.resolver';
 import { TeamResolver } from '../../../cleaners/presentation/graphql/team.resolver';
-import { BookingResolver } from '../../presentation/graphql/booking.resolver';
-import { BookingType } from '../../presentation/graphql/booking.type';
+import { BookingReadResolver } from '../../presentation/graphql/booking-read.resolver';
+import { BookingMutationResolver } from '../../presentation/graphql/booking.resolver';
 
-type ResolverMethod =
-  'booking' | 'bookings' | 'createBooking' | 'updateBooking' | 'removeBooking';
+type MutationMethod = 'createBooking' | 'updateBooking' | 'removeBooking';
+type ReadMethod = 'findById' | 'queryMany';
 
 const VIEW_ROLES = [
   Role.OWNER,
@@ -35,36 +36,38 @@ const WRITE_ROLES = [
   Role.CUSTOMER_SUPPORT,
 ];
 
-function methodRef(method: ResolverMethod): (...args: unknown[]) => unknown {
+const ALLOWED_BOOKING_MUTATIONS = new Set([
+  'createBooking',
+  'updateBooking',
+  'removeBooking',
+]);
+const DENYLIST =
+  /^(create|update|delete)(One|Many)Booking$|^set(Customer|Property|Service|Team)OnBooking$|^(add|remove).*(Booking|Customer|Property|Service|Team)/;
+
+function mutationMethodRef(
+  method: MutationMethod,
+): (...args: unknown[]) => unknown {
   const descriptor = Object.getOwnPropertyDescriptor(
-    BookingResolver.prototype,
+    BookingMutationResolver.prototype,
     method,
   );
   return descriptor!.value as (...args: unknown[]) => unknown;
 }
 
-describe('BookingResolver', () => {
+function readMethodRef(method: ReadMethod): (...args: unknown[]) => unknown {
+  let proto: object | null = BookingReadResolver.prototype;
+  while (proto) {
+    const descriptor = Object.getOwnPropertyDescriptor(proto, method);
+    if (descriptor?.value) {
+      return descriptor.value as (...args: unknown[]) => unknown;
+    }
+    proto = Object.getPrototypeOf(proto) as object | null;
+  }
+  throw new Error(`Read method ${method} not found on BookingReadResolver`);
+}
+
+describe('Booking GraphQL reads and mutations', () => {
   const reflector = new Reflector();
-
-  function guardsOn(method: ResolverMethod): unknown[] {
-    const guards = Reflect.getMetadata(GUARDS_METADATA, methodRef(method)) as
-      unknown[] | undefined;
-    return guards ?? [];
-  }
-
-  function rolesOn(method: ResolverMethod): Role[] | undefined {
-    return reflector.get<Role[] | undefined>(ROLES_KEY, methodRef(method));
-  }
-
-  describe.each([
-    ['booking', VIEW_ROLES],
-    ['bookings', VIEW_ROLES],
-  ] as const)('%s', (method, expectedRoles) => {
-    it(`is guarded by AuthGuard and @Roles(${expectedRoles.join(', ')}) — view matrix`, () => {
-      expect(guardsOn(method)).toContain(AuthGuard);
-      expect(rolesOn(method)).toEqual(expectedRoles);
-    });
-  });
 
   describe.each([
     ['createBooking', WRITE_ROLES],
@@ -72,24 +75,42 @@ describe('BookingResolver', () => {
     ['removeBooking', WRITE_ROLES],
   ] as const)('%s', (method, expectedRoles) => {
     it(`is guarded by AuthGuard and @Roles(${expectedRoles.join(', ')}) — write matrix`, () => {
-      expect(guardsOn(method)).toContain(AuthGuard);
-      expect(rolesOn(method)).toEqual(expectedRoles);
+      const guards = Reflect.getMetadata(
+        GUARDS_METADATA,
+        mutationMethodRef(method),
+      ) as unknown[] | undefined;
+      expect(guards ?? []).toContain(AuthGuard);
+      expect(
+        reflector.get<Role[] | undefined>(ROLES_KEY, mutationMethodRef(method)),
+      ).toEqual(expectedRoles);
     });
   });
 
-  // Builds the actual GraphQL schema from the full resolver set
-  // `BookingType` transitively references (same `GraphQLSchemaFactory`
-  // recipe as `cleaner.resolver.spec.ts`/`pricing-rule.resolver.spec.ts`) —
-  // this both proves the schema is buildable and is what actually
-  // populates `TypeMetadataStorage`'s lazy field metadata.
-  describe('BookingType (schema field set)', () => {
-    it('exposes exactly id, scheduledAt, status, pricingSnapshot, customer, property, service, team, createdAt', async () => {
+  describe.each([
+    ['findById', VIEW_ROLES],
+    ['queryMany', VIEW_ROLES],
+  ] as const)('%s', (method, expectedRoles) => {
+    it(`is guarded by AuthGuard and @Roles(${expectedRoles.join(', ')}) — view matrix`, () => {
+      const guards = Reflect.getMetadata(
+        GUARDS_METADATA,
+        readMethodRef(method),
+      ) as unknown[] | undefined;
+      expect(guards ?? []).toContain(AuthGuard);
+      expect(
+        reflector.get<Role[] | undefined>(ROLES_KEY, readMethodRef(method)),
+      ).toEqual(expectedRoles);
+    });
+  });
+
+  describe('schema allowlist', () => {
+    it('exposes Booking fields, Booking!, filter/sorting, and only Clensy booking mutations', async () => {
       const moduleRef = await Test.createTestingModule({
         imports: [GraphQLSchemaBuilderModule],
       }).compile();
       const schemaFactory = moduleRef.get(GraphQLSchemaFactory);
       const schema = await schemaFactory.create([
-        BookingResolver,
+        BookingReadResolver,
+        BookingMutationResolver,
         CustomerResolver,
         PropertyResolver,
         ServiceResolver,
@@ -98,7 +119,6 @@ describe('BookingResolver', () => {
 
       const bookingType = schema.getType('Booking') as GraphQLObjectType;
       expect(bookingType).toBeDefined();
-
       const fieldNames = Object.keys(bookingType.getFields()).sort();
       expect(fieldNames).toEqual(
         [
@@ -113,128 +133,48 @@ describe('BookingResolver', () => {
           'createdAt',
         ].sort(),
       );
-      // Belt-and-suspenders (plan §3/Task 4): `customerId`/`propertyId`/
-      // `serviceId`/`teamId` must never appear in the public schema, even
-      // though `toBookingType()` puts them on the runtime object for the
-      // four `@ResolveField()`s to read.
       expect(fieldNames).not.toContain('customerId');
       expect(fieldNames).not.toContain('propertyId');
       expect(fieldNames).not.toContain('serviceId');
       expect(fieldNames).not.toContain('teamId');
-    });
-  });
 
-  it('BookingType metadata has no customerId/propertyId/serviceId/teamId field', () => {
-    const metadata =
-      TypeMetadataStorage.getObjectTypeMetadataByTarget(BookingType);
-    const fieldNames = (metadata?.properties ?? []).map(
-      (property) => property.name,
-    );
+      expect(bookingType.getFields().customer.type.toString()).toBe(
+        'Customer!',
+      );
+      expect(bookingType.getFields().property.type.toString()).toBe(
+        'Property!',
+      );
+      expect(bookingType.getFields().service.type.toString()).toBe('Service!');
+      expect(bookingType.getFields().team.type.toString()).toBe('Team');
 
-    expect(fieldNames).not.toContain('customerId');
-    expect(fieldNames).not.toContain('propertyId');
-    expect(fieldNames).not.toContain('serviceId');
-    expect(fieldNames).not.toContain('teamId');
-  });
+      const bookingQuery = schema.getQueryType()!.getFields().booking;
+      expect(bookingQuery.type.toString()).toBe('Booking!');
 
-  describe('resolve fields', () => {
-    function makeResolver(
-      loaders: Record<string, { load: jest.Mock }>,
-    ): BookingResolver {
-      return new BookingResolver({} as never, loaders as never);
-    }
+      const bookingsQuery = schema.getQueryType()!.getFields().bookings;
+      expect(bookingsQuery.type.toString()).toBe('[Booking!]!');
+      const argNames = bookingsQuery.args.map((arg) => arg.name).sort();
+      expect(argNames).toEqual(['filter', 'sorting']);
+      expect(argNames).not.toContain('paging');
 
-    it('customer calls loaders.customerLoader.load exactly once with the parent id', async () => {
-      const customer = {
-        id: 'customer-1',
-        fullName: 'Jane',
-        email: 'j@x.com',
-        phone: '1',
-        notes: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      const loaders = {
-        customerLoader: { load: jest.fn().mockResolvedValue(customer) },
-      };
-      const resolver = makeResolver(loaders);
+      const queryNames = Object.keys(schema.getQueryType()!.getFields());
+      for (const name of queryNames) {
+        expect(name).not.toMatch(/aggregate/i);
+      }
 
-      await resolver.customer({ customerId: 'customer-1' });
-
-      expect(loaders.customerLoader.load).toHaveBeenCalledTimes(1);
-      expect(loaders.customerLoader.load).toHaveBeenCalledWith('customer-1');
-    });
-
-    it('property calls loaders.propertyLoader.load exactly once with the parent id', async () => {
-      const property = {
-        id: 'property-1',
-        customerId: 'customer-1',
-        label: 'Home',
-        addressLine1: '1 Main St',
-        addressLine2: null,
-        city: 'City',
-        region: 'Region',
-        postalCode: '0000',
-        accessNotes: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      const loaders = {
-        propertyLoader: { load: jest.fn().mockResolvedValue(property) },
-      };
-      const resolver = makeResolver(loaders);
-
-      await resolver.property({ propertyId: 'property-1' });
-
-      expect(loaders.propertyLoader.load).toHaveBeenCalledTimes(1);
-      expect(loaders.propertyLoader.load).toHaveBeenCalledWith('property-1');
-    });
-
-    it('service calls loaders.serviceLoader.load exactly once with the parent id', async () => {
-      const service = {
-        id: 'service-1',
-        name: 'Standard Clean',
-        description: null,
-        durationMinutes: 60,
-        active: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      const loaders = {
-        serviceLoader: { load: jest.fn().mockResolvedValue(service) },
-      };
-      const resolver = makeResolver(loaders);
-
-      await resolver.service({ serviceId: 'service-1' });
-
-      expect(loaders.serviceLoader.load).toHaveBeenCalledTimes(1);
-      expect(loaders.serviceLoader.load).toHaveBeenCalledWith('service-1');
-    });
-
-    it('team returns null synchronously and never calls loaders.teamLoader.load when teamId is null', async () => {
-      const loaders = { teamLoader: { load: jest.fn() } };
-      const resolver = makeResolver(loaders);
-
-      await expect(resolver.team({ teamId: null })).resolves.toBeNull();
-      expect(loaders.teamLoader.load).not.toHaveBeenCalled();
-    });
-
-    it('team calls loaders.teamLoader.load exactly once with the parent id when teamId is set', async () => {
-      const team = {
-        id: 'team-1',
-        name: 'Team A',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      const loaders = {
-        teamLoader: { load: jest.fn().mockResolvedValue(team) },
-      };
-      const resolver = makeResolver(loaders);
-
-      await resolver.team({ teamId: 'team-1' });
-
-      expect(loaders.teamLoader.load).toHaveBeenCalledTimes(1);
-      expect(loaders.teamLoader.load).toHaveBeenCalledWith('team-1');
+      const mutationNames = Object.keys(schema.getMutationType()!.getFields());
+      expect(mutationNames).toEqual(
+        expect.arrayContaining([
+          'createBooking',
+          'updateBooking',
+          'removeBooking',
+        ]),
+      );
+      for (const name of mutationNames) {
+        if (ALLOWED_BOOKING_MUTATIONS.has(name)) {
+          continue;
+        }
+        expect(name).not.toMatch(DENYLIST);
+      }
     });
   });
 
@@ -254,10 +194,7 @@ describe('BookingResolver', () => {
           pricingSnapshot: { priceMinorUnits: 1 },
         }),
       };
-      const resolver = new BookingResolver(
-        bookingsService as never,
-        {} as never,
-      );
+      const resolver = new BookingMutationResolver(bookingsService as never);
       const currentUser = { id: 'admin-1', role: Role.OWNER };
 
       await resolver.createBooking(
@@ -288,5 +225,55 @@ describe('BookingResolver', () => {
         'admin-1',
       );
     });
+  });
+
+  it('BookingMutationResolver and BookingReadResolver have no @ResolveField for the four relations', () => {
+    const graphqlDir = join(__dirname, '../../presentation/graphql');
+    const mutationSrc = readFileSync(
+      join(graphqlDir, 'booking.resolver.ts'),
+      'utf8',
+    );
+    const readSrc = readFileSync(
+      join(graphqlDir, 'booking-read.resolver.ts'),
+      'utf8',
+    );
+    for (const src of [mutationSrc, readSrc]) {
+      expect(src).not.toMatch(/@ResolveField[\s\S]*\bcustomer\b/);
+      expect(src).not.toMatch(/@ResolveField[\s\S]*\bproperty\b/);
+      expect(src).not.toMatch(/@ResolveField[\s\S]*\bservice\b/);
+      expect(src).not.toMatch(/@ResolveField[\s\S]*\bteam\b/);
+    }
+  });
+
+  it('application/domain/REST layers do not read or assign Booking relation properties', () => {
+    const roots = [
+      join(__dirname, '../../domain'),
+      join(__dirname, '../../application'),
+      join(__dirname, '../../presentation/rest'),
+    ];
+    const files: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir)) {
+        const full = join(dir, entry);
+        if (statSync(full).isDirectory()) {
+          walk(full);
+        } else if (full.endsWith('.ts')) {
+          files.push(full);
+        }
+      }
+    };
+    for (const root of roots) {
+      walk(root);
+    }
+
+    const relationProp =
+      /\b(?:booking|entity|existing|removed|row|record)\.(customer|property|service|team)(?![A-Za-z])/;
+    for (const file of files) {
+      const src = readFileSync(file, 'utf8')
+        .split('\n')
+        .filter((line) => !/^\s*(\/\/|\*|import\s)/.test(line))
+        .join('\n');
+      expect(src).not.toMatch(relationProp);
+    }
   });
 });

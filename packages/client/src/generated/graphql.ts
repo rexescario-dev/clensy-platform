@@ -186,7 +186,7 @@ export type BookingQueryVariables = Exact<{
 }>;
 
 
-export type BookingQuery = { booking: { id: string, scheduledAt: unknown, status: BookingStatus, pricingSnapshot: { priceMinorUnits: number }, customer: { id: string, fullName: string }, property: { id: string, addressLine1: string }, service: { id: string, name: string }, team: { id: string, name: string } | null } | null };
+export type BookingQuery = { booking: { id: string, scheduledAt: unknown, status: BookingStatus, pricingSnapshot: { priceMinorUnits: number }, customer: { id: string, fullName: string }, property: { id: string, addressLine1: string }, service: { id: string, name: string }, team: { id: string, name: string } | null } };
 
 export type CreateBookingMutationVariables = Exact<{
   createBookingInput: CreateBookingInput;

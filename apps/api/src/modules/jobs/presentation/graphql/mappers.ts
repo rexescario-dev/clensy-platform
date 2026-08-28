@@ -1,4 +1,4 @@
-import { toBookingType } from '../../../bookings/presentation/graphql/mappers';
+import { toBookingDto } from '../../../bookings/presentation/graphql/mappers';
 import { Checklist } from '../../domain/checklist';
 import { ChecklistItem } from '../../domain/checklist-item';
 import { CleaningJob } from '../../domain/cleaning-job';
@@ -38,4 +38,4 @@ export function toChecklistItemType(item: ChecklistItem): ChecklistItemType {
   };
 }
 
-export { toBookingType };
+export { toBookingDto };
