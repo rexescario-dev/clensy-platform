@@ -9,12 +9,13 @@ import { GraphQLObjectType } from 'graphql';
 import { ROLES_KEY } from '../../../../platform/auth/decorators/roles.decorator';
 import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
+import { AddOnReadResolver } from '../../presentation/graphql/add-on-read.resolver';
 import { AddOnResolver } from '../../presentation/graphql/add-on.resolver';
 import { PricingRuleResolver } from '../../presentation/graphql/pricing-rule.resolver';
+import { ServiceReadResolver } from '../../presentation/graphql/service-read.resolver';
 import { ServiceResolver } from '../../presentation/graphql/service.resolver';
 
-type ResolverMethod =
-  'service' | 'services' | 'createService' | 'updateService';
+type ResolverMethod = 'service' | 'createService' | 'updateService';
 
 // View matrix per spec §4.3: deliberately BROADER than the Cleaners
 // module's — all six roles, not just Owner/Ops Manager/Scheduler/Analyst.
@@ -53,10 +54,7 @@ describe('ServiceResolver', () => {
     return reflector.get<Role[] | undefined>(ROLES_KEY, methodRef(method));
   }
 
-  describe.each([
-    ['service', VIEW_ROLES],
-    ['services', VIEW_ROLES],
-  ] as const)('%s', (method, expectedRoles) => {
+  describe.each([['service', VIEW_ROLES]] as const)('%s', (method, expectedRoles) => {
     it(`is guarded by AuthGuard and @Roles(${expectedRoles.join(', ')}) — view matrix`, () => {
       expect(guardsOn(method)).toContain(AuthGuard);
       expect(rolesOn(method)).toEqual(expectedRoles);
@@ -97,7 +95,9 @@ describe('ServiceResolver', () => {
       }).compile();
       const schemaFactory = moduleRef.get(GraphQLSchemaFactory);
       const schema = await schemaFactory.create([
+        ServiceReadResolver,
         ServiceResolver,
+        AddOnReadResolver,
         AddOnResolver,
         PricingRuleResolver,
       ]);

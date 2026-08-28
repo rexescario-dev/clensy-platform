@@ -1,20 +1,40 @@
-import { FilterableField } from '@ptc-org/nestjs-query-graphql';
+import { SortDirection } from '@ptc-org/nestjs-query-core';
+import {
+  FilterableField,
+  IDField,
+  PagingStrategies,
+  QueryOptions,
+} from '@ptc-org/nestjs-query-graphql';
 import { Field, ID, Int, ObjectType } from '@nestjs/graphql';
+import {
+  PLATFORM_PAGE_DEFAULT,
+  PLATFORM_PAGE_MAX,
+} from '../../../../platform/graphql/paging';
+import { Role } from '../../../../platform/auth/domain/role';
 import { PricingRuleType } from './pricing-rule.type';
 
-// Explicit, hand-defined presentation type — never `Service` (the domain
-// interface) or `ServiceEntity` (the TypeORM entity) returned directly as a
-// GraphQL type (spec §4.5). `activePricing` is presentation-layer-only
-// computed data, populated exclusively by `ServiceResolver.activePricing()`'s
-// `@ResolveField(() => PricingRuleType, { nullable: true })` method, which
-// batches via `ActivePricingLoader` — the base `service`/`services`/
-// `createService`/`updateService` methods return an object typed
-// `Omit<ServiceType, 'activePricing'>` cast to `ServiceType`, since Apollo
-// calls the field resolver for `activePricing` independently of whatever the
-// parent object carries for that key.
+export const VIEW_ROLES = [
+  Role.OWNER,
+  Role.OPS_MANAGER,
+  Role.SCHEDULER,
+  Role.CUSTOMER_SUPPORT,
+  Role.FINANCE,
+  Role.ANALYST,
+];
+
 @ObjectType('Service')
+@QueryOptions({
+  pagingStrategy: PagingStrategies.OFFSET,
+  enableTotalCount: true,
+  defaultResultSize: PLATFORM_PAGE_DEFAULT,
+  maxResultsSize: PLATFORM_PAGE_MAX,
+  defaultSort: [
+    { field: 'createdAt', direction: SortDirection.DESC },
+    { field: 'id', direction: SortDirection.ASC },
+  ],
+})
 export class ServiceType {
-  @FilterableField(() => ID)
+  @IDField(() => ID)
   id!: string;
 
   @FilterableField()
@@ -26,13 +46,13 @@ export class ServiceType {
   @Field(() => Int)
   durationMinutes!: number;
 
-  @Field()
+  @FilterableField()
   active!: boolean;
 
   @Field(() => PricingRuleType, { nullable: true })
   activePricing!: PricingRuleType | null;
 
-  @Field()
+  @FilterableField()
   createdAt!: Date;
 
   @Field()

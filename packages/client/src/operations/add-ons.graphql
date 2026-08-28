@@ -1,10 +1,17 @@
-query AddOns {
-  addOns {
-    id
-    name
-    description
-    priceMinorUnits
-    active
+query AddOns($paging: OffsetPaging, $filter: AddOnFilter, $sorting: [AddOnSort!]) {
+  addOns(paging: $paging, filter: $filter, sorting: $sorting) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+    }
+    nodes {
+      id
+      name
+      description
+      priceMinorUnits
+      active
+    }
   }
 }
 

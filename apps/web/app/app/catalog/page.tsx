@@ -59,7 +59,12 @@ export default function CatalogPage() {
 }
 
 function CatalogPageContent() {
-  const { data, loading, error, refetch } = useServicesQuery({ fetchPolicy: 'network-only' });
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
+  const { data, loading, error, refetch } = useServicesQuery({
+    fetchPolicy: 'network-only',
+    variables: { paging: { limit: pageSize, offset: (page - 1) * pageSize } },
+  });
   const [createService, { loading: creating }] = useCreateServiceMutation();
   const { activeId, open: openDetail, close: closeDetail } = useDetailDrawer();
 
@@ -129,7 +134,7 @@ function CatalogPageContent() {
     },
   ];
 
-  const rows: ServiceRow[] = data?.services ?? [];
+  const rows: ServiceRow[] = (data?.services.nodes ?? []) as ServiceRow[];
 
   return (
     <div className="flex flex-col gap-8">
@@ -150,6 +155,12 @@ function CatalogPageContent() {
         loading={loading}
         error={error ? 'Unable to load services.' : undefined}
         onRowClick={(row) => openDetail(row.id)}
+        pagination={{
+          page,
+          pageSize,
+          totalCount: data?.services.totalCount ?? 0,
+          onPageChange: setPage,
+        }}
       />
 
       <FormDialog

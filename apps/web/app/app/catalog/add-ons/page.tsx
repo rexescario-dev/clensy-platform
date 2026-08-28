@@ -52,7 +52,12 @@ export default function AddOnsPage() {
 }
 
 function AddOnsPageContent() {
-  const { data, loading, error, refetch } = useAddOnsQuery({ fetchPolicy: 'network-only' });
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
+  const { data, loading, error, refetch } = useAddOnsQuery({
+    fetchPolicy: 'network-only',
+    variables: { paging: { limit: pageSize, offset: (page - 1) * pageSize } },
+  });
   const [createAddOn, { loading: creating }] = useCreateAddOnMutation();
   const { activeId, open: openDetail, close: closeDetail } = useDetailDrawer();
 
@@ -119,7 +124,7 @@ function AddOnsPageContent() {
     },
   ];
 
-  const rows: AddOnRow[] = data?.addOns ?? [];
+  const rows: AddOnRow[] = (data?.addOns.nodes ?? []) as AddOnRow[];
 
   return (
     <div className="flex flex-col gap-8">
@@ -140,6 +145,12 @@ function AddOnsPageContent() {
         loading={loading}
         error={error ? 'Unable to load add-ons.' : undefined}
         onRowClick={(row) => openDetail(row.id)}
+        pagination={{
+          page,
+          pageSize,
+          totalCount: data?.addOns.totalCount ?? 0,
+          onPageChange: setPage,
+        }}
       />
 
       <FormDialog

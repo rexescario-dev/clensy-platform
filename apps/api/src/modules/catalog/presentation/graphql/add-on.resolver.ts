@@ -1,5 +1,5 @@
 import { UseGuards } from '@nestjs/common';
-import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
+import { Args, ID, Mutation, Resolver } from '@nestjs/graphql';
 import { AddOnsService } from '../../application/services/add-ons.service';
 import { CreateAddOnCommand } from '../../application/commands/create-add-on.command';
 import { UpdateAddOnCommand } from '../../application/commands/update-add-on.command';
@@ -21,23 +21,6 @@ import { UpdateAddOnInput } from './update-add-on.input';
 @Resolver(() => AddOnType)
 export class AddOnResolver {
   constructor(private readonly addOnsService: AddOnsService) {}
-
-  // View matrix (spec §4.3) — deliberately broader than the Cleaners
-  // module's: all six roles, not just Owner/Ops Manager/Scheduler/Analyst.
-  @Query(() => [AddOnType], { name: 'addOns' })
-  @UseGuards(AuthGuard)
-  @Roles(
-    Role.OWNER,
-    Role.OPS_MANAGER,
-    Role.SCHEDULER,
-    Role.CUSTOMER_SUPPORT,
-    Role.FINANCE,
-    Role.ANALYST,
-  )
-  async addOns(): Promise<AddOnType[]> {
-    const addOns = await this.addOnsService.listAddOns();
-    return addOns.map(toAddOnType);
-  }
 
   @Mutation(() => AddOnType)
   @UseGuards(AuthGuard)

@@ -94,7 +94,10 @@ function BookingsPageContent() {
     fetchPolicy: 'network-only',
     variables: { paging: { limit: 100 } },
   });
-  const { data: servicesData } = useServicesQuery({ fetchPolicy: 'network-only' });
+  const { data: servicesData } = useServicesQuery({
+    fetchPolicy: 'network-only',
+    variables: { paging: { limit: 100 } },
+  });
   const { data: teamsData } = useTeamsQuery({
     fetchPolicy: 'network-only',
     variables: { paging: { limit: 100 } },
@@ -172,7 +175,9 @@ function BookingsPageContent() {
   const rows: BookingRow[] = (data?.bookings.nodes ?? []) as BookingRow[];
   const customers = customersData?.customers.nodes ?? [];
   const properties = propertiesData?.customerProperties.nodes ?? [];
-  const activeServices = (servicesData?.services ?? []).filter((service) => service.active);
+  const activeServices = (servicesData?.services.nodes ?? []).filter(
+    (service) => service.active,
+  );
   const teams = teamsData?.teams.nodes ?? [];
 
   return (
