@@ -149,6 +149,7 @@ describe('Catalog (e2e)', () => {
       createPricingRule(input: $input) {
         id
         serviceId
+        addOnId
         priceMinorUnits
       }
     }
@@ -317,6 +318,7 @@ describe('Catalog (e2e)', () => {
       createPricingRuleResponse.body.data.createPricingRule;
     expect(createdPricingRule).toMatchObject({
       serviceId,
+      addOnId: null,
       priceMinorUnits: 8000,
     });
     const firstPricingRuleId: string = createdPricingRule.id;
@@ -365,8 +367,33 @@ describe('Catalog (e2e)', () => {
     });
     expect(repriceResponse.body.errors).toBeUndefined();
     const repricedRule = repriceResponse.body.data.createPricingRule;
-    expect(repricedRule).toMatchObject({ serviceId, priceMinorUnits: 9500 });
+    expect(repricedRule).toMatchObject({
+      serviceId,
+      addOnId: null,
+      priceMinorUnits: 9500,
+    });
     const secondPricingRuleId: string = repricedRule.id;
+
+    // --- addOnId-targeted createPricingRule (Laundry Architecture & Catalog
+    // Foundation spec §4.6 post-acceptance addendum): the mutation extended
+    // to accept `addOnId` instead of `serviceId` returns `serviceId: null`,
+    // `addOnId: <id>` — the GraphQL-level regression/completion proof that
+    // this extension didn't disturb the existing serviceId-targeted shape
+    // (asserted above) while making the new target kind reachable at all. ---
+    const addOnPricingRuleResponse = await authedRequest(
+      ownerSessionCookie,
+    ).send({
+      query: CREATE_PRICING_RULE_MUTATION,
+      variables: {
+        input: { addOnId, priceMinorUnits: 1500, unit: 'PER_ITEM' },
+      },
+    });
+    expect(addOnPricingRuleResponse.body.errors).toBeUndefined();
+    expect(addOnPricingRuleResponse.body.data.createPricingRule).toMatchObject({
+      serviceId: null,
+      addOnId,
+      priceMinorUnits: 1500,
+    });
     expect(secondPricingRuleId).not.toBe(firstPricingRuleId);
 
     const activePricingAfterRepriceResponse = await authedRequest(
@@ -475,9 +502,10 @@ describe('Catalog (e2e)', () => {
       ownerSessionCookie,
     ).send({ query: ADD_ONS_QUERY });
     expect(addOnsAfterUpdateResponse.body.errors).toBeUndefined();
-    const addOnRowAfterUpdate = addOnsAfterUpdateResponse.body.data.addOns.nodes.find(
-      (a: { id: string }) => a.id === addOnId,
-    );
+    const addOnRowAfterUpdate =
+      addOnsAfterUpdateResponse.body.data.addOns.nodes.find(
+        (a: { id: string }) => a.id === addOnId,
+      );
     expect(addOnRowAfterUpdate).toMatchObject({
       id: addOnId,
       name: addOnName,
@@ -671,9 +699,10 @@ describe('Catalog (e2e)', () => {
         query: SERVICES_QUERY,
       });
       expect(servicesResponse.body.errors).toBeUndefined();
-      const roleServiceIds: string[] = servicesResponse.body.data.services.nodes.map(
-        (s: { id: string }) => s.id,
-      );
+      const roleServiceIds: string[] =
+        servicesResponse.body.data.services.nodes.map(
+          (s: { id: string }) => s.id,
+        );
       expect(roleServiceIds).toContain(serviceId);
 
       const addOnsResponse = await authedRequest(sessionCookie).send({
