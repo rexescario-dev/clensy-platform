@@ -897,4 +897,59 @@ describe('Catalog (e2e)', () => {
       `Service ${nonexistentServiceId} not found`,
     );
   });
+
+  // Task 5 (plan §8): a full mutation-to-query round trip through the real
+  // DI graph — creates an addOnId-targeted, future-scheduled rule via the
+  // real GraphQL mutation, then resolves it via `PricingRulesService`
+  // pulled off the same running `AppModule` (`moduleFixture.get`, the same
+  // technique the Catalog plan's N+1 test uses), confirming the row
+  // resolves correctly end-to-end, not just when the service is
+  // directly instantiated (as every `catalog.service.e2e-spec.ts` test
+  // does).
+  it('resolves an addOnId-targeted, future-scheduled rule created via GraphQL through the real DI graph', async () => {
+    const runId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const owner = await seedOwner(adminUserRepository);
+    const loginResponse = await login(owner.email, owner.password);
+    const ownerSessionCookie = extractSessionCookie(loginResponse);
+
+    const createAddOnResponse = await authedRequest(ownerSessionCookie).send({
+      query: CREATE_ADD_ON_MUTATION,
+      variables: {
+        input: {
+          name: `DI Round Trip Add-On ${runId}`,
+          priceMinorUnits: 800,
+        },
+      },
+    });
+    expect(createAddOnResponse.body.errors).toBeUndefined();
+    const addOnId: string = createAddOnResponse.body.data.createAddOn.id;
+
+    const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const createPricingRuleResponse = await authedRequest(
+      ownerSessionCookie,
+    ).send({
+      query: CREATE_PRICING_RULE_MUTATION,
+      variables: {
+        input: {
+          addOnId,
+          priceMinorUnits: 950,
+          unit: 'PER_KG',
+          effectiveFrom: future.toISOString(),
+        },
+      },
+    });
+    expect(createPricingRuleResponse.body.errors).toBeUndefined();
+    expect(createPricingRuleResponse.body.data.createPricingRule).toMatchObject(
+      { serviceId: null, addOnId, priceMinorUnits: 950 },
+    );
+
+    await expect(
+      pricingRulesService.resolveEffectivePricing({ addOnId }, future),
+    ).resolves.toEqual(
+      expect.objectContaining({ addOnId, priceMinorUnits: 950 }),
+    );
+    await expect(
+      pricingRulesService.resolveEffectivePricing({ addOnId }, new Date()),
+    ).resolves.toBeNull();
+  });
 });

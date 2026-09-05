@@ -1090,6 +1090,72 @@ describe('PricingRulesService (real Postgres)', () => {
       await expect(service.getActivePricing(svc.id)).resolves.toBeNull();
     });
   });
+
+  // Task 5 (plan §8): cross-cutting scenarios combining `getActivePricing`
+  // and `resolveEffectivePricing` in a single assertion, proving the two
+  // mechanisms' independence (spec §4.2, §4.4, §5) rather than any one
+  // method's behavior in isolation — the thing no single prior task's tests
+  // asserted together.
+  describe('effective-dated pricing — cross-cutting', () => {
+    it('serviceId: legacy active pricing and effective-dated resolution stay independently correct through an immediate + future scheduling', async () => {
+      const svc = await seedService('Standard Clean');
+      const immediate = await service.createPricingRule({
+        actorId: 'actor-1',
+        serviceId: svc.id,
+        priceMinorUnits: 5000,
+      });
+      const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      const scheduled = await service.createPricingRule({
+        actorId: 'actor-1',
+        serviceId: svc.id,
+        priceMinorUnits: 7000,
+        effectiveFrom: future,
+      });
+
+      // Legacy path — untouched by scheduling.
+      await expect(service.getActivePricing(svc.id)).resolves.toEqual(
+        expect.objectContaining({ id: immediate.id }),
+      );
+
+      // Effective-dated path — target-agnostic, correctly time-aware.
+      await expect(
+        service.resolveEffectivePricing({ serviceId: svc.id }, new Date()),
+      ).resolves.toEqual(expect.objectContaining({ id: immediate.id }));
+      await expect(
+        service.resolveEffectivePricing({ serviceId: svc.id }, future),
+      ).resolves.toEqual(expect.objectContaining({ id: scheduled.id }));
+      await expect(
+        service.resolveEffectivePricing(
+          { serviceId: svc.id },
+          new Date(future.getTime() - 24 * 60 * 60 * 1000),
+        ),
+      ).resolves.toEqual(expect.objectContaining({ id: immediate.id }));
+    });
+
+    it('addOnId: always active:false, resolveEffectivePricing resolves it correctly, legacy getActivePricing is not a valid call shape for this target', async () => {
+      const addOn = await seedAddOn('Same-Day Turnaround');
+      const t1 = new Date();
+      const created = await service.createPricingRule({
+        actorId: 'actor-1',
+        addOnId: addOn.id,
+        priceMinorUnits: 1500,
+        unit: PricingUnit.PER_ITEM,
+        effectiveFrom: t1,
+      });
+
+      const row = await dataSource
+        .getRepository(PricingRuleEntity)
+        .findOneByOrFail({ id: created.id });
+      expect(row.active).toBe(false);
+
+      await expect(
+        service.resolveEffectivePricing({ addOnId: addOn.id }, t1),
+      ).resolves.toEqual(expect.objectContaining({ id: created.id }));
+      // `getActivePricing(serviceId: string)` has no overload accepting an
+      // `addOnId` — this boundary is enforced at compile time, not runtime;
+      // there is no call to make here that would even type-check.
+    });
+  });
 });
 
 // Task 1 (plan §8): schema-level invariants and the migration's backfill
