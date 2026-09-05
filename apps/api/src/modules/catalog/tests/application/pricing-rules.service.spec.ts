@@ -21,11 +21,25 @@ describe('PricingRulesService', () => {
     save: jest.Mock;
     update: jest.Mock;
     findOneBy: jest.Mock;
+    createQueryBuilder: jest.Mock;
+  };
+  let closeQueryBuilder: {
+    update: jest.Mock;
+    set: jest.Mock;
+    where: jest.Mock;
+    returning: jest.Mock;
+    execute: jest.Mock;
   };
   let dataSource: { transaction: jest.Mock };
   let pricingRuleRepository: {
     findOneBy: jest.Mock;
     findBy: jest.Mock;
+    createQueryBuilder: jest.Mock;
+  };
+  let resolveQueryBuilder: {
+    where: jest.Mock;
+    andWhere: jest.Mock;
+    getOne: jest.Mock;
   };
   let serviceRepository: {
     findOneBy: jest.Mock;
@@ -33,6 +47,28 @@ describe('PricingRulesService', () => {
   let auditLogger: { log: jest.Mock };
 
   beforeEach(async () => {
+    // The close-and-read step's query builder — every chained method
+    // returns `this` except `execute`, matching TypeORM's own builder shape.
+    closeQueryBuilder = {
+      update: jest.fn(),
+      set: jest.fn(),
+      where: jest.fn(),
+      returning: jest.fn(),
+      execute: jest.fn().mockResolvedValue({ raw: [] }),
+    };
+    closeQueryBuilder.update.mockReturnValue(closeQueryBuilder);
+    closeQueryBuilder.set.mockReturnValue(closeQueryBuilder);
+    closeQueryBuilder.where.mockReturnValue(closeQueryBuilder);
+    closeQueryBuilder.returning.mockReturnValue(closeQueryBuilder);
+
+    resolveQueryBuilder = {
+      where: jest.fn(),
+      andWhere: jest.fn(),
+      getOne: jest.fn().mockResolvedValue(null),
+    };
+    resolveQueryBuilder.where.mockReturnValue(resolveQueryBuilder);
+    resolveQueryBuilder.andWhere.mockReturnValue(resolveQueryBuilder);
+
     manager = {
       create: jest.fn(
         (_entityClass: unknown, data: Record<string, unknown>) => ({
@@ -42,6 +78,7 @@ describe('PricingRulesService', () => {
       save: jest.fn((entity: unknown) => Promise.resolve(entity)),
       update: jest.fn().mockResolvedValue(undefined),
       findOneBy: jest.fn(),
+      createQueryBuilder: jest.fn().mockReturnValue(closeQueryBuilder),
     };
     dataSource = {
       transaction: jest.fn((cb: (manager: unknown) => unknown) => cb(manager)),
@@ -49,6 +86,7 @@ describe('PricingRulesService', () => {
     pricingRuleRepository = {
       findOneBy: jest.fn(),
       findBy: jest.fn(),
+      createQueryBuilder: jest.fn().mockReturnValue(resolveQueryBuilder),
     };
     serviceRepository = {
       findOneBy: jest.fn(),
@@ -113,6 +151,103 @@ describe('PricingRulesService', () => {
           expect(manager.save).not.toHaveBeenCalled();
           expect(auditLogger.log).not.toHaveBeenCalled();
         },
+      );
+
+      it.each([
+        ['negative', -1],
+        ['non-integer', 1.5],
+      ])(
+        'throws BadRequestException before any write when minimumChargeMinorUnits is %s',
+        async (_label, minimumChargeMinorUnits) => {
+          manager.findOneBy.mockResolvedValue({ id: 'service-1' });
+
+          await expect(
+            service.createPricingRule({
+              actorId: 'actor-1',
+              serviceId: 'service-1',
+              priceMinorUnits: 5000,
+              minimumChargeMinorUnits,
+            }),
+          ).rejects.toThrow(BadRequestException);
+
+          expect(manager.update).not.toHaveBeenCalled();
+          expect(manager.save).not.toHaveBeenCalled();
+        },
+      );
+
+      it('does not throw when minimumChargeMinorUnits is 0', async () => {
+        manager.findOneBy.mockResolvedValue({ id: 'service-1' });
+
+        await expect(
+          service.createPricingRule({
+            actorId: 'actor-1',
+            serviceId: 'service-1',
+            priceMinorUnits: 5000,
+            minimumChargeMinorUnits: 0,
+          }),
+        ).resolves.toBeDefined();
+      });
+    });
+
+    describe('mutual exclusivity', () => {
+      it('throws BadRequestException when both serviceId and addOnId are provided, without any repository call', async () => {
+        await expect(
+          service.createPricingRule({
+            actorId: 'actor-1',
+            serviceId: 'service-1',
+            addOnId: 'add-on-1',
+            priceMinorUnits: 5000,
+          }),
+        ).rejects.toThrow(BadRequestException);
+
+        expect(manager.findOneBy).not.toHaveBeenCalled();
+        expect(manager.update).not.toHaveBeenCalled();
+        expect(manager.save).not.toHaveBeenCalled();
+      });
+
+      it('throws BadRequestException when neither serviceId nor addOnId is provided, without any repository call', async () => {
+        await expect(
+          service.createPricingRule({
+            actorId: 'actor-1',
+            priceMinorUnits: 5000,
+          }),
+        ).rejects.toThrow(BadRequestException);
+
+        expect(manager.findOneBy).not.toHaveBeenCalled();
+        expect(manager.update).not.toHaveBeenCalled();
+        expect(manager.save).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('resolveEffectivePricing', () => {
+    it('queries by serviceId for a { serviceId } target, not addOnId', async () => {
+      const asOf = new Date('2026-01-01T00:00:00Z');
+
+      await service.resolveEffectivePricing({ serviceId: 'service-1' }, asOf);
+
+      expect(resolveQueryBuilder.where).toHaveBeenCalledWith(
+        expect.stringContaining('"serviceId"'),
+        { targetId: 'service-1' },
+      );
+      expect(resolveQueryBuilder.where).not.toHaveBeenCalledWith(
+        expect.stringContaining('"addOnId"'),
+        expect.anything(),
+      );
+    });
+
+    it('queries by addOnId for an { addOnId } target, not serviceId', async () => {
+      const asOf = new Date('2026-01-01T00:00:00Z');
+
+      await service.resolveEffectivePricing({ addOnId: 'add-on-1' }, asOf);
+
+      expect(resolveQueryBuilder.where).toHaveBeenCalledWith(
+        expect.stringContaining('"addOnId"'),
+        { targetId: 'add-on-1' },
+      );
+      expect(resolveQueryBuilder.where).not.toHaveBeenCalledWith(
+        expect.stringContaining('"serviceId"'),
+        expect.anything(),
       );
     });
   });
