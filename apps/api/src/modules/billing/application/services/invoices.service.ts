@@ -55,8 +55,6 @@ export class InvoicesService {
     private readonly dataSource: DataSource,
     @InjectRepository(InvoiceEntity)
     private readonly invoiceRepository: Repository<InvoiceEntity>,
-    @InjectRepository(InvoiceLineEntity)
-    private readonly invoiceLineRepository: Repository<InvoiceLineEntity>,
     private readonly laundryOrdersService: LaundryOrdersService,
     private readonly servicesService: ServicesService,
     private readonly addOnsService: AddOnsService,

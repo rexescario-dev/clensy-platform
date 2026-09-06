@@ -15,7 +15,6 @@ import { LaundryOrderStatus } from '../../../laundry/domain/laundry-order-status
 import { InvoicePaymentStatus } from '../../domain/invoice-payment-status';
 import { InvoicePaymentTerms } from '../../domain/invoice-payment-terms';
 import { InvoiceEntity } from '../../infrastructure/persistence/invoice.entity';
-import { InvoiceLineEntity } from '../../infrastructure/persistence/invoice-line.entity';
 import { InvoicesService } from '../../application/services/invoices.service';
 
 // Mocked Repository/DataSource unit tests (plan §7 Slice D). The mock
@@ -118,7 +117,6 @@ describe('InvoicesService', () => {
           provide: getRepositoryToken(InvoiceEntity),
           useValue: invoiceRepository,
         },
-        { provide: getRepositoryToken(InvoiceLineEntity), useValue: {} },
         { provide: LaundryOrdersService, useValue: laundryOrdersService },
         { provide: ServicesService, useValue: servicesService },
         { provide: AddOnsService, useValue: addOnsService },

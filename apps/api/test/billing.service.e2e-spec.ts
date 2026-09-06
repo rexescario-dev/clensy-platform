@@ -99,7 +99,6 @@ function buildInvoicesService(
   return new InvoicesService(
     ds,
     ds.getRepository(InvoiceEntity),
-    ds.getRepository(InvoiceLineEntity),
     laundry,
     services,
     addOns,
