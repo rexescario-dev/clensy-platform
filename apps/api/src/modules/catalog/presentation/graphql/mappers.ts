@@ -44,13 +44,17 @@ export function toAddOnType(addOn: AddOn): AddOnType {
   };
 }
 
-// Deliberately omits `active` — `PricingRuleType` has no `@Field()` for it
-// (see `pricing-rule.type.ts`), so it is dropped here rather than carried
-// through as an unused extra property.
+// Deliberately omits `active`/`unit`/`effectiveFrom`/`minimumChargeMinorUnits`
+// — `PricingRuleType` has no `@Field()` for any of them (see
+// `pricing-rule.type.ts`), so they are dropped here rather than carried
+// through as unused extra properties. `addOnId` is mapped alongside
+// `serviceId` (both now nullable, spec §4.6 post-acceptance addendum) — a
+// plain pass-through in both directions, no branching needed.
 export function toPricingRuleType(rule: PricingRule): PricingRuleType {
   return {
     id: rule.id,
     serviceId: rule.serviceId,
+    addOnId: rule.addOnId,
     priceMinorUnits: rule.priceMinorUnits,
     createdAt: rule.createdAt,
   };

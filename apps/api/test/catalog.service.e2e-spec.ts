@@ -1,9 +1,14 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { AuditEventEntity } from '../src/platform/audit/infrastructure/persistence/audit-event.entity';
 import { AddOnsService } from '../src/modules/catalog/application/services/add-ons.service';
 import { PricingRulesService } from '../src/modules/catalog/application/services/pricing-rules.service';
 import { ServicesService } from '../src/modules/catalog/application/services/services.service';
+import { PricingUnit } from '../src/modules/catalog/domain/pricing-unit';
 import { AddOnEntity } from '../src/modules/catalog/infrastructure/persistence/add-on.entity';
 import { PricingRuleEntity } from '../src/modules/catalog/infrastructure/persistence/pricing-rule.entity';
 import { ServiceEntity } from '../src/modules/catalog/infrastructure/persistence/service.entity';
@@ -493,6 +498,17 @@ describe('PricingRulesService (real Postgres)', () => {
     );
   }
 
+  async function seedAddOn(name: string) {
+    return dataSource.getRepository(AddOnEntity).save(
+      dataSource.getRepository(AddOnEntity).create({
+        name,
+        description: null,
+        priceMinorUnits: 1000,
+        active: true,
+      }),
+    );
+  }
+
   describe('createPricingRule', () => {
     it('creates an active PricingRule, records pricing_rule.create, and getActivePricing returns it', async () => {
       const svc = await seedService('Standard Clean');
@@ -657,6 +673,407 @@ describe('PricingRulesService (real Postgres)', () => {
         .getRepository(PricingRuleEntity)
         .findBy({ serviceId: svc.id, active: true });
       expect(activeRows).toHaveLength(1);
+
+      // This is the "first-ever price" race — no predecessor existed before
+      // firing the race, so exactly one row total should exist afterward
+      // (the loser's attempted insert never persists); it is the fulfilled
+      // call's own row. See the dedicated "extends an existing predecessor"
+      // tests below for the race that closes/extends an already-open
+      // interval, where a predecessor row does remain.
+      const allRows = await dataSource
+        .getRepository(PricingRuleEntity)
+        .findBy({ serviceId: svc.id });
+      expect(allRows).toHaveLength(1);
+
+      const won = (fulfilled[0] as PromiseFulfilledResult<PricingRuleEntity>)
+        .value;
+      expect(allRows[0].id).toBe(won.id);
+      expect(allRows[0].effectiveTo).toBeNull();
+      expect(activeRows[0].id).toBe(won.id);
+    });
+
+    it("two concurrent createPricingRule calls extending an existing predecessor (serviceId): exactly one fulfills, the predecessor closes exactly at the winner's effectiveFrom, legacy active stays consistent", async () => {
+      const svc = await seedService('Standard Clean');
+      const predecessor = await service.createPricingRule({
+        actorId: 'actor-1',
+        serviceId: svc.id,
+        priceMinorUnits: 5000,
+      });
+
+      const warmupA = dataSource.createQueryRunner();
+      const warmupB = dataSource.createQueryRunner();
+      await Promise.all([warmupA.connect(), warmupB.connect()]);
+      await Promise.all([warmupA.query('SELECT 1'), warmupB.query('SELECT 1')]);
+      await Promise.all([warmupA.release(), warmupB.release()]);
+
+      const effFromA = new Date(Date.now() + 60 * 60 * 1000);
+      const effFromB = new Date(Date.now() + 2 * 60 * 60 * 1000);
+      const [resultA, resultB] = await Promise.allSettled([
+        service.createPricingRule({
+          actorId: 'actor-1',
+          serviceId: svc.id,
+          priceMinorUnits: 6000,
+          effectiveFrom: effFromA,
+        }),
+        service.createPricingRule({
+          actorId: 'actor-2',
+          serviceId: svc.id,
+          priceMinorUnits: 7000,
+          effectiveFrom: effFromB,
+        }),
+      ]);
+
+      const fulfilled = [resultA, resultB].filter(
+        (r): r is PromiseFulfilledResult<PricingRuleEntity> =>
+          r.status === 'fulfilled',
+      );
+      expect(fulfilled).toHaveLength(1);
+      expect(
+        [resultA, resultB].filter((r) => r.status === 'rejected'),
+      ).toHaveLength(1);
+
+      const allRows = await dataSource
+        .getRepository(PricingRuleEntity)
+        .findBy({ serviceId: svc.id });
+      expect(allRows).toHaveLength(2);
+
+      const won = fulfilled[0].value;
+      const openRows = allRows.filter((r) => r.effectiveTo === null);
+      expect(openRows).toHaveLength(1);
+      expect(openRows[0].id).toBe(won.id);
+
+      const predecessorRow = allRows.find((r) => r.id === predecessor.id)!;
+      expect(predecessorRow.effectiveTo).toEqual(won.effectiveFrom);
+
+      // Legacy active state: the winner's effectiveFrom is always in the
+      // future in this test, so it must never be active, and the
+      // predecessor (still <= now) must remain the legacy-active row.
+      expect(won.active).toBe(false);
+      const activeRows = await dataSource
+        .getRepository(PricingRuleEntity)
+        .findBy({ serviceId: svc.id, active: true });
+      expect(activeRows).toHaveLength(1);
+      expect(activeRows[0].id).toBe(predecessor.id);
+    });
+  });
+
+  describe('mutual exclusivity', () => {
+    it('throws BadRequestException when both serviceId and addOnId are provided, and creates no row', async () => {
+      const svc = await seedService('Standard Clean');
+      const addOn = await seedAddOn('Same-Day Turnaround');
+
+      await expect(
+        service.createPricingRule({
+          actorId: 'actor-1',
+          serviceId: svc.id,
+          addOnId: addOn.id,
+          priceMinorUnits: 5000,
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      const rows = await dataSource.getRepository(PricingRuleEntity).find();
+      expect(rows).toHaveLength(0);
+    });
+
+    it('throws BadRequestException when neither serviceId nor addOnId is provided, and creates no row', async () => {
+      await expect(
+        service.createPricingRule({
+          actorId: 'actor-1',
+          priceMinorUnits: 5000,
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      const rows = await dataSource.getRepository(PricingRuleEntity).find();
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe('effective-dated pricing', () => {
+    it('immediate, serviceId-targeted: identical observable shape to the legacy call, plus correct new columns', async () => {
+      const svc = await seedService('Standard Clean');
+      const before = new Date();
+
+      const created = await service.createPricingRule({
+        actorId: 'actor-1',
+        serviceId: svc.id,
+        priceMinorUnits: 5000,
+      });
+      const after = new Date();
+
+      const row = await dataSource
+        .getRepository(PricingRuleEntity)
+        .findOneByOrFail({ id: created.id });
+      expect(row.active).toBe(true);
+      expect(row.unit).toBe(PricingUnit.PER_SERVICE);
+      expect(row.minimumChargeMinorUnits).toBeNull();
+      expect(row.addOnId).toBeNull();
+      expect(row.effectiveTo).toBeNull();
+      expect(row.effectiveFrom.getTime()).toBeGreaterThanOrEqual(
+        before.getTime(),
+      );
+      expect(row.effectiveFrom.getTime()).toBeLessThanOrEqual(after.getTime());
+    });
+
+    it('future-scheduled, serviceId-targeted: legacy active row is untouched, new row is active:false, date chain still closes', async () => {
+      const svc = await seedService('Standard Clean');
+      const current = await service.createPricingRule({
+        actorId: 'actor-1',
+        serviceId: svc.id,
+        priceMinorUnits: 5000,
+      });
+
+      const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      const scheduled = await service.createPricingRule({
+        actorId: 'actor-1',
+        serviceId: svc.id,
+        priceMinorUnits: 7000,
+        effectiveFrom: future,
+      });
+
+      const currentRow = await dataSource
+        .getRepository(PricingRuleEntity)
+        .findOneByOrFail({ id: current.id });
+      expect(currentRow.active).toBe(true);
+      expect(currentRow.effectiveTo).toEqual(future);
+
+      const scheduledRow = await dataSource
+        .getRepository(PricingRuleEntity)
+        .findOneByOrFail({ id: scheduled.id });
+      expect(scheduledRow.active).toBe(false);
+      expect(scheduledRow.effectiveTo).toBeNull();
+
+      await expect(service.getActivePricing(svc.id)).resolves.toEqual(
+        expect.objectContaining({ id: current.id }),
+      );
+    });
+
+    it('addOnId-targeted (first-ever rule): always active:false regardless of effectiveFrom, serviceId is null', async () => {
+      const addOn = await seedAddOn('Same-Day Turnaround');
+
+      const created = await service.createPricingRule({
+        actorId: 'actor-1',
+        addOnId: addOn.id,
+        priceMinorUnits: 1500,
+        unit: PricingUnit.PER_ITEM,
+      });
+
+      const row = await dataSource
+        .getRepository(PricingRuleEntity)
+        .findOneByOrFail({ id: created.id });
+      expect(row.active).toBe(false);
+      expect(row.serviceId).toBeNull();
+      expect(row.addOnId).toBe(addOn.id);
+      expect(row.unit).toBe(PricingUnit.PER_ITEM);
+      expect(row.effectiveTo).toBeNull();
+    });
+
+    it("forward-only rejection: effectiveFrom equal to, or before, the open interval's effectiveFrom is rejected and leaves the open interval unchanged", async () => {
+      const svc = await seedService('Standard Clean');
+      const t = new Date();
+      const first = await service.createPricingRule({
+        actorId: 'actor-1',
+        serviceId: svc.id,
+        priceMinorUnits: 5000,
+        effectiveFrom: t,
+      });
+
+      await expect(
+        service.createPricingRule({
+          actorId: 'actor-1',
+          serviceId: svc.id,
+          priceMinorUnits: 6000,
+          effectiveFrom: t,
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      await expect(
+        service.createPricingRule({
+          actorId: 'actor-1',
+          serviceId: svc.id,
+          priceMinorUnits: 6000,
+          effectiveFrom: new Date(t.getTime() - 1000),
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      const firstRow = await dataSource
+        .getRepository(PricingRuleEntity)
+        .findOneByOrFail({ id: first.id });
+      expect(firstRow.effectiveTo).toBeNull();
+
+      const rows = await dataSource
+        .getRepository(PricingRuleEntity)
+        .findBy({ serviceId: svc.id });
+      expect(rows).toHaveLength(1);
+    });
+
+    it("valid forward extension: the prior interval closes exactly at the new interval's effectiveFrom", async () => {
+      const svc = await seedService('Standard Clean');
+      const t1 = new Date();
+      const t2 = new Date(t1.getTime() + 60 * 60 * 1000);
+
+      const first = await service.createPricingRule({
+        actorId: 'actor-1',
+        serviceId: svc.id,
+        priceMinorUnits: 5000,
+        effectiveFrom: t1,
+      });
+      await service.createPricingRule({
+        actorId: 'actor-1',
+        serviceId: svc.id,
+        priceMinorUnits: 6000,
+        effectiveFrom: t2,
+      });
+
+      const firstRow = await dataSource
+        .getRepository(PricingRuleEntity)
+        .findOneByOrFail({ id: first.id });
+      expect(firstRow.effectiveTo).toEqual(t2);
+    });
+
+    it('rolls back the close step (not just the insert) when the audit write fails on a forward extension', async () => {
+      const svc = await seedService('Standard Clean');
+      const first = await service.createPricingRule({
+        actorId: 'actor-1',
+        serviceId: svc.id,
+        priceMinorUnits: 5000,
+      });
+
+      auditLogger.log.mockRejectedValueOnce(new Error('audit down'));
+      await expect(
+        service.createPricingRule({
+          actorId: 'actor-1',
+          serviceId: svc.id,
+          priceMinorUnits: 6000,
+          effectiveFrom: new Date(Date.now() + 60 * 60 * 1000),
+        }),
+      ).rejects.toThrow('audit down');
+
+      const firstRow = await dataSource
+        .getRepository(PricingRuleEntity)
+        .findOneByOrFail({ id: first.id });
+      expect(firstRow.effectiveTo).toBeNull();
+    });
+
+    it('two concurrent createPricingRule calls for the same addOnId: exactly one fulfills, one rejects, exactly one open row remains', async () => {
+      const addOn = await seedAddOn('Same-Day Turnaround');
+
+      const warmupA = dataSource.createQueryRunner();
+      const warmupB = dataSource.createQueryRunner();
+      await Promise.all([warmupA.connect(), warmupB.connect()]);
+      await Promise.all([warmupA.query('SELECT 1'), warmupB.query('SELECT 1')]);
+      await Promise.all([warmupA.release(), warmupB.release()]);
+
+      const [resultA, resultB] = await Promise.allSettled([
+        service.createPricingRule({
+          actorId: 'actor-1',
+          addOnId: addOn.id,
+          priceMinorUnits: 1000,
+        }),
+        service.createPricingRule({
+          actorId: 'actor-2',
+          addOnId: addOn.id,
+          priceMinorUnits: 1200,
+        }),
+      ]);
+
+      const fulfilled = [resultA, resultB].filter(
+        (r) => r.status === 'fulfilled',
+      );
+      expect(fulfilled).toHaveLength(1);
+      expect(
+        [resultA, resultB].filter((r) => r.status === 'rejected'),
+      ).toHaveLength(1);
+
+      const openRows = await dataSource
+        .getRepository(PricingRuleEntity)
+        .createQueryBuilder('rule')
+        .where('rule."addOnId" = :id', { id: addOn.id })
+        .andWhere('rule."effectiveTo" IS NULL')
+        .getMany();
+      expect(openRows).toHaveLength(1);
+    });
+  });
+
+  describe('resolveEffectivePricing', () => {
+    it('resolves the correct interval for past/current/future/boundary dates, half-open semantics', async () => {
+      const svc = await seedService('Standard Clean');
+      const t1 = new Date();
+      const t2 = new Date(t1.getTime() + 60 * 60 * 1000);
+
+      const a = await service.createPricingRule({
+        actorId: 'actor-1',
+        serviceId: svc.id,
+        priceMinorUnits: 5000,
+        effectiveFrom: t1,
+      });
+      const b = await service.createPricingRule({
+        actorId: 'actor-1',
+        serviceId: svc.id,
+        priceMinorUnits: 6000,
+        effectiveFrom: t2,
+      });
+
+      await expect(
+        service.resolveEffectivePricing({ serviceId: svc.id }, t1),
+      ).resolves.toEqual(expect.objectContaining({ id: a.id }));
+      await expect(
+        service.resolveEffectivePricing(
+          { serviceId: svc.id },
+          new Date(t1.getTime() + 30 * 60 * 1000),
+        ),
+      ).resolves.toEqual(expect.objectContaining({ id: a.id }));
+      // Boundary: asOf === t2 (== a's effectiveTo == b's effectiveFrom)
+      // resolves to b, per the half-open [effectiveFrom, effectiveTo) rule.
+      await expect(
+        service.resolveEffectivePricing({ serviceId: svc.id }, t2),
+      ).resolves.toEqual(expect.objectContaining({ id: b.id }));
+      await expect(
+        service.resolveEffectivePricing(
+          { serviceId: svc.id },
+          new Date(t1.getTime() - 1000),
+        ),
+      ).resolves.toBeNull();
+    });
+
+    it('resolves correctly for an addOnId target, target-agnostic behavior', async () => {
+      const addOn = await seedAddOn('Same-Day Turnaround');
+      const t1 = new Date();
+      const created = await service.createPricingRule({
+        actorId: 'actor-1',
+        addOnId: addOn.id,
+        priceMinorUnits: 1500,
+        effectiveFrom: t1,
+      });
+
+      await expect(
+        service.resolveEffectivePricing({ addOnId: addOn.id }, t1),
+      ).resolves.toEqual(expect.objectContaining({ id: created.id }));
+    });
+
+    it('returns null for a target that has never had a PricingRule, without throwing', async () => {
+      const svc = await seedService('Standard Clean');
+
+      await expect(
+        service.resolveEffectivePricing({ serviceId: svc.id }, new Date()),
+      ).resolves.toBeNull();
+    });
+
+    it('resolves normally for a Service/AddOn with active: false (catalog-retired) — does not check retirement status', async () => {
+      const svc = await seedService('Retired Service');
+      const t1 = new Date();
+      const created = await service.createPricingRule({
+        actorId: 'actor-1',
+        serviceId: svc.id,
+        priceMinorUnits: 5000,
+        effectiveFrom: t1,
+      });
+      await dataSource
+        .getRepository(ServiceEntity)
+        .update({ id: svc.id }, { active: false });
+
+      await expect(
+        service.resolveEffectivePricing({ serviceId: svc.id }, t1),
+      ).resolves.toEqual(expect.objectContaining({ id: created.id }));
     });
   });
 
@@ -671,6 +1088,338 @@ describe('PricingRulesService (real Postgres)', () => {
       const svc = await seedService('Standard Clean');
 
       await expect(service.getActivePricing(svc.id)).resolves.toBeNull();
+    });
+  });
+
+  // Task 5 (plan §8): cross-cutting scenarios combining `getActivePricing`
+  // and `resolveEffectivePricing` in a single assertion, proving the two
+  // mechanisms' independence (spec §4.2, §4.4, §5) rather than any one
+  // method's behavior in isolation — the thing no single prior task's tests
+  // asserted together.
+  describe('effective-dated pricing — cross-cutting', () => {
+    it('serviceId: legacy active pricing and effective-dated resolution stay independently correct through an immediate + future scheduling', async () => {
+      const svc = await seedService('Standard Clean');
+      const immediate = await service.createPricingRule({
+        actorId: 'actor-1',
+        serviceId: svc.id,
+        priceMinorUnits: 5000,
+      });
+      const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      const scheduled = await service.createPricingRule({
+        actorId: 'actor-1',
+        serviceId: svc.id,
+        priceMinorUnits: 7000,
+        effectiveFrom: future,
+      });
+
+      // Legacy path — untouched by scheduling.
+      await expect(service.getActivePricing(svc.id)).resolves.toEqual(
+        expect.objectContaining({ id: immediate.id }),
+      );
+
+      // Effective-dated path — target-agnostic, correctly time-aware.
+      await expect(
+        service.resolveEffectivePricing({ serviceId: svc.id }, new Date()),
+      ).resolves.toEqual(expect.objectContaining({ id: immediate.id }));
+      await expect(
+        service.resolveEffectivePricing({ serviceId: svc.id }, future),
+      ).resolves.toEqual(expect.objectContaining({ id: scheduled.id }));
+      await expect(
+        service.resolveEffectivePricing(
+          { serviceId: svc.id },
+          new Date(future.getTime() - 24 * 60 * 60 * 1000),
+        ),
+      ).resolves.toEqual(expect.objectContaining({ id: immediate.id }));
+    });
+
+    it('addOnId: always active:false, resolveEffectivePricing resolves it correctly, legacy getActivePricing is not a valid call shape for this target', async () => {
+      const addOn = await seedAddOn('Same-Day Turnaround');
+      const t1 = new Date();
+      const created = await service.createPricingRule({
+        actorId: 'actor-1',
+        addOnId: addOn.id,
+        priceMinorUnits: 1500,
+        unit: PricingUnit.PER_ITEM,
+        effectiveFrom: t1,
+      });
+
+      const row = await dataSource
+        .getRepository(PricingRuleEntity)
+        .findOneByOrFail({ id: created.id });
+      expect(row.active).toBe(false);
+
+      await expect(
+        service.resolveEffectivePricing({ addOnId: addOn.id }, t1),
+      ).resolves.toEqual(expect.objectContaining({ id: created.id }));
+      // `getActivePricing(serviceId: string)` has no overload accepting an
+      // `addOnId` — this boundary is enforced at compile time, not runtime;
+      // there is no call to make here that would even type-check.
+    });
+  });
+});
+
+// Task 1 (plan §8): schema-level invariants and the migration's backfill
+// computation. A separate `describe` block — these tests exercise the raw
+// database schema directly via `manager.query()`, not `PricingRulesService`,
+// so they belong conceptually with the schema/migration, not the service.
+describe('PricingRuleEntity schema (real Postgres)', () => {
+  let dataSource: DataSource;
+  let dbLock: CatalogDbTestLock;
+
+  beforeAll(async () => {
+    dataSource = createTestDataSource();
+    await dataSource.initialize();
+    dbLock = await acquireCatalogDbTestLock(dataSource);
+  });
+
+  afterAll(async () => {
+    await dbLock.release();
+    await dataSource.destroy();
+  });
+
+  beforeEach(async () => {
+    await dataSource.query(TRUNCATE_CATALOG_TABLES);
+  });
+
+  async function seedService(name: string) {
+    return dataSource.getRepository(ServiceEntity).save(
+      dataSource.getRepository(ServiceEntity).create({
+        name,
+        description: null,
+        durationMinutes: 60,
+        active: true,
+      }),
+    );
+  }
+
+  describe('mutual-exclusivity CHECK constraint', () => {
+    it('rejects a row with both serviceId and addOnId set', async () => {
+      const svc = await seedService('Standard Clean');
+      const addOn = await dataSource.getRepository(AddOnEntity).save(
+        dataSource.getRepository(AddOnEntity).create({
+          name: 'Turnaround',
+          description: null,
+          priceMinorUnits: 1000,
+          active: true,
+        }),
+      );
+
+      await expect(
+        dataSource.query(
+          `INSERT INTO "pricing_rule_entity" ("serviceId", "addOnId", "priceMinorUnits", "effectiveFrom") VALUES ($1, $2, $3, now())`,
+          [svc.id, addOn.id, 5000],
+        ),
+      ).rejects.toThrow(/ck_pricing_rule_target/);
+    });
+
+    it('rejects a row with neither serviceId nor addOnId set', async () => {
+      await expect(
+        dataSource.query(
+          `INSERT INTO "pricing_rule_entity" ("priceMinorUnits", "effectiveFrom") VALUES ($1, now())`,
+          [5000],
+        ),
+      ).rejects.toThrow(/ck_pricing_rule_target/);
+    });
+  });
+
+  describe('open-interval partial unique indexes', () => {
+    it('rejects a second open (effectiveTo IS NULL) row for the same serviceId', async () => {
+      const svc = await seedService('Standard Clean');
+      // `active: false` on both rows — isolates this test to the new
+      // `uq_pricing_rule_open_service` index; otherwise two rows with
+      // `active` at its column default (`true`) would also collide on the
+      // unrelated, pre-existing `uq_pricing_rule_active_service` index
+      // first, since Postgres reports whichever constraint it happens to
+      // check first.
+      await dataSource.query(
+        `INSERT INTO "pricing_rule_entity" ("serviceId", "priceMinorUnits", "effectiveFrom", "active") VALUES ($1, $2, now(), false)`,
+        [svc.id, 5000],
+      );
+
+      await expect(
+        dataSource.query(
+          `INSERT INTO "pricing_rule_entity" ("serviceId", "priceMinorUnits", "effectiveFrom", "active") VALUES ($1, $2, now(), false)`,
+          [svc.id, 6000],
+        ),
+      ).rejects.toThrow(/uq_pricing_rule_open_service/);
+    });
+
+    it('rejects a second open (effectiveTo IS NULL) row for the same addOnId', async () => {
+      const addOn = await dataSource.getRepository(AddOnEntity).save(
+        dataSource.getRepository(AddOnEntity).create({
+          name: 'Turnaround',
+          description: null,
+          priceMinorUnits: 1000,
+          active: true,
+        }),
+      );
+      await dataSource.query(
+        `INSERT INTO "pricing_rule_entity" ("addOnId", "priceMinorUnits", "effectiveFrom") VALUES ($1, $2, now())`,
+        [addOn.id, 1000],
+      );
+
+      await expect(
+        dataSource.query(
+          `INSERT INTO "pricing_rule_entity" ("addOnId", "priceMinorUnits", "effectiveFrom") VALUES ($1, $2, now())`,
+          [addOn.id, 1200],
+        ),
+      ).rejects.toThrow(/uq_pricing_rule_open_addon/);
+    });
+  });
+
+  describe('column defaults for post-migration inserts', () => {
+    it('a row created through PricingRulesService with only the legacy call shape gets correct defaults', async () => {
+      const svc = await seedService('Standard Clean');
+      const auditLogger = { log: jest.fn().mockResolvedValue(undefined) };
+      const service = new PricingRulesService(
+        dataSource,
+        dataSource.getRepository(PricingRuleEntity),
+        dataSource.getRepository(ServiceEntity),
+        auditLogger,
+      );
+
+      const created = await service.createPricingRule({
+        actorId: 'actor-1',
+        serviceId: svc.id,
+        priceMinorUnits: 5000,
+      });
+
+      const row = await dataSource
+        .getRepository(PricingRuleEntity)
+        .findOneByOrFail({ id: created.id });
+      expect(row.unit).toBe(PricingUnit.PER_SERVICE);
+      expect(row.minimumChargeMinorUnits).toBeNull();
+      expect(row.addOnId).toBeNull();
+    });
+  });
+
+  // The migration's own backfill computation, replayed against a throwaway
+  // temp table seeded with legacy-shaped data (plan §3, §7, §8's required
+  // correction). This verifies the backfill SQL's own semantics —
+  // partitioning and tie-breaking — against data shaped like it predates
+  // this migration; it does not execute the migration file itself, and does
+  // not touch the real `pricing_rule_entity` table (session-scoped TEMP
+  // TABLE, dropped automatically). The UPDATE statements below are copied
+  // verbatim from `ExtendPricingRuleEffectiveDating`'s `up()`, adapted only
+  // to target the fixture table name.
+  describe('migration backfill replay against legacy-shaped data', () => {
+    async function seedFixtureAndBackfill(
+      queryRunner: import('typeorm').QueryRunner,
+      rows: { id: string; serviceId: string; createdAt: Date }[],
+    ) {
+      await queryRunner.query(`
+        CREATE TEMP TABLE pricing_rule_backfill_fixture (
+          "id" uuid PRIMARY KEY,
+          "serviceId" uuid NOT NULL,
+          "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL,
+          "effectiveFrom" TIMESTAMP WITH TIME ZONE,
+          "effectiveTo" TIMESTAMP WITH TIME ZONE
+        )
+      `);
+      for (const row of rows) {
+        await queryRunner.query(
+          `INSERT INTO pricing_rule_backfill_fixture ("id", "serviceId", "createdAt") VALUES ($1, $2, $3)`,
+          [row.id, row.serviceId, row.createdAt],
+        );
+      }
+
+      // Verbatim from the migration's up() (effectiveFrom backfill step).
+      await queryRunner.query(
+        `UPDATE pricing_rule_backfill_fixture SET "effectiveFrom" = "createdAt"`,
+      );
+      // Verbatim from the migration's up() (effectiveTo backfill step),
+      // targeting the fixture table.
+      await queryRunner.query(`
+        UPDATE pricing_rule_backfill_fixture AS p
+        SET "effectiveTo" = sub."nextCreatedAt"
+        FROM (
+          SELECT "id", LEAD("createdAt") OVER (PARTITION BY "serviceId" ORDER BY "createdAt", "id") AS "nextCreatedAt"
+          FROM pricing_rule_backfill_fixture
+        ) AS sub
+        WHERE p."id" = sub."id"
+      `);
+
+      const result: {
+        id: string;
+        effectiveFrom: Date;
+        effectiveTo: Date | null;
+      }[] = await queryRunner.query(
+        `SELECT "id", "effectiveFrom", "effectiveTo" FROM pricing_rule_backfill_fixture`,
+      );
+      await queryRunner.query(`DROP TABLE pricing_rule_backfill_fixture`);
+      return result;
+    }
+
+    it('correctly partitions multi-row history per service and tie-breaks by id', async () => {
+      const queryRunner = dataSource.createQueryRunner();
+      await queryRunner.connect();
+      try {
+        const serviceA = '00000000-0000-0000-0001-000000000000';
+        const serviceB = '00000000-0000-0000-0002-000000000000';
+        const serviceC = '00000000-0000-0000-0003-000000000000';
+        const t1 = new Date('2026-01-01T00:00:00Z');
+        const t2 = new Date('2026-02-01T00:00:00Z');
+        const t3 = new Date('2026-03-01T00:00:00Z');
+        const t4 = new Date('2026-04-01T00:00:00Z');
+        const t5 = new Date('2026-05-01T00:00:00Z');
+
+        const r1 = '00000000-0000-0000-0000-000000000001';
+        const r2 = '00000000-0000-0000-0000-000000000002';
+        const r3 = '00000000-0000-0000-0000-000000000003';
+        const r4 = '00000000-0000-0000-0000-000000000004';
+        const r5 = '00000000-0000-0000-0000-000000000005';
+        const r6 = '00000000-0000-0000-0000-000000000006';
+
+        const rows = await seedFixtureAndBackfill(queryRunner, [
+          { id: r1, serviceId: serviceA, createdAt: t1 },
+          { id: r2, serviceId: serviceA, createdAt: t2 },
+          { id: r3, serviceId: serviceA, createdAt: t3 },
+          { id: r4, serviceId: serviceB, createdAt: t4 },
+          { id: r5, serviceId: serviceC, createdAt: t5 },
+          { id: r6, serviceId: serviceC, createdAt: t5 }, // tied timestamp
+        ]);
+        const byId = new Map(rows.map((r) => [r.id, r]));
+
+        // Service A: multi-row partitioning within one service.
+        expect(byId.get(r1)!.effectiveTo).toEqual(t2);
+        expect(byId.get(r2)!.effectiveTo).toEqual(t3);
+        expect(byId.get(r3)!.effectiveTo).toBeNull();
+
+        // Service B: a single-row partition is never spuriously chained to
+        // a different service's rows.
+        expect(byId.get(r4)!.effectiveTo).toBeNull();
+
+        // Service C: the tied-timestamp pair deterministically orders the
+        // lower id as superseded first.
+        expect(byId.get(r5)!.effectiveTo).toEqual(t5);
+        expect(byId.get(r6)!.effectiveTo).toBeNull();
+      } finally {
+        await queryRunner.release();
+      }
+    });
+
+    it('tie-breaker determinism holds across repeated runs', async () => {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const queryRunner = dataSource.createQueryRunner();
+        await queryRunner.connect();
+        try {
+          const serviceC = '00000000-0000-0000-0003-000000000000';
+          const t5 = new Date('2026-05-01T00:00:00Z');
+          const r5 = '00000000-0000-0000-0000-000000000005';
+          const r6 = '00000000-0000-0000-0000-000000000006';
+
+          const rows = await seedFixtureAndBackfill(queryRunner, [
+            { id: r5, serviceId: serviceC, createdAt: t5 },
+            { id: r6, serviceId: serviceC, createdAt: t5 },
+          ]);
+          const byId = new Map(rows.map((r) => [r.id, r]));
+
+          expect(byId.get(r5)!.effectiveTo).toEqual(t5);
+          expect(byId.get(r6)!.effectiveTo).toBeNull();
+        } finally {
+          await queryRunner.release();
+        }
+      }
     });
   });
 });

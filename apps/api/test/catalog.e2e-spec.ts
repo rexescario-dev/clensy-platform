@@ -149,6 +149,7 @@ describe('Catalog (e2e)', () => {
       createPricingRule(input: $input) {
         id
         serviceId
+        addOnId
         priceMinorUnits
       }
     }
@@ -317,6 +318,7 @@ describe('Catalog (e2e)', () => {
       createPricingRuleResponse.body.data.createPricingRule;
     expect(createdPricingRule).toMatchObject({
       serviceId,
+      addOnId: null,
       priceMinorUnits: 8000,
     });
     const firstPricingRuleId: string = createdPricingRule.id;
@@ -365,8 +367,33 @@ describe('Catalog (e2e)', () => {
     });
     expect(repriceResponse.body.errors).toBeUndefined();
     const repricedRule = repriceResponse.body.data.createPricingRule;
-    expect(repricedRule).toMatchObject({ serviceId, priceMinorUnits: 9500 });
+    expect(repricedRule).toMatchObject({
+      serviceId,
+      addOnId: null,
+      priceMinorUnits: 9500,
+    });
     const secondPricingRuleId: string = repricedRule.id;
+
+    // --- addOnId-targeted createPricingRule (Laundry Architecture & Catalog
+    // Foundation spec §4.6 post-acceptance addendum): the mutation extended
+    // to accept `addOnId` instead of `serviceId` returns `serviceId: null`,
+    // `addOnId: <id>` — the GraphQL-level regression/completion proof that
+    // this extension didn't disturb the existing serviceId-targeted shape
+    // (asserted above) while making the new target kind reachable at all. ---
+    const addOnPricingRuleResponse = await authedRequest(
+      ownerSessionCookie,
+    ).send({
+      query: CREATE_PRICING_RULE_MUTATION,
+      variables: {
+        input: { addOnId, priceMinorUnits: 1500, unit: 'PER_ITEM' },
+      },
+    });
+    expect(addOnPricingRuleResponse.body.errors).toBeUndefined();
+    expect(addOnPricingRuleResponse.body.data.createPricingRule).toMatchObject({
+      serviceId: null,
+      addOnId,
+      priceMinorUnits: 1500,
+    });
     expect(secondPricingRuleId).not.toBe(firstPricingRuleId);
 
     const activePricingAfterRepriceResponse = await authedRequest(
@@ -475,9 +502,10 @@ describe('Catalog (e2e)', () => {
       ownerSessionCookie,
     ).send({ query: ADD_ONS_QUERY });
     expect(addOnsAfterUpdateResponse.body.errors).toBeUndefined();
-    const addOnRowAfterUpdate = addOnsAfterUpdateResponse.body.data.addOns.nodes.find(
-      (a: { id: string }) => a.id === addOnId,
-    );
+    const addOnRowAfterUpdate =
+      addOnsAfterUpdateResponse.body.data.addOns.nodes.find(
+        (a: { id: string }) => a.id === addOnId,
+      );
     expect(addOnRowAfterUpdate).toMatchObject({
       id: addOnId,
       name: addOnName,
@@ -671,9 +699,10 @@ describe('Catalog (e2e)', () => {
         query: SERVICES_QUERY,
       });
       expect(servicesResponse.body.errors).toBeUndefined();
-      const roleServiceIds: string[] = servicesResponse.body.data.services.nodes.map(
-        (s: { id: string }) => s.id,
-      );
+      const roleServiceIds: string[] =
+        servicesResponse.body.data.services.nodes.map(
+          (s: { id: string }) => s.id,
+        );
       expect(roleServiceIds).toContain(serviceId);
 
       const addOnsResponse = await authedRequest(sessionCookie).send({
@@ -867,5 +896,60 @@ describe('Catalog (e2e)', () => {
     expect(missingServiceActivePricingError?.message).toContain(
       `Service ${nonexistentServiceId} not found`,
     );
+  });
+
+  // Task 5 (plan §8): a full mutation-to-query round trip through the real
+  // DI graph — creates an addOnId-targeted, future-scheduled rule via the
+  // real GraphQL mutation, then resolves it via `PricingRulesService`
+  // pulled off the same running `AppModule` (`moduleFixture.get`, the same
+  // technique the Catalog plan's N+1 test uses), confirming the row
+  // resolves correctly end-to-end, not just when the service is
+  // directly instantiated (as every `catalog.service.e2e-spec.ts` test
+  // does).
+  it('resolves an addOnId-targeted, future-scheduled rule created via GraphQL through the real DI graph', async () => {
+    const runId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const owner = await seedOwner(adminUserRepository);
+    const loginResponse = await login(owner.email, owner.password);
+    const ownerSessionCookie = extractSessionCookie(loginResponse);
+
+    const createAddOnResponse = await authedRequest(ownerSessionCookie).send({
+      query: CREATE_ADD_ON_MUTATION,
+      variables: {
+        input: {
+          name: `DI Round Trip Add-On ${runId}`,
+          priceMinorUnits: 800,
+        },
+      },
+    });
+    expect(createAddOnResponse.body.errors).toBeUndefined();
+    const addOnId: string = createAddOnResponse.body.data.createAddOn.id;
+
+    const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const createPricingRuleResponse = await authedRequest(
+      ownerSessionCookie,
+    ).send({
+      query: CREATE_PRICING_RULE_MUTATION,
+      variables: {
+        input: {
+          addOnId,
+          priceMinorUnits: 950,
+          unit: 'PER_KG',
+          effectiveFrom: future.toISOString(),
+        },
+      },
+    });
+    expect(createPricingRuleResponse.body.errors).toBeUndefined();
+    expect(createPricingRuleResponse.body.data.createPricingRule).toMatchObject(
+      { serviceId: null, addOnId, priceMinorUnits: 950 },
+    );
+
+    await expect(
+      pricingRulesService.resolveEffectivePricing({ addOnId }, future),
+    ).resolves.toEqual(
+      expect.objectContaining({ addOnId, priceMinorUnits: 950 }),
+    );
+    await expect(
+      pricingRulesService.resolveEffectivePricing({ addOnId }, new Date()),
+    ).resolves.toBeNull();
   });
 });

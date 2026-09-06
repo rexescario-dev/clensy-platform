@@ -218,8 +218,12 @@ export type CreateJobFromBookingInput = {
 };
 
 export type CreatePricingRuleInput = {
+  addOnId?: string | number | null | undefined;
+  effectiveFrom?: unknown;
+  minimumChargeMinorUnits?: number | null | undefined;
   priceMinorUnits: number;
-  serviceId: string | number;
+  serviceId?: string | number | null | undefined;
+  unit?: PricingUnit | null | undefined;
 };
 
 export type CreatePropertyInput = {
@@ -331,6 +335,12 @@ export type OffsetPaging = {
   /** Offset to start returning records from */
   offset?: number | null | undefined;
 };
+
+export type PricingUnit =
+  | 'FLAT'
+  | 'PER_ITEM'
+  | 'PER_KG'
+  | 'PER_SERVICE';
 
 export type PropertyFilter = {
   addressLine1?: StringFieldComparison | null | undefined;

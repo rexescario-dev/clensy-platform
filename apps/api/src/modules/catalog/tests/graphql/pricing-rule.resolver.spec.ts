@@ -71,7 +71,7 @@ describe('PricingRuleResolver', () => {
   );
 
   describe('PricingRuleType (schema field set)', () => {
-    it('exposes exactly id, serviceId, priceMinorUnits, createdAt — no active', async () => {
+    it('exposes exactly id, serviceId, addOnId, priceMinorUnits, createdAt — no active', async () => {
       const moduleRef = await Test.createTestingModule({
         imports: [GraphQLSchemaBuilderModule],
       }).compile();
@@ -88,7 +88,7 @@ describe('PricingRuleResolver', () => {
 
       const fieldNames = Object.keys(pricingRuleType.getFields()).sort();
       expect(fieldNames).toEqual(
-        ['id', 'serviceId', 'priceMinorUnits', 'createdAt'].sort(),
+        ['id', 'serviceId', 'addOnId', 'priceMinorUnits', 'createdAt'].sort(),
       );
       // Belt-and-suspenders (task brief, §3): `active` must never appear on
       // the public schema — every `PricingRule` reachable through GraphQL is
@@ -112,7 +112,40 @@ describe('PricingRuleResolver', () => {
 
     expect(fieldNames).not.toContain('active');
     expect(fieldNames.sort()).toEqual(
-      ['id', 'serviceId', 'priceMinorUnits', 'createdAt'].sort(),
+      ['id', 'serviceId', 'addOnId', 'priceMinorUnits', 'createdAt'].sort(),
     );
+  });
+
+  // Task 4 (plan §8): proves the existing `{ ...input, actorId }` spread in
+  // `createPricingRule` genuinely requires no resolver code change (plan §3)
+  // — it isn't merely "the file happens to be unedited," the spread itself
+  // structurally forwards the new field.
+  it('forwards addOnId into CreatePricingRuleCommand via the existing spread, with serviceId left undefined', () => {
+    const resolver = new PricingRuleResolver({
+      createPricingRule: jest.fn().mockResolvedValue({
+        id: 'rule-1',
+        serviceId: null,
+        addOnId: 'add-on-1',
+        priceMinorUnits: 1500,
+        createdAt: new Date(),
+      }),
+    } as never);
+
+    const createSpy = (
+      resolver as unknown as {
+        pricingRulesService: { createPricingRule: jest.Mock };
+      }
+    ).pricingRulesService.createPricingRule;
+
+    void resolver.createPricingRule(
+      { addOnId: 'add-on-1', priceMinorUnits: 1500 },
+      { id: 'actor-1' } as never,
+    );
+
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ addOnId: 'add-on-1', actorId: 'actor-1' }),
+    );
+    const calls = createSpy.mock.calls as { serviceId?: string }[][];
+    expect(calls[0][0].serviceId).toBeUndefined();
   });
 });
