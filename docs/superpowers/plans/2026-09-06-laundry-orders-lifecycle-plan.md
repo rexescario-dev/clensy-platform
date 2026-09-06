@@ -238,4 +238,14 @@ Full-suite regression (`pnpm --filter api test`, `pnpm --filter api test:e2e`, l
 | Line-creation timing is explicit (not left to inference) | Yes — §2 "Line ownership" + Task 10 `price` steps 1–9: lines are created only by `price`, in its transaction |
 | Every command's transaction boundary is explicit | Yes — Task 10 per-command boundaries (`receive` validates the customer before the transaction, everything else locks then acts) |
 | Transaction/audit atomicity + loser-emits-no-audit stated as an invariant | Yes — §2 "Transaction / audit atomicity"; verified in Task 20 |
-| Closeout baseline is evidence-based, not assumed | Yes — Slice 0 / Task 0 |
+| Closeout baseline is evidence-based, not assumed | Yes — Slice 0 / Task 0; recorded in §11 |
+
+## 11. Slice 0 baseline (recorded 2026-09-06, `feat/37-laundry-orders-lifecycle` at `53de9f9`, Docker Postgres)
+
+- **`pnpm --filter api test`** (unit): **43 suites / 287 tests, all passing.** Clean.
+- **`pnpm --filter api test:e2e`**: **15 suites pass / 2 fail; 131 tests pass / 3 fail.** Failing:
+  - `test/bookings.e2e-spec.ts` › *proves the full Bookings E2E acceptance scenario* — `expect(atSix.counts[table]).toBeGreaterThan(0)` fails (relation-table row counts read as `0`).
+  - `test/jobs.e2e-spec.ts` › *proves the full Jobs GraphQL E2E acceptance scenario*
+  - `test/jobs.e2e-spec.ts` › *filters jobs by booking relation (mechanism 1) with limit 1 and loads nested items in O(1)*
+- **Nature:** all three depend on the same query-logging/relation-count capture helper that does not function in this sandbox environment — the exact failure family #36's handoff documented (then 2 tests; the Jobs suite now trips one extra assertion in the same helper). **No laundry-touched file is involved** (no GraphQL schema-generation, `app.module.ts`, TypeORM-metadata, or pagination-allowlist failure). These three are the pre-existing baseline; the #37 closeout must show the same three and no others (beyond newly-added laundry tests passing).
+- **Lint / builds** not part of the baseline gate but confirmed green in #36's merged closeout; re-checked at #37 closeout against this record.
