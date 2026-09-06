@@ -24,6 +24,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: 'Bookings', href: '/app/bookings' },
       { label: 'Jobs', href: '/app/jobs' },
       { label: 'Laundry', href: '/app/laundry' },
+      { label: 'Invoices', href: '/app/billing' },
     ],
   },
   {

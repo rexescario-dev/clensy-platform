@@ -1,0 +1,84 @@
+fragment InvoiceRow on Invoice {
+  id
+  invoiceNumber
+  totalMinorUnits
+  amountDueMinorUnits
+  paymentStatus
+  issueDate
+  customer {
+    id
+    fullName
+  }
+}
+
+fragment InvoiceDetail on Invoice {
+  ...InvoiceRow
+  laundryOrderId
+  customerId
+  subtotalMinorUnits
+  discountMinorUnits
+  amountPaidMinorUnits
+  paymentTerms
+  dueDate
+  createdAt
+  laundryOrder {
+    id
+  }
+  lines {
+    nodes {
+      id
+      description
+      unit
+      quantity
+      rateMinorUnits
+      amountMinorUnits
+    }
+    pageInfo {
+      hasNextPage
+    }
+  }
+}
+
+query Invoices($paging: OffsetPaging, $sorting: [InvoiceSort!]) {
+  invoices(paging: $paging, sorting: $sorting) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+    }
+    nodes {
+      ...InvoiceRow
+    }
+  }
+}
+
+query Invoice($id: ID!) {
+  invoice(id: $id) {
+    ...InvoiceDetail
+  }
+}
+
+# At most one invoice per laundry order (uq_invoice_laundry_order), so this
+# needs no sort — there is never more than one matching row.
+query InvoiceForOrder($laundryOrderId: ID!) {
+  invoices(
+    filter: { laundryOrderId: { eq: $laundryOrderId } }
+    paging: { limit: 1 }
+  ) {
+    nodes {
+      id
+      invoiceNumber
+      totalMinorUnits
+      paymentStatus
+    }
+  }
+}
+
+mutation GenerateInvoiceFromOrder($input: GenerateInvoiceFromOrderInput!) {
+  generateInvoiceFromOrder(input: $input) {
+    id
+    invoiceNumber
+    totalMinorUnits
+    paymentStatus
+  }
+}
