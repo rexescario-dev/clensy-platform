@@ -226,13 +226,19 @@ export class PricingRulesService {
 
   // Mutual exclusivity is this decision itself, not a separate earlier check
   // (spec §4.7): `hasServiceId === hasAddOnId` is true for exactly the two
-  // rejection cases (both provided, or neither) — `!==` `undefined`, not
-  // truthiness, so an explicitly-passed empty string is still "provided."
+  // rejection cases (both provided, or neither) — `!= null` (not `!==
+  // undefined`), so an explicitly-passed empty string is still "provided,"
+  // but an explicit GraphQL `null` on the unused field is correctly treated
+  // as "not provided," matching `@IsOptional()`'s own null-or-undefined
+  // semantics (confirmed against class-validator's source — it skips
+  // validation for either) — a client sending `{ serviceId, addOnId: null
+  // }` must resolve to `serviceId`, not be rejected as "both provided."
+  // Same idiom as `BookingsService.update`'s `command.teamId != null`.
   private resolveTarget(
     command: Pick<CreatePricingRuleCommand, 'serviceId' | 'addOnId'>,
   ): PricingRuleTarget {
-    const hasServiceId = command.serviceId !== undefined;
-    const hasAddOnId = command.addOnId !== undefined;
+    const hasServiceId = command.serviceId != null;
+    const hasAddOnId = command.addOnId != null;
     if (hasServiceId === hasAddOnId) {
       throw new BadRequestException(
         'Exactly one of serviceId or addOnId is required',
@@ -258,7 +264,7 @@ export class PricingRulesService {
       );
     }
     if (
-      command.minimumChargeMinorUnits !== undefined &&
+      command.minimumChargeMinorUnits != null &&
       (!Number.isInteger(command.minimumChargeMinorUnits) ||
         command.minimumChargeMinorUnits < 0)
     ) {

@@ -217,6 +217,68 @@ describe('PricingRulesService', () => {
         expect(manager.update).not.toHaveBeenCalled();
         expect(manager.save).not.toHaveBeenCalled();
       });
+
+      // Regression (M7 round 1): `@IsOptional()` on `CreatePricingRuleInput`
+      // treats an explicit GraphQL `null` the same as an omitted field
+      // (confirmed against class-validator's source) — a client sending
+      // `{ serviceId, addOnId: null }` is a normal single-target request,
+      // not "both provided." `resolveTarget` must resolve it to `serviceId`,
+      // not reject it.
+      it('resolves to serviceId when addOnId is explicitly null (not "both provided")', async () => {
+        manager.findOneBy.mockResolvedValue({ id: 'service-1' });
+
+        await service.createPricingRule({
+          actorId: 'actor-1',
+          serviceId: 'service-1',
+          addOnId: null as unknown as undefined,
+          priceMinorUnits: 5000,
+        });
+
+        expect(manager.findOneBy).toHaveBeenCalledWith(expect.anything(), {
+          id: 'service-1',
+        });
+      });
+
+      it('resolves to addOnId when serviceId is explicitly null (not "both provided")', async () => {
+        manager.findOneBy.mockResolvedValue({ id: 'add-on-1' });
+
+        await service.createPricingRule({
+          actorId: 'actor-1',
+          serviceId: null as unknown as undefined,
+          addOnId: 'add-on-1',
+          priceMinorUnits: 5000,
+        });
+
+        expect(manager.findOneBy).toHaveBeenCalledWith(expect.anything(), {
+          id: 'add-on-1',
+        });
+      });
+
+      it('throws BadRequestException when both serviceId and addOnId are explicitly null', async () => {
+        await expect(
+          service.createPricingRule({
+            actorId: 'actor-1',
+            serviceId: null as unknown as undefined,
+            addOnId: null as unknown as undefined,
+            priceMinorUnits: 5000,
+          }),
+        ).rejects.toThrow(BadRequestException);
+      });
+    });
+
+    describe('assertValid null handling (M7 round 1 regression)', () => {
+      it('treats an explicit null minimumChargeMinorUnits as omitted, not invalid', async () => {
+        manager.findOneBy.mockResolvedValue({ id: 'service-1' });
+
+        await expect(
+          service.createPricingRule({
+            actorId: 'actor-1',
+            serviceId: 'service-1',
+            priceMinorUnits: 5000,
+            minimumChargeMinorUnits: null as unknown as undefined,
+          }),
+        ).resolves.toBeDefined();
+      });
     });
   });
 
