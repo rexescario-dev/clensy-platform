@@ -1,0 +1,145 @@
+fragment LaundryOrderRow on LaundryOrder {
+  id
+  status
+  fulfillmentType
+  weightGrams
+  totalMinorUnits
+  createdAt
+  customer {
+    id
+    fullName
+  }
+}
+
+fragment LaundryOrderDetail on LaundryOrder {
+  ...LaundryOrderRow
+  lines {
+    nodes {
+      id
+      serviceId
+      addOnId
+      createdAt
+      pricingSnapshot {
+        rateMinorUnits
+        unit
+        quantity
+        amountMinorUnits
+        minimumChargeMinorUnits
+        minimumChargeApplied
+        pricingRuleId
+      }
+    }
+    pageInfo {
+      hasNextPage
+    }
+  }
+}
+
+query LaundryOrders($paging: OffsetPaging, $sorting: [LaundryOrderSort!]) {
+  laundryOrders(paging: $paging, sorting: $sorting) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+    }
+    nodes {
+      ...LaundryOrderRow
+    }
+  }
+}
+
+query LaundryOrder($id: ID!) {
+  laundryOrder(id: $id) {
+    ...LaundryOrderDetail
+  }
+}
+
+mutation ReceiveLaundryOrder($input: ReceiveLaundryOrderInput!) {
+  receiveLaundryOrder(input: $input) {
+    id
+  }
+}
+
+mutation WeighLaundryOrder($input: WeighLaundryOrderInput!) {
+  weighLaundryOrder(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+
+mutation PriceLaundryOrder($input: PriceLaundryOrderInput!) {
+  priceLaundryOrder(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+
+mutation MarkLaundryOrderAwaitingPayment($input: LaundryOrderRefInput!) {
+  markLaundryOrderAwaitingPayment(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+
+mutation MarkLaundryOrderPaid($input: LaundryOrderRefInput!) {
+  markLaundryOrderPaid(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+
+mutation StartLaundryProcessing($input: LaundryOrderRefInput!) {
+  startLaundryProcessing(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+
+mutation MarkLaundryOrderReady($input: LaundryOrderRefInput!) {
+  markLaundryOrderReady(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+
+mutation MarkLaundryOrderAwaitingPickup($input: LaundryOrderRefInput!) {
+  markLaundryOrderAwaitingPickup(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+
+mutation MarkLaundryOrderAwaitingDelivery($input: LaundryOrderRefInput!) {
+  markLaundryOrderAwaitingDelivery(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+
+mutation CompleteLaundryOrder($input: LaundryOrderRefInput!) {
+  completeLaundryOrder(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+
+mutation CancelLaundryOrder($input: LaundryOrderRefInput!) {
+  cancelLaundryOrder(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+
+mutation RejectLaundryOrder($input: LaundryOrderRefInput!) {
+  rejectLaundryOrder(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+
+mutation MarkLaundryOrderLost($input: LaundryOrderRefInput!) {
+  markLaundryOrderLost(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+
+mutation MarkLaundryOrderDamaged($input: LaundryOrderRefInput!) {
+  markLaundryOrderDamaged(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+
+mutation RefundLaundryOrder($input: LaundryOrderRefInput!) {
+  refundLaundryOrder(input: $input) {
+    ...LaundryOrderDetail
+  }
+}

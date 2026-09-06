@@ -324,6 +324,49 @@ export type JobStatusFilterComparison = {
   notLike?: JobStatus | null | undefined;
 };
 
+export type LaundryFulfillmentType =
+  | 'DELIVERY'
+  | 'PICKUP';
+
+export type LaundryOrderAddOnInput = {
+  addOnId: string | number;
+  quantity?: number | null | undefined;
+};
+
+export type LaundryOrderRefInput = {
+  orderId: string | number;
+};
+
+export type LaundryOrderSort = {
+  direction: SortDirection;
+  field: LaundryOrderSortFields;
+  nulls?: SortNulls | null | undefined;
+};
+
+export type LaundryOrderSortFields =
+  | 'createdAt'
+  | 'customerId'
+  | 'fulfillmentType'
+  | 'id'
+  | 'status';
+
+export type LaundryOrderStatus =
+  | 'AWAITING_DELIVERY'
+  | 'AWAITING_PAYMENT'
+  | 'AWAITING_PICKUP'
+  | 'CANCELLED'
+  | 'COMPLETED'
+  | 'DAMAGED'
+  | 'LOST'
+  | 'PAID'
+  | 'PRICED'
+  | 'PROCESSING'
+  | 'READY'
+  | 'RECEIVED'
+  | 'REFUNDED'
+  | 'REJECTED'
+  | 'WEIGHED';
+
 export type LoginInput = {
   email: string;
   password: string;
@@ -334,6 +377,13 @@ export type OffsetPaging = {
   limit?: number | null | undefined;
   /** Offset to start returning records from */
   offset?: number | null | undefined;
+};
+
+export type PriceLaundryOrderInput = {
+  addOns: Array<LaundryOrderAddOnInput>;
+  baseQuantity?: number | null | undefined;
+  baseServiceId: string | number;
+  orderId: string | number;
 };
 
 export type PricingUnit =
@@ -349,6 +399,11 @@ export type PropertyFilter = {
   customerId?: IdFilterComparison | null | undefined;
   id?: IdFilterComparison | null | undefined;
   or?: Array<PropertyFilter> | null | undefined;
+};
+
+export type ReceiveLaundryOrderInput = {
+  customerId: string | number;
+  fulfillmentType: LaundryFulfillmentType;
 };
 
 export type Role =
@@ -469,6 +524,11 @@ export type UpdateServiceInput = {
   description?: string | null | undefined;
   durationMinutes?: number | null | undefined;
   name?: string | null | undefined;
+};
+
+export type WeighLaundryOrderInput = {
+  orderId: string | number;
+  weightGrams: number;
 };
 
 export type AddOnsQueryVariables = Exact<{
@@ -679,6 +739,130 @@ export type CompleteJobMutationVariables = Exact<{
 
 export type CompleteJobMutation = { completeJob: { id: string, scheduledAt: unknown, status: JobStatus, createdAt: unknown, updatedAt: unknown, booking: { id: string, scheduledAt: unknown, status: BookingStatus, customer: { id: string, fullName: string }, property: { id: string, addressLine1: string }, service: { id: string, name: string }, team: { id: string, name: string } | null }, team: { id: string, name: string } | null, checklist: { id: string, items: { nodes: Array<{ id: string, label: string, position: number, completed: boolean, completedAt: unknown }>, pageInfo: { hasNextPage: boolean | null } } } } };
 
+export type LaundryOrderRowFragment = { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, customer: { id: string, fullName: string } };
+
+export type LaundryOrderDetailFragment = { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } };
+
+export type LaundryOrdersQueryVariables = Exact<{
+  paging?: OffsetPaging | null | undefined;
+  sorting?: Array<LaundryOrderSort> | LaundryOrderSort | null | undefined;
+}>;
+
+
+export type LaundryOrdersQuery = { laundryOrders: { totalCount: number, pageInfo: { hasNextPage: boolean | null, hasPreviousPage: boolean | null }, nodes: Array<{ id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, customer: { id: string, fullName: string } }> } };
+
+export type LaundryOrderQueryVariables = Exact<{
+  id: string | number;
+}>;
+
+
+export type LaundryOrderQuery = { laundryOrder: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } | null };
+
+export type ReceiveLaundryOrderMutationVariables = Exact<{
+  input: ReceiveLaundryOrderInput;
+}>;
+
+
+export type ReceiveLaundryOrderMutation = { receiveLaundryOrder: { id: string } };
+
+export type WeighLaundryOrderMutationVariables = Exact<{
+  input: WeighLaundryOrderInput;
+}>;
+
+
+export type WeighLaundryOrderMutation = { weighLaundryOrder: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+
+export type PriceLaundryOrderMutationVariables = Exact<{
+  input: PriceLaundryOrderInput;
+}>;
+
+
+export type PriceLaundryOrderMutation = { priceLaundryOrder: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+
+export type MarkLaundryOrderAwaitingPaymentMutationVariables = Exact<{
+  input: LaundryOrderRefInput;
+}>;
+
+
+export type MarkLaundryOrderAwaitingPaymentMutation = { markLaundryOrderAwaitingPayment: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+
+export type MarkLaundryOrderPaidMutationVariables = Exact<{
+  input: LaundryOrderRefInput;
+}>;
+
+
+export type MarkLaundryOrderPaidMutation = { markLaundryOrderPaid: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+
+export type StartLaundryProcessingMutationVariables = Exact<{
+  input: LaundryOrderRefInput;
+}>;
+
+
+export type StartLaundryProcessingMutation = { startLaundryProcessing: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+
+export type MarkLaundryOrderReadyMutationVariables = Exact<{
+  input: LaundryOrderRefInput;
+}>;
+
+
+export type MarkLaundryOrderReadyMutation = { markLaundryOrderReady: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+
+export type MarkLaundryOrderAwaitingPickupMutationVariables = Exact<{
+  input: LaundryOrderRefInput;
+}>;
+
+
+export type MarkLaundryOrderAwaitingPickupMutation = { markLaundryOrderAwaitingPickup: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+
+export type MarkLaundryOrderAwaitingDeliveryMutationVariables = Exact<{
+  input: LaundryOrderRefInput;
+}>;
+
+
+export type MarkLaundryOrderAwaitingDeliveryMutation = { markLaundryOrderAwaitingDelivery: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+
+export type CompleteLaundryOrderMutationVariables = Exact<{
+  input: LaundryOrderRefInput;
+}>;
+
+
+export type CompleteLaundryOrderMutation = { completeLaundryOrder: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+
+export type CancelLaundryOrderMutationVariables = Exact<{
+  input: LaundryOrderRefInput;
+}>;
+
+
+export type CancelLaundryOrderMutation = { cancelLaundryOrder: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+
+export type RejectLaundryOrderMutationVariables = Exact<{
+  input: LaundryOrderRefInput;
+}>;
+
+
+export type RejectLaundryOrderMutation = { rejectLaundryOrder: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+
+export type MarkLaundryOrderLostMutationVariables = Exact<{
+  input: LaundryOrderRefInput;
+}>;
+
+
+export type MarkLaundryOrderLostMutation = { markLaundryOrderLost: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+
+export type MarkLaundryOrderDamagedMutationVariables = Exact<{
+  input: LaundryOrderRefInput;
+}>;
+
+
+export type MarkLaundryOrderDamagedMutation = { markLaundryOrderDamaged: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+
+export type RefundLaundryOrderMutationVariables = Exact<{
+  input: LaundryOrderRefInput;
+}>;
+
+
+export type RefundLaundryOrderMutation = { refundLaundryOrder: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+
 export type LoginMutationVariables = Exact<{
   loginInput: LoginInput;
 }>;
@@ -826,6 +1010,45 @@ export const JobFieldsFragmentDoc = gql`
   }
 }
     `;
+export const LaundryOrderRowFragmentDoc = gql`
+    fragment LaundryOrderRow on LaundryOrder {
+  id
+  status
+  fulfillmentType
+  weightGrams
+  totalMinorUnits
+  createdAt
+  customer {
+    id
+    fullName
+  }
+}
+    `;
+export const LaundryOrderDetailFragmentDoc = gql`
+    fragment LaundryOrderDetail on LaundryOrder {
+  ...LaundryOrderRow
+  lines {
+    nodes {
+      id
+      serviceId
+      addOnId
+      createdAt
+      pricingSnapshot {
+        rateMinorUnits
+        unit
+        quantity
+        amountMinorUnits
+        minimumChargeMinorUnits
+        minimumChargeApplied
+        pricingRuleId
+      }
+    }
+    pageInfo {
+      hasNextPage
+    }
+  }
+}
+    ${LaundryOrderRowFragmentDoc}`;
 export const AddOnsDocument = gql`
     query AddOns($paging: OffsetPaging, $filter: AddOnFilter, $sorting: [AddOnSort!]) {
   addOns(paging: $paging, filter: $filter, sorting: $sorting) {
@@ -2012,6 +2235,595 @@ export function useCompleteJobMutation(baseOptions?: Apollo.MutationHookOptions<
 export type CompleteJobMutationHookResult = ReturnType<typeof useCompleteJobMutation>;
 export type CompleteJobMutationResult = Apollo.MutationResult<CompleteJobMutation>;
 export type CompleteJobMutationOptions = Apollo.BaseMutationOptions<CompleteJobMutation, CompleteJobMutationVariables>;
+export const LaundryOrdersDocument = gql`
+    query LaundryOrders($paging: OffsetPaging, $sorting: [LaundryOrderSort!]) {
+  laundryOrders(paging: $paging, sorting: $sorting) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+    }
+    nodes {
+      ...LaundryOrderRow
+    }
+  }
+}
+    ${LaundryOrderRowFragmentDoc}`;
+
+/**
+ * __useLaundryOrdersQuery__
+ *
+ * To run a query within a React component, call `useLaundryOrdersQuery` and pass it any options that fit your needs.
+ * When your component renders, `useLaundryOrdersQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useLaundryOrdersQuery({
+ *   variables: {
+ *      paging: // value for 'paging'
+ *      sorting: // value for 'sorting'
+ *   },
+ * });
+ */
+export function useLaundryOrdersQuery(baseOptions?: Apollo.QueryHookOptions<LaundryOrdersQuery, LaundryOrdersQueryVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<LaundryOrdersQuery, LaundryOrdersQueryVariables>(LaundryOrdersDocument, options);
+      }
+export function useLaundryOrdersLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<LaundryOrdersQuery, LaundryOrdersQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<LaundryOrdersQuery, LaundryOrdersQueryVariables>(LaundryOrdersDocument, options);
+        }
+// @ts-ignore
+export function useLaundryOrdersSuspenseQuery(baseOptions?: Apollo.SuspenseQueryHookOptions<LaundryOrdersQuery, LaundryOrdersQueryVariables>): Apollo.UseSuspenseQueryResult<LaundryOrdersQuery, LaundryOrdersQueryVariables>;
+export function useLaundryOrdersSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<LaundryOrdersQuery, LaundryOrdersQueryVariables>): Apollo.UseSuspenseQueryResult<LaundryOrdersQuery | undefined, LaundryOrdersQueryVariables>;
+export function useLaundryOrdersSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<LaundryOrdersQuery, LaundryOrdersQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<LaundryOrdersQuery, LaundryOrdersQueryVariables>(LaundryOrdersDocument, options);
+        }
+export type LaundryOrdersQueryHookResult = ReturnType<typeof useLaundryOrdersQuery>;
+export type LaundryOrdersLazyQueryHookResult = ReturnType<typeof useLaundryOrdersLazyQuery>;
+export type LaundryOrdersSuspenseQueryHookResult = ReturnType<typeof useLaundryOrdersSuspenseQuery>;
+export type LaundryOrdersQueryResult = Apollo.QueryResult<LaundryOrdersQuery, LaundryOrdersQueryVariables>;
+export const LaundryOrderDocument = gql`
+    query LaundryOrder($id: ID!) {
+  laundryOrder(id: $id) {
+    ...LaundryOrderDetail
+  }
+}
+    ${LaundryOrderDetailFragmentDoc}`;
+
+/**
+ * __useLaundryOrderQuery__
+ *
+ * To run a query within a React component, call `useLaundryOrderQuery` and pass it any options that fit your needs.
+ * When your component renders, `useLaundryOrderQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useLaundryOrderQuery({
+ *   variables: {
+ *      id: // value for 'id'
+ *   },
+ * });
+ */
+export function useLaundryOrderQuery(baseOptions: Apollo.QueryHookOptions<LaundryOrderQuery, LaundryOrderQueryVariables> & ({ variables: LaundryOrderQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<LaundryOrderQuery, LaundryOrderQueryVariables>(LaundryOrderDocument, options);
+      }
+export function useLaundryOrderLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<LaundryOrderQuery, LaundryOrderQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<LaundryOrderQuery, LaundryOrderQueryVariables>(LaundryOrderDocument, options);
+        }
+// @ts-ignore
+export function useLaundryOrderSuspenseQuery(baseOptions?: Apollo.SuspenseQueryHookOptions<LaundryOrderQuery, LaundryOrderQueryVariables>): Apollo.UseSuspenseQueryResult<LaundryOrderQuery, LaundryOrderQueryVariables>;
+export function useLaundryOrderSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<LaundryOrderQuery, LaundryOrderQueryVariables>): Apollo.UseSuspenseQueryResult<LaundryOrderQuery | undefined, LaundryOrderQueryVariables>;
+export function useLaundryOrderSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<LaundryOrderQuery, LaundryOrderQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<LaundryOrderQuery, LaundryOrderQueryVariables>(LaundryOrderDocument, options);
+        }
+export type LaundryOrderQueryHookResult = ReturnType<typeof useLaundryOrderQuery>;
+export type LaundryOrderLazyQueryHookResult = ReturnType<typeof useLaundryOrderLazyQuery>;
+export type LaundryOrderSuspenseQueryHookResult = ReturnType<typeof useLaundryOrderSuspenseQuery>;
+export type LaundryOrderQueryResult = Apollo.QueryResult<LaundryOrderQuery, LaundryOrderQueryVariables>;
+export const ReceiveLaundryOrderDocument = gql`
+    mutation ReceiveLaundryOrder($input: ReceiveLaundryOrderInput!) {
+  receiveLaundryOrder(input: $input) {
+    id
+  }
+}
+    `;
+export type ReceiveLaundryOrderMutationFn = Apollo.MutationFunction<ReceiveLaundryOrderMutation, ReceiveLaundryOrderMutationVariables>;
+
+/**
+ * __useReceiveLaundryOrderMutation__
+ *
+ * To run a mutation, you first call `useReceiveLaundryOrderMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useReceiveLaundryOrderMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [receiveLaundryOrderMutation, { data, loading, error }] = useReceiveLaundryOrderMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useReceiveLaundryOrderMutation(baseOptions?: Apollo.MutationHookOptions<ReceiveLaundryOrderMutation, ReceiveLaundryOrderMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<ReceiveLaundryOrderMutation, ReceiveLaundryOrderMutationVariables>(ReceiveLaundryOrderDocument, options);
+      }
+export type ReceiveLaundryOrderMutationHookResult = ReturnType<typeof useReceiveLaundryOrderMutation>;
+export type ReceiveLaundryOrderMutationResult = Apollo.MutationResult<ReceiveLaundryOrderMutation>;
+export type ReceiveLaundryOrderMutationOptions = Apollo.BaseMutationOptions<ReceiveLaundryOrderMutation, ReceiveLaundryOrderMutationVariables>;
+export const WeighLaundryOrderDocument = gql`
+    mutation WeighLaundryOrder($input: WeighLaundryOrderInput!) {
+  weighLaundryOrder(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+    ${LaundryOrderDetailFragmentDoc}`;
+export type WeighLaundryOrderMutationFn = Apollo.MutationFunction<WeighLaundryOrderMutation, WeighLaundryOrderMutationVariables>;
+
+/**
+ * __useWeighLaundryOrderMutation__
+ *
+ * To run a mutation, you first call `useWeighLaundryOrderMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useWeighLaundryOrderMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [weighLaundryOrderMutation, { data, loading, error }] = useWeighLaundryOrderMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useWeighLaundryOrderMutation(baseOptions?: Apollo.MutationHookOptions<WeighLaundryOrderMutation, WeighLaundryOrderMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<WeighLaundryOrderMutation, WeighLaundryOrderMutationVariables>(WeighLaundryOrderDocument, options);
+      }
+export type WeighLaundryOrderMutationHookResult = ReturnType<typeof useWeighLaundryOrderMutation>;
+export type WeighLaundryOrderMutationResult = Apollo.MutationResult<WeighLaundryOrderMutation>;
+export type WeighLaundryOrderMutationOptions = Apollo.BaseMutationOptions<WeighLaundryOrderMutation, WeighLaundryOrderMutationVariables>;
+export const PriceLaundryOrderDocument = gql`
+    mutation PriceLaundryOrder($input: PriceLaundryOrderInput!) {
+  priceLaundryOrder(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+    ${LaundryOrderDetailFragmentDoc}`;
+export type PriceLaundryOrderMutationFn = Apollo.MutationFunction<PriceLaundryOrderMutation, PriceLaundryOrderMutationVariables>;
+
+/**
+ * __usePriceLaundryOrderMutation__
+ *
+ * To run a mutation, you first call `usePriceLaundryOrderMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `usePriceLaundryOrderMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [priceLaundryOrderMutation, { data, loading, error }] = usePriceLaundryOrderMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function usePriceLaundryOrderMutation(baseOptions?: Apollo.MutationHookOptions<PriceLaundryOrderMutation, PriceLaundryOrderMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<PriceLaundryOrderMutation, PriceLaundryOrderMutationVariables>(PriceLaundryOrderDocument, options);
+      }
+export type PriceLaundryOrderMutationHookResult = ReturnType<typeof usePriceLaundryOrderMutation>;
+export type PriceLaundryOrderMutationResult = Apollo.MutationResult<PriceLaundryOrderMutation>;
+export type PriceLaundryOrderMutationOptions = Apollo.BaseMutationOptions<PriceLaundryOrderMutation, PriceLaundryOrderMutationVariables>;
+export const MarkLaundryOrderAwaitingPaymentDocument = gql`
+    mutation MarkLaundryOrderAwaitingPayment($input: LaundryOrderRefInput!) {
+  markLaundryOrderAwaitingPayment(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+    ${LaundryOrderDetailFragmentDoc}`;
+export type MarkLaundryOrderAwaitingPaymentMutationFn = Apollo.MutationFunction<MarkLaundryOrderAwaitingPaymentMutation, MarkLaundryOrderAwaitingPaymentMutationVariables>;
+
+/**
+ * __useMarkLaundryOrderAwaitingPaymentMutation__
+ *
+ * To run a mutation, you first call `useMarkLaundryOrderAwaitingPaymentMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useMarkLaundryOrderAwaitingPaymentMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [markLaundryOrderAwaitingPaymentMutation, { data, loading, error }] = useMarkLaundryOrderAwaitingPaymentMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useMarkLaundryOrderAwaitingPaymentMutation(baseOptions?: Apollo.MutationHookOptions<MarkLaundryOrderAwaitingPaymentMutation, MarkLaundryOrderAwaitingPaymentMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<MarkLaundryOrderAwaitingPaymentMutation, MarkLaundryOrderAwaitingPaymentMutationVariables>(MarkLaundryOrderAwaitingPaymentDocument, options);
+      }
+export type MarkLaundryOrderAwaitingPaymentMutationHookResult = ReturnType<typeof useMarkLaundryOrderAwaitingPaymentMutation>;
+export type MarkLaundryOrderAwaitingPaymentMutationResult = Apollo.MutationResult<MarkLaundryOrderAwaitingPaymentMutation>;
+export type MarkLaundryOrderAwaitingPaymentMutationOptions = Apollo.BaseMutationOptions<MarkLaundryOrderAwaitingPaymentMutation, MarkLaundryOrderAwaitingPaymentMutationVariables>;
+export const MarkLaundryOrderPaidDocument = gql`
+    mutation MarkLaundryOrderPaid($input: LaundryOrderRefInput!) {
+  markLaundryOrderPaid(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+    ${LaundryOrderDetailFragmentDoc}`;
+export type MarkLaundryOrderPaidMutationFn = Apollo.MutationFunction<MarkLaundryOrderPaidMutation, MarkLaundryOrderPaidMutationVariables>;
+
+/**
+ * __useMarkLaundryOrderPaidMutation__
+ *
+ * To run a mutation, you first call `useMarkLaundryOrderPaidMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useMarkLaundryOrderPaidMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [markLaundryOrderPaidMutation, { data, loading, error }] = useMarkLaundryOrderPaidMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useMarkLaundryOrderPaidMutation(baseOptions?: Apollo.MutationHookOptions<MarkLaundryOrderPaidMutation, MarkLaundryOrderPaidMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<MarkLaundryOrderPaidMutation, MarkLaundryOrderPaidMutationVariables>(MarkLaundryOrderPaidDocument, options);
+      }
+export type MarkLaundryOrderPaidMutationHookResult = ReturnType<typeof useMarkLaundryOrderPaidMutation>;
+export type MarkLaundryOrderPaidMutationResult = Apollo.MutationResult<MarkLaundryOrderPaidMutation>;
+export type MarkLaundryOrderPaidMutationOptions = Apollo.BaseMutationOptions<MarkLaundryOrderPaidMutation, MarkLaundryOrderPaidMutationVariables>;
+export const StartLaundryProcessingDocument = gql`
+    mutation StartLaundryProcessing($input: LaundryOrderRefInput!) {
+  startLaundryProcessing(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+    ${LaundryOrderDetailFragmentDoc}`;
+export type StartLaundryProcessingMutationFn = Apollo.MutationFunction<StartLaundryProcessingMutation, StartLaundryProcessingMutationVariables>;
+
+/**
+ * __useStartLaundryProcessingMutation__
+ *
+ * To run a mutation, you first call `useStartLaundryProcessingMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useStartLaundryProcessingMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [startLaundryProcessingMutation, { data, loading, error }] = useStartLaundryProcessingMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useStartLaundryProcessingMutation(baseOptions?: Apollo.MutationHookOptions<StartLaundryProcessingMutation, StartLaundryProcessingMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<StartLaundryProcessingMutation, StartLaundryProcessingMutationVariables>(StartLaundryProcessingDocument, options);
+      }
+export type StartLaundryProcessingMutationHookResult = ReturnType<typeof useStartLaundryProcessingMutation>;
+export type StartLaundryProcessingMutationResult = Apollo.MutationResult<StartLaundryProcessingMutation>;
+export type StartLaundryProcessingMutationOptions = Apollo.BaseMutationOptions<StartLaundryProcessingMutation, StartLaundryProcessingMutationVariables>;
+export const MarkLaundryOrderReadyDocument = gql`
+    mutation MarkLaundryOrderReady($input: LaundryOrderRefInput!) {
+  markLaundryOrderReady(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+    ${LaundryOrderDetailFragmentDoc}`;
+export type MarkLaundryOrderReadyMutationFn = Apollo.MutationFunction<MarkLaundryOrderReadyMutation, MarkLaundryOrderReadyMutationVariables>;
+
+/**
+ * __useMarkLaundryOrderReadyMutation__
+ *
+ * To run a mutation, you first call `useMarkLaundryOrderReadyMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useMarkLaundryOrderReadyMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [markLaundryOrderReadyMutation, { data, loading, error }] = useMarkLaundryOrderReadyMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useMarkLaundryOrderReadyMutation(baseOptions?: Apollo.MutationHookOptions<MarkLaundryOrderReadyMutation, MarkLaundryOrderReadyMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<MarkLaundryOrderReadyMutation, MarkLaundryOrderReadyMutationVariables>(MarkLaundryOrderReadyDocument, options);
+      }
+export type MarkLaundryOrderReadyMutationHookResult = ReturnType<typeof useMarkLaundryOrderReadyMutation>;
+export type MarkLaundryOrderReadyMutationResult = Apollo.MutationResult<MarkLaundryOrderReadyMutation>;
+export type MarkLaundryOrderReadyMutationOptions = Apollo.BaseMutationOptions<MarkLaundryOrderReadyMutation, MarkLaundryOrderReadyMutationVariables>;
+export const MarkLaundryOrderAwaitingPickupDocument = gql`
+    mutation MarkLaundryOrderAwaitingPickup($input: LaundryOrderRefInput!) {
+  markLaundryOrderAwaitingPickup(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+    ${LaundryOrderDetailFragmentDoc}`;
+export type MarkLaundryOrderAwaitingPickupMutationFn = Apollo.MutationFunction<MarkLaundryOrderAwaitingPickupMutation, MarkLaundryOrderAwaitingPickupMutationVariables>;
+
+/**
+ * __useMarkLaundryOrderAwaitingPickupMutation__
+ *
+ * To run a mutation, you first call `useMarkLaundryOrderAwaitingPickupMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useMarkLaundryOrderAwaitingPickupMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [markLaundryOrderAwaitingPickupMutation, { data, loading, error }] = useMarkLaundryOrderAwaitingPickupMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useMarkLaundryOrderAwaitingPickupMutation(baseOptions?: Apollo.MutationHookOptions<MarkLaundryOrderAwaitingPickupMutation, MarkLaundryOrderAwaitingPickupMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<MarkLaundryOrderAwaitingPickupMutation, MarkLaundryOrderAwaitingPickupMutationVariables>(MarkLaundryOrderAwaitingPickupDocument, options);
+      }
+export type MarkLaundryOrderAwaitingPickupMutationHookResult = ReturnType<typeof useMarkLaundryOrderAwaitingPickupMutation>;
+export type MarkLaundryOrderAwaitingPickupMutationResult = Apollo.MutationResult<MarkLaundryOrderAwaitingPickupMutation>;
+export type MarkLaundryOrderAwaitingPickupMutationOptions = Apollo.BaseMutationOptions<MarkLaundryOrderAwaitingPickupMutation, MarkLaundryOrderAwaitingPickupMutationVariables>;
+export const MarkLaundryOrderAwaitingDeliveryDocument = gql`
+    mutation MarkLaundryOrderAwaitingDelivery($input: LaundryOrderRefInput!) {
+  markLaundryOrderAwaitingDelivery(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+    ${LaundryOrderDetailFragmentDoc}`;
+export type MarkLaundryOrderAwaitingDeliveryMutationFn = Apollo.MutationFunction<MarkLaundryOrderAwaitingDeliveryMutation, MarkLaundryOrderAwaitingDeliveryMutationVariables>;
+
+/**
+ * __useMarkLaundryOrderAwaitingDeliveryMutation__
+ *
+ * To run a mutation, you first call `useMarkLaundryOrderAwaitingDeliveryMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useMarkLaundryOrderAwaitingDeliveryMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [markLaundryOrderAwaitingDeliveryMutation, { data, loading, error }] = useMarkLaundryOrderAwaitingDeliveryMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useMarkLaundryOrderAwaitingDeliveryMutation(baseOptions?: Apollo.MutationHookOptions<MarkLaundryOrderAwaitingDeliveryMutation, MarkLaundryOrderAwaitingDeliveryMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<MarkLaundryOrderAwaitingDeliveryMutation, MarkLaundryOrderAwaitingDeliveryMutationVariables>(MarkLaundryOrderAwaitingDeliveryDocument, options);
+      }
+export type MarkLaundryOrderAwaitingDeliveryMutationHookResult = ReturnType<typeof useMarkLaundryOrderAwaitingDeliveryMutation>;
+export type MarkLaundryOrderAwaitingDeliveryMutationResult = Apollo.MutationResult<MarkLaundryOrderAwaitingDeliveryMutation>;
+export type MarkLaundryOrderAwaitingDeliveryMutationOptions = Apollo.BaseMutationOptions<MarkLaundryOrderAwaitingDeliveryMutation, MarkLaundryOrderAwaitingDeliveryMutationVariables>;
+export const CompleteLaundryOrderDocument = gql`
+    mutation CompleteLaundryOrder($input: LaundryOrderRefInput!) {
+  completeLaundryOrder(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+    ${LaundryOrderDetailFragmentDoc}`;
+export type CompleteLaundryOrderMutationFn = Apollo.MutationFunction<CompleteLaundryOrderMutation, CompleteLaundryOrderMutationVariables>;
+
+/**
+ * __useCompleteLaundryOrderMutation__
+ *
+ * To run a mutation, you first call `useCompleteLaundryOrderMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useCompleteLaundryOrderMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [completeLaundryOrderMutation, { data, loading, error }] = useCompleteLaundryOrderMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useCompleteLaundryOrderMutation(baseOptions?: Apollo.MutationHookOptions<CompleteLaundryOrderMutation, CompleteLaundryOrderMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<CompleteLaundryOrderMutation, CompleteLaundryOrderMutationVariables>(CompleteLaundryOrderDocument, options);
+      }
+export type CompleteLaundryOrderMutationHookResult = ReturnType<typeof useCompleteLaundryOrderMutation>;
+export type CompleteLaundryOrderMutationResult = Apollo.MutationResult<CompleteLaundryOrderMutation>;
+export type CompleteLaundryOrderMutationOptions = Apollo.BaseMutationOptions<CompleteLaundryOrderMutation, CompleteLaundryOrderMutationVariables>;
+export const CancelLaundryOrderDocument = gql`
+    mutation CancelLaundryOrder($input: LaundryOrderRefInput!) {
+  cancelLaundryOrder(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+    ${LaundryOrderDetailFragmentDoc}`;
+export type CancelLaundryOrderMutationFn = Apollo.MutationFunction<CancelLaundryOrderMutation, CancelLaundryOrderMutationVariables>;
+
+/**
+ * __useCancelLaundryOrderMutation__
+ *
+ * To run a mutation, you first call `useCancelLaundryOrderMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useCancelLaundryOrderMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [cancelLaundryOrderMutation, { data, loading, error }] = useCancelLaundryOrderMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useCancelLaundryOrderMutation(baseOptions?: Apollo.MutationHookOptions<CancelLaundryOrderMutation, CancelLaundryOrderMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<CancelLaundryOrderMutation, CancelLaundryOrderMutationVariables>(CancelLaundryOrderDocument, options);
+      }
+export type CancelLaundryOrderMutationHookResult = ReturnType<typeof useCancelLaundryOrderMutation>;
+export type CancelLaundryOrderMutationResult = Apollo.MutationResult<CancelLaundryOrderMutation>;
+export type CancelLaundryOrderMutationOptions = Apollo.BaseMutationOptions<CancelLaundryOrderMutation, CancelLaundryOrderMutationVariables>;
+export const RejectLaundryOrderDocument = gql`
+    mutation RejectLaundryOrder($input: LaundryOrderRefInput!) {
+  rejectLaundryOrder(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+    ${LaundryOrderDetailFragmentDoc}`;
+export type RejectLaundryOrderMutationFn = Apollo.MutationFunction<RejectLaundryOrderMutation, RejectLaundryOrderMutationVariables>;
+
+/**
+ * __useRejectLaundryOrderMutation__
+ *
+ * To run a mutation, you first call `useRejectLaundryOrderMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useRejectLaundryOrderMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [rejectLaundryOrderMutation, { data, loading, error }] = useRejectLaundryOrderMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useRejectLaundryOrderMutation(baseOptions?: Apollo.MutationHookOptions<RejectLaundryOrderMutation, RejectLaundryOrderMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<RejectLaundryOrderMutation, RejectLaundryOrderMutationVariables>(RejectLaundryOrderDocument, options);
+      }
+export type RejectLaundryOrderMutationHookResult = ReturnType<typeof useRejectLaundryOrderMutation>;
+export type RejectLaundryOrderMutationResult = Apollo.MutationResult<RejectLaundryOrderMutation>;
+export type RejectLaundryOrderMutationOptions = Apollo.BaseMutationOptions<RejectLaundryOrderMutation, RejectLaundryOrderMutationVariables>;
+export const MarkLaundryOrderLostDocument = gql`
+    mutation MarkLaundryOrderLost($input: LaundryOrderRefInput!) {
+  markLaundryOrderLost(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+    ${LaundryOrderDetailFragmentDoc}`;
+export type MarkLaundryOrderLostMutationFn = Apollo.MutationFunction<MarkLaundryOrderLostMutation, MarkLaundryOrderLostMutationVariables>;
+
+/**
+ * __useMarkLaundryOrderLostMutation__
+ *
+ * To run a mutation, you first call `useMarkLaundryOrderLostMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useMarkLaundryOrderLostMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [markLaundryOrderLostMutation, { data, loading, error }] = useMarkLaundryOrderLostMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useMarkLaundryOrderLostMutation(baseOptions?: Apollo.MutationHookOptions<MarkLaundryOrderLostMutation, MarkLaundryOrderLostMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<MarkLaundryOrderLostMutation, MarkLaundryOrderLostMutationVariables>(MarkLaundryOrderLostDocument, options);
+      }
+export type MarkLaundryOrderLostMutationHookResult = ReturnType<typeof useMarkLaundryOrderLostMutation>;
+export type MarkLaundryOrderLostMutationResult = Apollo.MutationResult<MarkLaundryOrderLostMutation>;
+export type MarkLaundryOrderLostMutationOptions = Apollo.BaseMutationOptions<MarkLaundryOrderLostMutation, MarkLaundryOrderLostMutationVariables>;
+export const MarkLaundryOrderDamagedDocument = gql`
+    mutation MarkLaundryOrderDamaged($input: LaundryOrderRefInput!) {
+  markLaundryOrderDamaged(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+    ${LaundryOrderDetailFragmentDoc}`;
+export type MarkLaundryOrderDamagedMutationFn = Apollo.MutationFunction<MarkLaundryOrderDamagedMutation, MarkLaundryOrderDamagedMutationVariables>;
+
+/**
+ * __useMarkLaundryOrderDamagedMutation__
+ *
+ * To run a mutation, you first call `useMarkLaundryOrderDamagedMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useMarkLaundryOrderDamagedMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [markLaundryOrderDamagedMutation, { data, loading, error }] = useMarkLaundryOrderDamagedMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useMarkLaundryOrderDamagedMutation(baseOptions?: Apollo.MutationHookOptions<MarkLaundryOrderDamagedMutation, MarkLaundryOrderDamagedMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<MarkLaundryOrderDamagedMutation, MarkLaundryOrderDamagedMutationVariables>(MarkLaundryOrderDamagedDocument, options);
+      }
+export type MarkLaundryOrderDamagedMutationHookResult = ReturnType<typeof useMarkLaundryOrderDamagedMutation>;
+export type MarkLaundryOrderDamagedMutationResult = Apollo.MutationResult<MarkLaundryOrderDamagedMutation>;
+export type MarkLaundryOrderDamagedMutationOptions = Apollo.BaseMutationOptions<MarkLaundryOrderDamagedMutation, MarkLaundryOrderDamagedMutationVariables>;
+export const RefundLaundryOrderDocument = gql`
+    mutation RefundLaundryOrder($input: LaundryOrderRefInput!) {
+  refundLaundryOrder(input: $input) {
+    ...LaundryOrderDetail
+  }
+}
+    ${LaundryOrderDetailFragmentDoc}`;
+export type RefundLaundryOrderMutationFn = Apollo.MutationFunction<RefundLaundryOrderMutation, RefundLaundryOrderMutationVariables>;
+
+/**
+ * __useRefundLaundryOrderMutation__
+ *
+ * To run a mutation, you first call `useRefundLaundryOrderMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useRefundLaundryOrderMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [refundLaundryOrderMutation, { data, loading, error }] = useRefundLaundryOrderMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useRefundLaundryOrderMutation(baseOptions?: Apollo.MutationHookOptions<RefundLaundryOrderMutation, RefundLaundryOrderMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<RefundLaundryOrderMutation, RefundLaundryOrderMutationVariables>(RefundLaundryOrderDocument, options);
+      }
+export type RefundLaundryOrderMutationHookResult = ReturnType<typeof useRefundLaundryOrderMutation>;
+export type RefundLaundryOrderMutationResult = Apollo.MutationResult<RefundLaundryOrderMutation>;
+export type RefundLaundryOrderMutationOptions = Apollo.BaseMutationOptions<RefundLaundryOrderMutation, RefundLaundryOrderMutationVariables>;
 export const LoginDocument = gql`
     mutation Login($loginInput: LoginInput!) {
   login(loginInput: $loginInput) {
