@@ -66,6 +66,12 @@ const ROOT_CONNECTIONS: Array<{
     sortFields: 'CleaningJobSortFields',
     sortColumns: ['scheduledAt', 'id'],
   },
+  {
+    field: 'laundryOrders',
+    connection: 'LaundryOrderConnection',
+    sortFields: 'LaundryOrderSortFields',
+    sortColumns: ['createdAt', 'id'],
+  },
 ];
 
 const NESTED_CONNECTIONS: Array<{
@@ -97,6 +103,12 @@ const NESTED_CONNECTIONS: Array<{
     field: 'items',
     sortFields: 'ChecklistItemSortFields',
     sortColumns: ['position', 'id'],
+  },
+  {
+    parent: 'LaundryOrder',
+    field: 'lines',
+    sortFields: 'LaundryOrderLineSortFields',
+    sortColumns: ['createdAt', 'id'],
   },
 ];
 
@@ -174,7 +186,9 @@ describe('paginated collection schema allowlist (Task 8)', () => {
       const nestedTypeName = field.type.toString().replace(/!$/, '');
       const nested = connectionType(schema, nestedTypeName);
       const nestedFields = Object.keys(nested.getFields()).sort();
-      expect(nestedFields).toEqual(expect.arrayContaining(['nodes', 'pageInfo']));
+      expect(nestedFields).toEqual(
+        expect.arrayContaining(['nodes', 'pageInfo']),
+      );
       expect(nestedFields).not.toContain('totalCount');
       expect(nestedFields).not.toContain('edges');
     }
