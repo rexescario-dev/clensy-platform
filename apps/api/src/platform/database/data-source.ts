@@ -14,6 +14,8 @@ import { PricingRuleEntity } from '../../modules/catalog/infrastructure/persiste
 import { ServiceEntity } from '../../modules/catalog/infrastructure/persistence/service.entity';
 import { LaundryOrderEntity } from '../../modules/laundry/infrastructure/persistence/laundry-order.entity';
 import { LaundryOrderLineEntity } from '../../modules/laundry/infrastructure/persistence/laundry-order-line.entity';
+import { InvoiceEntity } from '../../modules/billing/infrastructure/persistence/invoice.entity';
+import { InvoiceLineEntity } from '../../modules/billing/infrastructure/persistence/invoice-line.entity';
 import { AuditEventEntity } from '../audit/infrastructure/persistence/audit-event.entity';
 
 // Plain DataSource for the TypeORM CLI (migration:generate/run/revert) — kept
@@ -42,6 +44,8 @@ export default new DataSource({
     ChecklistItemEntity,
     LaundryOrderEntity,
     LaundryOrderLineEntity,
+    InvoiceEntity,
+    InvoiceLineEntity,
   ],
   migrations: [__dirname + '/migrations/*.ts'],
 });
