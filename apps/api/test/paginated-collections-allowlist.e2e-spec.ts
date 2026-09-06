@@ -72,6 +72,12 @@ const ROOT_CONNECTIONS: Array<{
     sortFields: 'LaundryOrderSortFields',
     sortColumns: ['createdAt', 'id'],
   },
+  {
+    field: 'invoices',
+    connection: 'InvoiceConnection',
+    sortFields: 'InvoiceSortFields',
+    sortColumns: ['issueDate', 'createdAt', 'id'],
+  },
 ];
 
 const NESTED_CONNECTIONS: Array<{
@@ -108,6 +114,12 @@ const NESTED_CONNECTIONS: Array<{
     parent: 'LaundryOrder',
     field: 'lines',
     sortFields: 'LaundryOrderLineSortFields',
+    sortColumns: ['createdAt', 'id'],
+  },
+  {
+    parent: 'Invoice',
+    field: 'lines',
+    sortFields: 'InvoiceLineSortFields',
     sortColumns: ['createdAt', 'id'],
   },
 ];

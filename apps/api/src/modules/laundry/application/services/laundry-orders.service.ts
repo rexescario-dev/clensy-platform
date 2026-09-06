@@ -22,6 +22,7 @@ import { LaundryOrderEntity } from '../../infrastructure/persistence/laundry-ord
 import { LaundryOrderLineEntity } from '../../infrastructure/persistence/laundry-order-line.entity';
 import { LaundryOrderLinePricingSnapshotEmbeddable } from '../../infrastructure/persistence/laundry-order-line-pricing-snapshot.embeddable';
 import { LaundryOrderTransitionCommand } from '../commands/laundry-order-transition.command';
+import { OrderForInvoicing } from './order-for-invoicing';
 import { PriceLaundryOrderCommand } from '../commands/price-laundry-order.command';
 import { ReceiveLaundryOrderCommand } from '../commands/receive-laundry-order.command';
 import { WeighLaundryOrderCommand } from '../commands/weigh-laundry-order.command';
@@ -47,6 +48,37 @@ export class LaundryOrdersService {
 
   getOrder(id: string): Promise<LaundryOrder | null> {
     return this.orderRepository.findOneBy({ id });
+  }
+
+  // Read-only projection for the Billing module (#38 spec §4.1). Returns
+  // the order plus its lines' `serviceId`/`addOnId` and the four snapshot
+  // fields Billing copies verbatim, or `null` if the order does not exist.
+  // Adds no capability to mutate an order and changes no existing contract.
+  async getOrderForInvoicing(id: string): Promise<OrderForInvoicing | null> {
+    const order = await this.orderRepository.findOneBy({ id });
+    if (!order) {
+      return null;
+    }
+    const lines = await this.lineRepository.find({
+      where: { laundryOrderId: id },
+      order: { createdAt: 'ASC' },
+    });
+    return {
+      id: order.id,
+      customerId: order.customerId,
+      status: order.status,
+      totalMinorUnits: order.totalMinorUnits,
+      lines: lines.map((line) => ({
+        serviceId: line.serviceId,
+        addOnId: line.addOnId,
+        pricingSnapshot: {
+          quantity: line.pricingSnapshot.quantity,
+          unit: line.pricingSnapshot.unit,
+          rateMinorUnits: line.pricingSnapshot.rateMinorUnits,
+          amountMinorUnits: line.pricingSnapshot.amountMinorUnits,
+        },
+      })),
+    };
   }
 
   // ---- intake ------------------------------------------------------------

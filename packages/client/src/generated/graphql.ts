@@ -285,6 +285,11 @@ export type DateFieldComparisonBetween = {
   upper: unknown;
 };
 
+export type GenerateInvoiceFromOrderInput = {
+  laundryOrderId: string | number;
+  paymentTerms: InvoicePaymentTerms;
+};
+
 export type IdFilterComparison = {
   eq?: string | number | null | undefined;
   gt?: string | number | null | undefined;
@@ -301,6 +306,32 @@ export type IdFilterComparison = {
   notIn?: Array<string | number> | null | undefined;
   notLike?: string | number | null | undefined;
 };
+
+export type InvoicePaymentStatus =
+  | 'PAID'
+  | 'PARTIALLY_PAID'
+  | 'UNPAID'
+  | 'VOID';
+
+export type InvoicePaymentTerms =
+  | 'PAY_NOW'
+  | 'PAY_ON_COMPLETION'
+  | 'PAY_ON_DELIVERY';
+
+export type InvoiceSort = {
+  direction: SortDirection;
+  field: InvoiceSortFields;
+  nulls?: SortNulls | null | undefined;
+};
+
+export type InvoiceSortFields =
+  | 'createdAt'
+  | 'customerId'
+  | 'id'
+  | 'invoiceNumber'
+  | 'issueDate'
+  | 'laundryOrderId'
+  | 'paymentStatus';
 
 export type JobStatus =
   | 'COMPLETED'
@@ -559,6 +590,39 @@ export type AdminsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
 export type AdminsQuery = { admins: Array<{ id: string, email: string, role: Role, isActive: boolean }> };
+
+export type InvoiceRowFragment = { id: string, invoiceNumber: string, totalMinorUnits: number, amountDueMinorUnits: number, paymentStatus: InvoicePaymentStatus, issueDate: unknown, customer: { id: string, fullName: string } };
+
+export type InvoiceDetailFragment = { laundryOrderId: string, customerId: string, subtotalMinorUnits: number, discountMinorUnits: number, amountPaidMinorUnits: number, paymentTerms: InvoicePaymentTerms, dueDate: unknown, createdAt: unknown, id: string, invoiceNumber: string, totalMinorUnits: number, amountDueMinorUnits: number, paymentStatus: InvoicePaymentStatus, issueDate: unknown, laundryOrder: { id: string }, lines: { nodes: Array<{ id: string, description: string, unit: PricingUnit, quantity: number, rateMinorUnits: number, amountMinorUnits: number }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } };
+
+export type InvoicesQueryVariables = Exact<{
+  paging?: OffsetPaging | null | undefined;
+  sorting?: Array<InvoiceSort> | InvoiceSort | null | undefined;
+}>;
+
+
+export type InvoicesQuery = { invoices: { totalCount: number, pageInfo: { hasNextPage: boolean | null, hasPreviousPage: boolean | null }, nodes: Array<{ id: string, invoiceNumber: string, totalMinorUnits: number, amountDueMinorUnits: number, paymentStatus: InvoicePaymentStatus, issueDate: unknown, customer: { id: string, fullName: string } }> } };
+
+export type InvoiceQueryVariables = Exact<{
+  id: string | number;
+}>;
+
+
+export type InvoiceQuery = { invoice: { laundryOrderId: string, customerId: string, subtotalMinorUnits: number, discountMinorUnits: number, amountPaidMinorUnits: number, paymentTerms: InvoicePaymentTerms, dueDate: unknown, createdAt: unknown, id: string, invoiceNumber: string, totalMinorUnits: number, amountDueMinorUnits: number, paymentStatus: InvoicePaymentStatus, issueDate: unknown, laundryOrder: { id: string }, lines: { nodes: Array<{ id: string, description: string, unit: PricingUnit, quantity: number, rateMinorUnits: number, amountMinorUnits: number }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } | null };
+
+export type InvoiceForOrderQueryVariables = Exact<{
+  laundryOrderId: string | number;
+}>;
+
+
+export type InvoiceForOrderQuery = { invoices: { nodes: Array<{ id: string, invoiceNumber: string, totalMinorUnits: number, paymentStatus: InvoicePaymentStatus }> } };
+
+export type GenerateInvoiceFromOrderMutationVariables = Exact<{
+  input: GenerateInvoiceFromOrderInput;
+}>;
+
+
+export type GenerateInvoiceFromOrderMutation = { generateInvoiceFromOrder: { id: string, invoiceNumber: string, totalMinorUnits: number, paymentStatus: InvoicePaymentStatus } };
 
 export type BookingsQueryVariables = Exact<{
   paging?: OffsetPaging | null | undefined;
@@ -961,6 +1025,49 @@ export type CreateTeamMutationVariables = Exact<{
 
 export type CreateTeamMutation = { createTeam: { id: string } };
 
+export const InvoiceRowFragmentDoc = gql`
+    fragment InvoiceRow on Invoice {
+  id
+  invoiceNumber
+  totalMinorUnits
+  amountDueMinorUnits
+  paymentStatus
+  issueDate
+  customer {
+    id
+    fullName
+  }
+}
+    `;
+export const InvoiceDetailFragmentDoc = gql`
+    fragment InvoiceDetail on Invoice {
+  ...InvoiceRow
+  laundryOrderId
+  customerId
+  subtotalMinorUnits
+  discountMinorUnits
+  amountPaidMinorUnits
+  paymentTerms
+  dueDate
+  createdAt
+  laundryOrder {
+    id
+  }
+  lines {
+    nodes {
+      id
+      description
+      unit
+      quantity
+      rateMinorUnits
+      amountMinorUnits
+    }
+    pageInfo {
+      hasNextPage
+    }
+  }
+}
+    ${InvoiceRowFragmentDoc}`;
 export const JobFieldsFragmentDoc = gql`
     fragment JobFields on CleaningJob {
   id
@@ -1217,6 +1324,187 @@ export type AdminsQueryHookResult = ReturnType<typeof useAdminsQuery>;
 export type AdminsLazyQueryHookResult = ReturnType<typeof useAdminsLazyQuery>;
 export type AdminsSuspenseQueryHookResult = ReturnType<typeof useAdminsSuspenseQuery>;
 export type AdminsQueryResult = Apollo.QueryResult<AdminsQuery, AdminsQueryVariables>;
+export const InvoicesDocument = gql`
+    query Invoices($paging: OffsetPaging, $sorting: [InvoiceSort!]) {
+  invoices(paging: $paging, sorting: $sorting) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+    }
+    nodes {
+      ...InvoiceRow
+    }
+  }
+}
+    ${InvoiceRowFragmentDoc}`;
+
+/**
+ * __useInvoicesQuery__
+ *
+ * To run a query within a React component, call `useInvoicesQuery` and pass it any options that fit your needs.
+ * When your component renders, `useInvoicesQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useInvoicesQuery({
+ *   variables: {
+ *      paging: // value for 'paging'
+ *      sorting: // value for 'sorting'
+ *   },
+ * });
+ */
+export function useInvoicesQuery(baseOptions?: Apollo.QueryHookOptions<InvoicesQuery, InvoicesQueryVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<InvoicesQuery, InvoicesQueryVariables>(InvoicesDocument, options);
+      }
+export function useInvoicesLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<InvoicesQuery, InvoicesQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<InvoicesQuery, InvoicesQueryVariables>(InvoicesDocument, options);
+        }
+// @ts-ignore
+export function useInvoicesSuspenseQuery(baseOptions?: Apollo.SuspenseQueryHookOptions<InvoicesQuery, InvoicesQueryVariables>): Apollo.UseSuspenseQueryResult<InvoicesQuery, InvoicesQueryVariables>;
+export function useInvoicesSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<InvoicesQuery, InvoicesQueryVariables>): Apollo.UseSuspenseQueryResult<InvoicesQuery | undefined, InvoicesQueryVariables>;
+export function useInvoicesSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<InvoicesQuery, InvoicesQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<InvoicesQuery, InvoicesQueryVariables>(InvoicesDocument, options);
+        }
+export type InvoicesQueryHookResult = ReturnType<typeof useInvoicesQuery>;
+export type InvoicesLazyQueryHookResult = ReturnType<typeof useInvoicesLazyQuery>;
+export type InvoicesSuspenseQueryHookResult = ReturnType<typeof useInvoicesSuspenseQuery>;
+export type InvoicesQueryResult = Apollo.QueryResult<InvoicesQuery, InvoicesQueryVariables>;
+export const InvoiceDocument = gql`
+    query Invoice($id: ID!) {
+  invoice(id: $id) {
+    ...InvoiceDetail
+  }
+}
+    ${InvoiceDetailFragmentDoc}`;
+
+/**
+ * __useInvoiceQuery__
+ *
+ * To run a query within a React component, call `useInvoiceQuery` and pass it any options that fit your needs.
+ * When your component renders, `useInvoiceQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useInvoiceQuery({
+ *   variables: {
+ *      id: // value for 'id'
+ *   },
+ * });
+ */
+export function useInvoiceQuery(baseOptions: Apollo.QueryHookOptions<InvoiceQuery, InvoiceQueryVariables> & ({ variables: InvoiceQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<InvoiceQuery, InvoiceQueryVariables>(InvoiceDocument, options);
+      }
+export function useInvoiceLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<InvoiceQuery, InvoiceQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<InvoiceQuery, InvoiceQueryVariables>(InvoiceDocument, options);
+        }
+// @ts-ignore
+export function useInvoiceSuspenseQuery(baseOptions?: Apollo.SuspenseQueryHookOptions<InvoiceQuery, InvoiceQueryVariables>): Apollo.UseSuspenseQueryResult<InvoiceQuery, InvoiceQueryVariables>;
+export function useInvoiceSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<InvoiceQuery, InvoiceQueryVariables>): Apollo.UseSuspenseQueryResult<InvoiceQuery | undefined, InvoiceQueryVariables>;
+export function useInvoiceSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<InvoiceQuery, InvoiceQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<InvoiceQuery, InvoiceQueryVariables>(InvoiceDocument, options);
+        }
+export type InvoiceQueryHookResult = ReturnType<typeof useInvoiceQuery>;
+export type InvoiceLazyQueryHookResult = ReturnType<typeof useInvoiceLazyQuery>;
+export type InvoiceSuspenseQueryHookResult = ReturnType<typeof useInvoiceSuspenseQuery>;
+export type InvoiceQueryResult = Apollo.QueryResult<InvoiceQuery, InvoiceQueryVariables>;
+export const InvoiceForOrderDocument = gql`
+    query InvoiceForOrder($laundryOrderId: ID!) {
+  invoices(
+    filter: { laundryOrderId: { eq: $laundryOrderId } }
+    paging: { limit: 1 }
+  ) {
+    nodes {
+      id
+      invoiceNumber
+      totalMinorUnits
+      paymentStatus
+    }
+  }
+}
+    `;
+
+/**
+ * __useInvoiceForOrderQuery__
+ *
+ * To run a query within a React component, call `useInvoiceForOrderQuery` and pass it any options that fit your needs.
+ * When your component renders, `useInvoiceForOrderQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useInvoiceForOrderQuery({
+ *   variables: {
+ *      laundryOrderId: // value for 'laundryOrderId'
+ *   },
+ * });
+ */
+export function useInvoiceForOrderQuery(baseOptions: Apollo.QueryHookOptions<InvoiceForOrderQuery, InvoiceForOrderQueryVariables> & ({ variables: InvoiceForOrderQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<InvoiceForOrderQuery, InvoiceForOrderQueryVariables>(InvoiceForOrderDocument, options);
+      }
+export function useInvoiceForOrderLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<InvoiceForOrderQuery, InvoiceForOrderQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<InvoiceForOrderQuery, InvoiceForOrderQueryVariables>(InvoiceForOrderDocument, options);
+        }
+// @ts-ignore
+export function useInvoiceForOrderSuspenseQuery(baseOptions?: Apollo.SuspenseQueryHookOptions<InvoiceForOrderQuery, InvoiceForOrderQueryVariables>): Apollo.UseSuspenseQueryResult<InvoiceForOrderQuery, InvoiceForOrderQueryVariables>;
+export function useInvoiceForOrderSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<InvoiceForOrderQuery, InvoiceForOrderQueryVariables>): Apollo.UseSuspenseQueryResult<InvoiceForOrderQuery | undefined, InvoiceForOrderQueryVariables>;
+export function useInvoiceForOrderSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<InvoiceForOrderQuery, InvoiceForOrderQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<InvoiceForOrderQuery, InvoiceForOrderQueryVariables>(InvoiceForOrderDocument, options);
+        }
+export type InvoiceForOrderQueryHookResult = ReturnType<typeof useInvoiceForOrderQuery>;
+export type InvoiceForOrderLazyQueryHookResult = ReturnType<typeof useInvoiceForOrderLazyQuery>;
+export type InvoiceForOrderSuspenseQueryHookResult = ReturnType<typeof useInvoiceForOrderSuspenseQuery>;
+export type InvoiceForOrderQueryResult = Apollo.QueryResult<InvoiceForOrderQuery, InvoiceForOrderQueryVariables>;
+export const GenerateInvoiceFromOrderDocument = gql`
+    mutation GenerateInvoiceFromOrder($input: GenerateInvoiceFromOrderInput!) {
+  generateInvoiceFromOrder(input: $input) {
+    id
+    invoiceNumber
+    totalMinorUnits
+    paymentStatus
+  }
+}
+    `;
+export type GenerateInvoiceFromOrderMutationFn = Apollo.MutationFunction<GenerateInvoiceFromOrderMutation, GenerateInvoiceFromOrderMutationVariables>;
+
+/**
+ * __useGenerateInvoiceFromOrderMutation__
+ *
+ * To run a mutation, you first call `useGenerateInvoiceFromOrderMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useGenerateInvoiceFromOrderMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [generateInvoiceFromOrderMutation, { data, loading, error }] = useGenerateInvoiceFromOrderMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useGenerateInvoiceFromOrderMutation(baseOptions?: Apollo.MutationHookOptions<GenerateInvoiceFromOrderMutation, GenerateInvoiceFromOrderMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<GenerateInvoiceFromOrderMutation, GenerateInvoiceFromOrderMutationVariables>(GenerateInvoiceFromOrderDocument, options);
+      }
+export type GenerateInvoiceFromOrderMutationHookResult = ReturnType<typeof useGenerateInvoiceFromOrderMutation>;
+export type GenerateInvoiceFromOrderMutationResult = Apollo.MutationResult<GenerateInvoiceFromOrderMutation>;
+export type GenerateInvoiceFromOrderMutationOptions = Apollo.BaseMutationOptions<GenerateInvoiceFromOrderMutation, GenerateInvoiceFromOrderMutationVariables>;
 export const BookingsDocument = gql`
     query Bookings($paging: OffsetPaging, $filter: BookingFilter, $sorting: [BookingSort!]) {
   bookings(paging: $paging, filter: $filter, sorting: $sorting) {

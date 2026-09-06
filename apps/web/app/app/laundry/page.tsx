@@ -3,7 +3,10 @@
 import {
   useCancelLaundryOrderMutation,
   useCompleteLaundryOrderMutation,
+  useCurrentAdminQuery,
   useCustomersQuery,
+  useGenerateInvoiceFromOrderMutation,
+  useInvoiceForOrderQuery,
   useLaundryOrderQuery,
   useLaundryOrdersQuery,
   useMarkLaundryOrderAwaitingDeliveryMutation,
@@ -37,6 +40,7 @@ import {
   StatusBadge,
 } from '@clensy/ui';
 import type { DataTableColumn, StatusTone } from '@clensy/ui';
+import Link from 'next/link';
 import { Suspense, useState } from 'react';
 import { formatMinorUnits } from '../../../lib/format-price';
 import { useDetailDrawer } from '../../../lib/use-detail-drawer';
@@ -150,6 +154,27 @@ function formatDate(value: unknown): string {
 function formatWeight(grams: number | null): string {
   return grams === null ? '—' : `${(grams / 1000).toFixed(2)} kg`;
 }
+
+// Client mirror of the #38 spec §4.3 eligibility range (PRICED..COMPLETED
+// minus the exceptional exits), presentation only. The server re-checks.
+const BILLABLE_STATUSES: ReadonlySet<LaundryOrderStatus> = new Set<LaundryOrderStatus>(
+  [
+    'PRICED',
+    'AWAITING_PAYMENT',
+    'PAID',
+    'PROCESSING',
+    'READY',
+    'AWAITING_PICKUP',
+    'AWAITING_DELIVERY',
+    'COMPLETED',
+  ],
+);
+const INVOICE_ROLES: ReadonlySet<string> = new Set(['FINANCE', 'OWNER']);
+const PAYMENT_TERMS = [
+  'PAY_NOW',
+  'PAY_ON_COMPLETION',
+  'PAY_ON_DELIVERY',
+] as const;
 
 export default function LaundryPage() {
   return (
@@ -462,6 +487,11 @@ function LaundryDetailDrawer({
           </div>
         ) : null}
 
+        <InvoiceSection
+          orderId={order.id}
+          status={order.status}
+        />
+
         {canWeigh ? (
           <div className="flex items-end gap-2">
             <div className="flex flex-1 flex-col gap-1">
@@ -600,5 +630,104 @@ function LaundryDetailDrawer({
         />
       ) : null}
     </DetailDrawer>
+  );
+}
+
+function InvoiceSection({
+  orderId,
+  status,
+}: {
+  orderId: string;
+  status: LaundryOrderStatus;
+}) {
+  const { data: adminData } = useCurrentAdminQuery();
+  const role = adminData?.currentAdmin.role;
+  const invoiceQuery = useInvoiceForOrderQuery({
+    variables: { laundryOrderId: orderId },
+    fetchPolicy: 'network-only',
+  });
+  const [generate, { loading: generating }] =
+    useGenerateInvoiceFromOrderMutation();
+  const [terms, setTerms] =
+    useState<(typeof PAYMENT_TERMS)[number]>('PAY_ON_COMPLETION');
+  const [error, setError] = useState<string | undefined>(undefined);
+
+  const invoice = invoiceQuery.data?.invoices.nodes[0];
+  const canGenerate =
+    !invoice &&
+    BILLABLE_STATUSES.has(status) &&
+    role !== undefined &&
+    INVOICE_ROLES.has(role);
+
+  async function handleGenerate() {
+    setError(undefined);
+    try {
+      await generate({
+        variables: { input: { laundryOrderId: orderId, paymentTerms: terms } },
+      });
+      await invoiceQuery.refetch();
+    } catch {
+      setError('Unable to generate invoice.');
+    }
+  }
+
+  return (
+    <div>
+      <h3 className="mb-2 text-sm font-semibold text-slate-900">Invoice</h3>
+      {invoice ? (
+        <div className="flex flex-col gap-1 text-sm">
+          <div className="text-slate-900">{invoice.invoiceNumber}</div>
+          <div className="text-slate-600">
+            {formatMinorUnits(invoice.totalMinorUnits)} · {invoice.paymentStatus}
+          </div>
+          <Link
+            className="text-slate-900 underline"
+            href={`/app/billing?detail=${invoice.id}`}
+          >
+            Open invoice
+          </Link>
+        </div>
+      ) : canGenerate ? (
+        <div className="flex items-end gap-2">
+          <div className="flex flex-1 flex-col gap-1">
+            <label
+              htmlFor="invoice-terms"
+              className="text-sm font-medium text-slate-700"
+            >
+              Payment terms
+            </label>
+            <select
+              id="invoice-terms"
+              value={terms}
+              onChange={(e) =>
+                setTerms(
+                  e.currentTarget.value as (typeof PAYMENT_TERMS)[number],
+                )
+              }
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+            >
+              {PAYMENT_TERMS.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={generating}
+            onClick={() => void handleGenerate()}
+          >
+            {generating ? 'Generating…' : 'Generate invoice'}
+          </Button>
+        </div>
+      ) : (
+        <p className="text-sm text-slate-500">
+          No invoice yet.
+        </p>
+      )}
+      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+    </div>
   );
 }

@@ -25,6 +25,7 @@ describe('AddOnsService', () => {
   let dataSource: { transaction: jest.Mock };
   let addOnRepository: {
     find: jest.Mock;
+    findBy: jest.Mock;
     findOneBy: jest.Mock;
   };
   let auditLogger: { log: jest.Mock };
@@ -59,6 +60,7 @@ describe('AddOnsService', () => {
     };
     addOnRepository = {
       find: jest.fn(),
+      findBy: jest.fn(),
       findOneBy: jest.fn(),
     };
     auditLogger = { log: jest.fn().mockResolvedValue(undefined) };
@@ -186,6 +188,32 @@ describe('AddOnsService', () => {
       addOnRepository.find.mockResolvedValue([]);
 
       await expect(service.listAddOns()).resolves.toEqual([]);
+    });
+  });
+
+  describe('getAddOnsByIds', () => {
+    it('returns exactly the rows found, with no synthetic entries for missing ids', async () => {
+      const addOns = [
+        {
+          id: 'add-on-1',
+          name: 'Starch Finish',
+          description: null,
+          priceMinorUnits: 500,
+          active: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ];
+      addOnRepository.findBy.mockResolvedValue(addOns);
+
+      await expect(
+        service.getAddOnsByIds(['add-on-1', 'add-on-2']),
+      ).resolves.toEqual(addOns);
+    });
+
+    it('returns an empty array without querying when ids is empty', async () => {
+      await expect(service.getAddOnsByIds([])).resolves.toEqual([]);
+      expect(addOnRepository.findBy).not.toHaveBeenCalled();
     });
   });
 });
