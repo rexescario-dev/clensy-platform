@@ -1,0 +1,74 @@
+- generic [ref=f1e1]:
+  - generic [ref=f1e2]:
+    - navigation "Primary" [ref=f1e3]:
+      - generic [ref=f1e4]:
+        - generic [ref=f1e5]:
+          - paragraph [ref=f1e6]: Operations
+          - link "Bookings" [ref=f1e7] [cursor=pointer]:
+            - /url: /app/bookings
+            - generic [aria-hidden] [ref=f1e8]: B
+          - link "Jobs" [ref=f1e10] [cursor=pointer]:
+            - /url: /app/jobs
+            - generic [aria-hidden] [ref=f1e11]: J
+          - link "Laundry" [ref=f1e13] [cursor=pointer]:
+            - /url: /app/laundry
+            - generic [aria-hidden] [ref=f1e14]: L
+        - generic [ref=f1e16]:
+          - paragraph [ref=f1e17]: People
+          - link "Customers" [ref=f1e18] [cursor=pointer]:
+            - /url: /app/customers
+            - generic [aria-hidden] [ref=f1e19]: C
+          - link "Cleaners" [ref=f1e21] [cursor=pointer]:
+            - /url: /app/cleaners
+            - generic [aria-hidden] [ref=f1e22]: C
+          - link "Teams" [ref=f1e24] [cursor=pointer]:
+            - /url: /app/cleaners/teams
+            - generic [aria-hidden] [ref=f1e25]: T
+        - generic [ref=f1e27]:
+          - paragraph [ref=f1e28]: Catalog
+          - link "Services" [ref=f1e29] [cursor=pointer]:
+            - /url: /app/catalog
+            - generic [aria-hidden] [ref=f1e30]: S
+          - link "Add-ons" [ref=f1e32] [cursor=pointer]:
+            - /url: /app/catalog/add-ons
+            - generic [aria-hidden] [ref=f1e33]: A
+        - generic [ref=f1e35]:
+          - paragraph [ref=f1e36]: Administration
+          - link "Staff" [ref=f1e37] [cursor=pointer]:
+            - /url: /app/admin
+            - generic [aria-hidden] [ref=f1e38]: S
+      - button "Collapse sidebar" [ref=f1e41] [cursor=pointer]: « Collapse
+    - generic [ref=f1e42]:
+      - banner [ref=f1e43]:
+        - generic [ref=f1e45]:
+          - paragraph [ref=f1e84]: OWNER
+          - button "Log out" [ref=f1e46] [cursor=pointer]
+      - main [ref=f1e47]:
+        - generic [ref=f1e48]:
+          - generic [ref=f1e49]:
+            - heading "Laundry" [level=1] [ref=f1e51]
+            - button "+ New Laundry Order" [active] [ref=f1e53] [cursor=pointer]
+          - generic [ref=f1e54]:
+            - table [ref=f1e55]:
+              - rowgroup [ref=f1e56]:
+                - row [ref=f1e57]:
+                  - columnheader "Customer" [ref=f1e58]
+                  - columnheader "Fulfillment" [ref=f1e59]
+                  - columnheader "Status" [ref=f1e60]
+                  - columnheader "Weight" [ref=f1e61]
+                  - columnheader "Total" [ref=f1e62]
+                  - columnheader "Created" [ref=f1e63]
+              - rowgroup [ref=f1e64]:
+                - button [ref=f1e173] [cursor=pointer]:
+                  - cell "Amara Chidi" [ref=f1e104]
+                  - cell "DELIVERY" [ref=f1e105]
+                  - cell "COMPLETED" [ref=f1e174]
+                  - cell "2.35 kg" [ref=f1e140]
+                  - cell "₱35.25" [ref=f1e149]
+                  - cell "9/6/2026, 1:29:46 PM" [ref=f1e110]
+            - generic [ref=f1e70]:
+              - button "Previous" [disabled] [ref=f1e71]
+              - generic [ref=f1e72]: Page 1 of 1
+              - button "Next" [disabled] [ref=f1e73]
+  - button "Open Next.js Dev Tools" [ref=f1e79] [cursor=pointer]
+  - alert [ref=f1e87]: Clensy

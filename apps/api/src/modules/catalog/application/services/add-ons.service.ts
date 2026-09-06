@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import type { AuditLogger } from '../../../../platform/audit/application/audit-logger.port';
 import { runAuditInTransaction } from '../../../../platform/audit/infrastructure/audit-logger.service';
@@ -118,11 +118,23 @@ export class AddOnsService {
 
   // Catalog reads are unfiltered (spec §4.1) — no `active` filter, no
   // arguments; the full set, active and inactive alike. No `getAddOn(id)`
-  // read method exists (spec §4.5 lists no `addOn(id)` GraphQL query, and no
-  // caller in this plan needs a single-`AddOn` read path) — `updateAddOn`'s
-  // existence check goes directly through the transaction manager instead.
+  // single-read exists — `updateAddOn`'s existence check goes directly
+  // through the transaction manager instead.
   listAddOns(): Promise<AddOn[]> {
     return this.addOnRepository.find();
+  }
+
+  // Bulk lookup, mirroring `ServicesService.getServicesByIds` verbatim.
+  // Added for the Billing module (#38): `generateInvoiceFromOrder` resolves
+  // each invoice line's frozen `description` from the catalog `AddOn` /
+  // `Service` name at generation time (#38 spec §4.1, §4.4). Not exposed
+  // over GraphQL directly. Returns exactly the rows that exist for the
+  // given ids — no synthetic entries for missing ones.
+  getAddOnsByIds(ids: string[]): Promise<AddOn[]> {
+    if (ids.length === 0) {
+      return Promise.resolve([]);
+    }
+    return this.addOnRepository.findBy({ id: In(ids) });
   }
 
   // Case-insensitive name uniqueness pre-check (spec §3) — the application-

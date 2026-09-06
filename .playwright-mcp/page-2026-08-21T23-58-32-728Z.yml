@@ -1,0 +1,121 @@
+- generic [ref=f3e1]:
+  - generic [ref=f3e2]:
+    - navigation "Primary" [ref=f3e3]:
+      - generic [ref=f3e4]:
+        - generic [ref=f3e5]:
+          - paragraph [ref=f3e6]: Operations
+          - link "Bookings" [ref=f3e7] [cursor=pointer]:
+            - /url: /app/bookings
+            - generic [ref=f3e8]: B
+        - generic [ref=f3e10]:
+          - paragraph [ref=f3e11]: People
+          - link "Customers" [ref=f3e12] [cursor=pointer]:
+            - /url: /app/customers
+            - generic [ref=f3e13]: C
+          - link "Cleaners" [ref=f3e15] [cursor=pointer]:
+            - /url: /app/cleaners
+            - generic [ref=f3e16]: C
+          - link "Teams" [ref=f3e18] [cursor=pointer]:
+            - /url: /app/cleaners/teams
+            - generic [ref=f3e19]: T
+        - generic [ref=f3e21]:
+          - paragraph [ref=f3e22]: Catalog
+          - link "Services" [ref=f3e23] [cursor=pointer]:
+            - /url: /app/catalog
+            - generic [ref=f3e24]: S
+          - link "Add-ons" [ref=f3e26] [cursor=pointer]:
+            - /url: /app/catalog/add-ons
+            - generic [ref=f3e27]: A
+        - generic [ref=f3e29]:
+          - paragraph [ref=f3e30]: Administration
+          - link "Staff" [ref=f3e31] [cursor=pointer]:
+            - /url: /app/admin
+            - generic [ref=f3e32]: S
+      - button "Collapse sidebar" [ref=f3e35] [cursor=pointer]: « Collapse
+    - generic [ref=f3e36]:
+      - banner [ref=f3e37]:
+        - generic [ref=f3e39]:
+          - paragraph [ref=f3e75]: OWNER
+          - button "Log out" [ref=f3e40] [cursor=pointer]
+      - main [ref=f3e41]:
+        - generic [ref=f3e42]:
+          - generic [ref=f3e43]:
+            - heading "Bookings" [level=1] [ref=f3e45]
+            - button "+ New Booking" [ref=f3e47] [cursor=pointer]
+          - table [ref=f3e49]:
+            - rowgroup [ref=f3e50]:
+              - row [ref=f3e51]:
+                - columnheader "Customer" [ref=f3e52]
+                - columnheader "Property" [ref=f3e53]
+                - columnheader "Service" [ref=f3e54]
+                - columnheader "Scheduled" [ref=f3e55]
+                - columnheader "Status" [ref=f3e56]
+                - columnheader "Team" [ref=f3e57]
+                - columnheader "Price" [ref=f3e58]
+            - rowgroup [ref=f3e59]:
+              - button [ref=f3e76] [cursor=pointer]:
+                - cell "Amara Chidi" [ref=f3e77]
+                - cell "12 Palm Street" [ref=f3e78]
+                - cell "Standard Cleaning" [ref=f3e79]
+                - cell "8/18/2026, 5:00:00 PM" [ref=f3e80]
+                - cell "CONFIRMED" [ref=f3e81]
+                - cell "Seed Team A" [ref=f3e82]
+                - cell "₱2500.00" [ref=f3e83]
+              - button [ref=f3e84] [cursor=pointer]:
+                - cell "Amara Chidi" [ref=f3e85]
+                - cell "12 Palm Street" [ref=f3e86]
+                - cell "Standard Cleaning" [ref=f3e87]
+                - cell "8/20/2026, 9:30:00 PM" [ref=f3e88]
+                - cell "PENDING" [ref=f3e89]
+                - cell "Unassigned" [ref=f3e90]
+                - cell "₱2500.00" [ref=f3e91]
+              - button [ref=f3e92] [cursor=pointer]:
+                - cell "Amara Chidi" [ref=f3e93]
+                - cell "12 Palm Street" [ref=f3e94]
+                - cell "Standard Cleaning" [ref=f3e95]
+                - cell "8/15/2026, 7:00:00 PM" [ref=f3e96]
+                - cell "COMPLETED" [ref=f3e97]
+                - cell "Seed Team A" [ref=f3e98]
+                - cell "₱2500.00" [ref=f3e99]
+              - button [ref=f3e125] [cursor=pointer]:
+                - cell "Amara Chidi" [ref=f3e126]
+                - cell "12 Palm Street" [ref=f3e127]
+                - cell "Standard Cleaning" [ref=f3e128]
+                - cell "9/20/2026, 2:00:00 PM" [ref=f3e129]
+                - cell "PENDING" [ref=f3e130]
+                - cell "Seed Team A" [ref=f3e131]
+                - cell "₱2500.00" [ref=f3e132]
+          - dialog [ref=f3e134]:
+            - generic [ref=f3e135]:
+              - heading "Amara Chidi — Standard Cleaning" [level=2] [ref=f3e136]
+              - button "Close" [active] [ref=f3e137] [cursor=pointer]: ×
+            - generic [ref=f3e139]:
+              - generic [ref=f3e140]:
+                - term [ref=f3e141]: Customer
+                - definition [ref=f3e142]: Amara Chidi
+                - term [ref=f3e143]: Property
+                - definition [ref=f3e144]: 12 Palm Street
+                - term [ref=f3e145]: Service
+                - definition [ref=f3e146]: Standard Cleaning
+                - term [ref=f3e147]: Price
+                - definition [ref=f3e148]: ₱2500.00
+              - generic [ref=f3e149]:
+                - generic [ref=f3e150]:
+                  - generic [ref=f3e151]: Scheduled at
+                  - textbox "Scheduled at" [ref=f3e152]: 2026-09-20T06:00
+                - generic [ref=f3e153]:
+                  - generic [ref=f3e154]: Status
+                  - combobox "Status" [ref=f3e155]:
+                    - option "PENDING" [selected]
+                    - option "CONFIRMED"
+                    - option "CANCELLED"
+                    - option "COMPLETED"
+                - generic [ref=f3e156]:
+                  - generic [ref=f3e157]: Team
+                  - combobox "Team" [ref=f3e158]:
+                    - option "Unassigned"
+                    - option "Seed Team A" [selected]
+                - button "Save changes" [ref=f3e159] [cursor=pointer]
+              - button "Delete booking" [ref=f3e161] [cursor=pointer]
+  - button "Open Next.js Dev Tools" [ref=f3e70] [cursor=pointer]
+  - alert [ref=f3e124]: Bookings

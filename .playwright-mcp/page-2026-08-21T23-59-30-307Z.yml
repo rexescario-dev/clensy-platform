@@ -1,0 +1,67 @@
+- generic [active] [ref=f4e1]:
+  - generic [ref=f4e2]:
+    - navigation "Primary" [ref=f4e3]:
+      - generic [ref=f4e4]:
+        - generic [ref=f4e5]:
+          - paragraph [ref=f4e6]: Operations
+          - link "Bookings" [ref=f4e7] [cursor=pointer]:
+            - /url: /app/bookings
+            - generic [ref=f4e8]: B
+        - generic [ref=f4e10]:
+          - paragraph [ref=f4e11]: People
+          - link "Customers" [ref=f4e12] [cursor=pointer]:
+            - /url: /app/customers
+            - generic [ref=f4e13]: C
+          - link "Cleaners" [ref=f4e15] [cursor=pointer]:
+            - /url: /app/cleaners
+            - generic [ref=f4e16]: C
+          - link "Teams" [ref=f4e18] [cursor=pointer]:
+            - /url: /app/cleaners/teams
+            - generic [ref=f4e19]: T
+        - generic [ref=f4e21]:
+          - paragraph [ref=f4e22]: Catalog
+          - link "Services" [ref=f4e23] [cursor=pointer]:
+            - /url: /app/catalog
+            - generic [ref=f4e24]: S
+          - link "Add-ons" [ref=f4e26] [cursor=pointer]:
+            - /url: /app/catalog/add-ons
+            - generic [ref=f4e27]: A
+        - generic [ref=f4e29]:
+          - paragraph [ref=f4e30]: Administration
+          - link "Staff" [ref=f4e31] [cursor=pointer]:
+            - /url: /app/admin
+            - generic [ref=f4e32]: S
+      - button "Collapse sidebar" [ref=f4e35] [cursor=pointer]: « Collapse
+    - generic [ref=f4e36]:
+      - banner [ref=f4e37]:
+        - button "Log out" [ref=f4e40] [cursor=pointer]
+      - main [ref=f4e41]:
+        - generic [ref=f4e42]:
+          - generic [ref=f4e43]:
+            - heading "Bookings" [level=1] [ref=f4e45]
+            - button "+ New Booking" [ref=f4e47] [cursor=pointer]
+          - table [ref=f4e49]:
+            - rowgroup [ref=f4e50]:
+              - row [ref=f4e51]:
+                - columnheader "Customer" [ref=f4e52]
+                - columnheader "Property" [ref=f4e53]
+                - columnheader "Service" [ref=f4e54]
+                - columnheader "Scheduled" [ref=f4e55]
+                - columnheader "Status" [ref=f4e56]
+                - columnheader "Team" [ref=f4e57]
+                - columnheader "Price" [ref=f4e58]
+            - rowgroup [ref=f4e59]:
+              - row [ref=f4e60]:
+                - cell [ref=f4e61]:
+                  - generic [ref=f4e62]:
+                    - status "Loading…" [ref=f4e63]
+                    - paragraph [ref=f4e64]: Loading…
+          - dialog [ref=f4e66]:
+            - generic [ref=f4e67]:
+              - heading "Booking" [level=2] [ref=f4e68]
+              - button "Close" [ref=f4e69] [cursor=pointer]: ×
+            - generic [ref=f4e71]:
+              - status "Loading…" [ref=f4e72]
+              - paragraph [ref=f4e73]: Loading…
+  - button "Open Next.js Dev Tools" [ref=f4e79] [cursor=pointer]
+  - alert [ref=f4e83]

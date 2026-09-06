@@ -33,7 +33,7 @@ describe('LaundryOrdersService', () => {
   };
   let dataSource: { transaction: jest.Mock };
   let orderRepository: { findOne: jest.Mock; findOneBy: jest.Mock };
-  let lineRepository: object;
+  let lineRepository: { find: jest.Mock };
   let customersService: { getCustomer: jest.Mock };
   let pricingRulesService: { resolveEffectivePricing: jest.Mock };
   let auditLogger: { log: jest.Mock };
@@ -69,7 +69,7 @@ describe('LaundryOrdersService', () => {
       transaction: jest.fn((fn: (m: unknown) => unknown) => fn(manager)),
     };
     orderRepository = { findOne: jest.fn(), findOneBy: jest.fn() };
-    lineRepository = {};
+    lineRepository = { find: jest.fn() };
     customersService = {
       getCustomer: jest.fn().mockResolvedValue({ id: 'cust-1' }),
     };
@@ -433,6 +433,78 @@ describe('LaundryOrdersService', () => {
     it('getOrder returns null for a missing id', async () => {
       orderRepository.findOneBy.mockResolvedValue(null);
       await expect(service.getOrder('nope')).resolves.toBeNull();
+    });
+
+    it('getOrderForInvoicing returns null for a missing id', async () => {
+      orderRepository.findOneBy.mockResolvedValue(null);
+      await expect(service.getOrderForInvoicing('nope')).resolves.toBeNull();
+      expect(lineRepository.find).not.toHaveBeenCalled();
+    });
+
+    it('getOrderForInvoicing projects the order plus its lines', async () => {
+      orderRepository.findOneBy.mockResolvedValue({
+        id: 'order-1',
+        customerId: 'cust-1',
+        status: LaundryOrderStatus.PRICED,
+        totalMinorUnits: 3500,
+      });
+      lineRepository.find.mockResolvedValue([
+        {
+          serviceId: 'svc-1',
+          addOnId: null,
+          pricingSnapshot: {
+            quantity: 2350,
+            unit: PricingUnit.PER_KG,
+            rateMinorUnits: 1500,
+            amountMinorUnits: 3525,
+            minimumChargeMinorUnits: null,
+            minimumChargeApplied: false,
+            pricingRuleId: 'rule-1',
+          },
+        },
+        {
+          serviceId: null,
+          addOnId: 'addon-1',
+          pricingSnapshot: {
+            quantity: 1,
+            unit: PricingUnit.FLAT,
+            rateMinorUnits: 200,
+            amountMinorUnits: 200,
+            minimumChargeMinorUnits: null,
+            minimumChargeApplied: false,
+            pricingRuleId: 'rule-2',
+          },
+        },
+      ]);
+
+      await expect(service.getOrderForInvoicing('order-1')).resolves.toEqual({
+        id: 'order-1',
+        customerId: 'cust-1',
+        status: LaundryOrderStatus.PRICED,
+        totalMinorUnits: 3500,
+        lines: [
+          {
+            serviceId: 'svc-1',
+            addOnId: null,
+            pricingSnapshot: {
+              quantity: 2350,
+              unit: PricingUnit.PER_KG,
+              rateMinorUnits: 1500,
+              amountMinorUnits: 3525,
+            },
+          },
+          {
+            serviceId: null,
+            addOnId: 'addon-1',
+            pricingSnapshot: {
+              quantity: 1,
+              unit: PricingUnit.FLAT,
+              rateMinorUnits: 200,
+              amountMinorUnits: 200,
+            },
+          },
+        ],
+      });
     });
   });
 });

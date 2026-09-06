@@ -3,7 +3,10 @@ import { computeInvoiceTotals } from '../../domain/invoice-totals';
 describe('computeInvoiceTotals', () => {
   it('sums no lines to a zero subtotal and total', () => {
     expect(
-      computeInvoiceTotals({ lineAmountsMinorUnits: [], discountMinorUnits: 0 }),
+      computeInvoiceTotals({
+        lineAmountsMinorUnits: [],
+        discountMinorUnits: 0,
+      }),
     ).toEqual({ subtotalMinorUnits: 0, totalMinorUnits: 0 });
   });
 
