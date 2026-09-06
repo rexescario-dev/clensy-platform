@@ -1,6 +1,7 @@
 import { Field, ID, InputType, Int } from '@nestjs/graphql';
 import {
   IsArray,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -22,6 +23,7 @@ export class ReceiveLaundryOrderInput {
   customerId!: string;
 
   @Field(() => LaundryFulfillmentType)
+  @IsEnum(LaundryFulfillmentType)
   fulfillmentType!: LaundryFulfillmentType;
 }
 
