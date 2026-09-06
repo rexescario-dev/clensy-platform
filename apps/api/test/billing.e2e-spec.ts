@@ -234,22 +234,28 @@ describe('Billing (e2e)', () => {
     const d = detail.body.data.invoice;
     expect(d.customer.id).toBe(ctx.customerId);
     expect(d.laundryOrder.id).toBe(orderId);
-    expect(d.lines.nodes).toEqual([
-      {
-        description: expect.stringMatching(/^Press /),
-        unit: 'PER_ITEM',
-        quantity: 3,
-        rateMinorUnits: 500,
-        amountMinorUnits: 1500,
-      },
-      {
-        description: expect.stringMatching(/^Fold .* \(add-on\)$/),
-        unit: 'FLAT',
-        quantity: 1,
-        rateMinorUnits: 200,
-        amountMinorUnits: 200,
-      },
-    ]);
+    // The nested `lines` connection sorts `createdAt ASC, id ASC`; both
+    // lines are inserted in one transaction so `createdAt` collides and the
+    // `id` tiebreak is arbitrary — assert the set, not the order.
+    expect(d.lines.nodes).toHaveLength(2);
+    expect(d.lines.nodes).toEqual(
+      expect.arrayContaining([
+        {
+          description: expect.stringMatching(/^Press /),
+          unit: 'PER_ITEM',
+          quantity: 3,
+          rateMinorUnits: 500,
+          amountMinorUnits: 1500,
+        },
+        {
+          description: expect.stringMatching(/^Fold .* \(add-on\)$/),
+          unit: 'FLAT',
+          quantity: 1,
+          rateMinorUnits: 200,
+          amountMinorUnits: 200,
+        },
+      ]),
+    );
 
     const events = await auditEventRepository.find({
       where: { entityType: 'invoice', entityId: inv.id },
@@ -282,7 +288,7 @@ describe('Billing (e2e)', () => {
     ).body.data.invoice;
     const storedLinesBefore = await invoiceLineRepository.find({
       where: { invoiceId: inv.id as string },
-      order: { createdAt: 'ASC' },
+      order: { createdAt: 'ASC', id: 'ASC' },
     });
     const storedInvoiceBefore = await invoiceRepository.findOneByOrFail({
       id: inv.id as string,
@@ -319,7 +325,7 @@ describe('Billing (e2e)', () => {
 
     const storedLinesAfter = await invoiceLineRepository.find({
       where: { invoiceId: inv.id as string },
-      order: { createdAt: 'ASC' },
+      order: { createdAt: 'ASC', id: 'ASC' },
     });
     expect(storedLinesAfter).toEqual(storedLinesBefore);
     expect(
