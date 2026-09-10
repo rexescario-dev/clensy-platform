@@ -66,6 +66,12 @@ lerna-debug.log*
 # Superpowers SDD scratch workspace (ledgers, briefs, reports, review diffs)
 .superpowers/
 
+# Isolated git worktrees created under the repo (Superpowers / local agents)
+.worktrees/
+
+# Accidental in-repo pnpm store (use the user-level store, never commit this)
+.pnpm-store/
+
 # Runtime data
 pids
 *.pid
