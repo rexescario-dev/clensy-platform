@@ -29,9 +29,6 @@ export function AppSidebar({ mobileNavOpen, onMobileNavClose }: AppSidebarProps)
   const [collapsed, setCollapsed] = useSidebarCollapsed();
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
   const onMobileNavCloseRef = useRef(onMobileNavClose);
-  const mobileSheetRef = useRef<HTMLDivElement>(null);
-  const mobileTriggerRef = useRef<HTMLElement | null>(null);
-  const mobileWasOpenRef = useRef(false);
   const activeHref = findActiveHref(pathname ?? '');
 
   useEffect(() => {
@@ -41,22 +38,6 @@ export function AppSidebar({ mobileNavOpen, onMobileNavClose }: AppSidebarProps)
   useEffect(() => {
     onMobileNavCloseRef.current();
   }, [pathname]);
-
-  useEffect(() => {
-    if (mobileNavOpen) {
-      if (
-        document.activeElement instanceof HTMLElement &&
-        !mobileSheetRef.current?.contains(document.activeElement)
-      ) {
-        mobileTriggerRef.current = document.activeElement;
-      }
-      mobileSheetRef.current?.focus();
-    } else if (mobileWasOpenRef.current) {
-      mobileTriggerRef.current?.focus();
-    }
-
-    mobileWasOpenRef.current = mobileNavOpen;
-  }, [mobileNavOpen]);
 
   return (
     <>
@@ -104,15 +85,8 @@ export function AppSidebar({ mobileNavOpen, onMobileNavClose }: AppSidebarProps)
         }}
       >
         <SheetContent
-          key={mobileNavOpen ? 'open' : 'closed'}
-          ref={mobileSheetRef}
           side="left"
           portalContainer={portalContainer}
-          forceMount
-          inert={!mobileNavOpen}
-          onCloseAutoFocus={(event) => {
-            event.preventDefault();
-          }}
           className="w-64 gap-0 border-sidebar-border bg-sidebar p-0 text-sidebar-foreground sm:max-w-64 md:hidden"
           showCloseButton={false}
         >
