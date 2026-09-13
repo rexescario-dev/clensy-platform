@@ -1,0 +1,27 @@
+{
+  "groups": {
+    "operations": "Operations",
+    "people": "People",
+    "catalog": "Catalog",
+    "administration": "Administration"
+  },
+  "items": {
+    "bookings": "Bookings",
+    "jobs": "Jobs",
+    "laundry": "Laundry",
+    "invoices": "Invoices",
+    "customers": "Customers",
+    "cleaners": "Cleaners",
+    "teams": "Teams",
+    "services": "Services",
+    "addOns": "Add-ons",
+    "staff": "Staff"
+  },
+  "sidebar": {
+    "primary": "Primary",
+    "expand": "Expand sidebar",
+    "collapse": "Collapse sidebar",
+    "collapseLabel": "Collapse",
+    "mobileTitle": "Primary navigation"
+  }
+}
