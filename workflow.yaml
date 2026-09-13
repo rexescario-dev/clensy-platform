@@ -4,6 +4,8 @@ workflow:
   packages:
     generic: 1.2.0
     claude: 0.1.0
+    ui-ux-claude: 0.1.0
+    ui-ux: 0.1.0
   assets:
     - path: docs/workflows/README.md
       package: generic
@@ -61,8 +63,44 @@ workflow:
       package: claude
       version: 0.1.0
       digest: sha256:e3d2e0dfd8f8a03ea9121c2be82029a882d0d86dce28d7b063f13e9ae6c7cc96
+    - path: .claude/skills/ui-ux/SKILL.md
+      package: ui-ux-claude
+      version: 0.1.0
+      digest: sha256:7c572d97065492fef178c47b7dcb0ce7218405946b5212f10657cab728b7aab9
+    - path: docs/skills/ui-ux/README.md
+      package: ui-ux
+      version: 0.1.0
+      digest: sha256:31c33b16bd52f07c572569069119aaa20e7af2b9615ba35c2f1f38760b675809
+    - path: docs/skills/ui-ux/reconnaissance.md
+      package: ui-ux
+      version: 0.1.0
+      digest: sha256:0f04a0f6cfd1686b4e93db264adc830ea7a26a18f1bd44b1824d557022966e0b
+    - path: docs/skills/ui-ux/design-direction.md
+      package: ui-ux
+      version: 0.1.0
+      digest: sha256:1e1fad816a8dfd4107940e81df38c00f19f73da15f5623c09c9bb398e31b3d60
+    - path: docs/skills/ui-ux/accessibility.md
+      package: ui-ux
+      version: 0.1.0
+      digest: sha256:29155ea1a784c1e4e3c3871135e3b1364772c4dd17270197fbecf33b2d2244cd
+    - path: docs/skills/ui-ux/forms.md
+      package: ui-ux
+      version: 0.1.0
+      digest: sha256:5851e39dbe26f86bc71b59c0d8cf08422b13443b7806279af193bd4f3a6802e6
+    - path: docs/skills/ui-ux/internationalization.md
+      package: ui-ux
+      version: 0.1.0
+      digest: sha256:fa3bb41009df1f3e3fdb209404a41a500bdbfc9c67eca714c859bb52c540f3f0
+    - path: docs/skills/ui-ux/visual-consistency.md
+      package: ui-ux
+      version: 0.1.0
+      digest: sha256:5850c22beb4b127b3ab119176bfa47ff4efa112e2615fa085d50e5a1ac0ae344
+    - path: docs/skills/ui-ux/verification.md
+      package: ui-ux
+      version: 0.1.0
+      digest: sha256:359bf9ab9d5187781b5a46f82bf21a9ded6bcbf9d99d4da28d285ecbe243cf76
   installation:
-    installedAt: 2026-08-14T13:19:30.994Z
+    installedAt: 2026-09-13T04:18:57.693Z
     toolVersion: 0.0.0
     catalogId: local
   providers:
