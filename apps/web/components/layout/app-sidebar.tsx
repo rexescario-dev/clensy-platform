@@ -1,6 +1,7 @@
 'use client';
 
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -25,6 +26,7 @@ export interface AppSidebarProps {
 }
 
 export function AppSidebar({ mobileNavOpen, onMobileNavClose }: AppSidebarProps) {
+  const t = useTranslations('nav');
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useSidebarCollapsed();
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
@@ -42,7 +44,7 @@ export function AppSidebar({ mobileNavOpen, onMobileNavClose }: AppSidebarProps)
   return (
     <>
       <nav
-        aria-label="Primary"
+        aria-label={t('sidebar.primary')}
         className={cn(
           'hidden shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] md:flex',
           collapsed ? 'w-16' : 'w-56',
@@ -57,6 +59,7 @@ export function AppSidebar({ mobileNavOpen, onMobileNavClose }: AppSidebarProps)
             activeHref={activeHref}
             collapsed={collapsed}
             portalContainer={portalContainer}
+            t={t}
           />
         </div>
         <Separator />
@@ -69,10 +72,10 @@ export function AppSidebar({ mobileNavOpen, onMobileNavClose }: AppSidebarProps)
               collapsed ? 'px-0' : 'justify-start',
             )}
             onClick={() => setCollapsed(!collapsed)}
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-label={collapsed ? t('sidebar.expand') : t('sidebar.collapse')}
           >
             {collapsed ? <ChevronRight /> : <ChevronLeft />}
-            {!collapsed ? <span>Collapse</span> : null}
+            {!collapsed ? <span>{t('sidebar.collapseLabel')}</span> : null}
           </Button>
         </div>
       </nav>
@@ -90,8 +93,8 @@ export function AppSidebar({ mobileNavOpen, onMobileNavClose }: AppSidebarProps)
           className="w-64 gap-0 border-sidebar-border bg-sidebar p-0 text-sidebar-foreground sm:max-w-64 md:hidden"
           showCloseButton={false}
         >
-          <SheetTitle className="sr-only">Primary navigation</SheetTitle>
-          <nav aria-label="Primary" className="flex h-full flex-col">
+          <SheetTitle className="sr-only">{t('sidebar.mobileTitle')}</SheetTitle>
+          <nav aria-label={t('sidebar.primary')} className="flex h-full flex-col">
             <div className="p-4">
               <BrandMark name="Clensy" tagline="Laundry" />
             </div>
@@ -101,6 +104,7 @@ export function AppSidebar({ mobileNavOpen, onMobileNavClose }: AppSidebarProps)
                 activeHref={activeHref}
                 collapsed={false}
                 portalContainer={portalContainer}
+                t={t}
               />
             </div>
           </nav>
@@ -120,19 +124,21 @@ function SidebarNavigation({
   activeHref,
   collapsed,
   portalContainer,
+  t,
 }: {
   activeHref?: string;
   collapsed: boolean;
   portalContainer: HTMLElement | null;
+  t: ReturnType<typeof useTranslations<'nav'>>;
 }) {
   return (
     <TooltipProvider>
       <div className="flex flex-col gap-6 px-2">
         {NAV_GROUPS.map((group) => (
-          <div key={group.label} className="flex flex-col gap-1">
+          <div key={group.labelKey} className="flex flex-col gap-1">
             {!collapsed ? (
               <p className="px-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {group.label}
+                {t(group.labelKey)}
               </p>
             ) : null}
             {group.items.map((item) => (
@@ -141,7 +147,7 @@ function SidebarNavigation({
                 active={item.href === activeHref}
                 collapsed={collapsed}
                 href={item.href}
-                label={item.label}
+                label={t(item.labelKey)}
                 portalContainer={portalContainer}
               />
             ))}
