@@ -261,7 +261,7 @@ git commit -m "test(web): add i18n message catalogs and resolution tests"
 - Consumes: `getMessages` (Task 1)
 - Produces: `<html lang>` sourced from `getLocale()`; `NextIntlClientProvider` ancestor for all of `apps/web`
 
-- [ ] **Step 1: `apps/web/i18n/request.ts`**
+- [x] **Step 1: `apps/web/i18n/request.ts`**
 
 ```ts
 import { getRequestConfig } from 'next-intl/server';
@@ -351,7 +351,7 @@ git commit -m "feat(web): wire next-intl request config and root layout locale"
 **Interfaces:**
 - Produces: an ESLint error on any `apps/web` file outside `i18n/` importing `messages/**` **or** `i18n/messages` directly, via either a relative import or the `@/*` → `apps/web/*` alias (`apps/web/tsconfig.json`) — both forms are in active use in this codebase, so the pattern must catch both.
 
-- [ ] **Step 1: Add the restriction**
+- [x] **Step 1: Add the restriction**
 
 ```js
 // @ts-check
@@ -370,7 +370,11 @@ export default tseslint.config(
   },
   {
     files: ['**/*.{ts,tsx}'],
-    ignores: ['i18n/**'],
+    // `lib/i18n-rendering.test.tsx` is the one deliberate exception outside
+    // `i18n/**`: it exercises the real getMessages() -> NextIntlClientProvider
+    // -> useTranslations() path (spec §6) and must import getMessages directly
+    // to do so.
+    ignores: ['i18n/**', 'lib/i18n-rendering.test.tsx'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -396,9 +400,9 @@ export default tseslint.config(
 
 Both `group` entries use `**` so they match a source string regardless of how many leading segments precede `messages`/`i18n` — this is what makes them fire for both a relative import (`../messages/en/auth.json`, `../i18n/messages`) and the `@/*` alias (`@/messages/en/auth.json`, `@/i18n/messages`), since `apps/web/tsconfig.json` maps `@/*` to `apps/web/*`.
 
-- [ ] **Step 2: Verify the rule fires for every import form it must catch, and doesn't false-positive**
+- [x] **Step 2: Verify the rule fires for every import form it must catch, and doesn't false-positive**
 
-Temporarily add each of the following to a non-`i18n/` file (e.g. `apps/web/components/layout/app-sidebar.tsx`), confirm `pnpm --filter web lint` fails for each, then remove them:
+Temporarily added each of the following to `apps/web/components/layout/app-sidebar.tsx`, confirmed `pnpm --filter web lint` failed for all four (one `no-restricted-imports` error each, per the message for its group), then removed them:
 
 ```ts
 import x from '../../messages/en/auth.json'; // relative catalog import
@@ -407,11 +411,11 @@ import { getMessages } from '../../i18n/messages'; // relative internal-module i
 import { getMessages as getMessages2 } from '@/i18n/messages'; // aliased internal-module import
 ```
 
-Then confirm no false positive: `apps/web/i18n/messages.ts` (imports all four catalogs) and `apps/web/i18n/request.ts` (imports `getMessages` from `./messages`) both still lint clean, since both are inside the `i18n/**` ignore.
+**False positive found and fixed:** the first lint run also flagged `apps/web/lib/i18n-rendering.test.tsx` (Task 1), which legitimately imports `getMessages` from `../i18n/messages` to exercise the real resolution path per spec §6 — that file lives under `lib/`, not `i18n/`, so the original `ignores: ['i18n/**']` didn't cover it. Fixed by adding the exact file to `ignores` (Step 1's snippet above already reflects this) rather than broadening the ignore to a `*.test.*` glob, which would have let any test bypass the restriction. Confirmed no other false positive: `apps/web/i18n/messages.ts` and `apps/web/i18n/request.ts` both still lint clean (inside `i18n/**`), and `lib/i18n-rendering.test.tsx` now lints clean too.
 
-- [ ] **Step 3: `pnpm --filter web lint` — expect PASS**
+- [x] **Step 3: `pnpm --filter web lint` — expect PASS**
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/web/eslint.config.mjs
