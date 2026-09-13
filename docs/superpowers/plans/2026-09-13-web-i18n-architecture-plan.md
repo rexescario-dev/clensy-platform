@@ -432,7 +432,7 @@ git commit -m "chore(web): forbid importing i18n message catalogs outside i18n/"
 **Interfaces:**
 - Consumes: `useTranslations('auth')`
 
-- [ ] **Step 1: Replace hardcoded strings**
+- [x] **Step 1: Replace hardcoded strings**
 
 ```tsx
 'use client';
@@ -512,9 +512,9 @@ export default function LoginPage() {
 }
 ```
 
-- [ ] **Step 2: `pnpm --filter web lint` and `pnpm --filter web build`**
+- [x] **Step 2: `pnpm --filter web lint` and `pnpm --filter web build`**
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/web/app/login/page.tsx
@@ -533,7 +533,7 @@ git commit -m "feat(web): migrate login page copy to next-intl keys"
 - Produces: `NavItem { href: string; labelKey: string }`, `NavGroup { labelKey: string; items: NavItem[] }`
 - `findActiveHref` signature and behavior unchanged
 
-- [ ] **Step 1: Establish the existing regression baseline**
+- [x] **Step 1: Establish the existing regression baseline**
 
 ```bash
 pnpm --filter web test -- nav-groups
@@ -541,7 +541,7 @@ pnpm --filter web test -- nav-groups
 
 This is a baseline check, not a TDD red step — `findActiveHref` only reads `href` and is unaffected by the `label` → `labelKey` rename, so it's expected to pass now and to still pass after Step 2. Re-run after Step 2 to confirm no regression.
 
-- [ ] **Step 2: Update `nav-groups.ts`**
+- [x] **Step 2: Update `nav-groups.ts`**
 
 ```ts
 export interface NavItem {
@@ -598,7 +598,7 @@ export function findActiveHref(pathname: string): string | undefined {
 }
 ```
 
-- [ ] **Step 3: Update `app-sidebar.tsx` to resolve every label/aria-label via `useTranslations('nav')`**
+- [x] **Step 3: Update `app-sidebar.tsx` to resolve every label/aria-label via `useTranslations('nav')`**
 
 Key changes to the existing file (full rewrite not required — apply in place):
 
@@ -611,11 +611,11 @@ Key changes to the existing file (full rewrite not required — apply in place):
 - `group.label` → `t(group.labelKey)`; use `group.labelKey` as the React `key` where `group.label` was previously used as the key (`key={group.label}` → `key={group.labelKey}`).
 - `item.label` → resolve once as `const label = t(item.labelKey)` inside `NavigationLink`, then use `label` everywhere that function currently uses its `label` prop (display text, `aria-label`, `label.charAt(0)` for the collapsed icon letter, tooltip content). The `label` **prop name** on `NavigationLink` may stay (planning-level naming — spec's key-only invariant is about `NavItem`/`NavGroup`'s data shape, not internal component prop names); pass `t(item.labelKey)` as its value from `SidebarNavigation`.
 
-- [ ] **Step 4: `pnpm --filter web test` — `nav-groups.test.ts` and `web-shell-regressions.test.ts` still pass**
+- [x] **Step 4: `pnpm --filter web test` — `nav-groups.test.ts` and `web-shell-regressions.test.ts` still pass**
 
-- [ ] **Step 5: `pnpm --filter web lint` and `pnpm --filter web build`**
+- [x] **Step 5: `pnpm --filter web lint` and `pnpm --filter web build`**
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/web/lib/nav-groups.ts apps/web/components/layout/app-sidebar.tsx
@@ -631,13 +631,13 @@ git commit -m "feat(web): migrate NAV_GROUPS and sidebar to next-intl keys"
 
 **Interfaces:** none (documentation only)
 
-- [ ] **Step 1: Inspect `apps/web` for an existing README**
+- [x] **Step 1: Inspect `apps/web` for an existing README**
 
 ```bash
 ls apps/web/README.md 2>/dev/null
 ```
 
-- [ ] **Step 2: Write the doc**
+- [x] **Step 2: Write the doc**
 
 Cover, briefly:
 - Catalog location (`apps/web/messages/en/*.json`) and the four current namespaces.
@@ -646,7 +646,7 @@ Cover, briefly:
 - The rule: `@clensy/ui` MUST NOT import `next-intl` or hold a Clensy message catalog — callers translate, `@clensy/ui` renders translated strings.
 - Documented (not implemented) contracts for future work, per spec §4.5–§4.6: the `{ field, rule, params }` structured-validation-error shape validation.json is meant to compose with (#51), and the `normalizeApiError` flow (`API error → stable error metadata when available → rule key → validation.<rule>`, falling back to a generic `common.errors.requestFailed` string that does not yet exist in the catalog).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/web/README.md
@@ -659,22 +659,24 @@ git commit -m "docs(web): document the next-intl catalog and key conventions"
 
 **Files:** none new unless a compatibility fix surfaces (then the smallest change to the affected file).
 
-- [ ] **Step 1: `pnpm --filter web lint && pnpm --filter web test && pnpm --filter web build`**
+- [x] **Step 1: `pnpm --filter web lint && pnpm --filter web test && pnpm --filter web build`**
 
-- [ ] **Step 2: Manual golden path (spec §6)**
+- [x] **Step 2: Manual golden path (spec §6)**
 
-1. `/login` renders the same visible English (title, field labels, button states, generic failure message on a bad login attempt) as before this plan.
-2. `<html lang="en">` in the rendered page source (View Source, not DevTools-mutated DOM) — confirms it came from `getLocale()`, not a leftover literal.
-3. Every `NAV_GROUPS` sidebar item shows the same visible label as before; collapse toggle `aria-label`/visible text and collapsed-item `aria-label`s are correct; opening the mobile Sheet still announces the same "Primary navigation" screen-reader title.
-4. `findActiveHref` behavior unchanged: `/app/cleaners/teams` highlights Teams, not Cleaners (same as `nav-groups.test.ts`).
-5. Old-path redirects in `next.config.ts` still work (spot-check one, e.g. `/customers` → `/app/customers`).
-6. Signed-out `/app` still redirects to `/login` (middleware unaffected).
+Verified 1–3 and 5 directly against the production build's prerendered static HTML (`apps/web/.next/server/app/{login,app/customers}.html`) rather than a live browser session, since every route involved renders statically for an unauthenticated/default request:
 
-- [ ] **Step 3: `formatMinorUnits` regression spot check**
+1. `/login` renders the same visible English (title: "Clensy Admin Login"; labels: "Email", "Password"; button: "Sign in"; error key present) as before this plan. **Confirmed.**
+2. `<html lang="en">` present in the rendered page source. **Confirmed** — came from `getLocale()`, not the old literal (the source line was changed to `<html lang={locale}>`).
+3. Every `NAV_GROUPS` sidebar item (all 10) and both group-heading/aria-label sets ("Expand sidebar", "Collapse sidebar", "Primary navigation") render identically to before. **Confirmed.**
+4. `findActiveHref` behavior unchanged. **Confirmed** — `apps/web/lib/nav-groups.test.ts` (unchanged assertions) still passes (Step 1, and Task 5 Step 4).
+5. Old-path redirects in `next.config.ts` still work. **Confirmed by inspection** — re-read the full `redirects()` array after Task 2's edit; all 12 entries present and unmodified (only the plugin wrapper and import were added).
+6. Signed-out `/app` still redirects to `/login`. **Not independently re-verified in this session** — `apps/web/middleware.ts` was not opened or modified by any task (confirmed via `git diff` in Step 3 below), and its cookie-presence logic is unrelated to anything this plan touched, so no regression path exists. A live click-through was not run.
 
-Confirm `apps/web/lib/format-price.ts` is untouched (`git diff` shows no changes to that file).
+- [x] **Step 3: `formatMinorUnits` regression spot check**
 
-- [ ] **Step 4: Clean tree**
+Confirmed via `git diff --stat main...HEAD -- apps/web/middleware.ts apps/web/lib/format-price.ts`: empty output — neither file appears in this branch's diff at all.
+
+- [x] **Step 4: Clean tree**
 
 ```bash
 git status --short
@@ -682,13 +684,7 @@ git status --short
 
 Only intentional Task 1–6 files. Confirm no `next-intl` artifacts leaked into `packages/ui` or `apps/api`.
 
-- [ ] **Step 5: Commit only if Step 1 required a fix**
-
-```bash
-git commit -m "fix(web): next-intl build/lint compatibility fix"
-```
-
-Otherwise no commit.
+- [x] **Step 5: N/A — Step 1 passed cleanly on the first run; no compatibility fix was needed, so no commit here.**
 
 ---
 
