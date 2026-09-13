@@ -93,7 +93,7 @@ export class AdminResolver {
   // Public: no `AuthGuard`, no `@Roles()`. Callable without a session —
   // idempotent, safe to call even if already logged out.
   @Mutation(() => Boolean)
-  async logout(@Context() context: GqlContext): Promise<boolean> {
+  logout(@Context() context: GqlContext): boolean {
     this.clearSessionCookie(context.res);
     return true;
   }

@@ -14,18 +14,21 @@ import {
 import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
 import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
+import type { CleanerType as CleanerTypeClass } from './cleaner.type';
 
-const VIEW_ROLES = [
-  Role.OWNER,
-  Role.OPS_MANAGER,
-  Role.SCHEDULER,
-  Role.ANALYST,
-];
+const VIEW_ROLES = [Role.OWNER, Role.OPS_MANAGER, Role.SCHEDULER, Role.ANALYST];
 
-function cleanerDto() {
-  // Lazy thunk: CleanerType imports TeamType.
-  return require('./cleaner.type').CleanerType;
+/* eslint-disable @typescript-eslint/no-require-imports -- Lazy thunk below:
+   CleanerType imports TeamType, so this must stay a runtime require() (not
+   a static import) to avoid a circular import; the `type` import above
+   gives it a real type without pulling in a runtime cycle. */
+function cleanerDto(): typeof CleanerTypeClass {
+  const cleanerModule = require('./cleaner.type') as {
+    CleanerType: typeof CleanerTypeClass;
+  };
+  return cleanerModule.CleanerType;
 }
+/* eslint-enable @typescript-eslint/no-require-imports */
 
 // Nested `cleaners` is Relatable-owned; do not add a Clensy `@ResolveField`.
 @ObjectType('Team')

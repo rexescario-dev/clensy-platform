@@ -15,6 +15,7 @@ import {
 import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
 import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
+import type { BookingDTO as BookingDTOClass } from '../../../bookings/presentation/graphql/booking.dto';
 
 const BOOKING_VIEW_ROLES = [
   Role.OWNER,
@@ -25,11 +26,18 @@ const BOOKING_VIEW_ROLES = [
   Role.ANALYST,
 ];
 
-function bookingDto() {
-  // Lazy thunk: BookingDTO already imports PropertyType.
-  return require('../../../bookings/presentation/graphql/booking.dto')
-    .BookingDTO;
+/* eslint-disable @typescript-eslint/no-require-imports -- Lazy thunk below:
+   BookingDTO already imports PropertyType, so this must stay a runtime
+   require() (not a static import) to avoid a circular import; the `type`
+   import above gives it a real type without pulling in a runtime cycle. */
+function bookingDto(): typeof BookingDTOClass {
+  const bookingModule =
+    require('../../../bookings/presentation/graphql/booking.dto') as {
+      BookingDTO: typeof BookingDTOClass;
+    };
+  return bookingModule.BookingDTO;
 }
+/* eslint-enable @typescript-eslint/no-require-imports */
 
 const PROPERTY_SORT = [
   { field: 'createdAt' as const, direction: SortDirection.DESC },
