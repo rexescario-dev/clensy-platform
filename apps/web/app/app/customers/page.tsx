@@ -229,22 +229,26 @@ function CustomersPageContent() {
           label="Full name"
           error={createCustomerForm.formState.errors.fullName?.message}
           {...createCustomerForm.register('fullName')}
+          name="new-fullName"
         />
         <FormField
           label="Email"
           type="email"
           error={createCustomerForm.formState.errors.email?.message}
           {...createCustomerForm.register('email')}
+          name="new-email"
         />
         <FormField
           label="Phone"
           error={createCustomerForm.formState.errors.phone?.message}
           {...createCustomerForm.register('phone')}
+          name="new-phone"
         />
         <FormField
           label="Notes"
           error={createCustomerForm.formState.errors.notes?.message}
           {...createCustomerForm.register('notes')}
+          name="new-notes"
         />
         {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
       </FormDialog>
