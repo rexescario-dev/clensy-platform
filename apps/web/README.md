@@ -7,3 +7,32 @@ Full application shell (sidebar/header/user menu/logout) mounted once for every 
 - `docker compose up -d --build` (from the repo root) — runs this app on port 3001 (matches `apps/api`'s `WEB_ORIGIN` CORS default) alongside `apps/api` and Postgres. See the root `README.md`'s "Setup" section.
 - `pnpm --filter web build` — production build.
 - See `.env.example` for the `NEXT_PUBLIC_API_URL` env var consumed by `@clensy/client`.
+
+## i18n
+
+`next-intl` is wired for a single locale, `en` (see [the design spec](../../docs/superpowers/specs/2026-09-13-web-i18n-architecture-design.md) for the full architecture). No second language ships yet, and no locale-prefixed routing exists — this is about getting product copy behind translation keys, not about shipping translations.
+
+**Catalogs** live at `apps/web/messages/en/*.json`, one file per namespace. Current namespaces: `common` (empty for now), `nav`, `auth`, `validation`. `apps/web/i18n/messages.ts` merges them; `apps/web/i18n/request.ts` is the next-intl plugin/runtime entry point that resolves the locale (always `en`) and calls it.
+
+**Adding a key:** add it to the right namespace's JSON file (or a new namespace file, if you also add it to `i18n/messages.ts`'s merge), then consume it:
+
+```tsx
+'use client';
+import { useTranslations } from 'next-intl';
+
+const t = useTranslations('auth');
+t('title'); // -> the string at messages/en/auth.json's "title" key
+```
+
+A server component uses `getTranslations` (`next-intl/server`) against the same catalogs instead.
+
+**Rules, enforced by lint (`apps/web/eslint.config.mjs`) where possible:**
+
+- Never `import` a `messages/**` catalog file, or `i18n/messages`, directly outside `apps/web/i18n/` — always go through `useTranslations`/`getTranslations`.
+- `@clensy/ui` MUST NOT import `next-intl` or hold a Clensy message catalog. It takes already-translated strings (`label`, `error`, `title`, …) as props; `apps/web` translates, `@clensy/ui` renders.
+- A translation key is a stable identifier, not derived from its current English text — renaming the visible copy doesn't require renaming the key.
+
+**Documented but not yet implemented** (see the design spec §4.5–§4.6 for the full rationale):
+
+- A structured validation-error shape (`{ field, rule, params }`) that a future validation package (#51) can produce, rendered via `t('validation.<rule>', { field })` against `messages/en/validation.json`'s ICU templates.
+- `normalizeApiError`: `API error → stable error metadata when available → rule key → validation.<rule>`, falling back to a generic `common.errors.requestFailed` key that doesn't exist in the catalog yet (no caller needs it today).

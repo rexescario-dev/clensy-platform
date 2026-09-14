@@ -1,41 +1,41 @@
 export interface NavItem {
-  label: string;
   href: string;
+  labelKey: string;
 }
 
 export interface NavGroup {
-  label: string;
   items: NavItem[];
+  labelKey: string;
 }
 
 export const NAV_GROUPS: NavGroup[] = [
   {
     items: [
-      { href: '/app/bookings', label: 'Bookings' },
-      { href: '/app/jobs', label: 'Jobs' },
-      { href: '/app/laundry', label: 'Laundry' },
-      { href: '/app/billing', label: 'Invoices' },
+      { href: '/app/bookings', labelKey: 'items.bookings' },
+      { href: '/app/jobs', labelKey: 'items.jobs' },
+      { href: '/app/laundry', labelKey: 'items.laundry' },
+      { href: '/app/billing', labelKey: 'items.invoices' },
     ],
-    label: 'Operations',
+    labelKey: 'groups.operations',
   },
   {
     items: [
-      { href: '/app/customers', label: 'Customers' },
-      { href: '/app/cleaners', label: 'Cleaners' },
-      { href: '/app/cleaners/teams', label: 'Teams' },
+      { href: '/app/customers', labelKey: 'items.customers' },
+      { href: '/app/cleaners', labelKey: 'items.cleaners' },
+      { href: '/app/cleaners/teams', labelKey: 'items.teams' },
     ],
-    label: 'People',
+    labelKey: 'groups.people',
   },
   {
     items: [
-      { href: '/app/catalog', label: 'Services' },
-      { href: '/app/catalog/add-ons', label: 'Add-ons' },
+      { href: '/app/catalog', labelKey: 'items.services' },
+      { href: '/app/catalog/add-ons', labelKey: 'items.addOns' },
     ],
-    label: 'Catalog',
+    labelKey: 'groups.catalog',
   },
   {
-    items: [{ href: '/app/admin', label: 'Staff' }],
-    label: 'Administration',
+    items: [{ href: '/app/admin', labelKey: 'items.staff' }],
+    labelKey: 'groups.administration',
   },
 ];
 

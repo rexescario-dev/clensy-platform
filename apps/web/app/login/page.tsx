@@ -2,6 +2,7 @@
 
 import { useLoginMutation } from '@clensy/client';
 import { Button, FormField } from '@clensy/ui';
+import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { type FormEvent, useState } from 'react';
 
@@ -11,8 +12,9 @@ import { type FormEvent, useState } from 'react';
 // returns one generic, non-discriminating error message (unknown email,
 // wrong password, and disabled account are all indistinguishable) — this
 // page mirrors that by not attempting to interpret the error, just
-// displaying a fixed generic message.
+// displaying the fixed generic translated string.
 export default function LoginPage() {
+  const t = useTranslations('auth');
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -28,9 +30,9 @@ export default function LoginPage() {
         router.push('/app');
         return;
       }
-      setError('Invalid email or password.');
+      setError(t('errors.invalidCredentials'));
     } catch {
-      setError('Invalid email or password.');
+      setError(t('errors.invalidCredentials'));
     }
   }
 
@@ -40,9 +42,9 @@ export default function LoginPage() {
         onSubmit={handleSubmit}
         className="flex w-full max-w-sm flex-col gap-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
       >
-        <h1 className="text-lg font-semibold text-slate-900">Clensy Admin Login</h1>
+        <h1 className="text-lg font-semibold text-slate-900">{t('title')}</h1>
         <FormField
-          label="Email"
+          label={t('email')}
           name="email"
           type="email"
           autoComplete="username"
@@ -51,7 +53,7 @@ export default function LoginPage() {
           onChange={(event) => setEmail(event.target.value)}
         />
         <FormField
-          label="Password"
+          label={t('password')}
           name="password"
           type="password"
           autoComplete="current-password"
@@ -65,7 +67,7 @@ export default function LoginPage() {
           </p>
         ) : null}
         <Button type="submit" disabled={loading}>
-          {loading ? 'Signing in…' : 'Sign in'}
+          {loading ? t('submitting') : t('submit')}
         </Button>
       </form>
     </main>
