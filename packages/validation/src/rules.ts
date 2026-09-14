@@ -121,7 +121,7 @@ export const RULE_VALIDATORS: Record<string, RuleValidator> = {
 
   url: (value) => {
     try {
-      Boolean(new URL(String(value)));
+      new URL(String(value));
       return true;
     } catch {
       return false;
