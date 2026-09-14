@@ -227,6 +227,9 @@ importers:
       '@clensy/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@clensy/validation':
+        specifier: workspace:*
+        version: link:../../packages/validation
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -251,6 +254,9 @@ importers:
       react-dom:
         specifier: ^19.2.8
         version: 19.2.8(react@19.2.8)
+      react-hook-form:
+        specifier: ^7.88.0
+        version: 7.88.0(react@19.2.8)
       shadcn:
         specifier: ^4.21.0
         version: 4.21.0(typescript@5.9.3)
@@ -376,6 +382,30 @@ importers:
       typescript-eslint:
         specifier: ^8.20.0
         version: 8.67.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3)
+
+  packages/validation:
+    devDependencies:
+      '@eslint/js':
+        specifier: ^9.18.0
+        version: 9.39.5
+      eslint:
+        specifier: ^9.18.0
+        version: 9.39.5(jiti@2.7.0)
+      globals:
+        specifier: ^17.0.0
+        version: 17.11.0
+      react-hook-form:
+        specifier: ^7.88.0
+        version: 7.88.0(react@19.2.8)
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      typescript-eslint:
+        specifier: ^8.20.0
+        version: 8.67.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3)
+      vitest:
+        specifier: ^5.0.0
+        version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(yaml@2.9.0))
 
 packages:
 
@@ -6886,6 +6916,12 @@ packages:
     resolution: {integrity: sha512-rVprimfGBG3DR+Tq0IQG2DT5PxKth1WIGDmj5yPmlzr4YBe7uyE+Du4oVqTDXZSHGGGXRtTJEGSSePyQCMBglQ==}
     peerDependencies:
       react: ^19.2.8
+
+  react-hook-form@7.88.0:
+    resolution: {integrity: sha512-QRaLOWhX93YCnMiRfnOFRSwWXZNt8qhm2JTZwypoDvKpSffTJHmpzMXt8U6PV5UThvL3IiiLDUWe2nHMtz6Mmw==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      react: ^16.8.0 || ^17 || ^18 || ^19
 
   react-is@16.13.1:
     resolution: {integrity: sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==}
@@ -15164,6 +15200,10 @@ snapshots:
     dependencies:
       react: 19.2.8
       scheduler: 0.27.0
+
+  react-hook-form@7.88.0(react@19.2.8):
+    dependencies:
+      react: 19.2.8
 
   react-is@16.13.1: {}
 
