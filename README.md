@@ -17,6 +17,8 @@ packages/
 │             Modal, FormDialog, ConfirmDialog, DetailDrawer, PageHeader,
 │             ToastProvider/useToast, LoadingState, EmptyState, ErrorState
 ├── client/   Apollo Client + graphql-codegen-generated hooks against apps/api's schema
+├── validation/ Laravel-inspired rule strings, field-error contract, React Hook Form
+│               resolver, and GraphQL validation-error normalizer for apps/web
 ├── graphql/  not yet implemented
 ├── auth/     not yet implemented
 ├── domain/   not yet implemented
