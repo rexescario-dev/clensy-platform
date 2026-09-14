@@ -20,7 +20,9 @@ import {
   useToast,
 } from '@clensy/ui';
 import type { DataTableColumn } from '@clensy/ui';
+import { clensyResolver, normalizeApiValidationErrors, type Rules } from '@clensy/validation';
 import { type FormEvent, Suspense, useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
 import { useDetailDrawer } from '../../../lib/use-detail-drawer';
 
 // `DataTable<T>` (packages/ui) constrains `T extends Record<string, unknown>`
@@ -55,6 +57,23 @@ type CustomerDetail = {
   phone: string;
   notes: string | null;
 };
+
+// Add Customer's client-side validation contract (spec: docs/superpowers/specs/2026-09-15-clensy-validation-design.md §4.2).
+// Mirrors `CreateCustomerInput`'s real class-validator constraints — no
+// `max` length rule, since the backend DTO has none.
+interface CreateCustomerFormValues {
+  fullName: string;
+  email: string;
+  phone: string;
+  notes?: string;
+}
+
+const createCustomerRules = {
+  email: 'required|email',
+  fullName: 'required|string',
+  notes: 'nullable|string',
+  phone: 'required|string',
+} satisfies Rules<CreateCustomerFormValues>;
 
 type PropertyFormState = {
   label: string;
@@ -117,43 +136,45 @@ function CustomersPageContent() {
   const { activeId, open: openDetail, close: closeDetail } = useDetailDrawer();
 
   const [formOpen, setFormOpen] = useState(false);
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [notes, setNotes] = useState('');
   const [formError, setFormError] = useState<string | undefined>(undefined);
-
-  function resetForm() {
-    setFullName('');
-    setEmail('');
-    setPhone('');
-    setNotes('');
-    setFormError(undefined);
-  }
+  const createCustomerForm = useForm<CreateCustomerFormValues>({
+    resolver: clensyResolver<CreateCustomerFormValues>(createCustomerRules),
+  });
 
   function openCreateForm() {
-    resetForm();
+    createCustomerForm.reset();
+    setFormError(undefined);
     setFormOpen(true);
   }
 
-  async function handleCreateSubmit() {
+  async function handleCreateSubmit(values: CreateCustomerFormValues) {
     setFormError(undefined);
     try {
       await createCustomer({
         variables: {
           input: {
-            email,
-            fullName,
-            notes: notes.trim() === '' ? undefined : notes,
-            phone,
+            email: values.email,
+            fullName: values.fullName,
+            notes: values.notes?.trim() === '' ? undefined : values.notes,
+            phone: values.phone,
           },
         },
       });
       setFormOpen(false);
-      resetForm();
+      createCustomerForm.reset();
       await refetch();
-    } catch {
-      setFormError('Unable to create customer.');
+    } catch (err) {
+      const fieldErrors = normalizeApiValidationErrors(err, ['fullName', 'email', 'phone', 'notes']);
+      if (fieldErrors) {
+        for (const [field, messages] of Object.entries(fieldErrors)) {
+          createCustomerForm.setError(field as keyof CreateCustomerFormValues, {
+            type: 'server',
+            message: messages[0],
+          });
+        }
+      } else {
+        setFormError('Unable to create customer.');
+      }
     }
   }
 
@@ -200,37 +221,30 @@ function CustomersPageContent() {
         open={formOpen}
         onClose={() => setFormOpen(false)}
         title="Add customer"
-        onSubmit={handleCreateSubmit}
+        onSubmit={createCustomerForm.handleSubmit(handleCreateSubmit)}
         submitLabel={creating ? 'Creating…' : 'Add customer'}
         submitting={creating}
       >
         <FormField
           label="Full name"
-          name="new-fullName"
-          required
-          value={fullName}
-          onChange={(event) => setFullName(event.target.value)}
+          error={createCustomerForm.formState.errors.fullName?.message}
+          {...createCustomerForm.register('fullName')}
         />
         <FormField
           label="Email"
-          name="new-email"
           type="email"
-          required
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
+          error={createCustomerForm.formState.errors.email?.message}
+          {...createCustomerForm.register('email')}
         />
         <FormField
           label="Phone"
-          name="new-phone"
-          required
-          value={phone}
-          onChange={(event) => setPhone(event.target.value)}
+          error={createCustomerForm.formState.errors.phone?.message}
+          {...createCustomerForm.register('phone')}
         />
         <FormField
           label="Notes"
-          name="new-notes"
-          value={notes}
-          onChange={(event) => setNotes(event.target.value)}
+          error={createCustomerForm.formState.errors.notes?.message}
+          {...createCustomerForm.register('notes')}
         />
         {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
       </FormDialog>
