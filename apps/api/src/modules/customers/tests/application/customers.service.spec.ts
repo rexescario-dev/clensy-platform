@@ -37,16 +37,16 @@ describe('CustomersService', () => {
           ...data,
         }),
       ),
-      save: jest.fn((entity: unknown) => Promise.resolve(entity)),
       findOneBy: jest.fn(),
+      save: jest.fn((entity: unknown) => Promise.resolve(entity)),
     };
     dataSource = {
       transaction: jest.fn((cb: (manager: unknown) => unknown) => cb(manager)),
     };
     customerRepository = {
       find: jest.fn(),
-      findOneBy: jest.fn(),
       findBy: jest.fn(),
+      findOneBy: jest.fn(),
     };
     auditLogger = { log: jest.fn().mockResolvedValue(undefined) };
 
@@ -85,11 +85,11 @@ describe('CustomersService', () => {
     it('does not leak actorId from the command onto the returned entity', async () => {
       manager.findOneBy.mockResolvedValue({
         id: 'customer-1',
-        fullName: 'Jane Doe',
-        email: 'jane@example.com',
-        phone: '555-0100',
-        notes: null,
         createdAt: new Date(),
+        email: 'jane@example.com',
+        fullName: 'Jane Doe',
+        notes: null,
+        phone: '555-0100',
         updatedAt: new Date(),
       });
 
@@ -113,8 +113,8 @@ describe('CustomersService', () => {
         await expect(
           service.create({
             actorId: 'actor-1',
-            fullName: 'Jane Doe',
             email: 'jane@example.com',
+            fullName: 'Jane Doe',
             phone: '555-0100',
             ...override,
           }),
@@ -136,11 +136,11 @@ describe('CustomersService', () => {
       async (_field, override) => {
         manager.findOneBy.mockResolvedValue({
           id: 'customer-1',
-          fullName: 'Jane Doe',
-          email: 'jane@example.com',
-          phone: '555-0100',
-          notes: null,
           createdAt: new Date(),
+          email: 'jane@example.com',
+          fullName: 'Jane Doe',
+          notes: null,
+          phone: '555-0100',
           updatedAt: new Date(),
         });
 
@@ -158,11 +158,11 @@ describe('CustomersService', () => {
     it('returns the customer for an existing id', async () => {
       const customer = {
         id: 'customer-1',
-        fullName: 'Jane Doe',
-        email: 'jane@example.com',
-        phone: '555-0100',
-        notes: null,
         createdAt: new Date(),
+        email: 'jane@example.com',
+        fullName: 'Jane Doe',
+        notes: null,
+        phone: '555-0100',
         updatedAt: new Date(),
       };
       customerRepository.findOneBy.mockResolvedValue(customer);
@@ -187,11 +187,11 @@ describe('CustomersService', () => {
       const customers = [
         {
           id: 'customer-1',
-          fullName: 'Jane Doe',
-          email: 'jane@example.com',
-          phone: '555-0100',
-          notes: null,
           createdAt: new Date(),
+          email: 'jane@example.com',
+          fullName: 'Jane Doe',
+          notes: null,
+          phone: '555-0100',
           updatedAt: new Date(),
         },
       ];
@@ -212,11 +212,11 @@ describe('CustomersService', () => {
       const customers = [
         {
           id: 'customer-1',
-          fullName: 'Jane Doe',
-          email: 'jane@example.com',
-          phone: '555-0100',
-          notes: null,
           createdAt: new Date(),
+          email: 'jane@example.com',
+          fullName: 'Jane Doe',
+          notes: null,
+          phone: '555-0100',
           updatedAt: new Date(),
         },
       ];

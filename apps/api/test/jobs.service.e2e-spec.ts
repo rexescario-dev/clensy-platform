@@ -32,11 +32,6 @@ import {
 
 function createTestDataSource(): DataSource {
   return new DataSource({
-    type: 'postgres',
-    host: process.env.DB_HOST ?? 'localhost',
-    port: Number(process.env.DB_PORT ?? 5432),
-    username: process.env.DB_USERNAME ?? 'clensy',
-    password: process.env.DB_PASSWORD ?? 'clensy_dev',
     database: process.env.DB_NAME ?? 'clensy',
     entities: [
       CleaningJobEntity,
@@ -51,6 +46,11 @@ function createTestDataSource(): DataSource {
       CleanerEntity, // TeamEntity#cleaners inverse metadata
       AuditEventEntity,
     ],
+    host: process.env.DB_HOST ?? 'localhost',
+    password: process.env.DB_PASSWORD ?? 'clensy_dev',
+    port: Number(process.env.DB_PORT ?? 5432),
+    type: 'postgres',
+    username: process.env.DB_USERNAME ?? 'clensy',
   });
 }
 
@@ -140,28 +140,28 @@ describe('JobsService (real Postgres)', () => {
   async function createFixture() {
     const customer = await customersService.create({
       actorId: 'actor-1',
-      fullName: 'Jane Doe',
       email: 'jane@example.com',
+      fullName: 'Jane Doe',
       phone: '555-0100',
     });
     const property = await propertiesService.create({
       actorId: 'actor-1',
       customerId: customer.id,
-      label: 'Home',
       addressLine1: '1 Main St',
       city: 'City',
-      region: 'Region',
+      label: 'Home',
       postalCode: '00000',
+      region: 'Region',
     });
     const service = await servicesService.createService({
       actorId: 'actor-1',
-      name: 'Standard Clean',
       durationMinutes: 60,
+      name: 'Standard Clean',
     });
     await pricingRulesService.createPricingRule({
       actorId: 'actor-1',
-      serviceId: service.id,
       priceMinorUnits: 5000,
+      serviceId: service.id,
     });
     const team = await teamsService.createTeam({
       actorId: 'actor-1',
@@ -212,15 +212,15 @@ describe('JobsService (real Postgres)', () => {
     expect(
       [...items]
         .sort((a, b) => a.position - b.position)
-        .map((item) => ({ position: item.position, label: item.label })),
+        .map((item) => ({ label: item.label, position: item.position })),
     ).toEqual([...DEFAULT_CHECKLIST_ITEMS]);
 
     expect(auditLogger.log).toHaveBeenCalledWith(
       expect.objectContaining({
         actorId: 'actor-1',
+        entityId: job.id,
         action: 'job.create',
         entityType: 'job',
-        entityId: job.id,
       }),
     );
   });
@@ -400,20 +400,20 @@ describe('JobsService (real Postgres)', () => {
     });
     expect(byName.UQ_checklist_job_id).toMatchObject({ contype: 'u' });
     expect(byName.fk_cleaning_job_booking).toMatchObject({
-      contype: 'f',
       confdeltype: 'r',
+      contype: 'f',
     });
     expect(byName.fk_cleaning_job_team).toMatchObject({
-      contype: 'f',
       confdeltype: 'r',
+      contype: 'f',
     });
     expect(byName.fk_checklist_job).toMatchObject({
-      contype: 'f',
       confdeltype: 'c',
+      contype: 'f',
     });
     expect(byName.fk_checklist_item_checklist).toMatchObject({
-      contype: 'f',
       confdeltype: 'c',
+      contype: 'f',
     });
   });
 
@@ -428,7 +428,7 @@ describe('JobsService (real Postgres)', () => {
       const items = [
         ...(await jobsService.getChecklistItemsByChecklistIds([checklist.id])),
       ].sort((a, b) => a.position - b.position);
-      return { job, team, checklist, items };
+      return { checklist, items, job, team };
     }
 
     it('assignTeam on PENDING updates teamId, bumps updatedAt, and audits; missing team is NotFound', async () => {
@@ -496,20 +496,20 @@ describe('JobsService (real Postgres)', () => {
 
       const afterFirst = await jobsService.completeChecklistItem({
         actorId: 'actor-1',
-        jobId: job.id,
         itemId: items[0].id,
+        jobId: job.id,
       });
       expect(afterFirst.status).toBe(JobStatus.IN_PROGRESS);
 
       await jobsService.completeChecklistItem({
         actorId: 'actor-1',
-        jobId: job.id,
         itemId: items[1].id,
+        jobId: job.id,
       });
       const afterLast = await jobsService.completeChecklistItem({
         actorId: 'actor-1',
-        jobId: job.id,
         itemId: items[2].id,
+        jobId: job.id,
       });
       expect(afterLast.status).toBe(JobStatus.IN_PROGRESS);
 
@@ -523,15 +523,15 @@ describe('JobsService (real Postgres)', () => {
       const { job, items } = await createdJob();
       const first = await jobsService.completeChecklistItem({
         actorId: 'actor-1',
-        jobId: job.id,
         itemId: items[0].id,
+        jobId: job.id,
       });
       auditLogger.log.mockClear();
 
       const again = await jobsService.completeChecklistItem({
         actorId: 'actor-1',
-        jobId: job.id,
         itemId: items[0].id,
+        jobId: job.id,
       });
       expect(again.status).toBe(JobStatus.IN_PROGRESS);
       expect(again.updatedAt.getTime()).toBeGreaterThan(
@@ -556,8 +556,8 @@ describe('JobsService (real Postgres)', () => {
       for (const item of items) {
         await jobsService.completeChecklistItem({
           actorId: 'actor-1',
-          jobId: job.id,
           itemId: item.id,
+          jobId: job.id,
         });
       }
 
@@ -586,8 +586,8 @@ describe('JobsService (real Postgres)', () => {
       for (const item of items) {
         await jobsService.completeChecklistItem({
           actorId: 'actor-1',
-          jobId: job.id,
           itemId: item.id,
+          jobId: job.id,
         });
       }
       await jobsService.completeJob({ actorId: 'actor-1', jobId: job.id });
@@ -604,8 +604,8 @@ describe('JobsService (real Postgres)', () => {
       await expect(
         jobsService.completeChecklistItem({
           actorId: 'actor-1',
-          jobId: job.id,
           itemId: items[0].id,
+          jobId: job.id,
         }),
       ).rejects.toThrow(
         new BadRequestException(
@@ -635,8 +635,8 @@ describe('JobsService (real Postgres)', () => {
       for (const item of items) {
         await jobsService.completeChecklistItem({
           actorId: 'actor-1',
-          jobId: job.id,
           itemId: item.id,
+          jobId: job.id,
         });
       }
       await expect(

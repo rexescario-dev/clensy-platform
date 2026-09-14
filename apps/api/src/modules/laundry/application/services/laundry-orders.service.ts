@@ -60,24 +60,24 @@ export class LaundryOrdersService {
       return null;
     }
     const lines = await this.lineRepository.find({
-      where: { laundryOrderId: id },
       order: { createdAt: 'ASC' },
+      where: { laundryOrderId: id },
     });
     return {
       id: order.id,
       customerId: order.customerId,
-      status: order.status,
-      totalMinorUnits: order.totalMinorUnits,
       lines: lines.map((line) => ({
-        serviceId: line.serviceId,
         addOnId: line.addOnId,
         pricingSnapshot: {
-          quantity: line.pricingSnapshot.quantity,
-          unit: line.pricingSnapshot.unit,
-          rateMinorUnits: line.pricingSnapshot.rateMinorUnits,
           amountMinorUnits: line.pricingSnapshot.amountMinorUnits,
+          quantity: line.pricingSnapshot.quantity,
+          rateMinorUnits: line.pricingSnapshot.rateMinorUnits,
+          unit: line.pricingSnapshot.unit,
         },
+        serviceId: line.serviceId,
       })),
+      status: order.status,
+      totalMinorUnits: order.totalMinorUnits,
     };
   }
 
@@ -101,8 +101,8 @@ export class LaundryOrdersService {
           customerId: command.customerId,
           fulfillmentType: command.fulfillmentType,
           status: S.RECEIVED,
-          weightGrams: null,
           totalMinorUnits: null,
+          weightGrams: null,
         });
         await manager.save(entity);
         await this.audit(command.actorId, 'laundry_order.received', entity.id);
@@ -131,8 +131,8 @@ export class LaundryOrdersService {
             { id: order.id },
             {
               status: S.WEIGHED,
-              weightGrams: command.weightGrams,
               updatedAt: new Date(),
+              weightGrams: command.weightGrams,
             },
           );
         } else if (order.status === S.WEIGHED) {
@@ -140,7 +140,7 @@ export class LaundryOrdersService {
           await manager.update(
             LaundryOrderEntity,
             { id: order.id },
-            { weightGrams: command.weightGrams, updatedAt: new Date() },
+            { updatedAt: new Date(), weightGrams: command.weightGrams },
           );
         } else {
           throw new BadRequestException(
@@ -179,7 +179,7 @@ export class LaundryOrdersService {
 
         const asOf = new Date();
         const targets: Array<{
-          column: 'serviceId' | 'addOnId';
+          column: 'addOnId' | 'serviceId';
           id: string;
           suppliedQuantity: number | undefined;
         }> = [
@@ -217,10 +217,10 @@ export class LaundryOrdersService {
             target.suppliedQuantity,
           );
           const input: LaundryLinePricingInput = {
-            unit: rule.unit,
-            rateMinorUnits: rule.priceMinorUnits,
-            quantity,
             minimumChargeMinorUnits: rule.minimumChargeMinorUnits,
+            quantity,
+            rateMinorUnits: rule.priceMinorUnits,
+            unit: rule.unit,
           };
           const { amountMinorUnits, minimumChargeApplied } =
             computeLaundryLineAmount(input);
@@ -228,20 +228,20 @@ export class LaundryOrdersService {
           const snapshot = Object.assign(
             new LaundryOrderLinePricingSnapshotEmbeddable(),
             {
+              pricingRuleId: rule.id,
+              amountMinorUnits,
+              minimumChargeApplied,
+              minimumChargeMinorUnits: rule.minimumChargeMinorUnits,
+              quantity,
               rateMinorUnits: rule.priceMinorUnits,
               unit: rule.unit,
-              quantity,
-              amountMinorUnits,
-              minimumChargeMinorUnits: rule.minimumChargeMinorUnits,
-              minimumChargeApplied,
-              pricingRuleId: rule.id,
             },
           );
 
           const line = manager.create(LaundryOrderLineEntity, {
+            addOnId: target.column === 'addOnId' ? target.id : null,
             laundryOrderId: order.id,
             serviceId: target.column === 'serviceId' ? target.id : null,
-            addOnId: target.column === 'addOnId' ? target.id : null,
           });
           line.pricingSnapshot = snapshot;
           lines.push(line);
@@ -382,8 +382,8 @@ export class LaundryOrdersService {
     id: string,
   ): Promise<LaundryOrderEntity> {
     const order = await manager.findOne(LaundryOrderEntity, {
-      where: { id },
       lock: { mode: 'pessimistic_write' },
+      where: { id },
     });
     if (!order) {
       throw new NotFoundException(`Laundry order ${id} not found`);
@@ -434,9 +434,9 @@ export class LaundryOrdersService {
   ): Promise<void> {
     await this.auditLogger.log({
       actorId,
+      entityId,
       action,
       entityType: ENTITY_TYPE,
-      entityId,
     });
   }
 }

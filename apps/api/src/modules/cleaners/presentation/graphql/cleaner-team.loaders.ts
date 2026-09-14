@@ -22,9 +22,7 @@ export function createTeamCleanersBatchFn(
   cleanersService: Pick<CleanersService, 'listCleanersByTeamIds'>,
 ): DataLoader.BatchLoadFn<string, Cleaner[]> {
   return async (teamIds) => {
-    const cleaners = await cleanersService.listCleanersByTeamIds([
-      ...teamIds,
-    ]);
+    const cleaners = await cleanersService.listCleanersByTeamIds([...teamIds]);
     const cleanersByTeamId = new Map<string, Cleaner[]>();
     for (const cleaner of cleaners) {
       if (cleaner.teamId === null) {

@@ -48,17 +48,17 @@ export class AdminsService {
         runAuditInTransaction(manager, async () => {
           const entity = manager.create(AdminUserEntity, {
             email,
+            isActive: true,
             passwordHash,
             role: command.role,
-            isActive: true,
           });
           await manager.save(entity);
 
           await this.auditLogger.log({
             actorId: command.actorId,
+            entityId: entity.id,
             action: 'admin.created',
             entityType: 'AdminUser',
-            entityId: entity.id,
             metadata: { role: entity.role },
           });
 
@@ -122,9 +122,9 @@ export class AdminsService {
 
         await this.auditLogger.log({
           actorId: command.actorId,
+          entityId: target.id,
           action: 'admin.disabled',
           entityType: 'AdminUser',
-          entityId: target.id,
         });
 
         return target;

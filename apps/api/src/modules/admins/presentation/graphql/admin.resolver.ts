@@ -28,8 +28,8 @@ function toAdminType(admin: AdminUser): AdminType {
   return {
     id: admin.id,
     email: admin.email,
-    role: admin.role,
     isActive: admin.isActive,
+    role: admin.role,
   };
 }
 
@@ -39,9 +39,9 @@ interface GqlContext {
 
 const SESSION_COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: true,
-  sameSite: 'lax' as const,
   path: '/',
+  sameSite: 'lax' as const,
+  secure: true,
 };
 
 // Exactly the 6 operations of spec §4.9 — no others. This is also the only
@@ -85,8 +85,8 @@ export class AdminResolver {
     this.setSessionCookie(context.res, token);
 
     return {
-      success: true,
       admin: { id: principal.id, role: principal.role },
+      success: true,
     };
   }
 

@@ -40,8 +40,8 @@ function bookingDto(): typeof BookingDTOClass {
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 const PROPERTY_SORT = [
-  { field: 'createdAt' as const, direction: SortDirection.DESC },
-  { field: 'id' as const, direction: SortDirection.ASC },
+  { direction: SortDirection.DESC, field: 'createdAt' as const },
+  { direction: SortDirection.ASC, field: 'id' as const },
 ];
 
 // Explicit, hand-defined presentation type — never `Property` (the domain
@@ -50,26 +50,26 @@ const PROPERTY_SORT = [
 // a Clensy `@ResolveField` for it.
 @ObjectType('Property')
 @QueryOptions({
-  pagingStrategy: PagingStrategies.OFFSET,
-  enableTotalCount: false,
   defaultResultSize: PLATFORM_PAGE_DEFAULT,
-  maxResultsSize: PLATFORM_PAGE_MAX,
   defaultSort: PROPERTY_SORT,
+  enableTotalCount: false,
+  maxResultsSize: PLATFORM_PAGE_MAX,
+  pagingStrategy: PagingStrategies.OFFSET,
 })
 @OffsetConnection('bookings', bookingDto, {
-  nullable: false,
-  enableTotalCount: false,
-  relationName: 'bookings',
-  defaultResultSize: PLATFORM_PAGE_DEFAULT,
-  maxResultsSize: PLATFORM_PAGE_MAX,
-  defaultSort: [
-    { field: 'scheduledAt', direction: SortDirection.DESC },
-    { field: 'id', direction: SortDirection.ASC },
-  ],
-  guards: [AuthGuard],
   decorators: [Roles(...BOOKING_VIEW_ROLES)],
-  update: { enabled: false },
+  defaultResultSize: PLATFORM_PAGE_DEFAULT,
+  defaultSort: [
+    { direction: SortDirection.DESC, field: 'scheduledAt' },
+    { direction: SortDirection.ASC, field: 'id' },
+  ],
+  enableTotalCount: false,
+  guards: [AuthGuard],
+  maxResultsSize: PLATFORM_PAGE_MAX,
+  nullable: false,
+  relationName: 'bookings',
   remove: { enabled: false },
+  update: { enabled: false },
 })
 export class PropertyType {
   @IDField(() => ID)
@@ -114,9 +114,9 @@ export class PropertyType {
  */
 export const CustomerPropertiesQueryArgs = QueryArgsType(PropertyType, {
   connectionName: 'PropertyConnection',
-  pagingStrategy: PagingStrategies.OFFSET,
-  enableTotalCount: true,
   defaultResultSize: PLATFORM_PAGE_DEFAULT,
-  maxResultsSize: PLATFORM_PAGE_MAX,
   defaultSort: PROPERTY_SORT,
+  enableTotalCount: true,
+  maxResultsSize: PLATFORM_PAGE_MAX,
+  pagingStrategy: PagingStrategies.OFFSET,
 });

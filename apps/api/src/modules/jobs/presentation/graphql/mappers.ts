@@ -11,13 +11,13 @@ export function toCleaningJobType(job: CleaningJob): CleaningJobType {
     id: job.id,
     bookingId: job.bookingId,
     teamId: job.teamId,
+    booking: null,
+    checklist: null,
+    createdAt: job.createdAt,
     scheduledAt: job.scheduledAt,
     status: job.status,
-    createdAt: job.createdAt,
-    updatedAt: job.updatedAt,
-    booking: null,
     team: null,
-    checklist: null,
+    updatedAt: job.updatedAt,
   } as unknown as CleaningJobType;
 }
 
@@ -30,10 +30,10 @@ export function toChecklistType(checklist: Checklist): ChecklistType {
 export function toChecklistItemType(item: ChecklistItem): ChecklistItemType {
   return {
     id: item.id,
-    label: item.label,
-    position: item.position,
     completed: item.completed,
     completedAt: item.completedAt,
+    label: item.label,
+    position: item.position,
   };
 }
 

@@ -121,40 +121,40 @@ function JobsPageContent() {
 
   const columns: DataTableColumn<JobRow>[] = [
     {
-      key: 'customer',
       header: 'Customer',
+      key: 'customer',
       render: (row) => row.booking.customer.fullName,
     },
     {
-      key: 'property',
       header: 'Property',
+      key: 'property',
       render: (row) => row.booking.property.addressLine1,
     },
     {
-      key: 'service',
       header: 'Service',
+      key: 'service',
       render: (row) => row.booking.service.name,
     },
     {
-      key: 'scheduledAt',
       header: 'Scheduled',
+      key: 'scheduledAt',
       render: (row) => formatScheduledAt(row.scheduledAt),
     },
     {
-      key: 'status',
       header: 'Status',
+      key: 'status',
       render: (row) => (
         <StatusBadge label={row.status} tone={jobStatusTone(row.status)} />
       ),
     },
     {
-      key: 'team',
       header: 'Team',
+      key: 'team',
       render: (row) => row.team?.name ?? 'Unassigned',
     },
     {
-      key: 'progress',
       header: 'Checklist',
+      key: 'progress',
       render: (row) => checklistProgress(row.checklist.items.nodes),
     },
   ];
@@ -182,10 +182,10 @@ function JobsPageContent() {
         error={jobsQuery.error ? 'Unable to load jobs.' : undefined}
         onRowClick={(row) => openDetail(row.id)}
         pagination={{
+          onPageChange: setPage,
           page,
           pageSize,
           totalCount: jobsQuery.data?.jobs.totalCount ?? 0,
-          onPageChange: setPage,
         }}
       />
 
@@ -242,8 +242,8 @@ function JobDetailDrawer({
   onChanged: () => void;
 }) {
   const { data, loading, error, refetch } = useJobQuery({
-    variables: { id },
     fetchPolicy: 'network-only',
+    variables: { id },
   });
   const { data: teamsData } = useTeamsQuery({
     fetchPolicy: 'network-only',
@@ -283,7 +283,7 @@ function JobDetailDrawer({
     setActionError(undefined);
     try {
       await completeItem({
-        variables: { input: { jobId: job.id, itemId } },
+        variables: { input: { itemId, jobId: job.id } },
       });
       await refetch();
       onChanged();

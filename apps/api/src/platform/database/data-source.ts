@@ -22,11 +22,6 @@ import { AuditEventEntity } from '../audit/infrastructure/persistence/audit-even
 // separate from database.module.ts, which is Nest-wrapped (ConfigService,
 // autoLoadEntities) and not something the CLI can consume directly.
 export default new DataSource({
-  type: 'postgres',
-  host: process.env.DB_HOST ?? 'localhost',
-  port: Number(process.env.DB_PORT ?? 5432),
-  username: process.env.DB_USERNAME ?? 'clensy',
-  password: process.env.DB_PASSWORD ?? 'clensy_dev',
   database: process.env.DB_NAME ?? 'clensy',
   entities: [
     BookingEntity,
@@ -47,5 +42,10 @@ export default new DataSource({
     InvoiceEntity,
     InvoiceLineEntity,
   ],
+  host: process.env.DB_HOST ?? 'localhost',
   migrations: [__dirname + '/migrations/*.ts'],
+  password: process.env.DB_PASSWORD ?? 'clensy_dev',
+  port: Number(process.env.DB_PORT ?? 5432),
+  type: 'postgres',
+  username: process.env.DB_USERNAME ?? 'clensy',
 });

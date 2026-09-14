@@ -19,21 +19,22 @@ import { LaundryOrderLineEntity } from '../infrastructure/persistence/laundry-or
 
 @Global()
 @Module({
-  providers: [{ provide: DataSource, useValue: {} }],
   exports: [DataSource],
+  providers: [{ provide: DataSource, useValue: {} }],
 })
 class FakeGlobalDataSourceModule {}
 
 @Module({
+  exports: [CustomersService, PropertiesService],
   providers: [
     { provide: CustomersService, useValue: { getCustomer: jest.fn() } },
     { provide: PropertiesService, useValue: {} },
   ],
-  exports: [CustomersService, PropertiesService],
 })
 class FakeCustomersModule {}
 
 @Module({
+  exports: [PricingRulesService, ServicesService, AddOnsService],
   providers: [
     {
       provide: PricingRulesService,
@@ -42,7 +43,6 @@ class FakeCustomersModule {}
     { provide: ServicesService, useValue: {} },
     { provide: AddOnsService, useValue: {} },
   ],
-  exports: [PricingRulesService, ServicesService, AddOnsService],
 })
 class FakeCatalogModule {}
 

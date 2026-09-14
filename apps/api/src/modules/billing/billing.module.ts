@@ -24,6 +24,7 @@ import { InvoiceLineType } from './presentation/graphql/invoice-line.type';
 // `Invoice.lines` offset connection resolves (the `LaundryOrderLine` /
 // `Checklist.items` precedent).
 @Module({
+  exports: [InvoicesService],
   imports: [
     TypeOrmModule.forFeature([InvoiceEntity, InvoiceLineEntity]),
     NestjsQueryTypeOrmModule.forFeature([InvoiceEntity, InvoiceLineEntity]),
@@ -36,6 +37,5 @@ import { InvoiceLineType } from './presentation/graphql/invoice-line.type';
     CustomersModule,
   ],
   providers: [InvoicesService, InvoiceReadResolver, InvoiceResolver],
-  exports: [InvoicesService],
 })
 export class BillingModule {}

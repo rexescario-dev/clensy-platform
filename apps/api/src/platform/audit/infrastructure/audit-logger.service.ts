@@ -47,9 +47,9 @@ export class AuditLoggerService implements AuditLogger {
   async log(event: AuditLogEvent): Promise<void> {
     const entity = this.auditEventRepository.create({
       actorId: event.actorId,
+      entityId: event.entityId,
       action: event.action,
       entityType: event.entityType,
-      entityId: event.entityId,
       metadata: event.metadata ?? null,
     });
 

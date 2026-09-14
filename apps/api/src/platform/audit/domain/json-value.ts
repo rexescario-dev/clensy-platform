@@ -2,4 +2,4 @@
 // "must be JSON-serializable" constraint (spec §4.6) a compile-time
 // approximation, rather than typing it as `Record<string, unknown>`.
 export type JsonValue =
-  string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+  JsonValue[] | boolean | number | string | { [key: string]: JsonValue } | null;

@@ -51,9 +51,9 @@ async function seedDevOwner(): Promise<void> {
       [
         {
           email: normalizedEmail,
+          isActive: true,
           passwordHash,
           role: Role.OWNER,
-          isActive: true,
         },
       ],
       ['email'],

@@ -35,13 +35,13 @@ describe('AdminsService (real Postgres)', () => {
 
   beforeAll(async () => {
     dataSource = new DataSource({
-      type: 'postgres',
-      host: process.env.DB_HOST ?? 'localhost',
-      port: Number(process.env.DB_PORT ?? 5432),
-      username: process.env.DB_USERNAME ?? 'clensy',
-      password: process.env.DB_PASSWORD ?? 'clensy_dev',
       database: process.env.DB_NAME ?? 'clensy',
       entities: [AdminUserEntity, AuditEventEntity],
+      host: process.env.DB_HOST ?? 'localhost',
+      password: process.env.DB_PASSWORD ?? 'clensy_dev',
+      port: Number(process.env.DB_PORT ?? 5432),
+      type: 'postgres',
+      username: process.env.DB_USERNAME ?? 'clensy',
     });
     await dataSource.initialize();
     dbLock = await acquireAdminDbTestLock(dataSource);
@@ -64,9 +64,9 @@ describe('AdminsService (real Postgres)', () => {
     return repo.save(
       repo.create({
         email: email ?? `owner-${Math.random()}@example.com`,
+        isActive: true,
         passwordHash: await bcrypt.hash('irrelevant', 4),
         role: Role.OWNER,
-        isActive: true,
       }),
     );
   };
@@ -94,9 +94,9 @@ describe('AdminsService (real Postgres)', () => {
       expect(auditLogger.log).toHaveBeenCalledWith(
         expect.objectContaining({
           actorId: 'owner-1',
+          entityId: created.id,
           action: 'admin.created',
           entityType: 'AdminUser',
-          entityId: created.id,
           metadata: { role: Role.SCHEDULER },
         }),
       );
@@ -185,9 +185,9 @@ describe('AdminsService (real Postgres)', () => {
       expect(auditLogger.log).toHaveBeenCalledWith(
         expect.objectContaining({
           actorId: ownerA.id,
+          entityId: ownerB.id,
           action: 'admin.disabled',
           entityType: 'AdminUser',
-          entityId: ownerB.id,
         }),
       );
     });

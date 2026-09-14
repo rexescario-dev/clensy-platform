@@ -12,7 +12,7 @@ const CASES = [
 
 describe('presentRole', () => {
   it.each(CASES)('%s → %s / %s', (role, label, initials) => {
-    expect(presentRole(role)).toEqual({ label, initials });
+    expect(presentRole(role)).toEqual({ initials, label });
   });
 
   it('returns undefined for null, undefined, empty, and unknown', () => {

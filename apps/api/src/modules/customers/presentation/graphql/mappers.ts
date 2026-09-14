@@ -10,27 +10,27 @@ import { PropertyType } from './property.type';
 export function toCustomerType(customer: Customer): CustomerType {
   return {
     id: customer.id,
-    fullName: customer.fullName,
-    email: customer.email,
-    phone: customer.phone,
-    notes: customer.notes,
     createdAt: customer.createdAt,
+    email: customer.email,
+    fullName: customer.fullName,
+    notes: customer.notes,
+    phone: customer.phone,
     updatedAt: customer.updatedAt,
-  } as CustomerType;
+  };
 }
 
 export function toPropertyType(property: Property): PropertyType {
   return {
     id: property.id,
     customerId: property.customerId,
-    label: property.label,
+    accessNotes: property.accessNotes,
     addressLine1: property.addressLine1,
     addressLine2: property.addressLine2,
     city: property.city,
-    region: property.region,
-    postalCode: property.postalCode,
-    accessNotes: property.accessNotes,
     createdAt: property.createdAt,
+    label: property.label,
+    postalCode: property.postalCode,
+    region: property.region,
     updatedAt: property.updatedAt,
   };
 }

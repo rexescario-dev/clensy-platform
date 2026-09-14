@@ -240,8 +240,8 @@ describe('Catalog (e2e)', () => {
     const ownerLoginResponse = await login(owner.email, owner.password);
     expect(ownerLoginResponse.body.errors).toBeUndefined();
     expect(ownerLoginResponse.body.data.login).toEqual({
-      success: true,
       admin: { id: owner.id, role: Role.OWNER },
+      success: true,
     });
     const ownerSessionCookie = extractSessionCookie(ownerLoginResponse);
 
@@ -256,19 +256,19 @@ describe('Catalog (e2e)', () => {
       query: CREATE_SERVICE_MUTATION,
       variables: {
         input: {
-          name: serviceName,
           description: 'A deep clean',
           durationMinutes: 90,
+          name: serviceName,
         },
       },
     });
     expect(createServiceResponse.body.errors).toBeUndefined();
     const createdService = createServiceResponse.body.data.createService;
     expect(createdService).toMatchObject({
-      name: serviceName,
+      active: true,
       description: 'A deep clean',
       durationMinutes: 90,
-      active: true,
+      name: serviceName,
     });
     const serviceId: string = createdService.id;
 
@@ -284,8 +284,8 @@ describe('Catalog (e2e)', () => {
       query: CREATE_ADD_ON_MUTATION,
       variables: {
         input: {
-          name: addOnName,
           description: 'Clean inside the fridge',
+          name: addOnName,
           priceMinorUnits: 1500,
         },
       },
@@ -293,10 +293,10 @@ describe('Catalog (e2e)', () => {
     expect(createAddOnResponse.body.errors).toBeUndefined();
     const createdAddOn = createAddOnResponse.body.data.createAddOn;
     expect(createdAddOn).toMatchObject({
-      name: addOnName,
-      description: 'Clean inside the fridge',
-      priceMinorUnits: 1500,
       active: true,
+      description: 'Clean inside the fridge',
+      name: addOnName,
+      priceMinorUnits: 1500,
     });
     const addOnId: string = createdAddOn.id;
 
@@ -311,15 +311,15 @@ describe('Catalog (e2e)', () => {
       ownerSessionCookie,
     ).send({
       query: CREATE_PRICING_RULE_MUTATION,
-      variables: { input: { serviceId, priceMinorUnits: 8000 } },
+      variables: { input: { priceMinorUnits: 8000, serviceId } },
     });
     expect(createPricingRuleResponse.body.errors).toBeUndefined();
     const createdPricingRule =
       createPricingRuleResponse.body.data.createPricingRule;
     expect(createdPricingRule).toMatchObject({
-      serviceId,
       addOnId: null,
       priceMinorUnits: 8000,
+      serviceId,
     });
     const firstPricingRuleId: string = createdPricingRule.id;
 
@@ -363,14 +363,14 @@ describe('Catalog (e2e)', () => {
     // deactivate-then-insert sequence). ---
     const repriceResponse = await authedRequest(ownerSessionCookie).send({
       query: CREATE_PRICING_RULE_MUTATION,
-      variables: { input: { serviceId, priceMinorUnits: 9500 } },
+      variables: { input: { priceMinorUnits: 9500, serviceId } },
     });
     expect(repriceResponse.body.errors).toBeUndefined();
     const repricedRule = repriceResponse.body.data.createPricingRule;
     expect(repricedRule).toMatchObject({
-      serviceId,
       addOnId: null,
       priceMinorUnits: 9500,
+      serviceId,
     });
     const secondPricingRuleId: string = repricedRule.id;
 
@@ -390,9 +390,9 @@ describe('Catalog (e2e)', () => {
     });
     expect(addOnPricingRuleResponse.body.errors).toBeUndefined();
     expect(addOnPricingRuleResponse.body.data.createPricingRule).toMatchObject({
-      serviceId: null,
       addOnId,
       priceMinorUnits: 1500,
+      serviceId: null,
     });
     expect(secondPricingRuleId).not.toBe(firstPricingRuleId);
 
@@ -419,8 +419,8 @@ describe('Catalog (e2e)', () => {
     expect(secondPricingRuleCreateAuditEvent?.actorId).toBe(owner.id);
 
     const activeRowsForService = await pricingRuleRepository.findBy({
-      serviceId,
       active: true,
+      serviceId,
     });
     expect(activeRowsForService).toHaveLength(1);
     expect(activeRowsForService[0].id).toBe(secondPricingRuleId);
@@ -436,10 +436,10 @@ describe('Catalog (e2e)', () => {
     expect(updateServiceResponse.body.errors).toBeUndefined();
     expect(updateServiceResponse.body.data.updateService).toMatchObject({
       id: serviceId,
-      name: serviceName,
+      active: true,
       description: 'A deep clean',
       durationMinutes: 120,
-      active: true,
+      name: serviceName,
     });
 
     const serviceUpdateAuditEvent = await auditEventRepository.findOneBy({
@@ -457,8 +457,8 @@ describe('Catalog (e2e)', () => {
     });
     expect(deactivateServiceResponse.body.errors).toBeUndefined();
     expect(deactivateServiceResponse.body.data.updateService).toMatchObject({
-      id: serviceId,
       active: false,
+      id: serviceId,
     });
 
     const servicesAfterDeactivateResponse = await authedRequest(
@@ -485,10 +485,10 @@ describe('Catalog (e2e)', () => {
     expect(updateAddOnResponse.body.errors).toBeUndefined();
     expect(updateAddOnResponse.body.data.updateAddOn).toMatchObject({
       id: addOnId,
-      name: addOnName,
-      description: 'Clean inside the fridge',
-      priceMinorUnits: 1800,
       active: true,
+      description: 'Clean inside the fridge',
+      name: addOnName,
+      priceMinorUnits: 1800,
     });
 
     const addOnUpdateAuditEvent = await auditEventRepository.findOneBy({
@@ -521,9 +521,9 @@ describe('Catalog (e2e)', () => {
         query: CREATE_SERVICE_MUTATION,
         variables: {
           input: {
-            name: `${label} ${runId}`,
             description: null,
             durationMinutes: 45,
+            name: `${label} ${runId}`,
           },
         },
       });
@@ -537,7 +537,7 @@ describe('Catalog (e2e)', () => {
     ) {
       const response = await authedRequest(ownerSessionCookie).send({
         query: CREATE_PRICING_RULE_MUTATION,
-        variables: { input: { serviceId: fixtureServiceId, priceMinorUnits } },
+        variables: { input: { priceMinorUnits, serviceId: fixtureServiceId } },
       });
       expect(response.body.errors).toBeUndefined();
     }
@@ -618,8 +618,8 @@ describe('Catalog (e2e)', () => {
     );
     expect(scheduler).toMatchObject({
       email: schedulerEmail,
-      role: Role.SCHEDULER,
       isActive: true,
+      role: Role.SCHEDULER,
     });
 
     const customerSupportEmail = `customer-support-${runId}@example.com`;
@@ -632,8 +632,8 @@ describe('Catalog (e2e)', () => {
     );
     expect(customerSupport).toMatchObject({
       email: customerSupportEmail,
-      role: Role.CUSTOMER_SUPPORT,
       isActive: true,
+      role: Role.CUSTOMER_SUPPORT,
     });
 
     const financeEmail = `finance-${runId}@example.com`;
@@ -646,8 +646,8 @@ describe('Catalog (e2e)', () => {
     );
     expect(finance).toMatchObject({
       email: financeEmail,
-      role: Role.FINANCE,
       isActive: true,
+      role: Role.FINANCE,
     });
 
     const analystEmail = `analyst-${runId}@example.com`;
@@ -660,8 +660,8 @@ describe('Catalog (e2e)', () => {
     );
     expect(analyst).toMatchObject({
       email: analystEmail,
-      role: Role.ANALYST,
       isActive: true,
+      role: Role.ANALYST,
     });
 
     // --- Step 8: Log in as each of Scheduler, Customer Support, Finance,
@@ -720,8 +720,8 @@ describe('Catalog (e2e)', () => {
       });
       expect(activePricingResponse.body.errors).toBeUndefined();
       expect(activePricingResponse.body.data.activePricing).toMatchObject({
-        serviceId,
         priceMinorUnits: 9500,
+        serviceId,
       });
 
       const createServiceDeniedResponse = await authedRequest(
@@ -730,8 +730,8 @@ describe('Catalog (e2e)', () => {
         query: CREATE_SERVICE_MUTATION,
         variables: {
           input: {
-            name: `Should Not Be Created ${role} ${runId}`,
             durationMinutes: 30,
+            name: `Should Not Be Created ${role} ${runId}`,
           },
         },
       });
@@ -762,7 +762,7 @@ describe('Catalog (e2e)', () => {
         sessionCookie,
       ).send({
         query: CREATE_PRICING_RULE_MUTATION,
-        variables: { input: { serviceId, priceMinorUnits: 100 } },
+        variables: { input: { priceMinorUnits: 100, serviceId } },
       });
       expect(
         createPricingRuleDeniedResponse.body.data?.createPricingRule,
@@ -787,7 +787,7 @@ describe('Catalog (e2e)', () => {
     ).send({
       query: CREATE_PRICING_RULE_MUTATION,
       variables: {
-        input: { serviceId: nonexistentServiceId, priceMinorUnits: 100 },
+        input: { priceMinorUnits: 100, serviceId: nonexistentServiceId },
       },
     });
     expect(
@@ -818,7 +818,7 @@ describe('Catalog (e2e)', () => {
     ).send({
       query: CREATE_SERVICE_MUTATION,
       variables: {
-        input: { name: duplicateCaseServiceName, durationMinutes: 30 },
+        input: { durationMinutes: 30, name: duplicateCaseServiceName },
       },
     });
     expect(duplicateServiceResponse.body.data?.createService).toBeUndefined();
@@ -932,15 +932,15 @@ describe('Catalog (e2e)', () => {
       variables: {
         input: {
           addOnId,
+          effectiveFrom: future.toISOString(),
           priceMinorUnits: 950,
           unit: 'PER_KG',
-          effectiveFrom: future.toISOString(),
         },
       },
     });
     expect(createPricingRuleResponse.body.errors).toBeUndefined();
     expect(createPricingRuleResponse.body.data.createPricingRule).toMatchObject(
-      { serviceId: null, addOnId, priceMinorUnits: 950 },
+      { addOnId, priceMinorUnits: 950, serviceId: null },
     );
 
     await expect(

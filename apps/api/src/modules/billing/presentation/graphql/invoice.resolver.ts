@@ -52,7 +52,7 @@ export class InvoiceResolver {
   @ResolveField(() => Int)
   amountDueMinorUnits(
     @Parent()
-    invoice: Pick<InvoiceType, 'totalMinorUnits' | 'amountPaidMinorUnits'>,
+    invoice: Pick<InvoiceType, 'amountPaidMinorUnits' | 'totalMinorUnits'>,
   ): number {
     return invoice.totalMinorUnits - invoice.amountPaidMinorUnits;
   }

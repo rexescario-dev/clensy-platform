@@ -25,9 +25,9 @@ const VIEW_ROLES = [
   Role.ANALYST,
 ];
 
-function readMethodRef(
-  ctor: { prototype: object },
-): (...args: unknown[]) => unknown {
+function readMethodRef(ctor: {
+  prototype: object;
+}): (...args: unknown[]) => unknown {
   let proto: object | null = ctor.prototype;
   while (proto) {
     const descriptor = Object.getOwnPropertyDescriptor(proto, 'queryMany');
@@ -49,8 +49,7 @@ describe('Catalog GraphQL collections', () => {
     it('is guarded by AuthGuard and the catalog view matrix', () => {
       const method = readMethodRef(ctor);
       const guards = Reflect.getMetadata(GUARDS_METADATA, method) as
-        | unknown[]
-        | undefined;
+        unknown[] | undefined;
       expect(guards ?? []).toContain(AuthGuard);
       expect(reflector.get<Role[] | undefined>(ROLES_KEY, method)).toEqual(
         VIEW_ROLES,

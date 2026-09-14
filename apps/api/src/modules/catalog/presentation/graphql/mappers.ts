@@ -17,9 +17,6 @@ import { ServiceType } from './service.type';
 export function toServiceType(service: Service): ServiceType {
   return {
     id: service.id,
-    name: service.name,
-    description: service.description,
-    durationMinutes: service.durationMinutes,
     active: service.active,
     // `activePricing: null` is a type-level placeholder only, satisfying
     // `ServiceType`'s required field — it is never read: Apollo always calls
@@ -28,6 +25,9 @@ export function toServiceType(service: Service): ServiceType {
     // it. Same pattern `toCleanerType()`'s `team: null` established.
     activePricing: null,
     createdAt: service.createdAt,
+    description: service.description,
+    durationMinutes: service.durationMinutes,
+    name: service.name,
     updatedAt: service.updatedAt,
   };
 }
@@ -35,11 +35,11 @@ export function toServiceType(service: Service): ServiceType {
 export function toAddOnType(addOn: AddOn): AddOnType {
   return {
     id: addOn.id,
-    name: addOn.name,
-    description: addOn.description,
-    priceMinorUnits: addOn.priceMinorUnits,
     active: addOn.active,
     createdAt: addOn.createdAt,
+    description: addOn.description,
+    name: addOn.name,
+    priceMinorUnits: addOn.priceMinorUnits,
     updatedAt: addOn.updatedAt,
   };
 }
@@ -53,9 +53,9 @@ export function toAddOnType(addOn: AddOn): AddOnType {
 export function toPricingRuleType(rule: PricingRule): PricingRuleType {
   return {
     id: rule.id,
-    serviceId: rule.serviceId,
     addOnId: rule.addOnId,
-    priceMinorUnits: rule.priceMinorUnits,
+    serviceId: rule.serviceId,
     createdAt: rule.createdAt,
+    priceMinorUnits: rule.priceMinorUnits,
   };
 }

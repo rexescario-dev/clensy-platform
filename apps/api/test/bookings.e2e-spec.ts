@@ -229,29 +229,29 @@ describe('Bookings (e2e)', () => {
   async function createFixture(runId: string, priceMinorUnits = 5000) {
     const customer = await customersService.create({
       actorId: 'e2e',
-      fullName: `Fixture Customer ${runId}`,
       email: `fixture-${runId}@example.com`,
+      fullName: `Fixture Customer ${runId}`,
       phone: '555-0100',
     });
     const property = await propertiesService.create({
       actorId: 'e2e',
       customerId: customer.id,
-      label: 'Home',
       addressLine1: `${runId} Main St`,
       city: 'City',
-      region: 'Region',
+      label: 'Home',
       postalCode: '00000',
+      region: 'Region',
     });
     const service = await servicesService.createService({
       actorId: 'e2e',
-      name: `Fixture Service ${runId}`,
       durationMinutes: 60,
+      name: `Fixture Service ${runId}`,
     });
     const team = await teamsService.createTeam({
       actorId: 'e2e',
       name: `Fixture Team ${runId}`,
     });
-    return { customer, property, service, team, priceMinorUnits };
+    return { customer, priceMinorUnits, property, service, team };
   }
 
   it('proves the full Bookings E2E acceptance scenario', async () => {
@@ -277,7 +277,7 @@ describe('Bookings (e2e)', () => {
       query: `mutation CreatePricingRule($input: CreatePricingRuleInput!) {
         createPricingRule(input: $input) { id }
       }`,
-      variables: { input: { serviceId: service.id, priceMinorUnits: 5000 } },
+      variables: { input: { priceMinorUnits: 5000, serviceId: service.id } },
     });
     expect(createPricingRuleResponse.body.errors).toBeUndefined();
 
@@ -297,12 +297,12 @@ describe('Bookings (e2e)', () => {
     expect(createBookingResponse.body.errors).toBeUndefined();
     const createdBooking = createBookingResponse.body.data.createBooking;
     expect(createdBooking).toMatchObject({
-      scheduledAt,
-      status: 'PENDING',
+      customer: { fullName: customer.fullName, id: customer.id },
       pricingSnapshot: { priceMinorUnits: 5000 },
-      customer: { id: customer.id, fullName: customer.fullName },
-      property: { id: property.id, addressLine1: property.addressLine1 },
+      property: { addressLine1: property.addressLine1, id: property.id },
+      scheduledAt,
       service: { id: service.id, name: service.name },
+      status: 'PENDING',
       team: { id: team.id, name: team.name },
     });
     const bookingId: string = createdBooking.id;
@@ -321,7 +321,7 @@ describe('Bookings (e2e)', () => {
       query: `mutation CreatePricingRule($input: CreatePricingRuleInput!) {
         createPricingRule(input: $input) { id }
       }`,
-      variables: { input: { serviceId: service.id, priceMinorUnits: 6000 } },
+      variables: { input: { priceMinorUnits: 6000, serviceId: service.id } },
     });
     expect(repriceResponse.body.errors).toBeUndefined();
 
@@ -386,7 +386,7 @@ describe('Bookings (e2e)', () => {
       query: `mutation CreatePricingRule($input: CreatePricingRuleInput!) {
         createPricingRule(input: $input) { id }
       }`,
-      variables: { input: { serviceId: s2.id, priceMinorUnits: 4000 } },
+      variables: { input: { priceMinorUnits: 4000, serviceId: s2.id } },
     });
     const secondBookingResponse = await authedRequest(ownerSessionCookie).send({
       query: CREATE_BOOKING_MUTATION,
@@ -434,7 +434,7 @@ describe('Bookings (e2e)', () => {
         createPricingRule(input: $input) { id }
       }`,
       variables: {
-        input: { serviceId: batchFixture.service.id, priceMinorUnits: 5500 },
+        input: { priceMinorUnits: 5500, serviceId: batchFixture.service.id },
       },
     });
     expect(batchPricing.body.errors).toBeUndefined();
@@ -467,13 +467,13 @@ describe('Bookings (e2e)', () => {
       expect(response.body.errors).toBeUndefined();
       expect(response.body.data.bookings.nodes).toHaveLength(expectedN);
       return {
-        queries,
         counts: Object.fromEntries(
           RELATION_TABLES.map((table) => [
             table,
             countSqlMentioning(queries, table),
           ]),
         ) as Record<(typeof RELATION_TABLES)[number], number>,
+        queries,
       };
     };
 
@@ -547,8 +547,8 @@ describe('Bookings (e2e)', () => {
     );
 
     await servicesService.updateService(s2.id, {
-      actorId: 'e2e',
       active: false,
+      actorId: 'e2e',
     });
     const inactiveServiceResponse = await authedRequest(
       ownerSessionCookie,
@@ -720,7 +720,7 @@ describe('Bookings (e2e)', () => {
         createPricingRule(input: $input) { id }
       }`,
       variables: {
-        input: { serviceId: fixture.service.id, priceMinorUnits: 5000 },
+        input: { priceMinorUnits: 5000, serviceId: fixture.service.id },
       },
     });
     expect(pricing.body.errors).toBeUndefined();
@@ -738,7 +738,9 @@ describe('Bookings (e2e)', () => {
           scheduledAt:
             index < 2
               ? sameScheduledAt
-              : new Date(`2026-12-${String(index).padStart(2, '0')}T09:00:00.000Z`),
+              : new Date(
+                  `2026-12-${String(index).padStart(2, '0')}T09:00:00.000Z`,
+                ),
         }),
       );
     }
@@ -770,9 +772,9 @@ describe('Bookings (e2e)', () => {
     });
     expect(defaultResponse.body.errors).toBeUndefined();
     expect(defaultResponse.body.data.bookings.nodes).toHaveLength(20);
-    expect(defaultResponse.body.data.bookings.totalCount).toBeGreaterThanOrEqual(
-      21,
-    );
+    expect(
+      defaultResponse.body.data.bookings.totalCount,
+    ).toBeGreaterThanOrEqual(21);
 
     const page0 = await authedRequest(ownerSessionCookie).send({
       query: `query SortPage($paging: OffsetPaging) {

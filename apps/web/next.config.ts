@@ -13,10 +13,10 @@ const nextConfig: NextConfig = {
   // entry added by an earlier task is still present.
   async redirects() {
     return [
-      { source: '/admin', destination: '/app/admin', permanent: true },
-      { source: '/customers', destination: '/app/customers', permanent: true },
-      { source: '/customers/:id', destination: '/app/customers?detail=:id', permanent: true },
-      { source: '/cleaners', destination: '/app/cleaners', permanent: true },
+      { destination: '/app/admin', permanent: true, source: '/admin' },
+      { destination: '/app/customers', permanent: true, source: '/customers' },
+      { destination: '/app/customers?detail=:id', permanent: true, source: '/customers/:id' },
+      { destination: '/app/cleaners', permanent: true, source: '/cleaners' },
       // `/cleaners/teams` and `/cleaners/teams/:id` are listed before the
       // more general `/cleaners/:id`: Next.js checks `redirects()` entries
       // in array order, and `:id` matches any single path segment —
@@ -25,18 +25,18 @@ const nextConfig: NextConfig = {
       // `/app/cleaners?detail=teams` instead of `/app/cleaners/teams`.
       // Reordering the more specific `/cleaners/teams*` entries first
       // avoids that.
-      { source: '/cleaners/teams', destination: '/app/cleaners/teams', permanent: true },
-      { source: '/cleaners/teams/:id', destination: '/app/cleaners/teams?detail=:id', permanent: true },
-      { source: '/cleaners/:id', destination: '/app/cleaners?detail=:id', permanent: true },
+      { destination: '/app/cleaners/teams', permanent: true, source: '/cleaners/teams' },
+      { destination: '/app/cleaners/teams?detail=:id', permanent: true, source: '/cleaners/teams/:id' },
+      { destination: '/app/cleaners?detail=:id', permanent: true, source: '/cleaners/:id' },
       // Same `:id`-vs-literal-segment collision as `/cleaners/teams` above:
       // `/catalog/add-ons` and `/catalog/add-ons/:id` must be listed before
       // the more general `/catalog/:id`, or a request for `/catalog/add-ons`
       // would match `/catalog/:id` first and redirect to
       // `/app/catalog?detail=add-ons` instead of `/app/catalog/add-ons`.
-      { source: '/catalog', destination: '/app/catalog', permanent: true },
-      { source: '/catalog/add-ons', destination: '/app/catalog/add-ons', permanent: true },
-      { source: '/catalog/add-ons/:id', destination: '/app/catalog/add-ons?detail=:id', permanent: true },
-      { source: '/catalog/:id', destination: '/app/catalog?detail=:id', permanent: true },
+      { destination: '/app/catalog', permanent: true, source: '/catalog' },
+      { destination: '/app/catalog/add-ons', permanent: true, source: '/catalog/add-ons' },
+      { destination: '/app/catalog/add-ons?detail=:id', permanent: true, source: '/catalog/add-ons/:id' },
+      { destination: '/app/catalog?detail=:id', permanent: true, source: '/catalog/:id' },
     ];
   },
 };

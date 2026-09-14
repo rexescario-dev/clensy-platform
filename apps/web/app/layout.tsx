@@ -4,8 +4,8 @@ import { ApolloProvider } from './apollo-provider';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Clensy',
   description: 'Clensy admin',
+  title: 'Clensy',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

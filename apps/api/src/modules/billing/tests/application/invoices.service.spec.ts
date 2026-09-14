@@ -39,30 +39,30 @@ describe('InvoicesService', () => {
   const anOrder = (over = {}) => ({
     id: 'order-1',
     customerId: 'cust-1',
-    status: LaundryOrderStatus.PRICED,
-    totalMinorUnits: 3725,
     lines: [
       {
-        serviceId: 'svc-1',
         addOnId: null,
         pricingSnapshot: {
-          quantity: 2350,
-          unit: PricingUnit.PER_KG,
-          rateMinorUnits: 1500,
           amountMinorUnits: 3525,
+          quantity: 2350,
+          rateMinorUnits: 1500,
+          unit: PricingUnit.PER_KG,
         },
+        serviceId: 'svc-1',
       },
       {
-        serviceId: null,
         addOnId: 'addon-1',
         pricingSnapshot: {
-          quantity: 1,
-          unit: PricingUnit.FLAT,
-          rateMinorUnits: 200,
           amountMinorUnits: 200,
+          quantity: 1,
+          rateMinorUnits: 200,
+          unit: PricingUnit.FLAT,
         },
+        serviceId: null,
       },
     ],
+    status: LaundryOrderStatus.PRICED,
+    totalMinorUnits: 3725,
     ...over,
   });
 
@@ -83,12 +83,12 @@ describe('InvoicesService', () => {
         id: `generated-${++created}`,
         ...data,
       })),
-      save: jest.fn((entity: unknown) => Promise.resolve(entity)),
       findOneBy: jest.fn().mockResolvedValue(null),
       findOneByOrFail: jest.fn((_e: unknown, where: { id: string }) =>
         Promise.resolve({ id: where.id, invoiceNumber: 'INV-2026-000042' }),
       ),
       query: jest.fn(() => Promise.resolve([{ n: String(++seq) }])),
+      save: jest.fn((entity: unknown) => Promise.resolve(entity)),
     };
     dataSource = {
       transaction: jest.fn((fn: (m: unknown) => unknown) => fn(manager)),
@@ -143,15 +143,15 @@ describe('InvoicesService', () => {
       const inv = savedInvoice()!;
       expect(inv).toEqual(
         expect.objectContaining({
-          invoiceNumber: 'INV-2026-000042',
-          laundryOrderId: 'order-1',
           customerId: 'cust-1',
-          subtotalMinorUnits: 3725,
-          discountMinorUnits: 0,
-          totalMinorUnits: 3725,
+          laundryOrderId: 'order-1',
           amountPaidMinorUnits: 0,
+          discountMinorUnits: 0,
+          invoiceNumber: 'INV-2026-000042',
           paymentStatus: InvoicePaymentStatus.UNPAID,
           paymentTerms: InvoicePaymentTerms.PAY_NOW,
+          subtotalMinorUnits: 3725,
+          totalMinorUnits: 3725,
         }),
       );
     });
@@ -162,18 +162,18 @@ describe('InvoicesService', () => {
       const lines = savedLines();
       expect(lines).toEqual([
         expect.objectContaining({
+          amountMinorUnits: 3525,
           description: 'Wash & Fold',
           quantity: 2350,
-          unit: PricingUnit.PER_KG,
           rateMinorUnits: 1500,
-          amountMinorUnits: 3525,
+          unit: PricingUnit.PER_KG,
         }),
         expect.objectContaining({
+          amountMinorUnits: 200,
           description: 'Starch Finish (add-on)',
           quantity: 1,
-          unit: PricingUnit.FLAT,
           rateMinorUnits: 200,
-          amountMinorUnits: 200,
+          unit: PricingUnit.FLAT,
         }),
       ]);
     });
@@ -190,8 +190,8 @@ describe('InvoicesService', () => {
       await service.generateFromOrder(cmd());
       expect(auditLogger.log).toHaveBeenCalledWith(
         expect.objectContaining({
-          actorId: 'actor-1',
           action: 'invoice.generated',
+          actorId: 'actor-1',
           entityType: 'invoice',
         }),
       );

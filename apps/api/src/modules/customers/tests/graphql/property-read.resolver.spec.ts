@@ -129,7 +129,8 @@ describe('Property.bookings nested connection (Task 3 hard gate)', () => {
       walk(root);
     }
 
-    const relationProp = /\b(?:property|entity|existing|row|record)\.bookings\b/;
+    const relationProp =
+      /\b(?:property|entity|existing|row|record)\.bookings\b/;
     for (const file of files) {
       const src = readFileSync(file, 'utf8')
         .split('\n')

@@ -140,11 +140,11 @@ function OwnerAdminConsole() {
   }
 
   const columns: DataTableColumn<AdminRow>[] = [
-    { key: 'email', header: 'Email' },
-    { key: 'role', header: 'Role' },
+    { header: 'Email', key: 'email' },
+    { header: 'Role', key: 'role' },
     {
-      key: 'status',
       header: 'Status',
+      key: 'status',
       render: (row) =>
         row.isActive ? (
           <StatusBadge label="Active" tone="success" />
@@ -153,8 +153,8 @@ function OwnerAdminConsole() {
         ),
     },
     {
-      key: 'actions',
       header: '',
+      key: 'actions',
       render: (row) =>
         row.isActive ? (
           <Button

@@ -9,11 +9,11 @@ export function toLaundryOrderType(order: LaundryOrder): LaundryOrderType {
   return {
     id: order.id,
     customerId: order.customerId,
+    createdAt: order.createdAt,
     fulfillmentType: order.fulfillmentType,
     status: order.status,
-    weightGrams: order.weightGrams,
     totalMinorUnits: order.totalMinorUnits,
-    createdAt: order.createdAt,
     updatedAt: order.updatedAt,
+    weightGrams: order.weightGrams,
   };
 }

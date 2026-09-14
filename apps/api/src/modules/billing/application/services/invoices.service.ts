@@ -95,8 +95,8 @@ export class InvoicesService {
 
     const linePayloads = await this.buildLinePayloads(order.lines);
     const { subtotalMinorUnits, totalMinorUnits } = computeInvoiceTotals({
-      lineAmountsMinorUnits: linePayloads.map((l) => l.amountMinorUnits),
       discountMinorUnits: 0,
+      lineAmountsMinorUnits: linePayloads.map((l) => l.amountMinorUnits),
     });
     const dueDate =
       command.paymentTerms === InvoicePaymentTerms.PAY_NOW ? issueDate : null;
@@ -121,17 +121,17 @@ export class InvoicesService {
         );
 
         const invoice = manager.create(InvoiceEntity, {
-          invoiceNumber,
-          laundryOrderId: order.id,
           customerId: order.customerId,
-          subtotalMinorUnits,
-          discountMinorUnits: 0,
-          totalMinorUnits,
+          laundryOrderId: order.id,
           amountPaidMinorUnits: 0,
+          discountMinorUnits: 0,
+          dueDate,
+          invoiceNumber,
+          issueDate,
           paymentStatus: InvoicePaymentStatus.UNPAID,
           paymentTerms: command.paymentTerms,
-          issueDate,
-          dueDate,
+          subtotalMinorUnits,
+          totalMinorUnits,
         });
         await this.saveInvoice(manager, invoice);
 
@@ -145,9 +145,9 @@ export class InvoicesService {
 
         await this.auditLogger.log({
           actorId: command.actorId,
+          entityId: invoice.id,
           action: 'invoice.generated',
           entityType: ENTITY_TYPE,
-          entityId: invoice.id,
         });
 
         return manager.findOneByOrFail(InvoiceEntity, { id: invoice.id });
@@ -215,7 +215,7 @@ export class InvoicesService {
         }
         description = `${name} (add-on)`;
       }
-      return { description, quantity, unit, rateMinorUnits, amountMinorUnits };
+      return { amountMinorUnits, description, quantity, rateMinorUnits, unit };
     });
   }
 

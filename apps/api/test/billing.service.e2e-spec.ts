@@ -46,13 +46,13 @@ const ENTITIES = [
 
 const makeDataSource = () =>
   new DataSource({
-    type: 'postgres',
-    host: process.env.DB_HOST ?? 'localhost',
-    port: Number(process.env.DB_PORT ?? 5432),
-    username: process.env.DB_USERNAME ?? 'clensy',
-    password: process.env.DB_PASSWORD ?? 'clensy_dev',
     database: process.env.DB_NAME ?? 'clensy',
     entities: ENTITIES,
+    host: process.env.DB_HOST ?? 'localhost',
+    password: process.env.DB_PASSWORD ?? 'clensy_dev',
+    port: Number(process.env.DB_PORT ?? 5432),
+    type: 'postgres',
+    username: process.env.DB_USERNAME ?? 'clensy',
   });
 
 const TRUNCATE =
@@ -166,14 +166,14 @@ describe('InvoicesService (real Postgres) — concurrent generation', () => {
     const stamp = `${Date.now()}-${Math.random()}`;
     const customer = await customers.create({
       actorId: 'a',
-      fullName: 'Race Jane',
       email: `race-${stamp}@example.com`,
+      fullName: 'Race Jane',
       phone: '555-0',
     });
     const service = await services.createService({
       actorId: 'a',
-      name: `Race Svc ${stamp}`,
       durationMinutes: 1,
+      name: `Race Svc ${stamp}`,
     });
     await pricing.createPricingRule({
       actorId: 'a',
@@ -189,8 +189,8 @@ describe('InvoicesService (real Postgres) — concurrent generation', () => {
     await laundry.weigh({ actorId: 'a', orderId: order.id, weightGrams: 2000 });
     await laundry.price({
       actorId: 'a',
-      orderId: order.id,
       baseServiceId: service.id,
+      orderId: order.id,
       addOns: [],
     });
     return order.id;

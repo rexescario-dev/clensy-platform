@@ -42,9 +42,9 @@ describe('ServicesService', () => {
 
   beforeEach(async () => {
     nameQueryBuilder = {
-      where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
       getOne: jest.fn().mockResolvedValue(null),
+      where: jest.fn().mockReturnThis(),
     };
     manager = {
       create: jest.fn(
@@ -52,21 +52,21 @@ describe('ServicesService', () => {
           ...data,
         }),
       ),
-      save: jest.fn((entity: unknown) => Promise.resolve(entity)),
-      update: jest.fn().mockResolvedValue(undefined),
       findOneBy: jest.fn(),
       findOneByOrFail: jest.fn(),
       getRepository: jest.fn(() => ({
         createQueryBuilder: jest.fn(() => nameQueryBuilder),
       })),
+      save: jest.fn((entity: unknown) => Promise.resolve(entity)),
+      update: jest.fn().mockResolvedValue(undefined),
     };
     dataSource = {
       transaction: jest.fn((cb: (manager: unknown) => unknown) => cb(manager)),
     };
     serviceRepository = {
       find: jest.fn(),
-      findOneBy: jest.fn(),
       findBy: jest.fn(),
+      findOneBy: jest.fn(),
     };
     auditLogger = { log: jest.fn().mockResolvedValue(undefined) };
 
@@ -87,22 +87,22 @@ describe('ServicesService', () => {
 
   describe('assertValid via createService', () => {
     it.each([
-      ['name', 'empty string', { name: '', durationMinutes: 30 }],
-      ['name', 'whitespace-only', { name: '   ', durationMinutes: 30 }],
+      ['name', 'empty string', { durationMinutes: 30, name: '' }],
+      ['name', 'whitespace-only', { durationMinutes: 30, name: '   ' }],
       [
         'durationMinutes',
         'zero',
-        { name: 'Standard Clean', durationMinutes: 0 },
+        { durationMinutes: 0, name: 'Standard Clean' },
       ],
       [
         'durationMinutes',
         'negative',
-        { name: 'Standard Clean', durationMinutes: -5 },
+        { durationMinutes: -5, name: 'Standard Clean' },
       ],
       [
         'durationMinutes',
         'non-integer',
-        { name: 'Standard Clean', durationMinutes: 30.5 },
+        { durationMinutes: 30.5, name: 'Standard Clean' },
       ],
     ])(
       'throws BadRequestException before any repository call when %s is %s',
@@ -128,11 +128,11 @@ describe('ServicesService', () => {
     it('returns the service for an existing id', async () => {
       const svc = {
         id: 'service-1',
-        name: 'Standard Clean',
-        description: null,
-        durationMinutes: 60,
         active: true,
         createdAt: new Date(),
+        description: null,
+        durationMinutes: 60,
+        name: 'Standard Clean',
         updatedAt: new Date(),
       };
       serviceRepository.findOneBy.mockResolvedValue(svc);
@@ -155,20 +155,20 @@ describe('ServicesService', () => {
       const services = [
         {
           id: 'service-1',
-          name: 'Standard Clean',
-          description: null,
-          durationMinutes: 60,
           active: true,
           createdAt: new Date(),
+          description: null,
+          durationMinutes: 60,
+          name: 'Standard Clean',
           updatedAt: new Date(),
         },
         {
           id: 'service-2',
-          name: 'Deep Clean',
-          description: null,
-          durationMinutes: 120,
           active: false,
           createdAt: new Date(),
+          description: null,
+          durationMinutes: 120,
+          name: 'Deep Clean',
           updatedAt: new Date(),
         },
       ];
@@ -207,10 +207,10 @@ describe('ServicesService', () => {
     it('throws BadRequestException, not ConflictException, when durationMinutes is invalid and name collides', async () => {
       manager.findOneBy.mockResolvedValue({
         id: 'service-1',
-        name: 'Standard Clean',
+        active: true,
         description: null,
         durationMinutes: 60,
-        active: true,
+        name: 'Standard Clean',
       });
       nameQueryBuilder.getOne.mockResolvedValue({
         id: 'other-service',
@@ -220,8 +220,8 @@ describe('ServicesService', () => {
       await expect(
         service.updateService('service-1', {
           actorId: 'actor-1',
-          name: 'Existing Name',
           durationMinutes: -5,
+          name: 'Existing Name',
         }),
       ).rejects.toThrow(BadRequestException);
 
@@ -235,11 +235,11 @@ describe('ServicesService', () => {
       const services = [
         {
           id: 'service-1',
-          name: 'Standard Clean',
-          description: null,
-          durationMinutes: 60,
           active: true,
           createdAt: new Date(),
+          description: null,
+          durationMinutes: 60,
+          name: 'Standard Clean',
           updatedAt: new Date(),
         },
       ];

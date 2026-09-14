@@ -50,11 +50,11 @@ describe('PricingRulesService', () => {
     // The close-and-read step's query builder — every chained method
     // returns `this` except `execute`, matching TypeORM's own builder shape.
     closeQueryBuilder = {
-      update: jest.fn(),
-      set: jest.fn(),
-      where: jest.fn(),
-      returning: jest.fn(),
       execute: jest.fn().mockResolvedValue({ raw: [] }),
+      returning: jest.fn(),
+      set: jest.fn(),
+      update: jest.fn(),
+      where: jest.fn(),
     };
     closeQueryBuilder.update.mockReturnValue(closeQueryBuilder);
     closeQueryBuilder.set.mockReturnValue(closeQueryBuilder);
@@ -62,9 +62,9 @@ describe('PricingRulesService', () => {
     closeQueryBuilder.returning.mockReturnValue(closeQueryBuilder);
 
     resolveQueryBuilder = {
-      where: jest.fn(),
       andWhere: jest.fn(),
       getOne: jest.fn().mockResolvedValue(null),
+      where: jest.fn(),
     };
     resolveQueryBuilder.where.mockReturnValue(resolveQueryBuilder);
     resolveQueryBuilder.andWhere.mockReturnValue(resolveQueryBuilder);
@@ -75,18 +75,18 @@ describe('PricingRulesService', () => {
           ...data,
         }),
       ),
+      createQueryBuilder: jest.fn().mockReturnValue(closeQueryBuilder),
+      findOneBy: jest.fn(),
       save: jest.fn((entity: unknown) => Promise.resolve(entity)),
       update: jest.fn().mockResolvedValue(undefined),
-      findOneBy: jest.fn(),
-      createQueryBuilder: jest.fn().mockReturnValue(closeQueryBuilder),
     };
     dataSource = {
       transaction: jest.fn((cb: (manager: unknown) => unknown) => cb(manager)),
     };
     pricingRuleRepository = {
-      findOneBy: jest.fn(),
-      findBy: jest.fn(),
       createQueryBuilder: jest.fn().mockReturnValue(resolveQueryBuilder),
+      findBy: jest.fn(),
+      findOneBy: jest.fn(),
     };
     serviceRepository = {
       findOneBy: jest.fn(),
@@ -119,8 +119,8 @@ describe('PricingRulesService', () => {
       await expect(
         service.createPricingRule({
           actorId: 'actor-1',
-          serviceId: 'missing-service',
           priceMinorUnits: 5000,
+          serviceId: 'missing-service',
         }),
       ).rejects.toThrow(NotFoundException);
 
@@ -142,8 +142,8 @@ describe('PricingRulesService', () => {
           await expect(
             service.createPricingRule({
               actorId: 'actor-1',
-              serviceId: 'service-1',
               priceMinorUnits,
+              serviceId: 'service-1',
             }),
           ).rejects.toThrow(BadRequestException);
 
@@ -165,8 +165,8 @@ describe('PricingRulesService', () => {
             service.createPricingRule({
               actorId: 'actor-1',
               serviceId: 'service-1',
-              priceMinorUnits: 5000,
               minimumChargeMinorUnits,
+              priceMinorUnits: 5000,
             }),
           ).rejects.toThrow(BadRequestException);
 
@@ -182,8 +182,8 @@ describe('PricingRulesService', () => {
           service.createPricingRule({
             actorId: 'actor-1',
             serviceId: 'service-1',
-            priceMinorUnits: 5000,
             minimumChargeMinorUnits: 0,
+            priceMinorUnits: 5000,
           }),
         ).resolves.toBeDefined();
       });
@@ -194,8 +194,8 @@ describe('PricingRulesService', () => {
         await expect(
           service.createPricingRule({
             actorId: 'actor-1',
-            serviceId: 'service-1',
             addOnId: 'add-on-1',
+            serviceId: 'service-1',
             priceMinorUnits: 5000,
           }),
         ).rejects.toThrow(BadRequestException);
@@ -229,8 +229,8 @@ describe('PricingRulesService', () => {
 
         await service.createPricingRule({
           actorId: 'actor-1',
-          serviceId: 'service-1',
           addOnId: null as unknown as undefined,
+          serviceId: 'service-1',
           priceMinorUnits: 5000,
         });
 
@@ -244,8 +244,8 @@ describe('PricingRulesService', () => {
 
         await service.createPricingRule({
           actorId: 'actor-1',
-          serviceId: null as unknown as undefined,
           addOnId: 'add-on-1',
+          serviceId: null as unknown as undefined,
           priceMinorUnits: 5000,
         });
 
@@ -258,8 +258,8 @@ describe('PricingRulesService', () => {
         await expect(
           service.createPricingRule({
             actorId: 'actor-1',
-            serviceId: null as unknown as undefined,
             addOnId: null as unknown as undefined,
+            serviceId: null as unknown as undefined,
             priceMinorUnits: 5000,
           }),
         ).rejects.toThrow(BadRequestException);
@@ -274,8 +274,8 @@ describe('PricingRulesService', () => {
           service.createPricingRule({
             actorId: 'actor-1',
             serviceId: 'service-1',
-            priceMinorUnits: 5000,
             minimumChargeMinorUnits: null as unknown as undefined,
+            priceMinorUnits: 5000,
           }),
         ).resolves.toBeDefined();
       });
@@ -330,8 +330,8 @@ describe('PricingRulesService', () => {
 
       await expect(service.getActivePricing('service-1')).resolves.toBeNull();
       expect(pricingRuleRepository.findOneBy).toHaveBeenCalledWith({
-        serviceId: 'service-1',
         active: true,
+        serviceId: 'service-1',
       });
     });
 
@@ -339,9 +339,9 @@ describe('PricingRulesService', () => {
       const rule = {
         id: 'rule-1',
         serviceId: 'service-1',
-        priceMinorUnits: 5000,
         active: true,
         createdAt: new Date(),
+        priceMinorUnits: 5000,
       };
       serviceRepository.findOneBy.mockResolvedValue({ id: 'service-1' });
       pricingRuleRepository.findOneBy.mockResolvedValue(rule);
@@ -358,9 +358,9 @@ describe('PricingRulesService', () => {
         {
           id: 'rule-1',
           serviceId: 'service-1',
-          priceMinorUnits: 5000,
           active: true,
           createdAt: new Date(),
+          priceMinorUnits: 5000,
         },
       ];
       pricingRuleRepository.findBy.mockResolvedValue(rules);

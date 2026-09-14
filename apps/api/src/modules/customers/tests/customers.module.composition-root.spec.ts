@@ -29,8 +29,8 @@ import { PropertyEntity } from '../infrastructure/persistence/property.entity';
 // wiring, not persistence.
 @Global()
 @Module({
-  providers: [{ provide: DataSource, useValue: {} }],
   exports: [DataSource],
+  providers: [{ provide: DataSource, useValue: {} }],
 })
 class FakeGlobalDataSourceModule {}
 
@@ -49,8 +49,8 @@ describe('CustomersModule — composition-root wiring (real AuditModule)', () =>
       })
       .overrideProvider(getRepositoryToken(PropertyEntity))
       .useValue({
-        findOneBy: jest.fn(),
         findBy: jest.fn(),
+        findOneBy: jest.fn(),
         metadata: { columns: [] },
       })
       .overrideProvider(getQueryServiceToken(CustomerEntity))

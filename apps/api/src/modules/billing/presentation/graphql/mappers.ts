@@ -9,18 +9,18 @@ import { InvoiceType } from './invoice.type';
 export function toInvoiceType(invoice: Invoice): InvoiceType {
   return {
     id: invoice.id,
-    invoiceNumber: invoice.invoiceNumber,
-    laundryOrderId: invoice.laundryOrderId,
     customerId: invoice.customerId,
-    subtotalMinorUnits: invoice.subtotalMinorUnits,
-    discountMinorUnits: invoice.discountMinorUnits,
-    totalMinorUnits: invoice.totalMinorUnits,
+    laundryOrderId: invoice.laundryOrderId,
     amountPaidMinorUnits: invoice.amountPaidMinorUnits,
+    createdAt: invoice.createdAt,
+    discountMinorUnits: invoice.discountMinorUnits,
+    dueDate: invoice.dueDate,
+    invoiceNumber: invoice.invoiceNumber,
+    issueDate: invoice.issueDate,
     paymentStatus: invoice.paymentStatus,
     paymentTerms: invoice.paymentTerms,
-    issueDate: invoice.issueDate,
-    dueDate: invoice.dueDate,
-    createdAt: invoice.createdAt,
+    subtotalMinorUnits: invoice.subtotalMinorUnits,
+    totalMinorUnits: invoice.totalMinorUnits,
     updatedAt: invoice.updatedAt,
   };
 }

@@ -52,9 +52,9 @@ export class TeamsService {
 
         await this.auditLogger.log({
           actorId: command.actorId,
+          entityId: entity.id,
           action: 'team.create',
           entityType: 'team',
-          entityId: entity.id,
         });
 
         return entity;

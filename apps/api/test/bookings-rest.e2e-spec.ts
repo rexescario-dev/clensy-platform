@@ -51,28 +51,28 @@ describe('Bookings REST (e2e)', () => {
     const runId = Date.now().toString();
     const customer = await customersService.create({
       actorId: 'e2e',
-      fullName: `REST Fixture Customer ${runId}`,
       email: `rest-fixture-${runId}@example.com`,
+      fullName: `REST Fixture Customer ${runId}`,
       phone: '555-0100',
     });
     const property = await propertiesService.create({
       actorId: 'e2e',
       customerId: customer.id,
-      label: 'Home',
       addressLine1: `${runId} Main St`,
       city: 'City',
-      region: 'Region',
+      label: 'Home',
       postalCode: '00000',
+      region: 'Region',
     });
     const service = await servicesService.createService({
       actorId: 'e2e',
-      name: `REST Fixture Service ${runId}`,
       durationMinutes: 60,
+      name: `REST Fixture Service ${runId}`,
     });
     await pricingRulesService.createPricingRule({
       actorId: 'e2e',
-      serviceId: service.id,
       priceMinorUnits: 5000,
+      serviceId: service.id,
     });
 
     // POST — unauthenticated, no Cookie header set anywhere in this file.
@@ -90,8 +90,8 @@ describe('Bookings REST (e2e)', () => {
       propertyId: property.id,
       serviceId: service.id,
       teamId: null,
-      status: 'PENDING',
       pricingSnapshot: { priceMinorUnits: 5000 },
+      status: 'PENDING',
     });
     expect(createResponse.body.customerName).toBeUndefined();
     expect(createResponse.body.serviceType).toBeUndefined();
@@ -115,8 +115,8 @@ describe('Bookings REST (e2e)', () => {
     );
     expect(getResponse.status).toBe(200);
     expect(getResponse.body).toMatchObject({
-      id: bookingId,
       customerId: customer.id,
+      id: bookingId,
     });
 
     // PATCH — unauthenticated; only scheduledAt/status/teamId are settable
@@ -127,15 +127,15 @@ describe('Bookings REST (e2e)', () => {
     expect(updateResponse.status).toBe(200);
     expect(updateResponse.body).toMatchObject({
       id: bookingId,
-      status: 'CONFIRMED',
       customerId: customer.id,
       propertyId: property.id,
       serviceId: service.id,
+      status: 'CONFIRMED',
     });
 
     const updateAuditEvents = await auditEventRepository.findBy({
-      entityId: bookingId,
       action: 'booking.update',
+      entityId: bookingId,
     });
     expect(updateAuditEvents).toHaveLength(0);
 
@@ -153,8 +153,8 @@ describe('Bookings REST (e2e)', () => {
     ).not.toContain(bookingId);
 
     const removeAuditEvents = await auditEventRepository.findBy({
-      entityId: bookingId,
       action: 'booking.remove',
+      entityId: bookingId,
     });
     expect(removeAuditEvents).toHaveLength(0);
   });

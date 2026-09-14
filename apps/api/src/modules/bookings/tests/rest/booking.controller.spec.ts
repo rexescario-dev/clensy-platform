@@ -7,7 +7,7 @@ import { UpdateBookingDto } from '../../presentation/rest/update-booking.dto';
 // `cleaner.resolver.spec.ts`): reads the method's own function value off
 // the prototype — the exact function reference `@UseGuards()` would attach
 // `Reflect` metadata to, if it were ever added here by mistake.
-type ControllerMethod = 'create' | 'findAll' | 'findOne' | 'update' | 'remove';
+type ControllerMethod = 'create' | 'findAll' | 'findOne' | 'remove' | 'update';
 
 function methodRef(method: ControllerMethod): (...args: unknown[]) => unknown {
   const descriptor = Object.getOwnPropertyDescriptor(
@@ -32,8 +32,8 @@ describe('BookingController', () => {
       create: jest.fn(),
       findAll: jest.fn(),
       findOne: jest.fn(),
-      update: jest.fn(),
       remove: jest.fn(),
+      update: jest.fn(),
     };
     controller = new BookingController(bookingsService as never);
   });
@@ -64,12 +64,12 @@ describe('BookingController', () => {
     });
 
     expect(bookingsService.create).toHaveBeenCalledWith({
+      actorId: null,
       customerId: 'customer-1',
       propertyId: 'property-1',
       serviceId: 'service-1',
       teamId: 'team-1',
       scheduledAt,
-      actorId: null,
     });
   });
 
@@ -78,9 +78,9 @@ describe('BookingController', () => {
     void controller.update('booking-1', { scheduledAt, teamId: null });
 
     expect(bookingsService.update).toHaveBeenCalledWith('booking-1', {
+      actorId: null,
       scheduledAt,
       teamId: null,
-      actorId: null,
     });
   });
 

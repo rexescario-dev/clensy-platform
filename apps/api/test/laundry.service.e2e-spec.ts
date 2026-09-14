@@ -45,13 +45,13 @@ const ENTITIES = [
 
 const makeDataSource = () =>
   new DataSource({
-    type: 'postgres',
-    host: process.env.DB_HOST ?? 'localhost',
-    port: Number(process.env.DB_PORT ?? 5432),
-    username: process.env.DB_USERNAME ?? 'clensy',
-    password: process.env.DB_PASSWORD ?? 'clensy_dev',
     database: process.env.DB_NAME ?? 'clensy',
     entities: ENTITIES,
+    host: process.env.DB_HOST ?? 'localhost',
+    password: process.env.DB_PASSWORD ?? 'clensy_dev',
+    port: Number(process.env.DB_PORT ?? 5432),
+    type: 'postgres',
+    username: process.env.DB_USERNAME ?? 'clensy',
   });
 
 const TRUNCATE =
@@ -101,7 +101,7 @@ function buildLaundryService(
     pricing,
     auditLogger,
   );
-  return { laundry, customers, services, addOns, pricing };
+  return { addOns, customers, laundry, pricing, services };
 }
 
 describe('LaundryOrdersService (real Postgres)', () => {
@@ -139,21 +139,21 @@ describe('LaundryOrdersService (real Postgres)', () => {
   }) {
     const customer = await svc.customers.create({
       actorId: 'actor-1',
-      fullName: 'Jane Doe',
       email: `jane-${Date.now()}-${Math.random()}@example.com`,
+      fullName: 'Jane Doe',
       phone: '555-0100',
     });
     const service = await svc.services.createService({
       actorId: 'actor-1',
-      name: `Wash & Fold ${Date.now()}-${Math.random()}`,
       durationMinutes: 1,
+      name: `Wash & Fold ${Date.now()}-${Math.random()}`,
     });
     await svc.pricing.createPricingRule({
       actorId: 'actor-1',
       serviceId: service.id,
+      minimumChargeMinorUnits: opts?.serviceMinCharge,
       priceMinorUnits: opts?.servicePrice ?? 1500,
       unit: opts?.serviceUnit ?? PricingUnit.PER_KG,
-      minimumChargeMinorUnits: opts?.serviceMinCharge,
     });
     const addOn = await svc.addOns.createAddOn({
       actorId: 'actor-1',
@@ -166,7 +166,7 @@ describe('LaundryOrdersService (real Postgres)', () => {
       priceMinorUnits: opts?.addOnPrice ?? 800,
       unit: PricingUnit.FLAT,
     });
-    return { customer, service, addOn };
+    return { addOn, customer, service };
   }
 
   // The audit mock is shared with the catalog/customer fixture services, so
@@ -178,10 +178,10 @@ describe('LaundryOrdersService (real Postgres)', () => {
 
   it('runs the full intake -> completed golden path with correct line pricing and audit trail', async () => {
     const { customer, service, addOn } = await fixture({
+      addOnPrice: 800,
+      serviceMinCharge: 500,
       servicePrice: 1500,
       serviceUnit: PricingUnit.PER_KG,
-      serviceMinCharge: 500,
-      addOnPrice: 800,
     });
 
     let order = await svc.laundry.receive({
@@ -201,8 +201,8 @@ describe('LaundryOrdersService (real Postgres)', () => {
 
     order = await svc.laundry.price({
       actorId: 'actor-1',
-      orderId: order.id,
       baseServiceId: service.id,
+      orderId: order.id,
       addOns: [{ addOnId: addOn.id }],
     });
     expect(order.status).toBe(LaundryOrderStatus.PRICED);
@@ -210,28 +210,28 @@ describe('LaundryOrdersService (real Postgres)', () => {
     expect(order.totalMinorUnits).toBe(4325);
 
     const lines = await dsA.getRepository(LaundryOrderLineEntity).find({
-      where: { laundryOrderId: order.id },
       order: { createdAt: 'ASC' },
+      where: { laundryOrderId: order.id },
     });
     expect(lines).toHaveLength(2);
     const base = lines.find((l) => l.serviceId === service.id)!;
     expect(base.pricingSnapshot).toEqual(
       expect.objectContaining({
+        amountMinorUnits: 3525,
+        minimumChargeApplied: false,
+        minimumChargeMinorUnits: 500,
+        quantity: 2350,
         rateMinorUnits: 1500,
         unit: PricingUnit.PER_KG,
-        quantity: 2350,
-        amountMinorUnits: 3525,
-        minimumChargeMinorUnits: 500,
-        minimumChargeApplied: false,
       }),
     );
     expect(base.pricingSnapshot.pricingRuleId).toBeTruthy();
     const addOnLine = lines.find((l) => l.addOnId === addOn.id)!;
     expect(addOnLine.pricingSnapshot).toEqual(
       expect.objectContaining({
-        unit: PricingUnit.FLAT,
         amountMinorUnits: 800,
         minimumChargeMinorUnits: null,
+        unit: PricingUnit.FLAT,
       }),
     );
 
@@ -285,8 +285,8 @@ describe('LaundryOrdersService (real Postgres)', () => {
     });
     order = await svc.laundry.price({
       actorId: 'actor-1',
-      orderId: order.id,
       baseServiceId: service.id,
+      orderId: order.id,
       addOns: [{ addOnId: addOn.id }],
     });
     const originalTotal = order.totalMinorUnits;
@@ -295,9 +295,9 @@ describe('LaundryOrdersService (real Postgres)', () => {
     await svc.pricing.createPricingRule({
       actorId: 'actor-1',
       serviceId: service.id,
+      effectiveFrom: new Date(Date.now() + 1000),
       priceMinorUnits: 9999,
       unit: PricingUnit.PER_KG,
-      effectiveFrom: new Date(Date.now() + 1000),
     });
     expect(
       (await svc.pricing.resolveEffectivePricing(
@@ -329,28 +329,28 @@ describe('LaundryOrdersService (real Postgres)', () => {
     });
     order = await svc.laundry.price({
       actorId: 'actor-1',
-      orderId: order.id,
       baseServiceId: service.id,
+      orderId: order.id,
       addOns: [{ addOnId: addOn.id }],
     });
 
     const before = await dsA
       .getRepository(LaundryOrderLineEntity)
-      .find({ where: { laundryOrderId: order.id }, order: { id: 'ASC' } });
+      .find({ order: { id: 'ASC' }, where: { laundryOrderId: order.id } });
     const beforeTotal = (await svc.laundry.getOrder(order.id))!.totalMinorUnits;
 
     await expect(
       svc.laundry.price({
         actorId: 'actor-1',
-        orderId: order.id,
         baseServiceId: service.id,
+        orderId: order.id,
         addOns: [{ addOnId: addOn.id }],
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
 
     const after = await dsA
       .getRepository(LaundryOrderLineEntity)
-      .find({ where: { laundryOrderId: order.id }, order: { id: 'ASC' } });
+      .find({ order: { id: 'ASC' }, where: { laundryOrderId: order.id } });
     expect(after).toHaveLength(before.length);
     expect(after).toEqual(before);
     expect((await svc.laundry.getOrder(order.id))!.totalMinorUnits).toBe(
@@ -372,8 +372,8 @@ describe('LaundryOrdersService (real Postgres)', () => {
     });
     order = await svc.laundry.price({
       actorId: 'actor-1',
-      orderId: order.id,
       baseServiceId: service.id,
+      orderId: order.id,
       addOns: [{ addOnId: addOn.id }],
     });
 
@@ -406,8 +406,8 @@ describe('LaundryOrdersService (real Postgres)', () => {
       });
       order = await svc.laundry.price({
         actorId: 'actor-1',
-        orderId: order.id,
         baseServiceId: service.id,
+        orderId: order.id,
         addOns: [{ addOnId: addOn.id }],
       });
       order = await svc.laundry.markAwaitingPayment({

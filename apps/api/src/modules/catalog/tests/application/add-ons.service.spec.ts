@@ -37,9 +37,9 @@ describe('AddOnsService', () => {
 
   beforeEach(async () => {
     nameQueryBuilder = {
-      where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
       getOne: jest.fn().mockResolvedValue(null),
+      where: jest.fn().mockReturnThis(),
     };
     manager = {
       create: jest.fn(
@@ -47,13 +47,13 @@ describe('AddOnsService', () => {
           ...data,
         }),
       ),
-      save: jest.fn((entity: unknown) => Promise.resolve(entity)),
-      update: jest.fn().mockResolvedValue(undefined),
       findOneBy: jest.fn(),
       findOneByOrFail: jest.fn(),
       getRepository: jest.fn(() => ({
         createQueryBuilder: jest.fn(() => nameQueryBuilder),
       })),
+      save: jest.fn((entity: unknown) => Promise.resolve(entity)),
+      update: jest.fn().mockResolvedValue(undefined),
     };
     dataSource = {
       transaction: jest.fn((cb: (manager: unknown) => unknown) => cb(manager)),
@@ -133,10 +133,10 @@ describe('AddOnsService', () => {
     it('throws BadRequestException, not ConflictException, when priceMinorUnits is invalid and name collides', async () => {
       manager.findOneBy.mockResolvedValue({
         id: 'add-on-1',
-        name: 'Extra Towels',
-        description: null,
-        priceMinorUnits: 500,
         active: true,
+        description: null,
+        name: 'Extra Towels',
+        priceMinorUnits: 500,
       });
       nameQueryBuilder.getOne.mockResolvedValue({
         id: 'other-add-on',
@@ -161,20 +161,20 @@ describe('AddOnsService', () => {
       const addOns = [
         {
           id: 'add-on-1',
-          name: 'Extra Towels',
-          description: null,
-          priceMinorUnits: 500,
           active: true,
           createdAt: new Date(),
+          description: null,
+          name: 'Extra Towels',
+          priceMinorUnits: 500,
           updatedAt: new Date(),
         },
         {
           id: 'add-on-2',
-          name: 'Pet Hair Removal',
-          description: null,
-          priceMinorUnits: 1500,
           active: false,
           createdAt: new Date(),
+          description: null,
+          name: 'Pet Hair Removal',
+          priceMinorUnits: 1500,
           updatedAt: new Date(),
         },
       ];
@@ -196,11 +196,11 @@ describe('AddOnsService', () => {
       const addOns = [
         {
           id: 'add-on-1',
-          name: 'Starch Finish',
-          description: null,
-          priceMinorUnits: 500,
           active: true,
           createdAt: new Date(),
+          description: null,
+          name: 'Starch Finish',
+          priceMinorUnits: 500,
           updatedAt: new Date(),
         },
       ];

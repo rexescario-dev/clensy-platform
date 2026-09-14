@@ -29,29 +29,29 @@ const VIEW_ROLES = [
 // Nested `properties` is Relatable-owned; do not add a Clensy `@ResolveField`.
 @ObjectType('Customer')
 @QueryOptions({
-  pagingStrategy: PagingStrategies.OFFSET,
-  enableTotalCount: true,
   defaultResultSize: PLATFORM_PAGE_DEFAULT,
-  maxResultsSize: PLATFORM_PAGE_MAX,
   defaultSort: [
-    { field: 'createdAt', direction: SortDirection.DESC },
-    { field: 'id', direction: SortDirection.ASC },
+    { direction: SortDirection.DESC, field: 'createdAt' },
+    { direction: SortDirection.ASC, field: 'id' },
   ],
+  enableTotalCount: true,
+  maxResultsSize: PLATFORM_PAGE_MAX,
+  pagingStrategy: PagingStrategies.OFFSET,
 })
 @OffsetConnection('properties', () => PropertyType, {
-  nullable: false,
-  enableTotalCount: false,
-  relationName: 'properties',
-  defaultResultSize: PLATFORM_PAGE_DEFAULT,
-  maxResultsSize: PLATFORM_PAGE_MAX,
-  defaultSort: [
-    { field: 'createdAt', direction: SortDirection.DESC },
-    { field: 'id', direction: SortDirection.ASC },
-  ],
-  guards: [AuthGuard],
   decorators: [Roles(...VIEW_ROLES)],
-  update: { enabled: false },
+  defaultResultSize: PLATFORM_PAGE_DEFAULT,
+  defaultSort: [
+    { direction: SortDirection.DESC, field: 'createdAt' },
+    { direction: SortDirection.ASC, field: 'id' },
+  ],
+  enableTotalCount: false,
+  guards: [AuthGuard],
+  maxResultsSize: PLATFORM_PAGE_MAX,
+  nullable: false,
+  relationName: 'properties',
   remove: { enabled: false },
+  update: { enabled: false },
 })
 export class CustomerType {
   @IDField(() => ID)

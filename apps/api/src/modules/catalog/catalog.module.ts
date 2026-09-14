@@ -19,6 +19,7 @@ import { ServiceResolver } from './presentation/graphql/service.resolver';
 import { ServiceType } from './presentation/graphql/service.type';
 
 @Module({
+  exports: [ServicesService, AddOnsService, PricingRulesService],
   imports: [
     TypeOrmModule.forFeature([ServiceEntity, AddOnEntity, PricingRuleEntity]),
     NestjsQueryTypeOrmModule.forFeature([ServiceEntity, AddOnEntity]),
@@ -38,6 +39,5 @@ import { ServiceType } from './presentation/graphql/service.type';
     PricingRuleResolver,
     ActivePricingLoader,
   ],
-  exports: [ServicesService, AddOnsService, PricingRulesService],
 })
 export class CatalogModule {}

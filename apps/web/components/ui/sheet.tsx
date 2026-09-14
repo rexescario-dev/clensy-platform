@@ -55,7 +55,7 @@ function SheetContent({
   forceMount,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
-  side?: "top" | "right" | "bottom" | "left"
+  side?: "bottom" | "left" | "right" | "top"
   showCloseButton?: boolean
   portalContainer?: HTMLElement | null
   overlayClassName?: string

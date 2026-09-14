@@ -2,7 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
-export type ToastTone = 'success' | 'error';
+export type ToastTone = 'error' | 'success';
 
 interface Toast {
   id: string;
@@ -24,8 +24,8 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 const TOAST_DURATION_MS = 4000;
 
 const TONE_CLASSES: Record<ToastTone, string> = {
-  success: 'bg-slate-900 text-white',
   error: 'bg-red-600 text-white',
+  success: 'bg-slate-900 text-white',
 };
 
 export function ToastProvider({ children }: ToastProviderProps) {
@@ -47,7 +47,7 @@ export function ToastProvider({ children }: ToastProviderProps) {
         typeof crypto !== 'undefined' && 'randomUUID' in crypto
           ? crypto.randomUUID()
           : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      setToasts((current) => [...current, { id, tone, message }]);
+      setToasts((current) => [...current, { id, message, tone }]);
       const timer = setTimeout(() => dismiss(id), TOAST_DURATION_MS);
       timers.current.set(id, timer);
     },
@@ -64,8 +64,8 @@ export function ToastProvider({ children }: ToastProviderProps) {
   }, []);
 
   const value: ToastContextValue = {
-    success: (message: string) => push('success', message),
     error: (message: string) => push('error', message),
+    success: (message: string) => push('success', message),
   };
 
   return (

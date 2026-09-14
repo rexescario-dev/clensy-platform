@@ -27,10 +27,10 @@ export class LaundryOrderLinePricingSnapshotEmbeddable implements LaundryOrderLi
   rateMinorUnits!: number;
 
   @Column({
-    type: 'enum',
     enum: PricingUnit,
     enumName: 'laundry_order_line_unit_enum',
     name: 'pricingSnapshotUnit',
+    type: 'enum',
   })
   unit!: PricingUnit;
 

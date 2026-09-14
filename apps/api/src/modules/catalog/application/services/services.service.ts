@@ -36,10 +36,10 @@ export class ServicesService {
         const name = command.name.trim();
 
         const entity = manager.create(ServiceEntity, {
-          name,
+          active: true,
           description: command.description ?? null,
           durationMinutes: command.durationMinutes,
-          active: true,
+          name,
         });
 
         this.assertValid(entity);
@@ -49,9 +49,9 @@ export class ServicesService {
 
         await this.auditLogger.log({
           actorId: command.actorId,
+          entityId: entity.id,
           action: 'service.create',
           entityType: 'service',
-          entityId: entity.id,
         });
 
         return entity;
@@ -101,9 +101,9 @@ export class ServicesService {
 
         await this.auditLogger.log({
           actorId,
+          entityId: updated.id,
           action: 'service.update',
           entityType: 'service',
-          entityId: updated.id,
         });
 
         return updated;
@@ -169,7 +169,7 @@ export class ServicesService {
   }
 
   private assertValid(
-    service: Pick<Service, 'name' | 'durationMinutes'>,
+    service: Pick<Service, 'durationMinutes' | 'name'>,
   ): void {
     if (!service.name?.trim()) {
       throw new BadRequestException('name must not be empty');

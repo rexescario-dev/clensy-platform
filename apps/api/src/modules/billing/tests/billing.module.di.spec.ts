@@ -21,38 +21,38 @@ import { InvoiceLineEntity } from '../infrastructure/persistence/invoice-line.en
 
 @Global()
 @Module({
-  providers: [{ provide: DataSource, useValue: {} }],
   exports: [DataSource],
+  providers: [{ provide: DataSource, useValue: {} }],
 })
 class FakeGlobalDataSourceModule {}
 
 @Module({
+  exports: [CustomersService, PropertiesService],
   providers: [
     { provide: CustomersService, useValue: {} },
     { provide: PropertiesService, useValue: {} },
   ],
-  exports: [CustomersService, PropertiesService],
 })
 class FakeCustomersModule {}
 
 @Module({
+  exports: [PricingRulesService, ServicesService, AddOnsService],
   providers: [
     { provide: PricingRulesService, useValue: {} },
     { provide: ServicesService, useValue: { getServicesByIds: jest.fn() } },
     { provide: AddOnsService, useValue: { getAddOnsByIds: jest.fn() } },
   ],
-  exports: [PricingRulesService, ServicesService, AddOnsService],
 })
 class FakeCatalogModule {}
 
 @Module({
+  exports: [LaundryOrdersService],
   providers: [
     {
       provide: LaundryOrdersService,
       useValue: { getOrderForInvoicing: jest.fn() },
     },
   ],
-  exports: [LaundryOrdersService],
 })
 class FakeLaundryModule {}
 

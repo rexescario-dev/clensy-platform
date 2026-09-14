@@ -13,9 +13,9 @@ function makeRule(id: string, serviceId: string): PricingRule {
   return {
     id,
     serviceId,
-    priceMinorUnits: 1000,
     active: true,
     createdAt: new Date(),
+    priceMinorUnits: 1000,
   };
 }
 

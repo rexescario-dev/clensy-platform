@@ -15,7 +15,7 @@ export interface AuthModuleAsyncOptions {
   // `forRootAsync()` call time — this never appears in `AuthModule`'s own
   // static `@Module()` decorator below, so the plain `AuthModule` class
   // still never unconditionally imports `AdminsModule`.
-  imports?: Array<Type<unknown> | DynamicModule>;
+  imports?: Array<DynamicModule | Type<unknown>>;
   inject?: Array<Type<unknown> | string | symbol>;
   useFactory: (
     ...args: any[]
@@ -61,25 +61,25 @@ export interface AuthModuleAsyncOptions {
 export class AuthModule {
   static forRootAsync(options: AuthModuleAsyncOptions): DynamicModule {
     const adminIdentityLookupProvider: Provider = {
+      inject: options.inject ?? [],
       provide: ADMIN_IDENTITY_LOOKUP,
       useFactory: options.useFactory,
-      inject: options.inject ?? [],
     };
 
     return {
-      module: AuthModule,
+      exports: [TokenService, AuthGuard],
       imports: [
         PassportModule,
         JwtModule.register({}),
         ...(options.imports ?? []),
       ],
+      module: AuthModule,
       providers: [
         TokenService,
         JwtStrategy,
         AuthGuard,
         adminIdentityLookupProvider,
       ],
-      exports: [TokenService, AuthGuard],
     };
   }
 }

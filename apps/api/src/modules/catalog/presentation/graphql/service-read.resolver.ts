@@ -16,18 +16,18 @@ import { ServiceType, VIEW_ROLES } from './service.type';
 
 @Resolver(() => ServiceType)
 export class ServiceReadResolver extends ReadResolver(ServiceType, {
-  guards: [AuthGuard],
   decorators: [Roles(...VIEW_ROLES)],
-  one: { disabled: true },
-  many: { name: 'services' },
-  pagingStrategy: PagingStrategies.OFFSET,
-  enableTotalCount: true,
   defaultResultSize: PLATFORM_PAGE_DEFAULT,
-  maxResultsSize: PLATFORM_PAGE_MAX,
   defaultSort: [
-    { field: 'createdAt', direction: SortDirection.DESC },
-    { field: 'id', direction: SortDirection.ASC },
+    { direction: SortDirection.DESC, field: 'createdAt' },
+    { direction: SortDirection.ASC, field: 'id' },
   ],
+  enableTotalCount: true,
+  guards: [AuthGuard],
+  many: { name: 'services' },
+  maxResultsSize: PLATFORM_PAGE_MAX,
+  one: { disabled: true },
+  pagingStrategy: PagingStrategies.OFFSET,
 }) {
   constructor(
     @InjectQueryService(ServiceEntity)

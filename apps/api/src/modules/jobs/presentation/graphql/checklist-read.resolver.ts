@@ -1,7 +1,4 @@
-import {
-  InjectQueryService,
-  QueryService,
-} from '@ptc-org/nestjs-query-core';
+import { InjectQueryService, QueryService } from '@ptc-org/nestjs-query-core';
 import { ReadResolver, Relatable } from '@ptc-org/nestjs-query-graphql';
 import { Resolver } from '@nestjs/graphql';
 import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
@@ -16,10 +13,10 @@ export class ChecklistReadResolver extends Relatable(ChecklistType, {
   enableTotalCount: false,
 })(
   ReadResolver(ChecklistType, {
-    guards: [AuthGuard],
     decorators: [Roles(...VIEW_ROLES)],
-    one: { disabled: true },
+    guards: [AuthGuard],
     many: { disabled: true },
+    one: { disabled: true },
   }),
 ) {
   constructor(

@@ -21,11 +21,6 @@ import {
 // stateless config/query/fixture shape is factored out here.
 function createTestDataSource(): DataSource {
   return new DataSource({
-    type: 'postgres',
-    host: process.env.DB_HOST ?? 'localhost',
-    port: Number(process.env.DB_PORT ?? 5432),
-    username: process.env.DB_USERNAME ?? 'clensy',
-    password: process.env.DB_PASSWORD ?? 'clensy_dev',
     database: process.env.DB_NAME ?? 'clensy',
     entities: [
       CustomerEntity,
@@ -38,6 +33,11 @@ function createTestDataSource(): DataSource {
       CleanerEntity,
       AuditEventEntity,
     ],
+    host: process.env.DB_HOST ?? 'localhost',
+    password: process.env.DB_PASSWORD ?? 'clensy_dev',
+    port: Number(process.env.DB_PORT ?? 5432),
+    type: 'postgres',
+    username: process.env.DB_USERNAME ?? 'clensy',
   });
 }
 
@@ -76,10 +76,10 @@ function seedCustomer(
   const repo = dataSource.getRepository(CustomerEntity);
   return repo.save(
     repo.create({
-      fullName: 'Jane Doe',
       email: 'jane@example.com',
-      phone: '555-0100',
+      fullName: 'Jane Doe',
       notes: 'Gate code 1234',
+      phone: '555-0100',
       ...overrides,
     }),
   );
@@ -134,8 +134,8 @@ describe('CustomersService (real Postgres)', () => {
     it('persists a CustomerEntity with the given fields, notes defaulting to null when omitted, and records customer.create', async () => {
       const created = await service.create({
         actorId: 'actor-1',
-        fullName: 'John Smith',
         email: 'john@example.com',
+        fullName: 'John Smith',
         phone: '555-0200',
       });
 
@@ -153,9 +153,9 @@ describe('CustomersService (real Postgres)', () => {
       expect(auditLogger.log).toHaveBeenCalledWith(
         expect.objectContaining({
           actorId: 'actor-1',
+          entityId: created.id,
           action: 'customer.create',
           entityType: 'customer',
-          entityId: created.id,
         }),
       );
     });
@@ -166,8 +166,8 @@ describe('CustomersService (real Postgres)', () => {
       await expect(
         service.create({
           actorId: 'actor-1',
-          fullName: 'Rollback Case',
           email: 'rollback@example.com',
+          fullName: 'Rollback Case',
           phone: '555-0300',
         }),
       ).rejects.toThrow('audit down');
@@ -268,13 +268,13 @@ describe('PropertiesService (real Postgres)', () => {
     return repo.save(
       repo.create({
         customerId,
-        label: 'Home',
+        accessNotes: 'Gate code 1234',
         addressLine1: '123 Main St',
         addressLine2: null,
         city: 'Springfield',
-        region: 'IL',
+        label: 'Home',
         postalCode: '62704',
-        accessNotes: 'Gate code 1234',
+        region: 'IL',
         ...overrides,
       }),
     );
@@ -287,11 +287,11 @@ describe('PropertiesService (real Postgres)', () => {
       const created = await service.create({
         actorId: 'actor-1',
         customerId: customer.id,
-        label: 'Downtown Office',
         addressLine1: '456 Market St',
         city: 'Springfield',
-        region: 'IL',
+        label: 'Downtown Office',
         postalCode: '62701',
+        region: 'IL',
       });
 
       expect(created.addressLine2).toBeNull();
@@ -311,9 +311,9 @@ describe('PropertiesService (real Postgres)', () => {
       expect(auditLogger.log).toHaveBeenCalledWith(
         expect.objectContaining({
           actorId: 'actor-1',
+          entityId: created.id,
           action: 'property.create',
           entityType: 'property',
-          entityId: created.id,
         }),
       );
     });
@@ -323,11 +323,11 @@ describe('PropertiesService (real Postgres)', () => {
         service.create({
           actorId: 'actor-1',
           customerId: '00000000-0000-0000-0000-000000000000',
-          label: 'Home',
           addressLine1: '123 Main St',
           city: 'Springfield',
-          region: 'IL',
+          label: 'Home',
           postalCode: '62704',
+          region: 'IL',
         }),
       ).rejects.toThrow(NotFoundException);
 
@@ -343,11 +343,11 @@ describe('PropertiesService (real Postgres)', () => {
         service.create({
           actorId: 'actor-1',
           customerId: customer.id,
-          label: 'Rollback Case',
           addressLine1: '789 Rollback Ave',
           city: 'Springfield',
-          region: 'IL',
+          label: 'Rollback Case',
           postalCode: '62704',
+          region: 'IL',
         }),
       ).rejects.toThrow('audit down');
 
@@ -386,8 +386,8 @@ describe('PropertiesService (real Postgres)', () => {
       });
 
       await service.update(existing.id, {
-        actorId: 'actor-1',
         accessNotes: null,
+        actorId: 'actor-1',
       });
 
       const row = await dataSource

@@ -33,22 +33,22 @@ const VIEW_ROLES = [
 ];
 
 const relationReadOpts = {
-  update: { enabled: false },
-  remove: { enabled: false },
-  guards: [AuthGuard],
   decorators: [Roles(...VIEW_ROLES)],
+  guards: [AuthGuard],
+  remove: { enabled: false },
+  update: { enabled: false },
 };
 
 @ObjectType('Booking')
 @QueryOptions({
-  pagingStrategy: PagingStrategies.OFFSET,
-  enableTotalCount: true,
   defaultResultSize: PLATFORM_PAGE_DEFAULT,
-  maxResultsSize: PLATFORM_PAGE_MAX,
   defaultSort: [
-    { field: 'scheduledAt', direction: SortDirection.DESC },
-    { field: 'id', direction: SortDirection.ASC },
+    { direction: SortDirection.DESC, field: 'scheduledAt' },
+    { direction: SortDirection.ASC, field: 'id' },
   ],
+  enableTotalCount: true,
+  maxResultsSize: PLATFORM_PAGE_MAX,
+  pagingStrategy: PagingStrategies.OFFSET,
 })
 @FilterableRelation('customer', () => CustomerType, {
   nullable: false,

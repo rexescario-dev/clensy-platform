@@ -19,6 +19,8 @@ import { BookingController } from './presentation/rest/booking.controller';
 // QueryServices (spec §4.1, §4.9#10). TypeOrmModule.forFeature stays
 // because BookingsService injects @InjectRepository(BookingEntity).
 @Module({
+  controllers: [BookingController],
+  exports: [BookingsService],
   imports: [
     TypeOrmModule.forFeature([BookingEntity]),
     NestjsQueryTypeOrmModule.forFeature([BookingEntity]),
@@ -30,13 +32,11 @@ import { BookingController } from './presentation/rest/booking.controller';
     CatalogModule,
     CleanersModule,
   ],
-  controllers: [BookingController],
   providers: [
     BookingReadResolver,
     BookingMutationResolver,
     BookingsService,
     BookingSeeder,
   ],
-  exports: [BookingsService],
 })
 export class BookingsModule {}

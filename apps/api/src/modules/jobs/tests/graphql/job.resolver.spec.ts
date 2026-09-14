@@ -23,11 +23,11 @@ import { JobReadResolver } from '../../presentation/graphql/job-read.resolver';
 import { JobResolver } from '../../presentation/graphql/job.resolver';
 
 type ResolverMethod =
-  | 'job'
-  | 'createJobFromBooking'
   | 'assignTeamToJob'
   | 'completeChecklistItem'
-  | 'completeJob';
+  | 'completeJob'
+  | 'createJobFromBooking'
+  | 'job';
 
 const VIEW_ROLES = [
   Role.OWNER,
@@ -66,12 +66,15 @@ describe('JobResolver', () => {
     return reflector.get<Role[] | undefined>(ROLES_KEY, methodRef(method));
   }
 
-  describe.each([['job', VIEW_ROLES]] as const)('%s', (method, expectedRoles) => {
-    it(`is guarded by AuthGuard and @Roles(${expectedRoles.join(', ')}) — view matrix`, () => {
-      expect(guardsOn(method)).toContain(AuthGuard);
-      expect(rolesOn(method)).toEqual(expectedRoles);
-    });
-  });
+  describe.each([['job', VIEW_ROLES]] as const)(
+    '%s',
+    (method, expectedRoles) => {
+      it(`is guarded by AuthGuard and @Roles(${expectedRoles.join(', ')}) — view matrix`, () => {
+        expect(guardsOn(method)).toContain(AuthGuard);
+        expect(rolesOn(method)).toEqual(expectedRoles);
+      });
+    },
+  );
 
   it('createJobFromBooking is guarded by AuthGuard and the create matrix (includes CS)', () => {
     expect(guardsOn('createJobFromBooking')).toContain(AuthGuard);
@@ -121,7 +124,10 @@ describe('JobResolver', () => {
         'CleaningJobConnection!',
       );
       expect(
-        schema.getQueryType()!.getFields().jobs.args.map((arg) => arg.name),
+        schema
+          .getQueryType()!
+          .getFields()
+          .jobs.args.map((arg) => arg.name),
       ).toEqual(expect.arrayContaining(['paging', 'filter']));
       const filterArg = schema
         .getQueryType()!

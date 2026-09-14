@@ -87,8 +87,8 @@ function AddOnsPageContent() {
       await createAddOn({
         variables: {
           input: {
-            name,
             description: description.trim() === '' ? undefined : description,
+            name,
             priceMinorUnits,
           },
         },
@@ -103,18 +103,18 @@ function AddOnsPageContent() {
 
   const columns: DataTableColumn<AddOnRow>[] = [
     {
-      key: 'name',
       header: 'Name',
+      key: 'name',
       render: (row) => <span className="font-medium text-slate-900">{row.name}</span>,
     },
     {
-      key: 'priceMinorUnits',
       header: 'Price',
+      key: 'priceMinorUnits',
       render: (row) => formatMinorUnits(row.priceMinorUnits),
     },
     {
-      key: 'active',
       header: 'Status',
+      key: 'active',
       render: (row) =>
         row.active ? (
           <StatusBadge label="Active" tone="success" />
@@ -146,10 +146,10 @@ function AddOnsPageContent() {
         error={error ? 'Unable to load add-ons.' : undefined}
         onRowClick={(row) => openDetail(row.id)}
         pagination={{
+          onPageChange: setPage,
           page,
           pageSize,
           totalCount: data?.addOns.totalCount ?? 0,
-          onPageChange: setPage,
         }}
       />
 
@@ -281,9 +281,9 @@ function AddOnEditForm({
         variables: {
           id: addOn.id,
           input: {
-            name,
-            description: description.trim() === '' ? null : description,
             active,
+            description: description.trim() === '' ? null : description,
+            name,
             priceMinorUnits,
           },
         },

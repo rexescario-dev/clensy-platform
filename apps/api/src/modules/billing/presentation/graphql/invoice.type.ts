@@ -35,10 +35,10 @@ export const VIEW_ROLES = [
 ];
 
 const relationReadOpts = {
-  update: { enabled: false },
-  remove: { enabled: false },
-  guards: [AuthGuard],
   decorators: [Roles(...VIEW_ROLES)],
+  guards: [AuthGuard],
+  remove: { enabled: false },
+  update: { enabled: false },
 };
 
 // The billing document (spec §4.2, §4.7). Its commercial fields are frozen
@@ -47,15 +47,15 @@ const relationReadOpts = {
 // `InvoiceResolver` (`total - amountPaid`) — never a stored column.
 @ObjectType('Invoice')
 @QueryOptions({
-  pagingStrategy: PagingStrategies.OFFSET,
-  enableTotalCount: true,
   defaultResultSize: PLATFORM_PAGE_DEFAULT,
-  maxResultsSize: PLATFORM_PAGE_MAX,
   defaultSort: [
-    { field: 'issueDate', direction: SortDirection.DESC },
-    { field: 'createdAt', direction: SortDirection.DESC },
-    { field: 'id', direction: SortDirection.ASC },
+    { direction: SortDirection.DESC, field: 'issueDate' },
+    { direction: SortDirection.DESC, field: 'createdAt' },
+    { direction: SortDirection.ASC, field: 'id' },
   ],
+  enableTotalCount: true,
+  maxResultsSize: PLATFORM_PAGE_MAX,
+  pagingStrategy: PagingStrategies.OFFSET,
 })
 @FilterableRelation('customer', () => CustomerType, {
   nullable: false,
@@ -66,19 +66,19 @@ const relationReadOpts = {
   ...relationReadOpts,
 })
 @OffsetConnection('lines', () => InvoiceLineType, {
-  nullable: false,
-  enableTotalCount: false,
-  relationName: 'lines',
-  defaultResultSize: PLATFORM_PAGE_DEFAULT,
-  maxResultsSize: PLATFORM_PAGE_MAX,
-  defaultSort: [
-    { field: 'createdAt', direction: SortDirection.ASC },
-    { field: 'id', direction: SortDirection.ASC },
-  ],
-  guards: [AuthGuard],
   decorators: [Roles(...VIEW_ROLES)],
-  update: { enabled: false },
+  defaultResultSize: PLATFORM_PAGE_DEFAULT,
+  defaultSort: [
+    { direction: SortDirection.ASC, field: 'createdAt' },
+    { direction: SortDirection.ASC, field: 'id' },
+  ],
+  enableTotalCount: false,
+  guards: [AuthGuard],
+  maxResultsSize: PLATFORM_PAGE_MAX,
+  nullable: false,
+  relationName: 'lines',
   remove: { enabled: false },
+  update: { enabled: false },
 })
 export class InvoiceType {
   @IDField(() => ID)

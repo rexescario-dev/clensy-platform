@@ -16,12 +16,12 @@ import { AuditLoggerService } from './infrastructure/audit-logger.service';
 // `./infrastructure/audit-logger.service` — an ordinary module import, not
 // Nest DI, so it needs no entry in this array.
 @Module({
+  exports: [AUDIT_LOGGER],
   imports: [TypeOrmModule.forFeature([AuditEventEntity])],
   providers: [
     Logger,
     AuditLoggerService,
     { provide: AUDIT_LOGGER, useExisting: AuditLoggerService },
   ],
-  exports: [AUDIT_LOGGER],
 })
 export class AuditModule {}

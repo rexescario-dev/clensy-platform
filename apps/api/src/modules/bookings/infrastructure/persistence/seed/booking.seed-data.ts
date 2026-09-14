@@ -30,9 +30,9 @@ export const bookingSeedData: readonly BookingSeedData[] = [
     propertyId: bookingFixtureProperty.id,
     serviceId: bookingFixtureService.id,
     teamId: bookingFixtureTeam.id,
+    pricingSnapshot: { priceMinorUnits: 250000 },
     scheduledAt: new Date('2026-08-18T09:00:00Z'),
     status: BookingStatus.CONFIRMED,
-    pricingSnapshot: { priceMinorUnits: 250000 },
   },
   {
     id: '00000000-0000-0000-0000-000000000002',
@@ -40,9 +40,9 @@ export const bookingSeedData: readonly BookingSeedData[] = [
     propertyId: bookingFixtureProperty.id,
     serviceId: bookingFixtureService.id,
     teamId: null,
+    pricingSnapshot: { priceMinorUnits: 250000 },
     scheduledAt: new Date('2026-08-20T13:30:00Z'),
     status: BookingStatus.PENDING,
-    pricingSnapshot: { priceMinorUnits: 250000 },
   },
   {
     id: '00000000-0000-0000-0000-000000000003',
@@ -50,8 +50,8 @@ export const bookingSeedData: readonly BookingSeedData[] = [
     propertyId: bookingFixtureProperty.id,
     serviceId: bookingFixtureService.id,
     teamId: bookingFixtureTeam.id,
+    pricingSnapshot: { priceMinorUnits: 250000 },
     scheduledAt: new Date('2026-08-15T11:00:00Z'),
     status: BookingStatus.COMPLETED,
-    pricingSnapshot: { priceMinorUnits: 250000 },
   },
 ];

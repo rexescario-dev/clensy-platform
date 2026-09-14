@@ -15,10 +15,7 @@ import { TeamResolver } from '../../presentation/graphql/team.resolver';
 import { TeamReadResolver } from '../../presentation/graphql/team-read.resolver';
 
 type ResolverMethod =
-  | 'cleaner'
-  | 'createCleaner'
-  | 'updateCleaner'
-  | 'assignCleanerToTeam';
+  'assignCleanerToTeam' | 'cleaner' | 'createCleaner' | 'updateCleaner';
 
 // View matrix per spec §4.3: Customer Support and Finance excluded (unlike
 // the Customers module) — this module's RBAC matrix is deliberately
@@ -52,12 +49,15 @@ describe('CleanerResolver', () => {
     return reflector.get<Role[] | undefined>(ROLES_KEY, methodRef(method));
   }
 
-  describe.each([['cleaner', VIEW_ROLES]] as const)('%s', (method, expectedRoles) => {
-    it(`is guarded by AuthGuard and @Roles(${expectedRoles.join(', ')}) — view matrix`, () => {
-      expect(guardsOn(method)).toContain(AuthGuard);
-      expect(rolesOn(method)).toEqual(expectedRoles);
-    });
-  });
+  describe.each([['cleaner', VIEW_ROLES]] as const)(
+    '%s',
+    (method, expectedRoles) => {
+      it(`is guarded by AuthGuard and @Roles(${expectedRoles.join(', ')}) — view matrix`, () => {
+        expect(guardsOn(method)).toContain(AuthGuard);
+        expect(rolesOn(method)).toEqual(expectedRoles);
+      });
+    },
+  );
 
   describe.each([
     ['createCleaner', WRITE_ROLES],
@@ -115,8 +115,8 @@ describe('CleanerResolver', () => {
   describe('team', () => {
     it('returns null synchronously and never calls loaders.teamLoader.load when cleaner.teamId is null', async () => {
       const loaders = {
-        teamLoader: { load: jest.fn() },
         teamCleanersLoader: { load: jest.fn() },
+        teamLoader: { load: jest.fn() },
       };
       const resolver = new CleanerResolver({} as never, loaders as never);
 
@@ -129,13 +129,13 @@ describe('CleanerResolver', () => {
     it('loads the team via loaders.teamLoader when cleaner.teamId is set', async () => {
       const team = {
         id: 'team-1',
-        name: 'Team A',
         createdAt: new Date(),
+        name: 'Team A',
         updatedAt: new Date(),
       };
       const loaders = {
-        teamLoader: { load: jest.fn().mockResolvedValue(team) },
         teamCleanersLoader: { load: jest.fn() },
+        teamLoader: { load: jest.fn().mockResolvedValue(team) },
       };
       const resolver = new CleanerResolver({} as never, loaders as never);
 

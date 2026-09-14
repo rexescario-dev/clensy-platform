@@ -1,7 +1,7 @@
 export const THEME_STORAGE_KEY = 'clensy.theme';
 
-export type ThemePreference = 'light' | 'dark' | 'system';
-export type ResolvedAppearance = 'light' | 'dark';
+export type ThemePreference = 'dark' | 'light' | 'system';
+export type ResolvedAppearance = 'dark' | 'light';
 
 export function parseThemePreference(stored: string | null): ThemePreference {
   if (stored === 'light' || stored === 'dark' || stored === 'system') {

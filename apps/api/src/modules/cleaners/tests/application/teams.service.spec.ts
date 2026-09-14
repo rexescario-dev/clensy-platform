@@ -43,8 +43,8 @@ describe('TeamsService', () => {
     };
     teamRepository = {
       find: jest.fn(),
-      findOneBy: jest.fn(),
       findBy: jest.fn(),
+      findOneBy: jest.fn(),
     };
     auditLogger = { log: jest.fn().mockResolvedValue(undefined) };
 
@@ -84,8 +84,8 @@ describe('TeamsService', () => {
     it('returns the team for an existing id', async () => {
       const team = {
         id: 'team-1',
-        name: 'Alpha Team',
         createdAt: new Date(),
+        name: 'Alpha Team',
         updatedAt: new Date(),
       };
       teamRepository.findOneBy.mockResolvedValue(team);
@@ -106,8 +106,8 @@ describe('TeamsService', () => {
       const teams = [
         {
           id: 'team-1',
-          name: 'Alpha Team',
           createdAt: new Date(),
+          name: 'Alpha Team',
           updatedAt: new Date(),
         },
       ];
@@ -128,8 +128,8 @@ describe('TeamsService', () => {
       const found = [
         {
           id: 'team-1',
-          name: 'Alpha Team',
           createdAt: new Date(),
+          name: 'Alpha Team',
           updatedAt: new Date(),
         },
       ];

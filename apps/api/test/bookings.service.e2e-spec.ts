@@ -21,11 +21,6 @@ import {
 
 function createTestDataSource(): DataSource {
   return new DataSource({
-    type: 'postgres',
-    host: process.env.DB_HOST ?? 'localhost',
-    port: Number(process.env.DB_PORT ?? 5432),
-    username: process.env.DB_USERNAME ?? 'clensy',
-    password: process.env.DB_PASSWORD ?? 'clensy_dev',
     database: process.env.DB_NAME ?? 'clensy',
     entities: [
       BookingEntity,
@@ -37,6 +32,11 @@ function createTestDataSource(): DataSource {
       CleanerEntity, // TeamEntity#cleaners inverse metadata
       AuditEventEntity,
     ],
+    host: process.env.DB_HOST ?? 'localhost',
+    password: process.env.DB_PASSWORD ?? 'clensy_dev',
+    port: Number(process.env.DB_PORT ?? 5432),
+    type: 'postgres',
+    username: process.env.DB_USERNAME ?? 'clensy',
   });
 }
 
@@ -126,28 +126,28 @@ describe('BookingsService (real Postgres)', () => {
   async function createFixture(priceMinorUnits = 5000) {
     const customer = await customersService.create({
       actorId: 'actor-1',
-      fullName: 'Jane Doe',
       email: 'jane@example.com',
+      fullName: 'Jane Doe',
       phone: '555-0100',
     });
     const property = await propertiesService.create({
       actorId: 'actor-1',
       customerId: customer.id,
-      label: 'Home',
       addressLine1: '1 Main St',
       city: 'City',
-      region: 'Region',
+      label: 'Home',
       postalCode: '00000',
+      region: 'Region',
     });
     const service = await servicesService.createService({
       actorId: 'actor-1',
-      name: 'Standard Clean',
       durationMinutes: 60,
+      name: 'Standard Clean',
     });
     await pricingRulesService.createPricingRule({
       actorId: 'actor-1',
-      serviceId: service.id,
       priceMinorUnits,
+      serviceId: service.id,
     });
     const team = await teamsService.createTeam({
       actorId: 'actor-1',
@@ -179,9 +179,9 @@ describe('BookingsService (real Postgres)', () => {
       expect(auditLogger.log).toHaveBeenCalledWith(
         expect.objectContaining({
           actorId: 'actor-1',
+          entityId: booking.id,
           action: 'booking.create',
           entityType: 'booking',
-          entityId: booking.id,
         }),
       );
     });
@@ -190,8 +190,8 @@ describe('BookingsService (real Postgres)', () => {
       const { property, service } = await createFixture();
       const otherCustomer = await customersService.create({
         actorId: 'actor-1',
-        fullName: 'Other Customer',
         email: 'other@example.com',
+        fullName: 'Other Customer',
         phone: '555-0101',
       });
 
@@ -213,8 +213,8 @@ describe('BookingsService (real Postgres)', () => {
     it('throws BadRequestException for an inactive service, persisting no row', async () => {
       const { customer, property, service } = await createFixture();
       await servicesService.updateService(service.id, {
-        actorId: 'actor-1',
         active: false,
+        actorId: 'actor-1',
       });
 
       await expect(
@@ -235,23 +235,23 @@ describe('BookingsService (real Postgres)', () => {
     it('throws BadRequestException when the service has no active price, persisting no row', async () => {
       const customer = await customersService.create({
         actorId: 'actor-1',
-        fullName: 'Jane Doe',
         email: 'jane@example.com',
+        fullName: 'Jane Doe',
         phone: '555-0100',
       });
       const property = await propertiesService.create({
         actorId: 'actor-1',
         customerId: customer.id,
-        label: 'Home',
         addressLine1: '1 Main St',
         city: 'City',
-        region: 'Region',
+        label: 'Home',
         postalCode: '00000',
+        region: 'Region',
       });
       const service = await servicesService.createService({
         actorId: 'actor-1',
-        name: 'Unpriced Service',
         durationMinutes: 30,
+        name: 'Unpriced Service',
       });
 
       await expect(
@@ -282,8 +282,8 @@ describe('BookingsService (real Postgres)', () => {
 
       await pricingRulesService.createPricingRule({
         actorId: 'actor-1',
-        serviceId: service.id,
         priceMinorUnits: 6000,
+        serviceId: service.id,
       });
 
       const refetched = await bookingsService.findOne(booking.id);
@@ -363,9 +363,9 @@ describe('BookingsService (real Postgres)', () => {
       await expect(
         bookingsService.update(booking.id, {
           actorId: 'actor-1',
+          teamId: undefined,
           scheduledAt: undefined,
           status: undefined,
-          teamId: undefined,
         }),
       ).resolves.toBeDefined();
 
@@ -480,7 +480,7 @@ describe('BookingsService (real Postgres)', () => {
 
       const events = await dataSource
         .getRepository(AuditEventEntity)
-        .findBy({ entityId: booking.id, action: 'booking.update' });
+        .findBy({ action: 'booking.update', entityId: booking.id });
       expect(events).toHaveLength(0);
     });
   });

@@ -33,41 +33,41 @@ export const VIEW_ROLES = [
 ];
 
 const relationReadOpts = {
-  update: { enabled: false },
-  remove: { enabled: false },
-  guards: [AuthGuard],
   decorators: [Roles(...VIEW_ROLES)],
+  guards: [AuthGuard],
+  remove: { enabled: false },
+  update: { enabled: false },
 };
 
 @ObjectType('LaundryOrder')
 @QueryOptions({
-  pagingStrategy: PagingStrategies.OFFSET,
-  enableTotalCount: true,
   defaultResultSize: PLATFORM_PAGE_DEFAULT,
-  maxResultsSize: PLATFORM_PAGE_MAX,
   defaultSort: [
-    { field: 'createdAt', direction: SortDirection.DESC },
-    { field: 'id', direction: SortDirection.ASC },
+    { direction: SortDirection.DESC, field: 'createdAt' },
+    { direction: SortDirection.ASC, field: 'id' },
   ],
+  enableTotalCount: true,
+  maxResultsSize: PLATFORM_PAGE_MAX,
+  pagingStrategy: PagingStrategies.OFFSET,
 })
 @FilterableRelation('customer', () => CustomerType, {
   nullable: false,
   ...relationReadOpts,
 })
 @OffsetConnection('lines', () => LaundryOrderLineType, {
-  nullable: false,
-  enableTotalCount: false,
-  relationName: 'lines',
-  defaultResultSize: PLATFORM_PAGE_DEFAULT,
-  maxResultsSize: PLATFORM_PAGE_MAX,
-  defaultSort: [
-    { field: 'createdAt', direction: SortDirection.ASC },
-    { field: 'id', direction: SortDirection.ASC },
-  ],
-  guards: [AuthGuard],
   decorators: [Roles(...VIEW_ROLES)],
-  update: { enabled: false },
+  defaultResultSize: PLATFORM_PAGE_DEFAULT,
+  defaultSort: [
+    { direction: SortDirection.ASC, field: 'createdAt' },
+    { direction: SortDirection.ASC, field: 'id' },
+  ],
+  enableTotalCount: false,
+  guards: [AuthGuard],
+  maxResultsSize: PLATFORM_PAGE_MAX,
+  nullable: false,
+  relationName: 'lines',
   remove: { enabled: false },
+  update: { enabled: false },
 })
 export class LaundryOrderType {
   @IDField(() => ID)

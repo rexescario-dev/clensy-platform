@@ -21,6 +21,7 @@ import { LaundryOrderLineType } from './presentation/graphql/laundry-order-line.
 // resolves (the `ChecklistItemEntity`/`ChecklistItemType` precedent in
 // `jobs.module.ts`).
 @Module({
+  exports: [LaundryOrdersService],
   imports: [
     TypeOrmModule.forFeature([LaundryOrderEntity, LaundryOrderLineEntity]),
     NestjsQueryTypeOrmModule.forFeature([
@@ -43,6 +44,5 @@ import { LaundryOrderLineType } from './presentation/graphql/laundry-order-line.
     LaundryOrderReadResolver,
     LaundryOrderResolver,
   ],
-  exports: [LaundryOrdersService],
 })
 export class LaundryModule {}

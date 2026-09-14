@@ -24,11 +24,13 @@ import { TeamType } from './team.type';
 export function toCleanerType(cleaner: Cleaner): CleanerType {
   return {
     id: cleaner.id,
-    fullName: cleaner.fullName,
-    phone: cleaner.phone,
+    // not a @Field() on CleanerType — see comment above
+    teamId: cleaner.teamId,
+    createdAt: cleaner.createdAt,
     email: cleaner.email,
+    fullName: cleaner.fullName,
     notes: cleaner.notes,
-    teamId: cleaner.teamId, // not a @Field() on CleanerType — see comment above
+    phone: cleaner.phone,
     // `team: null` is a type-level placeholder only, satisfying `CleanerType`'s
     // required field so this literal-with-an-extra-property (`teamId`) cast
     // type-checks — TS's `as` comparability check rejects an object literal
@@ -37,7 +39,6 @@ export function toCleanerType(cleaner: Cleaner): CleanerType {
     // `@ResolveField()` for the `team` key independently of whatever this
     // object carries for it.
     team: null,
-    createdAt: cleaner.createdAt,
     updatedAt: cleaner.updatedAt,
   } as CleanerType;
 }
@@ -46,8 +47,8 @@ export function toCleanerType(cleaner: Cleaner): CleanerType {
 export function toTeamType(team: Team): TeamType {
   return {
     id: team.id,
-    name: team.name,
     createdAt: team.createdAt,
+    name: team.name,
     updatedAt: team.updatedAt,
   };
 }

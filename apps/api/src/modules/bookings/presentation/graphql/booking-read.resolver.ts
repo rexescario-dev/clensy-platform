@@ -24,18 +24,18 @@ export class BookingReadResolver extends Relatable(BookingDTO, {
   enableTotalCount: true,
 })(
   ReadResolver(BookingDTO, {
-    guards: [AuthGuard],
     decorators: [Roles(...VIEW_ROLES)],
-    one: { name: 'booking' },
-    many: { name: 'bookings' },
-    pagingStrategy: PagingStrategies.OFFSET,
-    enableTotalCount: true,
     defaultResultSize: PLATFORM_PAGE_DEFAULT,
-    maxResultsSize: PLATFORM_PAGE_MAX,
     defaultSort: [
-      { field: 'scheduledAt', direction: SortDirection.DESC },
-      { field: 'id', direction: SortDirection.ASC },
+      { direction: SortDirection.DESC, field: 'scheduledAt' },
+      { direction: SortDirection.ASC, field: 'id' },
     ],
+    enableTotalCount: true,
+    guards: [AuthGuard],
+    many: { name: 'bookings' },
+    maxResultsSize: PLATFORM_PAGE_MAX,
+    one: { name: 'booking' },
+    pagingStrategy: PagingStrategies.OFFSET,
   }),
 ) {
   constructor(

@@ -28,9 +28,9 @@ type InvoiceRow = {
 };
 
 const STATUS_TONE: Record<InvoicePaymentStatus, StatusTone> = {
-  UNPAID: 'neutral',
-  PARTIALLY_PAID: 'warning',
   PAID: 'success',
+  PARTIALLY_PAID: 'warning',
+  UNPAID: 'neutral',
   VOID: 'danger',
 };
 
@@ -57,21 +57,21 @@ function BillingPageContent() {
   const { activeId, open: openDetail, close: closeDetail } = useDetailDrawer();
 
   const columns: DataTableColumn<InvoiceRow>[] = [
-    { key: 'number', header: 'Invoice', render: (r) => r.invoiceNumber },
-    { key: 'customer', header: 'Customer', render: (r) => r.customer.fullName },
+    { header: 'Invoice', key: 'number', render: (r) => r.invoiceNumber },
+    { header: 'Customer', key: 'customer', render: (r) => r.customer.fullName },
     {
-      key: 'total',
       header: 'Total',
+      key: 'total',
       render: (r) => formatMinorUnits(r.totalMinorUnits),
     },
     {
-      key: 'due',
       header: 'Amount due',
+      key: 'due',
       render: (r) => formatMinorUnits(r.amountDueMinorUnits),
     },
     {
-      key: 'status',
       header: 'Payment',
+      key: 'status',
       render: (r) => (
         <StatusBadge
           label={r.paymentStatus}
@@ -79,7 +79,7 @@ function BillingPageContent() {
         />
       ),
     },
-    { key: 'issued', header: 'Issued', render: (r) => formatDate(r.issueDate) },
+    { header: 'Issued', key: 'issued', render: (r) => formatDate(r.issueDate) },
   ];
 
   const rows = (invoicesQuery.data?.invoices.nodes ?? []) as InvoiceRow[];
@@ -97,10 +97,10 @@ function BillingPageContent() {
         error={invoicesQuery.error ? 'Unable to load invoices.' : undefined}
         onRowClick={(r) => openDetail(r.id)}
         pagination={{
+          onPageChange: setPage,
           page,
           pageSize,
           totalCount: invoicesQuery.data?.invoices.totalCount ?? 0,
-          onPageChange: setPage,
         }}
       />
 
@@ -119,8 +119,8 @@ function InvoiceDetailDrawer({
   onClose: () => void;
 }) {
   const { data, loading, error } = useInvoiceQuery({
-    variables: { id },
     fetchPolicy: 'network-only',
+    variables: { id },
   });
   const invoice = data?.invoice;
 

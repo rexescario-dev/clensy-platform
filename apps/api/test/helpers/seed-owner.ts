@@ -33,11 +33,11 @@ export async function seedOwner(
   const entity = await repository.save(
     repository.create({
       email,
+      isActive: true,
       passwordHash,
       role: Role.OWNER,
-      isActive: true,
     }),
   );
 
-  return { id: entity.id, email, password };
+  return { email, id: entity.id, password };
 }

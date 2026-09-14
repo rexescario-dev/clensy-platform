@@ -112,9 +112,9 @@ function BookingsPageContent() {
   const [formError, setFormError] = useState<string | undefined>(undefined);
 
   const { data: propertiesData } = useCustomerPropertiesQuery({
-    variables: { customerId, paging: { limit: 100 } },
-    skip: customerId === '',
     fetchPolicy: 'network-only',
+    skip: customerId === '',
+    variables: { customerId, paging: { limit: 100 } },
   });
 
   function resetForm() {
@@ -159,15 +159,15 @@ function BookingsPageContent() {
   }
 
   const columns: DataTableColumn<BookingRow>[] = [
-    { key: 'customer', header: 'Customer', render: (row) => row.customer.fullName },
-    { key: 'property', header: 'Property', render: (row) => row.property.addressLine1 },
-    { key: 'service', header: 'Service', render: (row) => row.service.name },
-    { key: 'scheduledAt', header: 'Scheduled', render: (row) => formatScheduledAt(row.scheduledAt) },
-    { key: 'status', header: 'Status', render: (row) => row.status },
-    { key: 'team', header: 'Team', render: (row) => row.team?.name ?? 'Unassigned' },
+    { header: 'Customer', key: 'customer', render: (row) => row.customer.fullName },
+    { header: 'Property', key: 'property', render: (row) => row.property.addressLine1 },
+    { header: 'Service', key: 'service', render: (row) => row.service.name },
+    { header: 'Scheduled', key: 'scheduledAt', render: (row) => formatScheduledAt(row.scheduledAt) },
+    { header: 'Status', key: 'status', render: (row) => row.status },
+    { header: 'Team', key: 'team', render: (row) => row.team?.name ?? 'Unassigned' },
     {
-      key: 'price',
       header: 'Price',
+      key: 'price',
       render: (row) => formatMinorUnits(row.pricingSnapshot.priceMinorUnits),
     },
   ];
@@ -200,10 +200,10 @@ function BookingsPageContent() {
         error={error ? 'Unable to load bookings.' : undefined}
         onRowClick={(row) => openDetail(row.id)}
         pagination={{
+          onPageChange: setPage,
           page,
           pageSize,
           totalCount: data?.bookings.totalCount ?? 0,
-          onPageChange: setPage,
         }}
       />
 
@@ -331,8 +331,8 @@ function BookingDetailDrawer({
 }) {
   const router = useRouter();
   const { data, loading, error, refetch } = useBookingQuery({
-    variables: { id },
     fetchPolicy: 'network-only',
+    variables: { id },
   });
   const { data: teamsData } = useTeamsQuery({
     fetchPolicy: 'network-only',
@@ -381,9 +381,9 @@ function BookingDetailDrawer({
         variables: {
           updateBookingInput: {
             id: booking.id,
+            teamId: teamIdValue === '' ? null : teamIdValue,
             scheduledAt: new Date(scheduledAtValue),
             status: statusValue,
-            teamId: teamIdValue === '' ? null : teamIdValue,
           },
         },
       });

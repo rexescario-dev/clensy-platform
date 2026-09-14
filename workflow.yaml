@@ -6,6 +6,8 @@ workflow:
     claude: 0.1.0
     ui-ux-claude: 0.1.0
     ui-ux: 0.1.0
+    javascript-conventions: 0.1.0
+    javascript-conventions-claude: 0.1.0
   assets:
     - path: docs/workflows/README.md
       package: generic
@@ -99,6 +101,18 @@ workflow:
       package: ui-ux
       version: 0.1.0
       digest: sha256:359bf9ab9d5187781b5a46f82bf21a9ded6bcbf9d99d4da28d285ecbe243cf76
+    - path: docs/conventions/javascript/README.md
+      package: javascript-conventions
+      version: 0.1.0
+      digest: sha256:4f1a4c713ab1cca60604e200b09c2955ec97ef221a86149f9405b5f0c2345c33
+    - path: tooling/eslint.contextforge.mjs
+      package: javascript-conventions
+      version: 0.1.0
+      digest: sha256:eb758e90ad4159b28b726ba2ea84b23f8e563128a8570c3f05a84b3ffa0818cb
+    - path: .claude/skills/javascript-conventions/SKILL.md
+      package: javascript-conventions-claude
+      version: 0.1.0
+      digest: sha256:b677dc5b0bc3d94952d14a7a39dfb0a21d3e9a20154bbad9a4d373f7d2141c9e
   installation:
     installedAt: 2026-09-13T04:18:57.693Z
     toolVersion: 0.0.0

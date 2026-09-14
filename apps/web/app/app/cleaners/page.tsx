@@ -93,10 +93,10 @@ function CleanersPageContent() {
       await createCleaner({
         variables: {
           input: {
-            fullName,
-            phone,
             email,
+            fullName,
             notes: notes.trim() === '' ? undefined : notes,
+            phone,
           },
         },
       });
@@ -110,15 +110,15 @@ function CleanersPageContent() {
 
   const columns: DataTableColumn<CleanerRow>[] = [
     {
-      key: 'fullName',
       header: 'Name',
+      key: 'fullName',
       render: (row) => <span className="font-medium text-slate-900">{row.fullName}</span>,
     },
-    { key: 'phone', header: 'Phone' },
-    { key: 'email', header: 'Email' },
+    { header: 'Phone', key: 'phone' },
+    { header: 'Email', key: 'email' },
     {
-      key: 'team',
       header: 'Team',
+      key: 'team',
       render: (row) => row.team?.name ?? '—',
     },
   ];
@@ -145,10 +145,10 @@ function CleanersPageContent() {
         error={error ? 'Unable to load cleaners.' : undefined}
         onRowClick={(row) => openDetail(row.id)}
         pagination={{
+          onPageChange: setPage,
           page,
           pageSize,
           totalCount: data?.cleaners.totalCount ?? 0,
-          onPageChange: setPage,
         }}
       />
 
@@ -208,8 +208,8 @@ function CleanerDetailDrawer({
   onSaved: () => void;
 }) {
   const { data, loading, error, refetch } = useCleanerQuery({
-    variables: { id },
     fetchPolicy: 'network-only',
+    variables: { id },
   });
 
   const title = data?.cleaner?.fullName ?? 'Cleaner';
@@ -265,10 +265,10 @@ function CleanerEditForm({
         variables: {
           id: cleaner.id,
           input: {
-            fullName,
-            phone,
             email,
+            fullName,
             notes: notes.trim() === '' ? null : notes,
+            phone,
           },
         },
       });

@@ -31,8 +31,8 @@ import { ServiceEntity } from '../infrastructure/persistence/service.entity';
 // (Task 4 adds GraphQL resolver coverage, not module DI wiring).
 @Global()
 @Module({
-  providers: [{ provide: DataSource, useValue: {} }],
   exports: [DataSource],
+  providers: [{ provide: DataSource, useValue: {} }],
 })
 class FakeGlobalDataSourceModule {}
 
@@ -60,7 +60,7 @@ describe('CatalogModule — module-internal DI wiring (real AuditModule)', () =>
       .overrideProvider(getQueryServiceToken(AddOnEntity))
       .useValue({ query: jest.fn() })
       .overrideProvider(getRepositoryToken(PricingRuleEntity))
-      .useValue({ findOneBy: jest.fn(), findBy: jest.fn() })
+      .useValue({ findBy: jest.fn(), findOneBy: jest.fn() })
       .overrideProvider(getRepositoryToken(AuditEventEntity))
       .useValue({ create: jest.fn(), save: jest.fn() })
       .compile();

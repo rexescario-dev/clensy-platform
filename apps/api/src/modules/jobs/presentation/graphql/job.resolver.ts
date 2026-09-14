@@ -89,8 +89,8 @@ export class JobResolver {
   ): Promise<CleaningJobType> {
     const job = await this.jobsService.completeChecklistItem({
       actorId: currentUser.id,
-      jobId: input.jobId,
       itemId: input.itemId,
+      jobId: input.jobId,
     });
     return toCleaningJobType(job);
   }

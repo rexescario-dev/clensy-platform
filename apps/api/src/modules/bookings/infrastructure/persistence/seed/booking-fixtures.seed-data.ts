@@ -8,30 +8,30 @@
 
 export const bookingFixtureCustomer = {
   id: '00000000-0000-0000-0001-000000000001',
-  fullName: 'Amara Chidi',
   email: 'amara.chidi@example.com',
-  phone: '555-0110',
+  fullName: 'Amara Chidi',
   notes: null,
+  phone: '555-0110',
 };
 
 export const bookingFixtureProperty = {
   id: '00000000-0000-0000-0001-000000000002',
   customerId: bookingFixtureCustomer.id,
-  label: 'Home',
+  accessNotes: null,
   addressLine1: '12 Palm Street',
   addressLine2: null,
   city: 'Cebu City',
-  region: 'Cebu',
+  label: 'Home',
   postalCode: '6000',
-  accessNotes: null,
+  region: 'Cebu',
 };
 
 export const bookingFixtureService = {
   id: '00000000-0000-0000-0001-000000000003',
-  name: 'Standard Cleaning',
+  active: true,
   description: null,
   durationMinutes: 120,
-  active: true,
+  name: 'Standard Cleaning',
 };
 
 export const bookingFixtureTeam = {

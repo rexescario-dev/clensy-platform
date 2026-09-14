@@ -42,11 +42,11 @@ export class CleanersService {
     return this.dataSource.transaction((manager) =>
       runAuditInTransaction(manager, async () => {
         const entity = manager.create(CleanerEntity, {
-          fullName: command.fullName,
-          phone: command.phone,
-          email: command.email,
-          notes: command.notes ?? null,
           teamId: null,
+          email: command.email,
+          fullName: command.fullName,
+          notes: command.notes ?? null,
+          phone: command.phone,
         });
 
         this.assertValid(entity);
@@ -55,9 +55,9 @@ export class CleanersService {
 
         await this.auditLogger.log({
           actorId: command.actorId,
+          entityId: entity.id,
           action: 'cleaner.create',
           entityType: 'cleaner',
-          entityId: entity.id,
         });
 
         return entity;
@@ -101,9 +101,9 @@ export class CleanersService {
 
         await this.auditLogger.log({
           actorId,
+          entityId: updated.id,
           action: 'cleaner.update',
           entityType: 'cleaner',
-          entityId: updated.id,
         });
 
         return updated;
@@ -145,9 +145,9 @@ export class CleanersService {
 
         await this.auditLogger.log({
           actorId: command.actorId,
+          entityId: updated.id,
           action: 'cleaner.assign_team',
           entityType: 'cleaner',
-          entityId: updated.id,
         });
 
         return updated;
@@ -191,7 +191,7 @@ export class CleanersService {
   }
 
   private assertValid(
-    cleaner: Pick<Cleaner, 'fullName' | 'phone' | 'email'>,
+    cleaner: Pick<Cleaner, 'email' | 'fullName' | 'phone'>,
   ): void {
     if (!cleaner.fullName?.trim()) {
       throw new BadRequestException('fullName must not be empty');

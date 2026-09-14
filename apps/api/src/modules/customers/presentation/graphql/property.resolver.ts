@@ -19,10 +19,7 @@ import { PLATFORM_PAGE_DEFAULT } from '../../../../platform/graphql/paging';
 import { PropertyEntity } from '../../infrastructure/persistence/property.entity';
 import { CreatePropertyInput } from './create-property.input';
 import { toPropertyType } from './mappers';
-import {
-  CustomerPropertiesQueryArgs,
-  PropertyType,
-} from './property.type';
+import { CustomerPropertiesQueryArgs, PropertyType } from './property.type';
 import { UpdatePropertyInput } from './update-property.input';
 
 const VIEW_ROLES = [
@@ -83,9 +80,9 @@ export class PropertyResolver {
       throw new BadRequestException('customerId is required');
     }
     const withoutClientScope = {
+      filter: getFilterOmitting(filter ?? {}, 'customerId'),
       paging: paging ?? { limit: PLATFORM_PAGE_DEFAULT },
       sorting,
-      filter: getFilterOmitting(filter ?? {}, 'customerId'),
     };
     const scoped = mergeQuery(withoutClientScope, {
       filter: { customerId: { eq: customerId } },
@@ -112,8 +109,8 @@ export class PropertyResolver {
   ): Promise<PropertyType> {
     const command: CreatePropertyCommand = {
       ...input,
-      customerId,
       actorId: currentUser.id,
+      customerId,
     };
     const property = await this.propertiesService.create(command);
     return toPropertyType(property);

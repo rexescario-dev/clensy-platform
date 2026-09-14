@@ -59,8 +59,7 @@ describe('property.bookings nested connection (e2e)', () => {
 
   function extractSessionCookie(response: request.Response): string {
     const setCookieHeader = response.headers['set-cookie'] as unknown as
-      | string[]
-      | undefined;
+      string[] | undefined;
     if (!setCookieHeader || setCookieHeader.length === 0) {
       throw new Error('Expected a Set-Cookie header on the login response');
     }
@@ -91,21 +90,21 @@ describe('property.bookings nested connection (e2e)', () => {
 
     const customer = await customersService.create({
       actorId: owner.id,
-      fullName: `Nest Customer ${runId}`,
       email: `nest-${runId}@example.com`,
+      fullName: `Nest Customer ${runId}`,
       phone: '555-0200',
     });
     const service = await servicesService.createService({
       actorId: owner.id,
-      name: `Nest Service ${runId}`,
       durationMinutes: 60,
+      name: `Nest Service ${runId}`,
     });
     const pricing = await authedRequest(cookie).send({
       query: `mutation CreatePricingRule($input: CreatePricingRuleInput!) {
         createPricingRule(input: $input) { id }
       }`,
       variables: {
-        input: { serviceId: service.id, priceMinorUnits: 4000 },
+        input: { priceMinorUnits: 4000, serviceId: service.id },
       },
     });
     expect(pricing.body.errors).toBeUndefined();
@@ -116,11 +115,11 @@ describe('property.bookings nested connection (e2e)', () => {
         await propertiesService.create({
           actorId: owner.id,
           customerId: customer.id,
-          label: `P${index}`,
           addressLine1: `${runId}-${index} Nest St`,
           city: 'City',
-          region: 'Region',
+          label: `P${index}`,
           postalCode: '00000',
+          region: 'Region',
         }),
       );
     }
@@ -191,9 +190,9 @@ describe('property.bookings nested connection (e2e)', () => {
       variables: { id: properties[0].id },
     });
     expect(omitted.body.errors).toBeUndefined();
-    expect(omitted.body.data.property.bookings.nodes.length).toBeLessThanOrEqual(
-      20,
-    );
+    expect(
+      omitted.body.data.property.bookings.nodes.length,
+    ).toBeLessThanOrEqual(20);
     expect(omitted.body.data.property.bookings.nodes).toHaveLength(20);
     expect(omitted.body.data.property.bookings.pageInfo.hasNextPage).toBe(true);
 
@@ -227,18 +226,20 @@ describe('property.bookings nested connection (e2e)', () => {
       const property = await propertiesService.create({
         actorId: owner.id,
         customerId: customer.id,
-        label: `P${index}`,
         addressLine1: `${runId}-${index} Nest St`,
         city: 'City',
-        region: 'Region',
+        label: `P${index}`,
         postalCode: '00000',
+        region: 'Region',
       });
       await bookingsService.create({
         actorId: owner.id,
         customerId: customer.id,
         propertyId: property.id,
         serviceId: service.id,
-        scheduledAt: new Date(`2026-07-${String(index).padStart(2, '0')}T09:00:00.000Z`),
+        scheduledAt: new Date(
+          `2026-07-${String(index).padStart(2, '0')}T09:00:00.000Z`,
+        ),
       });
     }
 

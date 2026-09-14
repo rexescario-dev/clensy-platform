@@ -16,8 +16,8 @@ import { Team } from '../../domain/team';
 function makeTeam(id: string): Team {
   return {
     id,
-    name: `Team ${id}`,
     createdAt: new Date(),
+    name: `Team ${id}`,
     updatedAt: new Date(),
   };
 }
@@ -25,12 +25,12 @@ function makeTeam(id: string): Team {
 function makeCleaner(id: string, teamId: string | null): Cleaner {
   return {
     id,
-    fullName: `Cleaner ${id}`,
-    phone: '555-0000',
-    email: `${id}@example.com`,
-    notes: null,
     teamId,
     createdAt: new Date(),
+    email: `${id}@example.com`,
+    fullName: `Cleaner ${id}`,
+    notes: null,
+    phone: '555-0000',
     updatedAt: new Date(),
   };
 }

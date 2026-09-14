@@ -91,9 +91,9 @@ export class JobsService {
           const job = manager.create(CleaningJobEntity, {
             bookingId: booking.id,
             teamId: booking.teamId,
+            createdAt: now,
             scheduledAt: booking.scheduledAt,
             status: JobStatus.PENDING,
-            createdAt: now,
             updatedAt: now,
           });
           await manager.save(job);
@@ -106,19 +106,19 @@ export class JobsService {
           for (const item of DEFAULT_CHECKLIST_ITEMS) {
             const row = manager.create(ChecklistItemEntity, {
               checklistId: checklist.id,
-              label: item.label,
-              position: item.position,
               completed: false,
               completedAt: null,
+              label: item.label,
+              position: item.position,
             });
             await manager.save(row);
           }
 
           await this.auditLogger.log({
             actorId: command.actorId,
+            entityId: job.id,
             action: 'job.create',
             entityType: 'job',
-            entityId: job.id,
           });
 
           return job;
@@ -185,9 +185,9 @@ export class JobsService {
 
         await this.auditLogger.log({
           actorId: command.actorId,
+          entityId: command.jobId,
           action: 'job.assign_team',
           entityType: 'job',
-          entityId: command.jobId,
         });
 
         return manager.findOneByOrFail(CleaningJobEntity, {
@@ -247,9 +247,9 @@ export class JobsService {
 
         await this.auditLogger.log({
           actorId: command.actorId,
+          entityId: job.id,
           action: 'job.checklist_item.complete',
           entityType: 'job',
-          entityId: job.id,
         });
 
         return manager.findOneByOrFail(CleaningJobEntity, { id: job.id });
@@ -289,9 +289,9 @@ export class JobsService {
 
         await this.auditLogger.log({
           actorId: command.actorId,
+          entityId: job.id,
           action: 'job.complete',
           entityType: 'job',
-          entityId: job.id,
         });
 
         return manager.findOneByOrFail(CleaningJobEntity, { id: job.id });

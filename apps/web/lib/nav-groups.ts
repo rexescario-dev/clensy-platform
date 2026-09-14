@@ -10,32 +10,32 @@ export interface NavGroup {
 
 export const NAV_GROUPS: NavGroup[] = [
   {
+    items: [
+      { href: '/app/bookings', label: 'Bookings' },
+      { href: '/app/jobs', label: 'Jobs' },
+      { href: '/app/laundry', label: 'Laundry' },
+      { href: '/app/billing', label: 'Invoices' },
+    ],
     label: 'Operations',
-    items: [
-      { label: 'Bookings', href: '/app/bookings' },
-      { label: 'Jobs', href: '/app/jobs' },
-      { label: 'Laundry', href: '/app/laundry' },
-      { label: 'Invoices', href: '/app/billing' },
-    ],
   },
   {
+    items: [
+      { href: '/app/customers', label: 'Customers' },
+      { href: '/app/cleaners', label: 'Cleaners' },
+      { href: '/app/cleaners/teams', label: 'Teams' },
+    ],
     label: 'People',
-    items: [
-      { label: 'Customers', href: '/app/customers' },
-      { label: 'Cleaners', href: '/app/cleaners' },
-      { label: 'Teams', href: '/app/cleaners/teams' },
-    ],
   },
   {
+    items: [
+      { href: '/app/catalog', label: 'Services' },
+      { href: '/app/catalog/add-ons', label: 'Add-ons' },
+    ],
     label: 'Catalog',
-    items: [
-      { label: 'Services', href: '/app/catalog' },
-      { label: 'Add-ons', href: '/app/catalog/add-ons' },
-    ],
   },
   {
+    items: [{ href: '/app/admin', label: 'Staff' }],
     label: 'Administration',
-    items: [{ label: 'Staff', href: '/app/admin' }],
   },
 ];
 

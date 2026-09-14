@@ -46,23 +46,23 @@ describe('CleanersService', () => {
           ...data,
         }),
       ),
-      save: jest.fn((entity: unknown) => Promise.resolve(entity)),
-      update: jest.fn().mockResolvedValue(undefined),
       findOneBy: jest.fn(),
       findOneByOrFail: jest.fn(),
+      save: jest.fn((entity: unknown) => Promise.resolve(entity)),
+      update: jest.fn().mockResolvedValue(undefined),
     };
     dataSource = {
       transaction: jest.fn((cb: (manager: unknown) => unknown) => cb(manager)),
     };
     cleanerRepository = {
       find: jest.fn(),
-      findOneBy: jest.fn(),
       findBy: jest.fn(),
+      findOneBy: jest.fn(),
     };
     teamRepository = {
       find: jest.fn(),
-      findOneBy: jest.fn(),
       findBy: jest.fn(),
+      findOneBy: jest.fn(),
     };
     auditLogger = { log: jest.fn().mockResolvedValue(undefined) };
 
@@ -90,28 +90,28 @@ describe('CleanersService', () => {
       [
         'fullName',
         'empty string',
-        { fullName: '', phone: '555', email: 'a@b.com' },
+        { email: 'a@b.com', fullName: '', phone: '555' },
       ],
       [
         'fullName',
         'whitespace-only',
-        { fullName: '   ', phone: '555', email: 'a@b.com' },
+        { email: 'a@b.com', fullName: '   ', phone: '555' },
       ],
       [
         'phone',
         'empty string',
-        { fullName: 'Jane', phone: '', email: 'a@b.com' },
+        { email: 'a@b.com', fullName: 'Jane', phone: '' },
       ],
       [
         'phone',
         'whitespace-only',
-        { fullName: 'Jane', phone: '   ', email: 'a@b.com' },
+        { email: 'a@b.com', fullName: 'Jane', phone: '   ' },
       ],
-      ['email', 'empty string', { fullName: 'Jane', phone: '555', email: '' }],
+      ['email', 'empty string', { email: '', fullName: 'Jane', phone: '555' }],
       [
         'email',
         'whitespace-only',
-        { fullName: 'Jane', phone: '555', email: '   ' },
+        { email: '   ', fullName: 'Jane', phone: '555' },
       ],
     ])(
       'throws BadRequestException before any repository call when %s is %s',
@@ -130,12 +130,12 @@ describe('CleanersService', () => {
     it('throws BadRequestException when the resulting fullName would be whitespace-only', async () => {
       manager.findOneBy.mockResolvedValue({
         id: 'cleaner-1',
-        fullName: 'Jane',
-        phone: '555',
-        email: 'jane@example.com',
-        notes: null,
         teamId: null,
         createdAt: new Date(),
+        email: 'jane@example.com',
+        fullName: 'Jane',
+        notes: null,
+        phone: '555',
         updatedAt: new Date(),
       });
 
@@ -207,12 +207,12 @@ describe('CleanersService', () => {
     it('returns the cleaner for an existing id', async () => {
       const cleaner = {
         id: 'cleaner-1',
-        fullName: 'Jane',
-        phone: '555',
-        email: 'jane@example.com',
-        notes: null,
         teamId: null,
         createdAt: new Date(),
+        email: 'jane@example.com',
+        fullName: 'Jane',
+        notes: null,
+        phone: '555',
         updatedAt: new Date(),
       };
       cleanerRepository.findOneBy.mockResolvedValue(cleaner);
@@ -235,12 +235,12 @@ describe('CleanersService', () => {
       const cleaners = [
         {
           id: 'cleaner-1',
-          fullName: 'Jane',
-          phone: '555',
-          email: 'jane@example.com',
-          notes: null,
           teamId: null,
           createdAt: new Date(),
+          email: 'jane@example.com',
+          fullName: 'Jane',
+          notes: null,
+          phone: '555',
           updatedAt: new Date(),
         },
       ];
@@ -261,12 +261,12 @@ describe('CleanersService', () => {
       const cleaners = [
         {
           id: 'cleaner-1',
-          fullName: 'Jane',
-          phone: '555',
-          email: 'jane@example.com',
-          notes: null,
           teamId: 'team-1',
           createdAt: new Date(),
+          email: 'jane@example.com',
+          fullName: 'Jane',
+          notes: null,
+          phone: '555',
           updatedAt: new Date(),
         },
       ];
@@ -292,12 +292,12 @@ describe('CleanersService', () => {
       const found = [
         {
           id: 'cleaner-1',
-          fullName: 'Jane',
-          phone: '555',
-          email: 'jane@example.com',
-          notes: null,
           teamId: 'team-1',
           createdAt: new Date(),
+          email: 'jane@example.com',
+          fullName: 'Jane',
+          notes: null,
+          phone: '555',
           updatedAt: new Date(),
         },
       ];

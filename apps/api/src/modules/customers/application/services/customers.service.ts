@@ -34,10 +34,10 @@ export class CustomersService {
     return this.dataSource.transaction((manager) =>
       runAuditInTransaction(manager, async () => {
         const entity = manager.create(CustomerEntity, {
-          fullName: command.fullName,
           email: command.email,
-          phone: command.phone,
+          fullName: command.fullName,
           notes: command.notes ?? null,
+          phone: command.phone,
         });
 
         this.assertValid(entity);
@@ -45,9 +45,9 @@ export class CustomersService {
 
         await this.auditLogger.log({
           actorId: command.actorId,
+          entityId: entity.id,
           action: 'customer.create',
           entityType: 'customer',
-          entityId: entity.id,
         });
 
         return entity;
@@ -80,9 +80,9 @@ export class CustomersService {
 
         await this.auditLogger.log({
           actorId: command.actorId,
+          entityId: entity.id,
           action: 'customer.update',
           entityType: 'customer',
-          entityId: entity.id,
         });
 
         return entity;
@@ -113,7 +113,7 @@ export class CustomersService {
   // `email` is non-empty only — syntax validation is a presentation-layer
   // concern owned by the GraphQL input types, not this service.
   private assertValid(
-    customer: Pick<Customer, 'fullName' | 'email' | 'phone'>,
+    customer: Pick<Customer, 'email' | 'fullName' | 'phone'>,
   ): void {
     if (!customer.fullName?.trim()) {
       throw new BadRequestException('fullName must not be empty');

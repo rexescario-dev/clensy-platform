@@ -38,15 +38,15 @@ describe('PropertiesService', () => {
           ...data,
         }),
       ),
-      save: jest.fn((entity: unknown) => Promise.resolve(entity)),
       findOneBy: jest.fn(),
+      save: jest.fn((entity: unknown) => Promise.resolve(entity)),
     };
     dataSource = {
       transaction: jest.fn((cb: (manager: unknown) => unknown) => cb(manager)),
     };
     propertyRepository = {
-      findOneBy: jest.fn(),
       findBy: jest.fn(),
+      findOneBy: jest.fn(),
     };
     customerRepository = {
       findOneBy: jest.fn(),
@@ -75,24 +75,24 @@ describe('PropertiesService', () => {
   const validCreateCommand = {
     actorId: 'actor-1',
     customerId: 'customer-1',
-    label: 'Home',
     addressLine1: '123 Main St',
     city: 'Springfield',
-    region: 'IL',
+    label: 'Home',
     postalCode: '62704',
+    region: 'IL',
   };
 
   const existingProperty = {
     id: 'property-1',
     customerId: 'customer-1',
-    label: 'Home',
+    accessNotes: null,
     addressLine1: '123 Main St',
     addressLine2: null,
     city: 'Springfield',
-    region: 'IL',
-    postalCode: '62704',
-    accessNotes: null,
     createdAt: new Date(),
+    label: 'Home',
+    postalCode: '62704',
+    region: 'IL',
     updatedAt: new Date(),
   };
 

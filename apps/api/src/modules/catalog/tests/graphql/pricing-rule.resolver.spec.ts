@@ -124,10 +124,10 @@ describe('PricingRuleResolver', () => {
     const resolver = new PricingRuleResolver({
       createPricingRule: jest.fn().mockResolvedValue({
         id: 'rule-1',
-        serviceId: null,
         addOnId: 'add-on-1',
-        priceMinorUnits: 1500,
+        serviceId: null,
         createdAt: new Date(),
+        priceMinorUnits: 1500,
       }),
     } as never);
 
@@ -143,7 +143,7 @@ describe('PricingRuleResolver', () => {
     );
 
     expect(createSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ addOnId: 'add-on-1', actorId: 'actor-1' }),
+      expect.objectContaining({ actorId: 'actor-1', addOnId: 'add-on-1' }),
     );
     const calls = createSpy.mock.calls as { serviceId?: string }[][];
     expect(calls[0][0].serviceId).toBeUndefined();

@@ -70,7 +70,7 @@ export async function withCapturedSql<T>(
 
   try {
     const result = await run();
-    return { result, queries };
+    return { queries, result };
   } finally {
     console.log = originalConsoleLog;
     dataSource.setOptions({ logging: previousLogging });
