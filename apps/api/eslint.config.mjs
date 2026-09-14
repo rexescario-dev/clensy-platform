@@ -1,4 +1,5 @@
 // @ts-check
+import { contextforgeJavascript } from '../../tooling/eslint.contextforge.mjs';
 import eslint from '@eslint/js';
 import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended';
 import globals from 'globals';
@@ -8,7 +9,7 @@ export default tseslint.config(
   {
     ignores: ['eslint.config.mjs'],
   },
-  eslint.configs.recommended,
+  ...contextforgeJavascript({ eslint, tseslint }),
   ...tseslint.configs.recommendedTypeChecked,
   eslintPluginPrettierRecommended,
   {
