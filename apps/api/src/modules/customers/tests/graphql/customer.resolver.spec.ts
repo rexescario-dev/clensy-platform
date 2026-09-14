@@ -5,7 +5,7 @@ import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
 import { CustomerResolver } from '../../presentation/graphql/customer.resolver';
 
-type ResolverMethod = 'customer' | 'createCustomer' | 'updateCustomer';
+type ResolverMethod = 'createCustomer' | 'customer' | 'updateCustomer';
 
 const VIEW_ROLES = [
   Role.OWNER,
@@ -30,8 +30,7 @@ describe('CustomerResolver', () => {
 
   function guardsOn(method: ResolverMethod): unknown[] {
     const guards = Reflect.getMetadata(GUARDS_METADATA, methodRef(method)) as
-      | unknown[]
-      | undefined;
+      unknown[] | undefined;
     return guards ?? [];
   }
 

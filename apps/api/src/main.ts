@@ -22,8 +22,8 @@ async function bootstrap() {
   // env var so this doesn't hardcode a single environment's URL; the
   // `localhost:3001` fallback matches `apps/web`'s local dev port.
   app.enableCors({
-    origin: process.env.WEB_ORIGIN ?? 'http://localhost:3001',
     credentials: true,
+    origin: process.env.WEB_ORIGIN ?? 'http://localhost:3001',
   });
 
   applyPlatformPipes(app);

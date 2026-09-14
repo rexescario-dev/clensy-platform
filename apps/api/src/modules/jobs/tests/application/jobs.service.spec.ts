@@ -54,9 +54,9 @@ describe('JobsService', () => {
 
   const pendingBooking = {
     id: 'booking-1',
-    status: BookingStatus.PENDING,
-    scheduledAt: new Date('2026-09-01T09:00:00Z'),
     teamId: 'team-1',
+    scheduledAt: new Date('2026-09-01T09:00:00Z'),
+    status: BookingStatus.PENDING,
   };
 
   beforeEach(async () => {
@@ -68,10 +68,10 @@ describe('JobsService', () => {
           ...data,
         }),
       ),
-      save: jest.fn((entity: unknown) => Promise.resolve(entity)),
+      findBy: jest.fn(),
       findOneBy: jest.fn(),
       findOneByOrFail: jest.fn(),
-      findBy: jest.fn(),
+      save: jest.fn((entity: unknown) => Promise.resolve(entity)),
       update: jest.fn().mockResolvedValue(undefined),
     };
     dataSource = {
@@ -176,9 +176,9 @@ describe('JobsService', () => {
       );
       expect(auditLogger.log).toHaveBeenCalledWith({
         actorId: 'actor-1',
+        entityId: job.id,
         action: 'job.create',
         entityType: 'job',
-        entityId: job.id,
       });
 
       const itemPayloads = manager.create.mock.calls
@@ -187,10 +187,10 @@ describe('JobsService', () => {
       expect(itemPayloads).toEqual(
         DEFAULT_CHECKLIST_ITEMS.map((item) => ({
           checklistId: expect.any(String),
-          label: item.label,
-          position: item.position,
           completed: false,
           completedAt: null,
+          label: item.label,
+          position: item.position,
         })),
       );
     });
@@ -239,7 +239,7 @@ describe('JobsService', () => {
     });
 
     it('returns exactly the rows found, with no synthetic entries for missing ids', async () => {
-      const found = [{ id: 'i1', checklistId: 'a' }];
+      const found = [{ checklistId: 'a', id: 'i1' }];
       checklistItemRepository.findBy.mockResolvedValue(found);
 
       await expect(
@@ -252,9 +252,9 @@ describe('JobsService', () => {
     id: 'job-1',
     bookingId: 'booking-1',
     teamId: 'team-1',
-    status: JobStatus.PENDING,
-    scheduledAt: new Date('2026-09-01T09:00:00Z'),
     createdAt: new Date('2026-08-01T00:00:00Z'),
+    scheduledAt: new Date('2026-09-01T09:00:00Z'),
+    status: JobStatus.PENDING,
     updatedAt: new Date('2026-08-01T00:00:00Z'),
   };
   const checklist = { id: 'checklist-1', jobId: 'job-1' };
@@ -263,8 +263,8 @@ describe('JobsService', () => {
     checklistId: 'checklist-1',
     completed: false,
     completedAt: null,
-    position: 0,
     label: 'Arrive on site',
+    position: 0,
   };
 
   describe('assignTeam', () => {
@@ -325,9 +325,9 @@ describe('JobsService', () => {
       );
       expect(auditLogger.log).toHaveBeenCalledWith({
         actorId: 'actor-1',
+        entityId: 'job-1',
         action: 'job.assign_team',
         entityType: 'job',
-        entityId: 'job-1',
       });
       expect(teamsService.getTeam).toHaveBeenCalledWith('team-2');
     });
@@ -336,8 +336,8 @@ describe('JobsService', () => {
   describe('completeChecklistItem', () => {
     const command = {
       actorId: 'actor-1',
-      jobId: 'job-1',
       itemId: 'item-1',
+      jobId: 'job-1',
     };
 
     function mockAggregate(opts?: {
@@ -367,7 +367,7 @@ describe('JobsService', () => {
         },
       );
       manager.findOneByOrFail.mockResolvedValue(job);
-      return { job, item };
+      return { item, job };
     }
 
     it('throws NotFoundException when the job is missing', async () => {
@@ -412,7 +412,7 @@ describe('JobsService', () => {
     });
 
     it('first incomplete→complete on PENDING sets IN_PROGRESS, updates the item, bumps updatedAt, and audits', async () => {
-      mockAggregate({ jobStatus: JobStatus.PENDING, itemCompleted: false });
+      mockAggregate({ itemCompleted: false, jobStatus: JobStatus.PENDING });
 
       await service.completeChecklistItem(command);
 
@@ -434,14 +434,14 @@ describe('JobsService', () => {
       );
       expect(auditLogger.log).toHaveBeenCalledWith({
         actorId: 'actor-1',
+        entityId: 'job-1',
         action: 'job.checklist_item.complete',
         entityType: 'job',
-        entityId: 'job-1',
       });
     });
 
     it('same-state complete on PENDING does not change status, still bumps updatedAt and audits', async () => {
-      mockAggregate({ jobStatus: JobStatus.PENDING, itemCompleted: true });
+      mockAggregate({ itemCompleted: true, jobStatus: JobStatus.PENDING });
 
       await service.completeChecklistItem(command);
 
@@ -469,8 +469,8 @@ describe('JobsService', () => {
 
     it('completing a further item including the last leaves IN_PROGRESS', async () => {
       mockAggregate({
-        jobStatus: JobStatus.IN_PROGRESS,
         itemCompleted: false,
+        jobStatus: JobStatus.IN_PROGRESS,
       });
 
       await service.completeChecklistItem(command);
@@ -523,7 +523,7 @@ describe('JobsService', () => {
       });
       manager.findBy.mockResolvedValue([
         { ...incompleteItem, completed: true },
-        { ...incompleteItem, id: 'item-2', completed: false },
+        { ...incompleteItem, completed: false, id: 'item-2' },
       ]);
 
       await expect(service.completeJob(command)).rejects.toThrow(
@@ -547,8 +547,8 @@ describe('JobsService', () => {
       });
       manager.findBy.mockResolvedValue([
         { ...incompleteItem, completed: true },
-        { ...incompleteItem, id: 'item-2', completed: true },
-        { ...incompleteItem, id: 'item-3', completed: true },
+        { ...incompleteItem, completed: true, id: 'item-2' },
+        { ...incompleteItem, completed: true, id: 'item-3' },
       ]);
       manager.findOneByOrFail.mockResolvedValue({
         ...job,
@@ -567,9 +567,9 @@ describe('JobsService', () => {
       );
       expect(auditLogger.log).toHaveBeenCalledWith({
         actorId: 'actor-1',
+        entityId: 'job-1',
         action: 'job.complete',
         entityType: 'job',
-        entityId: 'job-1',
       });
     });
 

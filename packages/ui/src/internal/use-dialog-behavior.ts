@@ -159,5 +159,5 @@ export function useDialogBehavior(open: boolean, onClose: () => void) {
     };
   }
 
-  return { containerRef, backdropProps };
+  return { backdropProps, containerRef };
 }

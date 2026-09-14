@@ -41,10 +41,10 @@ export class AddOnsService {
         const name = command.name.trim();
 
         const entity = manager.create(AddOnEntity, {
-          name,
-          description: command.description ?? null,
-          priceMinorUnits: command.priceMinorUnits,
           active: true,
+          description: command.description ?? null,
+          name,
+          priceMinorUnits: command.priceMinorUnits,
         });
 
         this.assertValid(entity);
@@ -54,9 +54,9 @@ export class AddOnsService {
 
         await this.auditLogger.log({
           actorId: command.actorId,
+          entityId: entity.id,
           action: 'add_on.create',
           entityType: 'add_on',
-          entityId: entity.id,
         });
 
         return entity;
@@ -106,9 +106,9 @@ export class AddOnsService {
 
         await this.auditLogger.log({
           actorId,
+          entityId: updated.id,
           action: 'add_on.update',
           entityType: 'add_on',
-          entityId: updated.id,
         });
 
         return updated;

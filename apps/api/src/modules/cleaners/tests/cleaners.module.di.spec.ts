@@ -32,8 +32,8 @@ import { TeamEntity } from '../infrastructure/persistence/team.entity';
 // with `CleanersService`.
 @Global()
 @Module({
-  providers: [{ provide: DataSource, useValue: {} }],
   exports: [DataSource],
+  providers: [{ provide: DataSource, useValue: {} }],
 })
 class FakeGlobalDataSourceModule {}
 
@@ -47,15 +47,15 @@ describe('CleanersModule — module-internal DI wiring (real AuditModule)', () =
       .overrideProvider(getRepositoryToken(TeamEntity))
       .useValue({
         find: jest.fn(),
-        findOneBy: jest.fn(),
         findBy: jest.fn(),
+        findOneBy: jest.fn(),
         metadata: { columns: [] },
       })
       .overrideProvider(getRepositoryToken(CleanerEntity))
       .useValue({
         find: jest.fn(),
-        findOneBy: jest.fn(),
         findBy: jest.fn(),
+        findOneBy: jest.fn(),
         metadata: { columns: [] },
       })
       .overrideProvider(getQueryServiceToken(TeamEntity))

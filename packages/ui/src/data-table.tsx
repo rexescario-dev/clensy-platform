@@ -88,10 +88,10 @@ export function DataTable<T extends Record<string, unknown>>({
                 className={`border-b border-slate-100${onRowClick ? ' cursor-pointer hover:bg-slate-50' : ''}`}
                 {...(onRowClick
                   ? {
-                      role: 'button',
-                      tabIndex: 0,
                       onClick: () => onRowClick(row),
                       onKeyDown: (event: KeyboardEvent<HTMLTableRowElement>) => handleRowKeyDown(event, row),
+                      role: 'button',
+                      tabIndex: 0,
                     }
                   : {})}
               >

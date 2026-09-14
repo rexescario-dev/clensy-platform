@@ -11,7 +11,9 @@ describe('ClampPagingLimitPipe', () => {
 
   it('leaves a legal paging.limit unchanged', () => {
     const input = { paging: { limit: 20, offset: 40 } };
-    expect(pipe.transform(input)).toEqual({ paging: { limit: 20, offset: 40 } });
+    expect(pipe.transform(input)).toEqual({
+      paging: { limit: 20, offset: 40 },
+    });
   });
 
   it('does not invent a limit when paging is omitted', () => {

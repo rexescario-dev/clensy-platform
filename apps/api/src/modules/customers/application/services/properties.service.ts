@@ -46,13 +46,13 @@ export class PropertiesService {
 
         const entity = manager.create(PropertyEntity, {
           customerId: command.customerId,
-          label: command.label,
+          accessNotes: command.accessNotes ?? null,
           addressLine1: command.addressLine1,
           addressLine2: command.addressLine2 ?? null,
           city: command.city,
-          region: command.region,
+          label: command.label,
           postalCode: command.postalCode,
-          accessNotes: command.accessNotes ?? null,
+          region: command.region,
         });
 
         this.assertValid(entity);
@@ -60,9 +60,9 @@ export class PropertiesService {
 
         await this.auditLogger.log({
           actorId: command.actorId,
+          entityId: entity.id,
           action: 'property.create',
           entityType: 'property',
-          entityId: entity.id,
         });
 
         return entity;
@@ -93,9 +93,9 @@ export class PropertiesService {
 
         await this.auditLogger.log({
           actorId: command.actorId,
+          entityId: entity.id,
           action: 'property.update',
           entityType: 'property',
-          entityId: entity.id,
         });
 
         return entity;
@@ -140,7 +140,7 @@ export class PropertiesService {
   private assertValid(
     property: Pick<
       Property,
-      'label' | 'addressLine1' | 'city' | 'region' | 'postalCode'
+      'addressLine1' | 'city' | 'label' | 'postalCode' | 'region'
     >,
   ): void {
     if (!property.label?.trim()) {

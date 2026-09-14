@@ -12,7 +12,12 @@ import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
 import { AdminResolver } from '../../presentation/graphql/admin.resolver';
 
 type ResolverMethod =
-  'login' | 'logout' | 'createAdmin' | 'disableAdmin' | 'admins' | 'currentAdmin';
+  | 'admins'
+  | 'createAdmin'
+  | 'currentAdmin'
+  | 'disableAdmin'
+  | 'login'
+  | 'logout';
 
 // Reads the method's own function value off `AdminResolver.prototype` via
 // `Object.getOwnPropertyDescriptor` rather than a plain member access — the

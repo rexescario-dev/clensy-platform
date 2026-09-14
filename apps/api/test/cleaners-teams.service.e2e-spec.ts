@@ -19,13 +19,13 @@ import {
 // stateless config shape is factored out here.
 function createTestDataSource(): DataSource {
   return new DataSource({
-    type: 'postgres',
-    host: process.env.DB_HOST ?? 'localhost',
-    port: Number(process.env.DB_PORT ?? 5432),
-    username: process.env.DB_USERNAME ?? 'clensy',
-    password: process.env.DB_PASSWORD ?? 'clensy_dev',
     database: process.env.DB_NAME ?? 'clensy',
     entities: [TeamEntity, CleanerEntity, AuditEventEntity],
+    host: process.env.DB_HOST ?? 'localhost',
+    password: process.env.DB_PASSWORD ?? 'clensy_dev',
+    port: Number(process.env.DB_PORT ?? 5432),
+    type: 'postgres',
+    username: process.env.DB_USERNAME ?? 'clensy',
   });
 }
 
@@ -105,9 +105,9 @@ describe('TeamsService (real Postgres)', () => {
       expect(auditLogger.log).toHaveBeenCalledWith(
         expect.objectContaining({
           actorId: 'actor-1',
+          entityId: created.id,
           action: 'team.create',
           entityType: 'team',
-          entityId: created.id,
         }),
       );
     });
@@ -195,10 +195,10 @@ describe('CleanersService (real Postgres)', () => {
     it('persists a CleanerEntity with teamId: null and records cleaner.create', async () => {
       const created = await service.createCleaner({
         actorId: 'actor-1',
-        fullName: 'Jane Doe',
-        phone: '555-0100',
         email: 'jane@example.com',
+        fullName: 'Jane Doe',
         notes: 'Prefers mornings',
+        phone: '555-0100',
       });
 
       const row = await dataSource
@@ -211,9 +211,9 @@ describe('CleanersService (real Postgres)', () => {
       expect(auditLogger.log).toHaveBeenCalledWith(
         expect.objectContaining({
           actorId: 'actor-1',
+          entityId: created.id,
           action: 'cleaner.create',
           entityType: 'cleaner',
-          entityId: created.id,
         }),
       );
     });
@@ -221,17 +221,17 @@ describe('CleanersService (real Postgres)', () => {
     it('throws ConflictException for a duplicate email, leaving only one row persisted', async () => {
       await service.createCleaner({
         actorId: 'actor-1',
+        email: 'jane@example.com',
         fullName: 'Jane Doe',
         phone: '555-0100',
-        email: 'jane@example.com',
       });
 
       await expect(
         service.createCleaner({
           actorId: 'actor-1',
+          email: 'jane@example.com',
           fullName: 'Jane Two',
           phone: '555-0200',
-          email: 'jane@example.com',
         }),
       ).rejects.toThrow(ConflictException);
 
@@ -247,9 +247,9 @@ describe('CleanersService (real Postgres)', () => {
       await expect(
         service.createCleaner({
           actorId: 'actor-1',
+          email: 'rollback@example.com',
           fullName: 'Rollback Case',
           phone: '555-0300',
-          email: 'rollback@example.com',
         }),
       ).rejects.toThrow('audit down');
 
@@ -264,10 +264,10 @@ describe('CleanersService (real Postgres)', () => {
     it('updates only the provided field, leaving the rest unchanged in the re-read row', async () => {
       const created = await service.createCleaner({
         actorId: 'actor-1',
-        fullName: 'Jane Doe',
-        phone: '555-0100',
         email: 'jane@example.com',
+        fullName: 'Jane Doe',
         notes: 'Prefers mornings',
+        phone: '555-0100',
       });
 
       await service.updateCleaner(created.id, {
@@ -287,10 +287,10 @@ describe('CleanersService (real Postgres)', () => {
     it('explicit notes: null clears an existing value', async () => {
       const created = await service.createCleaner({
         actorId: 'actor-1',
-        fullName: 'Jane Doe',
-        phone: '555-0100',
         email: 'jane@example.com',
+        fullName: 'Jane Doe',
         notes: 'Prefers mornings',
+        phone: '555-0100',
       });
 
       await service.updateCleaner(created.id, {
@@ -316,15 +316,15 @@ describe('CleanersService (real Postgres)', () => {
     it("throws ConflictException when updating email to another cleaner's email, leaving the target row unchanged", async () => {
       const cleanerA = await service.createCleaner({
         actorId: 'actor-1',
+        email: 'a@example.com',
         fullName: 'Cleaner A',
         phone: '555-0001',
-        email: 'a@example.com',
       });
       const cleanerB = await service.createCleaner({
         actorId: 'actor-1',
+        email: 'b@example.com',
         fullName: 'Cleaner B',
         phone: '555-0002',
-        email: 'b@example.com',
       });
 
       await expect(
@@ -347,10 +347,10 @@ describe('CleanersService (real Postgres)', () => {
     it('a no-effective-change update (every field set to its own current value) still strictly advances updatedAt and still audits cleaner.update', async () => {
       const created = await service.createCleaner({
         actorId: 'actor-1',
-        fullName: 'Jane Doe',
-        phone: '555-0100',
         email: 'jane@example.com',
+        fullName: 'Jane Doe',
         notes: 'Prefers mornings',
+        phone: '555-0100',
       });
       const before = await dataSource
         .getRepository(CleanerEntity)
@@ -363,10 +363,10 @@ describe('CleanersService (real Postgres)', () => {
       auditLogger.log.mockClear();
       await service.updateCleaner(created.id, {
         actorId: 'actor-1',
-        fullName: before.fullName,
-        phone: before.phone,
         email: before.email,
+        fullName: before.fullName,
         notes: before.notes,
+        phone: before.phone,
       });
 
       const after = await dataSource
@@ -379,9 +379,9 @@ describe('CleanersService (real Postgres)', () => {
       expect(auditLogger.log).toHaveBeenCalledWith(
         expect.objectContaining({
           actorId: 'actor-1',
+          entityId: created.id,
           action: 'cleaner.update',
           entityType: 'cleaner',
-          entityId: created.id,
         }),
       );
     });
@@ -391,9 +391,9 @@ describe('CleanersService (real Postgres)', () => {
     it('sets teamId and audits cleaner.assign_team', async () => {
       const cleaner = await service.createCleaner({
         actorId: 'actor-1',
+        email: 'jane@example.com',
         fullName: 'Jane Doe',
         phone: '555-0100',
-        email: 'jane@example.com',
       });
       const teamA = await createTeam('Team A');
 
@@ -413,9 +413,9 @@ describe('CleanersService (real Postgres)', () => {
       expect(auditLogger.log).toHaveBeenCalledWith(
         expect.objectContaining({
           actorId: 'actor-1',
+          entityId: cleaner.id,
           action: 'cleaner.assign_team',
           entityType: 'cleaner',
-          entityId: cleaner.id,
         }),
       );
     });
@@ -427,9 +427,9 @@ describe('CleanersService (real Postgres)', () => {
     it('assigning to the same team again succeeds, strictly advances updatedAt, and emits a second cleaner.assign_team audit event', async () => {
       const cleaner = await service.createCleaner({
         actorId: 'actor-1',
+        email: 'jane@example.com',
         fullName: 'Jane Doe',
         phone: '555-0100',
-        email: 'jane@example.com',
       });
       const teamA = await createTeam('Team A');
 
@@ -464,9 +464,9 @@ describe('CleanersService (real Postgres)', () => {
     it("throws NotFoundException for a nonexistent teamId, leaving the cleaner's teamId unchanged", async () => {
       const cleaner = await service.createCleaner({
         actorId: 'actor-1',
+        email: 'jane@example.com',
         fullName: 'Jane Doe',
         phone: '555-0100',
-        email: 'jane@example.com',
       });
 
       await expect(

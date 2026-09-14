@@ -52,11 +52,11 @@ describe('AdminIdentityLookupService', () => {
   it('returns the principal (id + role) for an active admin id', async () => {
     repository.findOneBy.mockResolvedValue({
       id: 'active-id',
+      createdAt: new Date(),
       email: 'active@example.com',
+      isActive: true,
       passwordHash: 'hash',
       role: Role.FINANCE,
-      isActive: true,
-      createdAt: new Date(),
     });
 
     const result = await service.findActiveAdminById('active-id');

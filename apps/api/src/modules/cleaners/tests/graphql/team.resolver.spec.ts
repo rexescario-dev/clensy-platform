@@ -14,7 +14,7 @@ import { CleanerReadResolver } from '../../presentation/graphql/cleaner-read.res
 import { TeamResolver } from '../../presentation/graphql/team.resolver';
 import { TeamReadResolver } from '../../presentation/graphql/team-read.resolver';
 
-type ResolverMethod = 'team' | 'createTeam';
+type ResolverMethod = 'createTeam' | 'team';
 
 // View matrix per spec §4.3: Customer Support and Finance excluded.
 const VIEW_ROLES = [Role.OWNER, Role.OPS_MANAGER, Role.SCHEDULER, Role.ANALYST];
@@ -42,12 +42,15 @@ describe('TeamResolver', () => {
     return reflector.get<Role[] | undefined>(ROLES_KEY, methodRef(method));
   }
 
-  describe.each([['team', VIEW_ROLES]] as const)('%s', (method, expectedRoles) => {
-    it(`is guarded by AuthGuard and @Roles(${expectedRoles.join(', ')}) — view matrix`, () => {
-      expect(guardsOn(method)).toContain(AuthGuard);
-      expect(rolesOn(method)).toEqual(expectedRoles);
-    });
-  });
+  describe.each([['team', VIEW_ROLES]] as const)(
+    '%s',
+    (method, expectedRoles) => {
+      it(`is guarded by AuthGuard and @Roles(${expectedRoles.join(', ')}) — view matrix`, () => {
+        expect(guardsOn(method)).toContain(AuthGuard);
+        expect(rolesOn(method)).toEqual(expectedRoles);
+      });
+    },
+  );
 
   describe.each([['createTeam', WRITE_ROLES]] as const)(
     '%s',

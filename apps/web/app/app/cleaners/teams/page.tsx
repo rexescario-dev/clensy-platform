@@ -34,9 +34,9 @@ type TeamMemberRow = {
 };
 
 const memberColumns: DataTableColumn<TeamMemberRow>[] = [
-  { key: 'fullName', header: 'Name' },
-  { key: 'phone', header: 'Phone' },
-  { key: 'email', header: 'Email' },
+  { header: 'Name', key: 'fullName' },
+  { header: 'Phone', key: 'phone' },
+  { header: 'Email', key: 'email' },
 ];
 
 // `useDetailDrawer` reads `useSearchParams()`, which Next.js requires to sit
@@ -93,13 +93,13 @@ function TeamsPageContent() {
 
   const columns: DataTableColumn<TeamRow>[] = [
     {
-      key: 'name',
       header: 'Name',
+      key: 'name',
       render: (row) => <span className="font-medium text-slate-900">{row.name}</span>,
     },
     {
-      key: 'memberCount',
       header: 'Members',
+      key: 'memberCount',
       render: (row) =>
         row.cleaners.pageInfo.hasNextPage
           ? `${row.cleaners.nodes.length}+`
@@ -129,10 +129,10 @@ function TeamsPageContent() {
         error={error ? 'Unable to load teams.' : undefined}
         onRowClick={(row) => openDetail(row.id)}
         pagination={{
+          onPageChange: setPage,
           page,
           pageSize,
           totalCount: data?.teams.totalCount ?? 0,
-          onPageChange: setPage,
         }}
       />
 
@@ -165,8 +165,8 @@ function TeamsPageContent() {
 // a heading and a `DataTable` of its members, matching the old page exactly.
 function TeamDetailDrawer({ id, onClose }: { id: string; onClose: () => void }) {
   const { data, loading, error } = useTeamQuery({
-    variables: { id },
     fetchPolicy: 'network-only',
+    variables: { id },
   });
 
   const title = data?.team?.name ?? 'Team';

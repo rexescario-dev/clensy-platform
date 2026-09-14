@@ -45,12 +45,12 @@ describe('BookingsService', () => {
   let auditLogger: { log: jest.Mock };
 
   const customer = { id: 'customer-1' };
-  const property = { id: 'property-1', customerId: 'customer-1' };
-  const activeService = { id: 'service-1', active: true };
+  const property = { customerId: 'customer-1', id: 'property-1' };
+  const activeService = { active: true, id: 'service-1' };
   const activePricing = {
     id: 'pricing-1',
-    serviceId: 'service-1',
     priceMinorUnits: 5000,
+    serviceId: 'service-1',
   };
   const team = { id: 'team-1' };
 
@@ -61,6 +61,20 @@ describe('BookingsService', () => {
           id: 'generated-booking-id',
           ...data,
         }),
+      ),
+      findOneBy: jest.fn(),
+      findOneByOrFail: jest.fn(),
+      // Replicates TypeORM's real `EntityManager.remove()` behavior, not a
+      // naive echo: it strips the id off the passed entity after removal.
+      // A mock that just echoed the entity back would hide the exact bug
+      // this test file caught only when tested against real Postgres/
+      // GraphQL (bookings.service.ts's `remove()` must snapshot the
+      // entity before calling this).
+      remove: jest.fn(
+        (_entityClass: unknown, entity: Record<string, unknown>) => {
+          delete entity.id;
+          return Promise.resolve(entity);
+        },
       ),
       save: jest.fn((entity: unknown) => Promise.resolve(entity)),
       // Replicates TypeORM's real `EntityManager.update()` behavior for an
@@ -83,20 +97,6 @@ describe('BookingsService', () => {
           return Promise.resolve(undefined);
         },
       ),
-      // Replicates TypeORM's real `EntityManager.remove()` behavior, not a
-      // naive echo: it strips the id off the passed entity after removal.
-      // A mock that just echoed the entity back would hide the exact bug
-      // this test file caught only when tested against real Postgres/
-      // GraphQL (bookings.service.ts's `remove()` must snapshot the
-      // entity before calling this).
-      remove: jest.fn(
-        (_entityClass: unknown, entity: Record<string, unknown>) => {
-          delete entity.id;
-          return Promise.resolve(entity);
-        },
-      ),
-      findOneBy: jest.fn(),
-      findOneByOrFail: jest.fn(),
     };
     dataSource = {
       transaction: jest.fn((fn: (manager: unknown) => unknown) => fn(manager)),
@@ -159,8 +159,8 @@ describe('BookingsService', () => {
 
     it('throws BadRequestException when the property belongs to a different customer', async () => {
       propertiesService.getProperty.mockResolvedValue({
-        id: 'property-1',
         customerId: 'someone-else',
+        id: 'property-1',
       });
 
       await expect(service.create(command)).rejects.toThrow(
@@ -178,8 +178,8 @@ describe('BookingsService', () => {
 
     it('throws BadRequestException when the service is not active', async () => {
       servicesService.getService.mockResolvedValue({
-        id: 'service-1',
         active: false,
+        id: 'service-1',
       });
 
       await expect(service.create(command)).rejects.toThrow(
@@ -216,14 +216,14 @@ describe('BookingsService', () => {
       const result = await service.create(command);
 
       expect(result).toMatchObject({
-        status: BookingStatus.PENDING,
         pricingSnapshot: { priceMinorUnits: 5000 },
+        status: BookingStatus.PENDING,
       });
       expect(auditLogger.log).toHaveBeenCalledWith({
         actorId: 'actor-1',
+        entityId: result.id,
         action: 'booking.create',
         entityType: 'booking',
-        entityId: result.id,
       });
     });
 
@@ -310,9 +310,9 @@ describe('BookingsService', () => {
       await expect(
         service.update('booking-1', {
           actorId: 'actor-1',
+          teamId: undefined,
           scheduledAt: undefined,
           status: undefined,
-          teamId: undefined,
         }),
       ).resolves.toBeDefined();
 
@@ -348,9 +348,9 @@ describe('BookingsService', () => {
       expect(result.id).toBe('booking-1');
       expect(auditLogger.log).toHaveBeenCalledWith({
         actorId: 'actor-1',
+        entityId: 'booking-1',
         action: 'booking.remove',
         entityType: 'booking',
-        entityId: 'booking-1',
       });
     });
 

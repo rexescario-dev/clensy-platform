@@ -104,10 +104,10 @@ describe('Billing (e2e)', () => {
       `mutation($i: PriceLaundryOrderInput!){ priceLaundryOrder(input:$i){ status totalMinorUnits } }`,
       {
         i: {
-          orderId,
           baseServiceId: ctx.serviceId,
-          baseQuantity: 3,
+          orderId,
           addOns: [{ addOnId: ctx.addOnId }],
+          baseQuantity: 3,
         },
       },
     );
@@ -144,8 +144,8 @@ describe('Billing (e2e)', () => {
         `mutation($i: CreateCustomerInput!){ createCustomer(input:$i){ id } }`,
         {
           i: {
-            fullName: `Billing Jane ${uniq}`,
             email: `bj-${uniq}@example.com`,
+            fullName: `Billing Jane ${uniq}`,
             phone: '555-9',
           },
         },
@@ -156,13 +156,13 @@ describe('Billing (e2e)', () => {
       await gql(
         ownerCookie,
         `mutation($i: CreateServiceInput!){ createService(input:$i){ id } }`,
-        { i: { name: `Press ${uniq}`, durationMinutes: 1 } },
+        { i: { durationMinutes: 1, name: `Press ${uniq}` } },
       )
     ).body.data.createService.id as string;
     await gql(
       ownerCookie,
       `mutation($i: CreatePricingRuleInput!){ createPricingRule(input:$i){ id } }`,
-      { i: { serviceId, priceMinorUnits: 500, unit: 'PER_ITEM' } },
+      { i: { priceMinorUnits: 500, serviceId, unit: 'PER_ITEM' } },
     );
 
     const addOnId = (
@@ -179,12 +179,12 @@ describe('Billing (e2e)', () => {
     );
 
     return {
-      ownerCookie,
-      financeCookie,
-      opsCookie,
+      addOnId,
       customerId,
       serviceId,
-      addOnId,
+      financeCookie,
+      opsCookie,
+      ownerCookie,
       tag,
     };
   }
@@ -241,24 +241,24 @@ describe('Billing (e2e)', () => {
     expect(d.lines.nodes).toEqual(
       expect.arrayContaining([
         {
+          amountMinorUnits: 1500,
           description: expect.stringMatching(/^Press /),
-          unit: 'PER_ITEM',
           quantity: 3,
           rateMinorUnits: 500,
-          amountMinorUnits: 1500,
+          unit: 'PER_ITEM',
         },
         {
+          amountMinorUnits: 200,
           description: expect.stringMatching(/^Fold .* \(add-on\)$/),
-          unit: 'FLAT',
           quantity: 1,
           rateMinorUnits: 200,
-          amountMinorUnits: 200,
+          unit: 'FLAT',
         },
       ]),
     );
 
     const events = await auditEventRepository.find({
-      where: { entityType: 'invoice', entityId: inv.id },
+      where: { entityId: inv.id, entityType: 'invoice' },
     });
     expect(events.map((e) => e.action)).toEqual(['invoice.generated']);
 
@@ -287,8 +287,8 @@ describe('Billing (e2e)', () => {
       await gql(ctx.financeCookie, INVOICE_DETAIL, { id: inv.id })
     ).body.data.invoice;
     const storedLinesBefore = await invoiceLineRepository.find({
-      where: { invoiceId: inv.id as string },
       order: { createdAt: 'ASC', id: 'ASC' },
+      where: { invoiceId: inv.id as string },
     });
     const storedInvoiceBefore = await invoiceRepository.findOneByOrFail({
       id: inv.id as string,
@@ -298,20 +298,20 @@ describe('Billing (e2e)', () => {
     await gql(
       ctx.ownerCookie,
       `mutation($id: ID!, $i: UpdateServiceInput!){ updateService(id:$id, input:$i){ id } }`,
-      { id: ctx.serviceId, i: { name: `RENAMED ${Date.now()}` } },
+      { i: { name: `RENAMED ${Date.now()}` }, id: ctx.serviceId },
     );
     await gql(
       ctx.ownerCookie,
       `mutation($id: ID!, $i: UpdateAddOnInput!){ updateAddOn(id:$id, input:$i){ id } }`,
-      { id: ctx.addOnId, i: { name: `RENAMED-ADDON ${Date.now()}` } },
+      { i: { name: `RENAMED-ADDON ${Date.now()}` }, id: ctx.addOnId },
     );
     await gql(
       ctx.ownerCookie,
       `mutation($i: CreatePricingRuleInput!){ createPricingRule(input:$i){ id } }`,
       {
         i: {
-          serviceId: ctx.serviceId,
           priceMinorUnits: 99999,
+          serviceId: ctx.serviceId,
           unit: 'PER_ITEM',
         },
       },
@@ -324,8 +324,8 @@ describe('Billing (e2e)', () => {
     expect(after.dueDate).toBeNull();
 
     const storedLinesAfter = await invoiceLineRepository.find({
-      where: { invoiceId: inv.id as string },
       order: { createdAt: 'ASC', id: 'ASC' },
+      where: { invoiceId: inv.id as string },
     });
     expect(storedLinesAfter).toEqual(storedLinesBefore);
     expect(

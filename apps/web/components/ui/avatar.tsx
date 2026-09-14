@@ -9,7 +9,7 @@ function Avatar({
   size = "default",
   ...props
 }: React.ComponentProps<typeof AvatarPrimitive.Root> & {
-  size?: "default" | "sm" | "lg"
+  size?: "default" | "lg" | "sm"
 }) {
   return (
     <AvatarPrimitive.Root

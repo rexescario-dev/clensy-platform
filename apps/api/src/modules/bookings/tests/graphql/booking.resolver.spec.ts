@@ -19,7 +19,7 @@ import { TeamResolver } from '../../../cleaners/presentation/graphql/team.resolv
 import { BookingReadResolver } from '../../presentation/graphql/booking-read.resolver';
 import { BookingMutationResolver } from '../../presentation/graphql/booking.resolver';
 
-type MutationMethod = 'createBooking' | 'updateBooking' | 'removeBooking';
+type MutationMethod = 'createBooking' | 'removeBooking' | 'updateBooking';
 type ReadMethod = 'findById' | 'queryMany';
 
 const VIEW_ROLES = [
@@ -156,7 +156,9 @@ describe('Booking GraphQL reads and mutations', () => {
       const argNames = bookingsQuery.args.map((arg) => arg.name).sort();
       expect(argNames).toEqual(['filter', 'paging', 'sorting']);
 
-      const connection = schema.getType('BookingConnection') as GraphQLObjectType;
+      const connection = schema.getType(
+        'BookingConnection',
+      ) as GraphQLObjectType;
       expect(connection).toBeDefined();
       expect(Object.keys(connection.getFields()).sort()).toEqual(
         ['nodes', 'pageInfo', 'totalCount'].sort(),
@@ -175,7 +177,9 @@ describe('Booking GraphQL reads and mutations', () => {
       const sortFields = schema.getType('BookingSortFields') as GraphQLEnumType;
       expect(sortFields).toBeDefined();
       const sortFieldNames = sortFields.getValues().map((value) => value.name);
-      expect(sortFieldNames).toEqual(expect.arrayContaining(['id', 'scheduledAt']));
+      expect(sortFieldNames).toEqual(
+        expect.arrayContaining(['id', 'scheduledAt']),
+      );
 
       const queryNames = Object.keys(schema.getQueryType()!.getFields());
       for (const name of queryNames) {
@@ -206,11 +210,11 @@ describe('Booking GraphQL reads and mutations', () => {
           id: 'booking-1',
           pricingSnapshot: { priceMinorUnits: 1 },
         }),
-        update: jest.fn().mockResolvedValue({
+        remove: jest.fn().mockResolvedValue({
           id: 'booking-1',
           pricingSnapshot: { priceMinorUnits: 1 },
         }),
-        remove: jest.fn().mockResolvedValue({
+        update: jest.fn().mockResolvedValue({
           id: 'booking-1',
           pricingSnapshot: { priceMinorUnits: 1 },
         }),

@@ -47,8 +47,7 @@ describe('Cleaner and Team GraphQL collections', () => {
     it(`is guarded by AuthGuard and @Roles(${expectedRoles.join(', ')}) — view matrix`, () => {
       const method = readMethodRef(ctor, 'queryMany');
       const guards = Reflect.getMetadata(GUARDS_METADATA, method) as
-        | unknown[]
-        | undefined;
+        unknown[] | undefined;
       expect(guards ?? []).toContain(AuthGuard);
       expect(reflector.get<Role[] | undefined>(ROLES_KEY, method)).toEqual(
         expectedRoles,
@@ -97,7 +96,9 @@ describe('Cleaner and Team GraphQL collections', () => {
     expect(teamsQuery.args.map((arg) => arg.name)).toEqual(
       expect.arrayContaining(['paging']),
     );
-    const teamConnection = schema.getType('TeamConnection') as GraphQLObjectType;
+    const teamConnection = schema.getType(
+      'TeamConnection',
+    ) as GraphQLObjectType;
     expect(Object.keys(teamConnection.getFields()).sort()).toEqual(
       ['nodes', 'pageInfo', 'totalCount'].sort(),
     );

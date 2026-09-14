@@ -17,30 +17,30 @@ import { ChecklistItemEntity } from '../infrastructure/persistence/checklist-ite
 
 @Global()
 @Module({
-  providers: [{ provide: DataSource, useValue: {} }],
   exports: [DataSource],
+  providers: [{ provide: DataSource, useValue: {} }],
 })
 class FakeGlobalDataSourceModule {}
 
 @Module({
+  exports: [BookingsService],
   providers: [
     {
       provide: BookingsService,
       useValue: { findOne: jest.fn(), getBookingsByIds: jest.fn() },
     },
   ],
-  exports: [BookingsService],
 })
 class FakeBookingsModule {}
 
 @Module({
+  exports: [TeamsService],
   providers: [
     {
       provide: TeamsService,
       useValue: { getTeam: jest.fn(), getTeamsByIds: jest.fn() },
     },
   ],
-  exports: [TeamsService],
 })
 class FakeCleanersModule {}
 
@@ -58,8 +58,8 @@ describe('JobsModule — module-internal DI wiring', () => {
       .overrideProvider(getRepositoryToken(CleaningJobEntity))
       .useValue({
         find: jest.fn(),
-        findOneBy: jest.fn(),
         findBy: jest.fn(),
+        findOneBy: jest.fn(),
         metadata: { columns: [] },
       })
       .overrideProvider(getRepositoryToken(ChecklistEntity))

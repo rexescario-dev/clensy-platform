@@ -15,7 +15,7 @@ import { PricingRuleResolver } from '../../presentation/graphql/pricing-rule.res
 import { ServiceReadResolver } from '../../presentation/graphql/service-read.resolver';
 import { ServiceResolver } from '../../presentation/graphql/service.resolver';
 
-type ResolverMethod = 'service' | 'createService' | 'updateService';
+type ResolverMethod = 'createService' | 'service' | 'updateService';
 
 // View matrix per spec §4.3: deliberately BROADER than the Cleaners
 // module's — all six roles, not just Owner/Ops Manager/Scheduler/Analyst.
@@ -54,12 +54,15 @@ describe('ServiceResolver', () => {
     return reflector.get<Role[] | undefined>(ROLES_KEY, methodRef(method));
   }
 
-  describe.each([['service', VIEW_ROLES]] as const)('%s', (method, expectedRoles) => {
-    it(`is guarded by AuthGuard and @Roles(${expectedRoles.join(', ')}) — view matrix`, () => {
-      expect(guardsOn(method)).toContain(AuthGuard);
-      expect(rolesOn(method)).toEqual(expectedRoles);
-    });
-  });
+  describe.each([['service', VIEW_ROLES]] as const)(
+    '%s',
+    (method, expectedRoles) => {
+      it(`is guarded by AuthGuard and @Roles(${expectedRoles.join(', ')}) — view matrix`, () => {
+        expect(guardsOn(method)).toContain(AuthGuard);
+        expect(rolesOn(method)).toEqual(expectedRoles);
+      });
+    },
+  );
 
   describe.each([
     ['createService', WRITE_ROLES],
@@ -126,9 +129,9 @@ describe('ServiceResolver', () => {
       const rule = {
         id: 'rule-1',
         serviceId: 'service-1',
-        priceMinorUnits: 1500,
         active: true,
         createdAt: new Date(),
+        priceMinorUnits: 1500,
       };
       const loader = {
         loader: { load: jest.fn().mockResolvedValue(rule) },
@@ -141,8 +144,8 @@ describe('ServiceResolver', () => {
       expect(loader.loader.load).toHaveBeenCalledWith('service-1');
       expect(result).toMatchObject({
         id: 'rule-1',
-        serviceId: 'service-1',
         priceMinorUnits: 1500,
+        serviceId: 'service-1',
       });
     });
 

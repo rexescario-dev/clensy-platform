@@ -5,7 +5,7 @@ import { Button } from './button';
 export interface ConfirmDialogProps {
   open: boolean;
   onClose: () => void;
-  onConfirm: () => void | Promise<void>;
+  onConfirm: () => Promise<void> | void;
   title: string;
   description: string;
   confirmLabel: string;

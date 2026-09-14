@@ -58,10 +58,10 @@ export class LaundryOrderEntity implements LaundryOrder {
   fulfillmentType!: LaundryFulfillmentType;
 
   @Column({
-    type: 'enum',
+    default: LaundryOrderStatus.RECEIVED,
     enum: LaundryOrderStatus,
     enumName: 'laundry_order_status_enum',
-    default: LaundryOrderStatus.RECEIVED,
+    type: 'enum',
   })
   @Index('IDX_laundry_order_status')
   status!: LaundryOrderStatus;

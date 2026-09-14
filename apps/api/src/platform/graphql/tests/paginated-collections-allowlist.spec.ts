@@ -11,74 +11,74 @@ const DEFAULT_SORTS: Array<{
 }> = [
   {
     collection: 'bookings',
-    entityFile: 'bookings/infrastructure/persistence/booking.entity.ts',
     dtoFile: 'bookings/presentation/graphql/booking.dto.ts',
+    entityFile: 'bookings/infrastructure/persistence/booking.entity.ts',
     fields: ['scheduledAt', 'id'],
   },
   {
     collection: 'jobs',
-    entityFile: 'jobs/infrastructure/persistence/cleaning-job.entity.ts',
     dtoFile: 'jobs/presentation/graphql/cleaning-job.type.ts',
+    entityFile: 'jobs/infrastructure/persistence/cleaning-job.entity.ts',
     fields: ['scheduledAt', 'id'],
   },
   {
     collection: 'property.bookings',
-    entityFile: 'bookings/infrastructure/persistence/booking.entity.ts',
     dtoFile: 'bookings/presentation/graphql/booking.dto.ts',
+    entityFile: 'bookings/infrastructure/persistence/booking.entity.ts',
     fields: ['scheduledAt', 'id'],
   },
   {
     collection: 'checklist.items',
-    entityFile: 'jobs/infrastructure/persistence/checklist-item.entity.ts',
     dtoFile: 'jobs/presentation/graphql/checklist-item.type.ts',
+    entityFile: 'jobs/infrastructure/persistence/checklist-item.entity.ts',
     fields: ['position', 'id'],
   },
   {
     collection: 'customers',
-    entityFile: 'customers/infrastructure/persistence/customer.entity.ts',
     dtoFile: 'customers/presentation/graphql/customer.type.ts',
+    entityFile: 'customers/infrastructure/persistence/customer.entity.ts',
     fields: ['createdAt', 'id'],
   },
   {
     collection: 'customer.properties',
-    entityFile: 'customers/infrastructure/persistence/property.entity.ts',
     dtoFile: 'customers/presentation/graphql/property.type.ts',
+    entityFile: 'customers/infrastructure/persistence/property.entity.ts',
     fields: ['createdAt', 'id'],
   },
   {
     collection: 'customerProperties',
-    entityFile: 'customers/infrastructure/persistence/property.entity.ts',
     dtoFile: 'customers/presentation/graphql/property.type.ts',
+    entityFile: 'customers/infrastructure/persistence/property.entity.ts',
     fields: ['createdAt', 'id'],
   },
   {
     collection: 'cleaners',
-    entityFile: 'cleaners/infrastructure/persistence/cleaner.entity.ts',
     dtoFile: 'cleaners/presentation/graphql/cleaner.type.ts',
+    entityFile: 'cleaners/infrastructure/persistence/cleaner.entity.ts',
     fields: ['createdAt', 'id'],
   },
   {
     collection: 'teams',
-    entityFile: 'cleaners/infrastructure/persistence/team.entity.ts',
     dtoFile: 'cleaners/presentation/graphql/team.type.ts',
+    entityFile: 'cleaners/infrastructure/persistence/team.entity.ts',
     fields: ['createdAt', 'id'],
   },
   {
     collection: 'team.cleaners',
-    entityFile: 'cleaners/infrastructure/persistence/cleaner.entity.ts',
     dtoFile: 'cleaners/presentation/graphql/cleaner.type.ts',
+    entityFile: 'cleaners/infrastructure/persistence/cleaner.entity.ts',
     fields: ['createdAt', 'id'],
   },
   {
     collection: 'services',
-    entityFile: 'catalog/infrastructure/persistence/service.entity.ts',
     dtoFile: 'catalog/presentation/graphql/service.type.ts',
+    entityFile: 'catalog/infrastructure/persistence/service.entity.ts',
     fields: ['createdAt', 'id'],
   },
   {
     collection: 'addOns',
-    entityFile: 'catalog/infrastructure/persistence/add-on.entity.ts',
     dtoFile: 'catalog/presentation/graphql/add-on.type.ts',
+    entityFile: 'catalog/infrastructure/persistence/add-on.entity.ts',
     fields: ['createdAt', 'id'],
   },
 ];
@@ -176,7 +176,10 @@ describe('paginated collection allowlist (Task 8 source/config)', () => {
 
   it('keeps default-sort columns on the entity and sortable on the DTO', () => {
     for (const row of DEFAULT_SORTS) {
-      const entitySrc = readFileSync(join(MODULES_ROOT, row.entityFile), 'utf8');
+      const entitySrc = readFileSync(
+        join(MODULES_ROOT, row.entityFile),
+        'utf8',
+      );
       const dtoSrc = readFileSync(join(MODULES_ROOT, row.dtoFile), 'utf8');
       for (const field of row.fields) {
         expect(entitySrc).toMatch(new RegExp(`\\b${field}!:`));

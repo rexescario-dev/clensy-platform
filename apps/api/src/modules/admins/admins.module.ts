@@ -32,8 +32,8 @@ import { AdminUserEntity } from './infrastructure/persistence/admin-user.entity'
 // dynamic module (and re-registering the `'jwt'` passport strategy a
 // second time). See `app/app.module.ts`.
 @Module({
+  exports: [AdminsService, LoginService, AdminIdentityLookupService],
   imports: [TypeOrmModule.forFeature([AdminUserEntity]), AuditModule],
   providers: [AdminsService, LoginService, AdminIdentityLookupService],
-  exports: [AdminsService, LoginService, AdminIdentityLookupService],
 })
 export class AdminsModule {}

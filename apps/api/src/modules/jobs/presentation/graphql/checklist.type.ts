@@ -26,25 +26,25 @@ const VIEW_ROLES = [
 
 @ObjectType('Checklist')
 @QueryOptions({
-  pagingStrategy: PagingStrategies.OFFSET,
-  enableTotalCount: false,
   defaultResultSize: PLATFORM_PAGE_DEFAULT,
+  enableTotalCount: false,
   maxResultsSize: PLATFORM_PAGE_MAX,
+  pagingStrategy: PagingStrategies.OFFSET,
 })
 @OffsetConnection('items', () => ChecklistItemType, {
-  nullable: false,
-  enableTotalCount: false,
-  relationName: 'items',
-  defaultResultSize: PLATFORM_PAGE_DEFAULT,
-  maxResultsSize: PLATFORM_PAGE_MAX,
-  defaultSort: [
-    { field: 'position', direction: SortDirection.ASC },
-    { field: 'id', direction: SortDirection.ASC },
-  ],
-  guards: [AuthGuard],
   decorators: [Roles(...VIEW_ROLES)],
-  update: { enabled: false },
+  defaultResultSize: PLATFORM_PAGE_DEFAULT,
+  defaultSort: [
+    { direction: SortDirection.ASC, field: 'position' },
+    { direction: SortDirection.ASC, field: 'id' },
+  ],
+  enableTotalCount: false,
+  guards: [AuthGuard],
+  maxResultsSize: PLATFORM_PAGE_MAX,
+  nullable: false,
+  relationName: 'items',
   remove: { enabled: false },
+  update: { enabled: false },
 })
 export class ChecklistType {
   @IDField(() => ID)

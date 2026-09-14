@@ -49,9 +49,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       );
     }
     super({
+      ignoreExpiration: false,
       jwtFromRequest: cookieExtractor,
       secretOrKey: secret ?? TEST_ONLY_FALLBACK_SECRET,
-      ignoreExpiration: false,
     });
   }
 

@@ -7,7 +7,7 @@ export interface FormDialogProps {
   open: boolean;
   onClose: () => void;
   title: string;
-  onSubmit: () => void | Promise<void>;
+  onSubmit: () => Promise<void> | void;
   submitLabel: string;
   submitting?: boolean;
   children: ReactNode;

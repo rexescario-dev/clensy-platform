@@ -12,9 +12,9 @@ export function toBookingDto(booking: Booking): BookingDTO {
     propertyId: booking.propertyId,
     serviceId: booking.serviceId,
     teamId: booking.teamId,
+    createdAt: booking.createdAt,
+    pricingSnapshot: booking.pricingSnapshot,
     scheduledAt: booking.scheduledAt,
     status: booking.status,
-    pricingSnapshot: booking.pricingSnapshot,
-    createdAt: booking.createdAt,
   } as unknown as BookingDTO;
 }

@@ -44,12 +44,12 @@ describe('LaundryOrdersService', () => {
     ({
       id: 'order-1',
       customerId: 'cust-1',
+      createdAt: new Date('2026-09-06T00:00:00Z'),
       fulfillmentType: LaundryFulfillmentType.PICKUP,
       status: LaundryOrderStatus.RECEIVED,
-      weightGrams: null,
       totalMinorUnits: null,
-      createdAt: new Date('2026-09-06T00:00:00Z'),
       updatedAt: new Date('2026-09-06T00:00:00Z'),
+      weightGrams: null,
       ...over,
     }) as LaundryOrderEntity;
 
@@ -60,9 +60,9 @@ describe('LaundryOrdersService', () => {
         id: `generated-${++created}`,
         ...data,
       })),
-      save: jest.fn((entity: unknown) => Promise.resolve(entity)),
       findOne: jest.fn(),
       findOneByOrFail: jest.fn(),
+      save: jest.fn((entity: unknown) => Promise.resolve(entity)),
       update: jest.fn().mockResolvedValue(undefined),
     };
     dataSource = {
@@ -123,14 +123,14 @@ describe('LaundryOrdersService', () => {
           customerId: 'cust-1',
           fulfillmentType: LaundryFulfillmentType.DELIVERY,
           status: LaundryOrderStatus.RECEIVED,
-          weightGrams: null,
           totalMinorUnits: null,
+          weightGrams: null,
         }),
       );
       expect(auditLogger.log).toHaveBeenCalledWith(
         expect.objectContaining({
-          actorId: 'actor-1',
           action: 'laundry_order.received',
+          actorId: 'actor-1',
           entityType: 'laundry_order',
         }),
       );
@@ -226,8 +226,8 @@ describe('LaundryOrdersService', () => {
   describe('price', () => {
     const cmd = (over = {}) => ({
       actorId: 'a',
-      orderId: 'order-1',
       baseServiceId: 'svc-1',
+      orderId: 'order-1',
       addOns: [] as { addOnId: string; quantity?: number }[],
       ...over,
     });
@@ -248,9 +248,9 @@ describe('LaundryOrdersService', () => {
     it('freezes a PER_KG base line snapshot, sets total, transitions to PRICED, audits', async () => {
       pricingRulesService.resolveEffectivePricing.mockResolvedValue({
         id: 'rule-1',
+        minimumChargeMinorUnits: null,
         priceMinorUnits: 1500,
         unit: PricingUnit.PER_KG,
-        minimumChargeMinorUnits: null,
       });
 
       await service.price(cmd());
@@ -258,17 +258,17 @@ describe('LaundryOrdersService', () => {
       // 2000 g * 1500 / 1000 = 3000
       expect(manager.save).toHaveBeenCalledWith(
         expect.objectContaining({
-          serviceId: 'svc-1',
           addOnId: null,
           pricingSnapshot: expect.objectContaining({
+            pricingRuleId: 'rule-1',
+            amountMinorUnits: 3000,
+            minimumChargeApplied: false,
+            minimumChargeMinorUnits: null,
+            quantity: 2000,
             rateMinorUnits: 1500,
             unit: PricingUnit.PER_KG,
-            quantity: 2000,
-            amountMinorUnits: 3000,
-            minimumChargeMinorUnits: null,
-            minimumChargeApplied: false,
-            pricingRuleId: 'rule-1',
           }),
+          serviceId: 'svc-1',
         }),
       );
       expect(manager.update).toHaveBeenCalledWith(
@@ -290,16 +290,16 @@ describe('LaundryOrdersService', () => {
           if ('serviceId' in target) {
             return Promise.resolve({
               id: 'rule-base',
+              minimumChargeMinorUnits: null,
               priceMinorUnits: 4000,
               unit: PricingUnit.FLAT,
-              minimumChargeMinorUnits: null,
             });
           }
           return Promise.resolve({
             id: 'rule-addon',
+            minimumChargeMinorUnits: null,
             priceMinorUnits: 250,
             unit: PricingUnit.PER_ITEM,
-            minimumChargeMinorUnits: null,
           });
         },
       );
@@ -311,7 +311,7 @@ describe('LaundryOrdersService', () => {
       ) as Array<{ addOnId?: string; pricingSnapshot: unknown }>;
       const addOnRow = savedRows.find((r) => r.addOnId === 'ao-1');
       expect(addOnRow?.pricingSnapshot).toEqual(
-        expect.objectContaining({ quantity: 3, amountMinorUnits: 750 }),
+        expect.objectContaining({ amountMinorUnits: 750, quantity: 3 }),
       );
       expect(manager.update).toHaveBeenCalledWith(
         LaundryOrderEntity,
@@ -387,8 +387,8 @@ describe('LaundryOrdersService', () => {
     it('markAwaitingPickup on a DELIVERY order is rejected', async () => {
       manager.findOne.mockResolvedValue(
         anOrder({
-          status: LaundryOrderStatus.READY,
           fulfillmentType: LaundryFulfillmentType.DELIVERY,
+          status: LaundryOrderStatus.READY,
         }),
       );
       await expect(service.markAwaitingPickup(t)).rejects.toThrow(
@@ -399,8 +399,8 @@ describe('LaundryOrdersService', () => {
     it('markAwaitingDelivery on a DELIVERY order at READY succeeds', async () => {
       manager.findOne.mockResolvedValue(
         anOrder({
-          status: LaundryOrderStatus.READY,
           fulfillmentType: LaundryFulfillmentType.DELIVERY,
+          status: LaundryOrderStatus.READY,
         }),
       );
       await service.markAwaitingDelivery(t);
@@ -450,60 +450,60 @@ describe('LaundryOrdersService', () => {
       });
       lineRepository.find.mockResolvedValue([
         {
-          serviceId: 'svc-1',
           addOnId: null,
           pricingSnapshot: {
-            quantity: 2350,
-            unit: PricingUnit.PER_KG,
-            rateMinorUnits: 1500,
-            amountMinorUnits: 3525,
-            minimumChargeMinorUnits: null,
-            minimumChargeApplied: false,
             pricingRuleId: 'rule-1',
+            amountMinorUnits: 3525,
+            minimumChargeApplied: false,
+            minimumChargeMinorUnits: null,
+            quantity: 2350,
+            rateMinorUnits: 1500,
+            unit: PricingUnit.PER_KG,
           },
+          serviceId: 'svc-1',
         },
         {
-          serviceId: null,
           addOnId: 'addon-1',
           pricingSnapshot: {
-            quantity: 1,
-            unit: PricingUnit.FLAT,
-            rateMinorUnits: 200,
-            amountMinorUnits: 200,
-            minimumChargeMinorUnits: null,
-            minimumChargeApplied: false,
             pricingRuleId: 'rule-2',
+            amountMinorUnits: 200,
+            minimumChargeApplied: false,
+            minimumChargeMinorUnits: null,
+            quantity: 1,
+            rateMinorUnits: 200,
+            unit: PricingUnit.FLAT,
           },
+          serviceId: null,
         },
       ]);
 
       await expect(service.getOrderForInvoicing('order-1')).resolves.toEqual({
         id: 'order-1',
         customerId: 'cust-1',
-        status: LaundryOrderStatus.PRICED,
-        totalMinorUnits: 3500,
         lines: [
           {
-            serviceId: 'svc-1',
             addOnId: null,
             pricingSnapshot: {
-              quantity: 2350,
-              unit: PricingUnit.PER_KG,
-              rateMinorUnits: 1500,
               amountMinorUnits: 3525,
+              quantity: 2350,
+              rateMinorUnits: 1500,
+              unit: PricingUnit.PER_KG,
             },
+            serviceId: 'svc-1',
           },
           {
-            serviceId: null,
             addOnId: 'addon-1',
             pricingSnapshot: {
-              quantity: 1,
-              unit: PricingUnit.FLAT,
-              rateMinorUnits: 200,
               amountMinorUnits: 200,
+              quantity: 1,
+              rateMinorUnits: 200,
+              unit: PricingUnit.FLAT,
             },
+            serviceId: null,
           },
         ],
+        status: LaundryOrderStatus.PRICED,
+        totalMinorUnits: 3500,
       });
     });
   });

@@ -91,7 +91,7 @@ export function ShellChrome({
 
   const resolved = resolveAppearance(theme.preference, theme.prefersDark);
   const contextValue = useMemo(
-    () => ({ preference: theme.preference, setPreference, resolved }),
+    () => ({ preference: theme.preference, resolved, setPreference }),
     [resolved, setPreference, theme.preference],
   );
 

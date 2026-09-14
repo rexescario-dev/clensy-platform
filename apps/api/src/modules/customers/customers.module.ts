@@ -23,6 +23,7 @@ import { PropertyType } from './presentation/graphql/property.type';
 // each other. `AuditModule` is not `@Global()`, so there is no ambient
 // mechanism that makes this import optional.
 @Module({
+  exports: [CustomersService, PropertiesService],
   imports: [
     TypeOrmModule.forFeature([CustomerEntity, PropertyEntity]),
     NestjsQueryTypeOrmModule.forFeature([CustomerEntity, PropertyEntity]),
@@ -39,6 +40,5 @@ import { PropertyType } from './presentation/graphql/property.type';
     PropertyResolver,
     PropertyReadResolver,
   ],
-  exports: [CustomersService, PropertiesService],
 })
 export class CustomersModule {}

@@ -35,13 +35,13 @@ describe('AdminsService.disable — last-active-Owner race (real Postgres, two c
 
   const makeDataSource = () =>
     new DataSource({
-      type: 'postgres',
-      host: process.env.DB_HOST ?? 'localhost',
-      port: Number(process.env.DB_PORT ?? 5432),
-      username: process.env.DB_USERNAME ?? 'clensy',
-      password: process.env.DB_PASSWORD ?? 'clensy_dev',
       database: process.env.DB_NAME ?? 'clensy',
       entities: [AdminUserEntity, AuditEventEntity],
+      host: process.env.DB_HOST ?? 'localhost',
+      password: process.env.DB_PASSWORD ?? 'clensy_dev',
+      port: Number(process.env.DB_PORT ?? 5432),
+      type: 'postgres',
+      username: process.env.DB_USERNAME ?? 'clensy',
     });
 
   beforeAll(async () => {
@@ -74,17 +74,17 @@ describe('AdminsService.disable — last-active-Owner race (real Postgres, two c
     const ownerA = await repo.save(
       repo.create({
         email: 'race-owner-a@example.com',
+        isActive: true,
         passwordHash: await bcrypt.hash('irrelevant', 4),
         role: Role.OWNER,
-        isActive: true,
       }),
     );
     const ownerB = await repo.save(
       repo.create({
         email: 'race-owner-b@example.com',
+        isActive: true,
         passwordHash: await bcrypt.hash('irrelevant', 4),
         role: Role.OWNER,
-        isActive: true,
       }),
     );
 
@@ -103,7 +103,7 @@ describe('AdminsService.disable — last-active-Owner race (real Postgres, two c
     expect(rejectionReason.message).toMatch(/last active owner/i);
 
     const remainingActiveOwners = await repo.count({
-      where: { role: Role.OWNER, isActive: true },
+      where: { isActive: true, role: Role.OWNER },
     });
     expect(remainingActiveOwners).toBe(1);
   });

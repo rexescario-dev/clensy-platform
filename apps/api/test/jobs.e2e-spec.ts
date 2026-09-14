@@ -6,7 +6,11 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { DataSource, Repository } from 'typeorm';
 import { AppModule } from '../src/app/app.module';
-import { assertNoPerParentChildSelect, countSqlMentioning, withCapturedSql } from './helpers/capture-sql';
+import {
+  assertNoPerParentChildSelect,
+  countSqlMentioning,
+  withCapturedSql,
+} from './helpers/capture-sql';
 import { TeamsService } from '../src/modules/cleaners/application/services/teams.service';
 import { CustomersService } from '../src/modules/customers/application/services/customers.service';
 import { PropertiesService } from '../src/modules/customers/application/services/properties.service';
@@ -201,23 +205,23 @@ describe('Jobs (e2e)', () => {
   async function createFixture(runId: string) {
     const customer = await customersService.create({
       actorId: 'e2e',
-      fullName: `Jobs Fixture Customer ${runId}`,
       email: `jobs-fixture-${runId}@example.com`,
+      fullName: `Jobs Fixture Customer ${runId}`,
       phone: '555-0100',
     });
     const property = await propertiesService.create({
       actorId: 'e2e',
       customerId: customer.id,
-      label: 'Home',
       addressLine1: `${runId} Jobs St`,
       city: 'City',
-      region: 'Region',
+      label: 'Home',
       postalCode: '00000',
+      region: 'Region',
     });
     const service = await servicesService.createService({
       actorId: 'e2e',
-      name: `Jobs Fixture Service ${runId}`,
       durationMinutes: 60,
+      name: `Jobs Fixture Service ${runId}`,
     });
     const team = await teamsService.createTeam({
       actorId: 'e2e',
@@ -237,7 +241,7 @@ describe('Jobs (e2e)', () => {
         createPricingRule(input: $input) { id }
       }`,
       variables: {
-        input: { serviceId: fixture.service.id, priceMinorUnits: 5000 },
+        input: { priceMinorUnits: 5000, serviceId: fixture.service.id },
       },
     });
     expect(pricingResponse.body.errors).toBeUndefined();
@@ -291,16 +295,16 @@ describe('Jobs (e2e)', () => {
     expect(
       createdJob.checklist.items.nodes.map(
         (item: { position: number; label: string; completed: boolean }) => ({
-          position: item.position,
-          label: item.label,
           completed: item.completed,
+          label: item.label,
+          position: item.position,
         }),
       ),
     ).toEqual(
       DEFAULT_CHECKLIST_ITEMS.map((item) => ({
-        position: item.position,
-        label: item.label,
         completed: false,
+        label: item.label,
+        position: item.position,
       })),
     );
     const jobId: string = createdJob.id;
@@ -313,7 +317,7 @@ describe('Jobs (e2e)', () => {
       const completeItemResponse = await authedRequest(ownerSessionCookie).send(
         {
           query: COMPLETE_ITEM_MUTATION,
-          variables: { input: { jobId, itemId: itemIds[index] } },
+          variables: { input: { itemId: itemIds[index], jobId } },
         },
       );
       expect(completeItemResponse.body.errors).toBeUndefined();
@@ -593,9 +597,10 @@ describe('Jobs (e2e)', () => {
       expect(writeResponse.body.errors).toBeUndefined();
       expect(writeResponse.body.data.createJobFromBooking.id).toBeDefined();
       createdByRole[tag] = {
-        jobId: writeResponse.body.data.createJobFromBooking.id,
         itemId:
-          writeResponse.body.data.createJobFromBooking.checklist.items.nodes[0].id,
+          writeResponse.body.data.createJobFromBooking.checklist.items.nodes[0]
+            .id,
+        jobId: writeResponse.body.data.createJobFromBooking.id,
         teamId: source.team.id,
       };
     }
@@ -665,8 +670,8 @@ describe('Jobs (e2e)', () => {
         query: COMPLETE_ITEM_MUTATION,
         variables: {
           input: {
-            jobId: createdByRole.cs.jobId,
             itemId: createdByRole.cs.itemId,
+            jobId: createdByRole.cs.jobId,
           },
         },
       });
@@ -703,15 +708,17 @@ describe('Jobs (e2e)', () => {
     expect(created.body.errors).toBeUndefined();
     const jobId = created.body.data.createJobFromBooking.id as string;
 
-    const { result: existence, queries } = await withCapturedSql(dataSource, () =>
-      authedRequest(cookie).send({
-        query: `query JobByBooking($bookingId: ID!) {
+    const { result: existence, queries } = await withCapturedSql(
+      dataSource,
+      () =>
+        authedRequest(cookie).send({
+          query: `query JobByBooking($bookingId: ID!) {
           jobs(filter: { booking: { id: { eq: $bookingId } } }, paging: { limit: 1 }) {
             nodes { id }
           }
         }`,
-        variables: { bookingId: first.bookingId },
-      }),
+          variables: { bookingId: first.bookingId },
+        }),
     );
     expect(existence.body.errors).toBeUndefined();
     expect(existence.body.data.jobs.nodes).toHaveLength(1);
@@ -720,7 +727,10 @@ describe('Jobs (e2e)', () => {
 
     const jobIds: string[] = [jobId];
     for (let index = 1; index < 6; index += 1) {
-      const source = await createPricedBooking(cookie, `${runId}-items-${index}`);
+      const source = await createPricedBooking(
+        cookie,
+        `${runId}-items-${index}`,
+      );
       const jobResponse = await authedRequest(cookie).send({
         query: CREATE_JOB_MUTATION,
         variables: { input: { bookingId: source.bookingId } },
@@ -757,7 +767,10 @@ describe('Jobs (e2e)', () => {
 
     const atSix = await captureAtN(6, jobIds);
     for (let index = 6; index < 12; index += 1) {
-      const source = await createPricedBooking(cookie, `${runId}-items-${index}`);
+      const source = await createPricedBooking(
+        cookie,
+        `${runId}-items-${index}`,
+      );
       const jobResponse = await authedRequest(cookie).send({
         query: CREATE_JOB_MUTATION,
         variables: { input: { bookingId: source.bookingId } },

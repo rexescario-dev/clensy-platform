@@ -16,6 +16,7 @@ import { TeamResolver } from './presentation/graphql/team.resolver';
 import { TeamType } from './presentation/graphql/team.type';
 
 @Module({
+  exports: [TeamsService, CleanersService],
   imports: [
     TypeOrmModule.forFeature([TeamEntity, CleanerEntity]),
     NestjsQueryTypeOrmModule.forFeature([TeamEntity, CleanerEntity]),
@@ -33,6 +34,5 @@ import { TeamType } from './presentation/graphql/team.type';
     TeamReadResolver,
     CleanerTeamLoaders,
   ],
-  exports: [TeamsService, CleanersService],
 })
 export class CleanersModule {}

@@ -25,18 +25,18 @@ export class TeamReadResolver extends Relatable(TeamType, {
   enableTotalCount: false,
 })(
   ReadResolver(TeamType, {
-    guards: [AuthGuard],
     decorators: [Roles(...VIEW_ROLES)],
-    one: { disabled: true },
-    many: { name: 'teams' },
-    pagingStrategy: PagingStrategies.OFFSET,
-    enableTotalCount: true,
     defaultResultSize: PLATFORM_PAGE_DEFAULT,
-    maxResultsSize: PLATFORM_PAGE_MAX,
     defaultSort: [
-      { field: 'createdAt', direction: SortDirection.DESC },
-      { field: 'id', direction: SortDirection.ASC },
+      { direction: SortDirection.DESC, field: 'createdAt' },
+      { direction: SortDirection.ASC, field: 'id' },
     ],
+    enableTotalCount: true,
+    guards: [AuthGuard],
+    many: { name: 'teams' },
+    maxResultsSize: PLATFORM_PAGE_MAX,
+    one: { disabled: true },
+    pagingStrategy: PagingStrategies.OFFSET,
   }),
 ) {
   constructor(

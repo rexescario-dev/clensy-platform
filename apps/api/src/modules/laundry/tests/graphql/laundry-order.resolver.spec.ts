@@ -17,22 +17,22 @@ const A = Role.ANALYST;
 
 // Exactly the spec §4.4 RBAC table, hand-copied.
 const RBAC: Record<string, Role[]> = {
-  laundryOrder: [O, M, S, C, F, A],
-  receiveLaundryOrder: [O, M, S, C],
-  weighLaundryOrder: [O, M, S],
-  priceLaundryOrder: [O, M, S],
-  markLaundryOrderAwaitingPayment: [O, M, F, C],
-  markLaundryOrderPaid: [O, M, F, C],
-  startLaundryProcessing: [O, M, S],
-  markLaundryOrderReady: [O, M, S],
-  markLaundryOrderAwaitingPickup: [O, M, S],
-  markLaundryOrderAwaitingDelivery: [O, M, S],
-  completeLaundryOrder: [O, M, S, C],
   cancelLaundryOrder: [O, M, C],
-  rejectLaundryOrder: [O, M],
-  markLaundryOrderLost: [O, M],
+  completeLaundryOrder: [O, M, S, C],
+  laundryOrder: [O, M, S, C, F, A],
+  markLaundryOrderAwaitingDelivery: [O, M, S],
+  markLaundryOrderAwaitingPayment: [O, M, F, C],
+  markLaundryOrderAwaitingPickup: [O, M, S],
   markLaundryOrderDamaged: [O, M],
+  markLaundryOrderLost: [O, M],
+  markLaundryOrderPaid: [O, M, F, C],
+  markLaundryOrderReady: [O, M, S],
+  priceLaundryOrder: [O, M, S],
+  receiveLaundryOrder: [O, M, S, C],
   refundLaundryOrder: [O, M, F],
+  rejectLaundryOrder: [O, M],
+  startLaundryProcessing: [O, M, S],
+  weighLaundryOrder: [O, M, S],
 };
 
 function methodRef(name: string): (...args: unknown[]) => unknown {
@@ -59,11 +59,11 @@ describe('LaundryOrderResolver', () => {
       Pick<
         LaundryOrdersService,
         | 'getOrder'
-        | 'receive'
-        | 'weigh'
         | 'price'
-        | 'startProcessing'
+        | 'receive'
         | 'refund'
+        | 'startProcessing'
+        | 'weigh'
       >
     >;
     let resolver: LaundryOrderResolver;
@@ -71,22 +71,22 @@ describe('LaundryOrderResolver', () => {
     const order = {
       id: 'o1',
       customerId: 'c1',
+      createdAt: new Date(),
       fulfillmentType: LaundryFulfillmentType.PICKUP,
       status: LaundryOrderStatus.RECEIVED,
-      weightGrams: null,
       totalMinorUnits: null,
-      createdAt: new Date(),
       updatedAt: new Date(),
+      weightGrams: null,
     };
 
     beforeEach(() => {
       service = {
         getOrder: jest.fn(),
-        receive: jest.fn().mockResolvedValue(order),
-        weigh: jest.fn().mockResolvedValue(order),
         price: jest.fn().mockResolvedValue(order),
-        startProcessing: jest.fn().mockResolvedValue(order),
+        receive: jest.fn().mockResolvedValue(order),
         refund: jest.fn().mockResolvedValue(order),
+        startProcessing: jest.fn().mockResolvedValue(order),
+        weigh: jest.fn().mockResolvedValue(order),
       };
       resolver = new LaundryOrderResolver(service as never);
     });
@@ -102,9 +102,9 @@ describe('LaundryOrderResolver', () => {
         user,
       );
       expect(service.receive).toHaveBeenCalledWith({
+        actorId: 'actor-9',
         customerId: 'c1',
         fulfillmentType: LaundryFulfillmentType.DELIVERY,
-        actorId: 'actor-9',
       });
     });
 

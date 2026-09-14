@@ -31,10 +31,10 @@ describe('computeLaundryLineAmount', () => {
     it('is grams * rate / 1000 (exact case)', () => {
       expect(
         computeLaundryLineAmount({
-          unit: PricingUnit.PER_KG,
-          rateMinorUnits: 15000,
-          quantity: 2350,
           minimumChargeMinorUnits: null,
+          quantity: 2350,
+          rateMinorUnits: 15000,
+          unit: PricingUnit.PER_KG,
         }),
       ).toEqual({ amountMinorUnits: 35250, minimumChargeApplied: false });
     });
@@ -43,10 +43,10 @@ describe('computeLaundryLineAmount', () => {
       // 3 g * 500 = 1500 ; /1000 = 1.5 -> 2
       expect(
         computeLaundryLineAmount({
-          unit: PricingUnit.PER_KG,
-          rateMinorUnits: 500,
-          quantity: 3,
           minimumChargeMinorUnits: null,
+          quantity: 3,
+          rateMinorUnits: 500,
+          unit: PricingUnit.PER_KG,
         }),
       ).toEqual({ amountMinorUnits: 2, minimumChargeApplied: false });
     });
@@ -55,10 +55,10 @@ describe('computeLaundryLineAmount', () => {
       // 100 g * 1000 = 100000 ; /1000 = 100 ; floor 500 wins
       expect(
         computeLaundryLineAmount({
-          unit: PricingUnit.PER_KG,
-          rateMinorUnits: 1000,
-          quantity: 100,
           minimumChargeMinorUnits: 500,
+          quantity: 100,
+          rateMinorUnits: 1000,
+          unit: PricingUnit.PER_KG,
         }),
       ).toEqual({ amountMinorUnits: 500, minimumChargeApplied: true });
     });
@@ -66,10 +66,10 @@ describe('computeLaundryLineAmount', () => {
     it('a 0-gram order is floored to the minimum charge', () => {
       expect(
         computeLaundryLineAmount({
-          unit: PricingUnit.PER_KG,
-          rateMinorUnits: 1000,
-          quantity: 0,
           minimumChargeMinorUnits: 300,
+          quantity: 0,
+          rateMinorUnits: 1000,
+          unit: PricingUnit.PER_KG,
         }),
       ).toEqual({ amountMinorUnits: 300, minimumChargeApplied: true });
     });
@@ -77,10 +77,10 @@ describe('computeLaundryLineAmount', () => {
     it('a 0-gram order with no floor is 0', () => {
       expect(
         computeLaundryLineAmount({
-          unit: PricingUnit.PER_KG,
-          rateMinorUnits: 1000,
-          quantity: 0,
           minimumChargeMinorUnits: null,
+          quantity: 0,
+          rateMinorUnits: 1000,
+          unit: PricingUnit.PER_KG,
         }),
       ).toEqual({ amountMinorUnits: 0, minimumChargeApplied: false });
     });
@@ -89,10 +89,10 @@ describe('computeLaundryLineAmount', () => {
       // 2000 g * 1000 / 1000 = 2000 ; floor 2000 -> equal, not "applied"
       expect(
         computeLaundryLineAmount({
-          unit: PricingUnit.PER_KG,
-          rateMinorUnits: 1000,
-          quantity: 2000,
           minimumChargeMinorUnits: 2000,
+          quantity: 2000,
+          rateMinorUnits: 1000,
+          unit: PricingUnit.PER_KG,
         }),
       ).toEqual({ amountMinorUnits: 2000, minimumChargeApplied: false });
     });
@@ -102,10 +102,10 @@ describe('computeLaundryLineAmount', () => {
     it('is quantity * rate, no rounding', () => {
       expect(
         computeLaundryLineAmount({
-          unit: PricingUnit.PER_ITEM,
-          rateMinorUnits: 800,
-          quantity: 3,
           minimumChargeMinorUnits: null,
+          quantity: 3,
+          rateMinorUnits: 800,
+          unit: PricingUnit.PER_ITEM,
         }),
       ).toEqual({ amountMinorUnits: 2400, minimumChargeApplied: false });
     });
@@ -113,10 +113,10 @@ describe('computeLaundryLineAmount', () => {
     it('applies the floor when quantity * rate is below it', () => {
       expect(
         computeLaundryLineAmount({
-          unit: PricingUnit.PER_ITEM,
-          rateMinorUnits: 100,
-          quantity: 1,
           minimumChargeMinorUnits: 500,
+          quantity: 1,
+          rateMinorUnits: 100,
+          unit: PricingUnit.PER_ITEM,
         }),
       ).toEqual({ amountMinorUnits: 500, minimumChargeApplied: true });
     });
@@ -126,10 +126,10 @@ describe('computeLaundryLineAmount', () => {
     it('FLAT is the flat rate', () => {
       expect(
         computeLaundryLineAmount({
-          unit: PricingUnit.FLAT,
-          rateMinorUnits: 4200,
-          quantity: 1,
           minimumChargeMinorUnits: null,
+          quantity: 1,
+          rateMinorUnits: 4200,
+          unit: PricingUnit.FLAT,
         }),
       ).toEqual({ amountMinorUnits: 4200, minimumChargeApplied: false });
     });
@@ -137,10 +137,10 @@ describe('computeLaundryLineAmount', () => {
     it('PER_SERVICE is the flat rate', () => {
       expect(
         computeLaundryLineAmount({
-          unit: PricingUnit.PER_SERVICE,
-          rateMinorUnits: 999,
-          quantity: 1,
           minimumChargeMinorUnits: null,
+          quantity: 1,
+          rateMinorUnits: 999,
+          unit: PricingUnit.PER_SERVICE,
         }),
       ).toEqual({ amountMinorUnits: 999, minimumChargeApplied: false });
     });
@@ -148,10 +148,10 @@ describe('computeLaundryLineAmount', () => {
     it('FLAT still honours a higher floor', () => {
       expect(
         computeLaundryLineAmount({
-          unit: PricingUnit.FLAT,
-          rateMinorUnits: 100,
-          quantity: 1,
           minimumChargeMinorUnits: 250,
+          quantity: 1,
+          rateMinorUnits: 100,
+          unit: PricingUnit.FLAT,
         }),
       ).toEqual({ amountMinorUnits: 250, minimumChargeApplied: true });
     });
@@ -160,10 +160,10 @@ describe('computeLaundryLineAmount', () => {
   it('treats a null minimumChargeMinorUnits as a floor of 0 that never applies', () => {
     expect(
       computeLaundryLineAmount({
-        unit: PricingUnit.PER_ITEM,
-        rateMinorUnits: 1,
-        quantity: 1,
         minimumChargeMinorUnits: null,
+        quantity: 1,
+        rateMinorUnits: 1,
+        unit: PricingUnit.PER_ITEM,
       }),
     ).toEqual({ amountMinorUnits: 1, minimumChargeApplied: false });
   });

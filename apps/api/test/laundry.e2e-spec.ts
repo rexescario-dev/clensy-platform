@@ -77,8 +77,8 @@ describe('Laundry (e2e)', () => {
         `mutation($i: CreateCustomerInput!){ createCustomer(input:$i){ id } }`,
         {
           i: {
-            fullName: 'Laundry Jane',
             email: `lj-${tag}-${Date.now()}@example.com`,
+            fullName: 'Laundry Jane',
             phone: '555-1',
           },
         },
@@ -89,7 +89,7 @@ describe('Laundry (e2e)', () => {
       await gql(
         cookie,
         `mutation($i: CreateServiceInput!){ createService(input:$i){ id } }`,
-        { i: { name: `Wash&Fold ${tag}-${Date.now()}`, durationMinutes: 1 } },
+        { i: { durationMinutes: 1, name: `Wash&Fold ${tag}-${Date.now()}` } },
       )
     ).body.data.createService.id;
 
@@ -99,9 +99,9 @@ describe('Laundry (e2e)', () => {
       {
         i: {
           serviceId,
+          minimumChargeMinorUnits: 1000,
           priceMinorUnits: 2000,
           unit: 'PER_KG',
-          minimumChargeMinorUnits: 1000,
         },
       },
     );
@@ -125,7 +125,7 @@ describe('Laundry (e2e)', () => {
     const priced = await gql(
       cookie,
       `mutation($i: PriceLaundryOrderInput!){ priceLaundryOrder(input:$i){ status totalMinorUnits } }`,
-      { i: { orderId, baseServiceId: serviceId, addOns: [] } },
+      { i: { addOns: [], baseServiceId: serviceId, orderId } },
     );
     expect(priced.body.errors).toBeUndefined();
     // 400 g * 2000 / 1000 = 800 -> floored to the 1000 minimum charge.
@@ -148,14 +148,14 @@ describe('Laundry (e2e)', () => {
     expect(order.customer.fullName).toBe('Laundry Jane');
     expect(order.lines.nodes).toHaveLength(1);
     expect(order.lines.nodes[0]).toEqual({
-      serviceId,
       pricingSnapshot: {
-        unit: 'PER_KG',
-        quantity: 400,
+        pricingRuleId: expect.any(String),
         amountMinorUnits: 1000,
         minimumChargeApplied: true,
-        pricingRuleId: expect.any(String),
+        quantity: 400,
+        unit: 'PER_KG',
       },
+      serviceId,
     });
 
     // Illegal transition over GraphQL -> error, status unchanged.
@@ -190,7 +190,7 @@ describe('Laundry (e2e)', () => {
     expect(final.body.data.laundryOrder.status).toBe('COMPLETED');
 
     const events = await auditEventRepository.find({
-      where: { entityType: 'laundry_order', entityId: orderId },
+      where: { entityId: orderId, entityType: 'laundry_order' },
     });
     expect(events.map((e) => e.action).sort()).toEqual(
       [

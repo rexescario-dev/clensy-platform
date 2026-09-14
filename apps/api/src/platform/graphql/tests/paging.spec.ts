@@ -1,7 +1,4 @@
-import {
-  PLATFORM_PAGE_DEFAULT,
-  PLATFORM_PAGE_MAX,
-} from '../paging';
+import { PLATFORM_PAGE_DEFAULT, PLATFORM_PAGE_MAX } from '../paging';
 
 describe('platform paging policy', () => {
   it('defaults list pages to 20', () => {

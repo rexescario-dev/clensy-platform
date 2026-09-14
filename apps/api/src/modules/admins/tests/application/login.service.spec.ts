@@ -54,8 +54,8 @@ describe('LoginService', () => {
     expect(result).toBeNull();
     expect(auditLogger.log).toHaveBeenCalledWith(
       expect.objectContaining({
-        actorId: null,
         action: 'admin.login.failed',
+        actorId: null,
       }),
     );
   });
@@ -63,11 +63,11 @@ describe('LoginService', () => {
   it('returns null and records admin.login.failed for a wrong password', async () => {
     repository.findOneBy.mockResolvedValue({
       id: activeAdminId,
+      createdAt: new Date(),
       email: 'active@example.com',
+      isActive: true,
       passwordHash: activeAdminPasswordHash,
       role: Role.SCHEDULER,
-      isActive: true,
-      createdAt: new Date(),
     });
 
     const result = await service.login('active@example.com', 'wrong-password');
@@ -75,8 +75,8 @@ describe('LoginService', () => {
     expect(result).toBeNull();
     expect(auditLogger.log).toHaveBeenCalledWith(
       expect.objectContaining({
-        actorId: null,
         action: 'admin.login.failed',
+        actorId: null,
       }),
     );
   });
@@ -84,11 +84,11 @@ describe('LoginService', () => {
   it('returns null and records admin.login.failed for a disabled account, even with the correct password', async () => {
     repository.findOneBy.mockResolvedValue({
       id: activeAdminId,
+      createdAt: new Date(),
       email: 'disabled@example.com',
+      isActive: false,
       passwordHash: activeAdminPasswordHash,
       role: Role.SCHEDULER,
-      isActive: false,
-      createdAt: new Date(),
     });
 
     const result = await service.login(
@@ -99,8 +99,8 @@ describe('LoginService', () => {
     expect(result).toBeNull();
     expect(auditLogger.log).toHaveBeenCalledWith(
       expect.objectContaining({
-        actorId: null,
         action: 'admin.login.failed',
+        actorId: null,
       }),
     );
   });
@@ -114,11 +114,11 @@ describe('LoginService', () => {
 
     repository.findOneBy.mockResolvedValueOnce({
       id: activeAdminId,
+      createdAt: new Date(),
       email: 'active@example.com',
+      isActive: true,
       passwordHash: activeAdminPasswordHash,
       role: Role.SCHEDULER,
-      isActive: true,
-      createdAt: new Date(),
     });
     const wrongPasswordResult = await service.login(
       'active@example.com',
@@ -127,11 +127,11 @@ describe('LoginService', () => {
 
     repository.findOneBy.mockResolvedValueOnce({
       id: activeAdminId,
+      createdAt: new Date(),
       email: 'disabled@example.com',
+      isActive: false,
       passwordHash: activeAdminPasswordHash,
       role: Role.SCHEDULER,
-      isActive: false,
-      createdAt: new Date(),
     });
     const disabledResult = await service.login(
       'disabled@example.com',
@@ -159,11 +159,11 @@ describe('LoginService', () => {
   it('returns the principal and records admin.login.succeeded for correct credentials on an active account', async () => {
     repository.findOneBy.mockResolvedValue({
       id: activeAdminId,
+      createdAt: new Date(),
       email: 'active@example.com',
+      isActive: true,
       passwordHash: activeAdminPasswordHash,
       role: Role.OWNER,
-      isActive: true,
-      createdAt: new Date(),
     });
 
     const result = await service.login(
@@ -175,9 +175,9 @@ describe('LoginService', () => {
     expect(auditLogger.log).toHaveBeenCalledWith(
       expect.objectContaining({
         actorId: activeAdminId,
+        entityId: activeAdminId,
         action: 'admin.login.succeeded',
         entityType: 'AdminUser',
-        entityId: activeAdminId,
       }),
     );
   });

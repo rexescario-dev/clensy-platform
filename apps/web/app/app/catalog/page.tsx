@@ -92,9 +92,9 @@ function CatalogPageContent() {
       await createService({
         variables: {
           input: {
-            name,
             description: description.trim() === '' ? undefined : description,
             durationMinutes: Number(durationMinutes),
+            name,
           },
         },
       });
@@ -108,18 +108,18 @@ function CatalogPageContent() {
 
   const columns: DataTableColumn<ServiceRow>[] = [
     {
-      key: 'name',
       header: 'Name',
+      key: 'name',
       render: (row) => <span className="font-medium text-slate-900">{row.name}</span>,
     },
     {
-      key: 'durationMinutes',
       header: 'Duration',
+      key: 'durationMinutes',
       render: (row) => `${row.durationMinutes} min`,
     },
     {
-      key: 'active',
       header: 'Status',
+      key: 'active',
       render: (row) =>
         row.active ? (
           <StatusBadge label="Active" tone="success" />
@@ -128,8 +128,8 @@ function CatalogPageContent() {
         ),
     },
     {
-      key: 'activePricing',
       header: 'Active price',
+      key: 'activePricing',
       render: (row) => (row.activePricing ? formatMinorUnits(row.activePricing.priceMinorUnits) : '—'),
     },
   ];
@@ -156,10 +156,10 @@ function CatalogPageContent() {
         error={error ? 'Unable to load services.' : undefined}
         onRowClick={(row) => openDetail(row.id)}
         pagination={{
+          onPageChange: setPage,
           page,
           pageSize,
           totalCount: data?.services.totalCount ?? 0,
-          onPageChange: setPage,
         }}
       />
 
@@ -206,8 +206,8 @@ function ServiceDetailDrawer({
   onSaved: () => void;
 }) {
   const { data, loading, error, refetch } = useServiceQuery({
-    variables: { id },
     fetchPolicy: 'network-only',
+    variables: { id },
   });
 
   const title = data?.service?.name ?? 'Service';
@@ -263,10 +263,10 @@ function ServiceEditForm({
         variables: {
           id: service.id,
           input: {
-            name,
+            active,
             description: description.trim() === '' ? null : description,
             durationMinutes: Number(durationMinutes),
-            active,
+            name,
           },
         },
       });
@@ -347,7 +347,7 @@ function ServicePricing({
     const priceMinorUnits = parsePriceOrReportError(newPrice, setPriceFormError);
     if (priceMinorUnits === undefined) return;
     try {
-      await createPricingRule({ variables: { input: { serviceId: service.id, priceMinorUnits } } });
+      await createPricingRule({ variables: { input: { priceMinorUnits, serviceId: service.id } } });
       setNewPrice('');
       await refetch();
       onSaved();

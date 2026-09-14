@@ -9,13 +9,13 @@ import { ApolloClient, HttpLink, InMemoryCache } from '@apollo/client';
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000/graphql';
 
 export const apolloClient = new ApolloClient({
+  cache: new InMemoryCache(),
   link: new HttpLink({
-    uri: API_URL,
     // Required so the browser sends the HttpOnly session cookie set by
     // apps/api's `login` mutation across the apps/web <-> apps/api origin
     // boundary (spec §4; matches apps/api/src/main.ts's
     // `enableCors({ credentials: true, ... })`).
     credentials: 'include',
+    uri: API_URL,
   }),
-  cache: new InMemoryCache(),
 });

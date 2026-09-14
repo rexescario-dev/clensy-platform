@@ -39,18 +39,18 @@ describe('AuditLoggerService', () => {
 
     await service.log({
       actorId: null,
+      entityId: null,
       action: 'admin.login.failed',
       entityType: null,
-      entityId: null,
       metadata: { email: 'x@example.com', reason: 'invalid_credentials' },
     });
 
     expect(repository.save).toHaveBeenCalledWith(
       expect.objectContaining({
         actorId: null,
+        entityId: null,
         action: 'admin.login.failed',
         entityType: null,
-        entityId: null,
         metadata: { email: 'x@example.com', reason: 'invalid_credentials' },
       }),
     );
@@ -63,9 +63,9 @@ describe('AuditLoggerService', () => {
     await expect(
       service.log({
         actorId: 'admin-1',
+        entityId: 'admin-1',
         action: 'admin.login.succeeded',
         entityType: 'AdminUser',
-        entityId: 'admin-1',
       }),
     ).resolves.toBeUndefined();
 
@@ -81,9 +81,9 @@ describe('AuditLoggerService', () => {
       runAuditInTransaction(manager, () =>
         service.log({
           actorId: 'owner-1',
+          entityId: 'new-admin-1',
           action: 'admin.created',
           entityType: 'AdminUser',
-          entityId: 'new-admin-1',
           metadata: { role: 'SCHEDULER' },
         }),
       ),
@@ -93,8 +93,8 @@ describe('AuditLoggerService', () => {
       AuditEventEntity,
       expect.objectContaining({
         action: 'admin.created',
-        entityType: 'AdminUser',
         entityId: 'new-admin-1',
+        entityType: 'AdminUser',
       }),
     );
     expect(repository.save).not.toHaveBeenCalled();

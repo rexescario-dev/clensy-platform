@@ -70,15 +70,15 @@ describe('AuthGuard', () => {
     const gqlContext = { req, res: {} };
     const args = [{}, {}, gqlContext, {}];
     return {
-      getArgs: () => args,
       getArgByIndex: (i: number) => args[i],
-      getType: () => 'graphql',
+      getArgs: () => args,
       getClass: () => DummyResolver,
       getHandler: () => handler,
+      getType: () => 'graphql',
       switchToHttp: () => ({
+        getNext: () => undefined,
         getRequest: () => req,
         getResponse: () => gqlContext.res,
-        getNext: () => undefined,
       }),
     } as unknown as ExecutionContext;
   }

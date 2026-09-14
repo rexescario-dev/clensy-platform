@@ -52,9 +52,9 @@ export class LoginService {
     if (!isValid) {
       await this.auditLogger.log({
         actorId: null,
+        entityId: null,
         action: 'admin.login.failed',
         entityType: null,
-        entityId: null,
         metadata: { email: normalizedEmail, reason: 'invalid_credentials' },
       });
       return null;
@@ -62,9 +62,9 @@ export class LoginService {
 
     await this.auditLogger.log({
       actorId: admin.id,
+      entityId: admin.id,
       action: 'admin.login.succeeded',
       entityType: 'AdminUser',
-      entityId: admin.id,
     });
 
     return { id: admin.id, role: admin.role };

@@ -47,5 +47,5 @@ export function useDetailDrawer(paramName = 'detail') {
     router.replace(query ? `${pathname}?${query}` : pathname);
   }, [router, pathname, searchParams, paramName]);
 
-  return { activeId, open, close };
+  return { activeId, close, open };
 }

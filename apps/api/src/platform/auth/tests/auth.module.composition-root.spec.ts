@@ -24,8 +24,8 @@ import { JwtStrategy } from '../infrastructure/jwt.strategy';
 // `AdminsModule`, without needing a real Postgres connection.
 @Global()
 @Module({
-  providers: [{ provide: DataSource, useValue: {} }],
   exports: [DataSource],
+  providers: [{ provide: DataSource, useValue: {} }],
 })
 class FakeGlobalDataSourceModule {}
 
@@ -82,8 +82,8 @@ describe('AuthModule.forRootAsync — composition-root wiring (real AdminsModule
   it('binds ADMIN_IDENTITY_LOOKUP to the real AdminIdentityLookupService (not a stub) — validate() reaches the actual repository', async () => {
     adminUserRepository.findOneBy.mockResolvedValue({
       id: 'admin-1',
-      role: Role.OWNER,
       isActive: true,
+      role: Role.OWNER,
     });
 
     const strategy = moduleRef.get(JwtStrategy);

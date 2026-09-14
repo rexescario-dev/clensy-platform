@@ -57,70 +57,59 @@ type OrderRow = {
 };
 
 const STATUS_TONE: Record<LaundryOrderStatus, StatusTone> = {
-  RECEIVED: 'neutral',
-  WEIGHED: 'neutral',
-  PRICED: 'neutral',
+  AWAITING_DELIVERY: 'warning',
   AWAITING_PAYMENT: 'neutral',
+  AWAITING_PICKUP: 'warning',
+  CANCELLED: 'danger',
+  COMPLETED: 'success',
+  DAMAGED: 'danger',
+  LOST: 'danger',
   PAID: 'warning',
+  PRICED: 'neutral',
   PROCESSING: 'warning',
   READY: 'warning',
-  AWAITING_PICKUP: 'warning',
-  AWAITING_DELIVERY: 'warning',
-  COMPLETED: 'success',
-  CANCELLED: 'danger',
-  REJECTED: 'danger',
-  LOST: 'danger',
-  DAMAGED: 'danger',
+  RECEIVED: 'neutral',
   REFUNDED: 'danger',
+  REJECTED: 'danger',
+  WEIGHED: 'neutral',
 };
 
 // Client mirror of the spec §4.3 transition matrix, for presentation only.
 // The server re-checks every transition (spec §4.9).
 const MATRIX: Record<LaundryOrderStatus, LaundryOrderStatus[]> = {
-  RECEIVED: ['WEIGHED', 'REJECTED', 'CANCELLED'],
-  WEIGHED: ['PRICED', 'REJECTED', 'CANCELLED'],
-  PRICED: ['AWAITING_PAYMENT', 'PAID', 'CANCELLED'],
+  AWAITING_DELIVERY: ['COMPLETED', 'LOST', 'DAMAGED', 'REFUNDED'],
   AWAITING_PAYMENT: ['PAID', 'CANCELLED'],
+  AWAITING_PICKUP: ['COMPLETED', 'LOST', 'DAMAGED', 'REFUNDED'],
+  CANCELLED: [],
+  COMPLETED: ['REFUNDED'],
+  DAMAGED: ['REFUNDED'],
+  LOST: ['REFUNDED'],
   PAID: ['PROCESSING', 'REFUNDED'],
+  PRICED: ['AWAITING_PAYMENT', 'PAID', 'CANCELLED'],
   PROCESSING: ['READY', 'LOST', 'DAMAGED', 'REFUNDED'],
   READY: ['AWAITING_PICKUP', 'AWAITING_DELIVERY', 'LOST', 'DAMAGED', 'REFUNDED'],
-  AWAITING_PICKUP: ['COMPLETED', 'LOST', 'DAMAGED', 'REFUNDED'],
-  AWAITING_DELIVERY: ['COMPLETED', 'LOST', 'DAMAGED', 'REFUNDED'],
-  COMPLETED: ['REFUNDED'],
-  LOST: ['REFUNDED'],
-  DAMAGED: ['REFUNDED'],
-  CANCELLED: [],
-  REJECTED: [],
+  RECEIVED: ['WEIGHED', 'REJECTED', 'CANCELLED'],
   REFUNDED: [],
+  REJECTED: [],
+  WEIGHED: ['PRICED', 'REJECTED', 'CANCELLED'],
 };
 
 type RefVerb =
-  | 'markAwaitingPayment'
-  | 'markPaid'
-  | 'startProcessing'
-  | 'markReady'
-  | 'markAwaitingPickup'
-  | 'markAwaitingDelivery'
-  | 'complete'
-  | 'cancel'
-  | 'reject'
-  | 'markLost'
-  | 'markDamaged'
-  | 'refund';
+  'cancel' | 'complete' | 'markAwaitingDelivery' | 'markAwaitingPayment' | 'markAwaitingPickup' | 'markDamaged' | 'markLost' | 'markPaid' | 'markReady' | 'refund' | 'reject' | 'startProcessing';
 
 const TARGET_TO_VERB: Partial<Record<LaundryOrderStatus, RefVerb>> = {
+  AWAITING_DELIVERY: 'markAwaitingDelivery',
   AWAITING_PAYMENT: 'markAwaitingPayment',
+  AWAITING_PICKUP: 'markAwaitingPickup',
+  CANCELLED: 'cancel',
+  COMPLETED: 'complete',
+  DAMAGED: 'markDamaged',
+  LOST: 'markLost',
   PAID: 'markPaid',
   PROCESSING: 'startProcessing',
   READY: 'markReady',
-  AWAITING_PICKUP: 'markAwaitingPickup',
-  AWAITING_DELIVERY: 'markAwaitingDelivery',
-  COMPLETED: 'complete',
-  CANCELLED: 'cancel',
-  REJECTED: 'reject',
-  LOST: 'markLost',
-  DAMAGED: 'markDamaged',
   REFUNDED: 'refund',
+  REJECTED: 'reject',
 };
 
 const DESTRUCTIVE: ReadonlySet<RefVerb> = new Set([
@@ -132,18 +121,18 @@ const DESTRUCTIVE: ReadonlySet<RefVerb> = new Set([
 ]);
 
 const VERB_LABEL: Record<RefVerb, string> = {
-  markAwaitingPayment: 'Mark awaiting payment',
-  markPaid: 'Mark paid',
-  startProcessing: 'Start processing',
-  markReady: 'Mark ready',
-  markAwaitingPickup: 'Mark awaiting pickup',
-  markAwaitingDelivery: 'Mark awaiting delivery',
-  complete: 'Complete order',
   cancel: 'Cancel order',
-  reject: 'Reject order',
-  markLost: 'Mark lost',
+  complete: 'Complete order',
+  markAwaitingDelivery: 'Mark awaiting delivery',
+  markAwaitingPayment: 'Mark awaiting payment',
+  markAwaitingPickup: 'Mark awaiting pickup',
   markDamaged: 'Mark damaged',
+  markLost: 'Mark lost',
+  markPaid: 'Mark paid',
+  markReady: 'Mark ready',
   refund: 'Refund order',
+  reject: 'Reject order',
+  startProcessing: 'Start processing',
 };
 
 function formatDate(value: unknown): string {
@@ -227,23 +216,23 @@ function LaundryPageContent() {
   }
 
   const columns: DataTableColumn<OrderRow>[] = [
-    { key: 'customer', header: 'Customer', render: (r) => r.customer.fullName },
-    { key: 'fulfillment', header: 'Fulfillment', render: (r) => r.fulfillmentType },
+    { header: 'Customer', key: 'customer', render: (r) => r.customer.fullName },
+    { header: 'Fulfillment', key: 'fulfillment', render: (r) => r.fulfillmentType },
     {
-      key: 'status',
       header: 'Status',
+      key: 'status',
       render: (r) => (
         <StatusBadge label={r.status} tone={STATUS_TONE[r.status]} />
       ),
     },
-    { key: 'weight', header: 'Weight', render: (r) => formatWeight(r.weightGrams) },
+    { header: 'Weight', key: 'weight', render: (r) => formatWeight(r.weightGrams) },
     {
-      key: 'total',
       header: 'Total',
+      key: 'total',
       render: (r) =>
         r.totalMinorUnits === null ? '—' : formatMinorUnits(r.totalMinorUnits),
     },
-    { key: 'created', header: 'Created', render: (r) => formatDate(r.createdAt) },
+    { header: 'Created', key: 'created', render: (r) => formatDate(r.createdAt) },
   ];
 
   const rows = (ordersQuery.data?.laundryOrders.nodes ?? []) as OrderRow[];
@@ -269,10 +258,10 @@ function LaundryPageContent() {
         error={ordersQuery.error ? 'Unable to load laundry orders.' : undefined}
         onRowClick={(r) => openDetail(r.id)}
         pagination={{
+          onPageChange: setPage,
           page,
           pageSize,
           totalCount: ordersQuery.data?.laundryOrders.totalCount ?? 0,
-          onPageChange: setPage,
         }}
       />
 
@@ -343,8 +332,8 @@ function LaundryDetailDrawer({
   onChanged: () => void;
 }) {
   const { data, loading, error, refetch } = useLaundryOrderQuery({
-    variables: { id },
     fetchPolicy: 'network-only',
+    variables: { id },
   });
   const { data: servicesData } = useServicesQuery({
     fetchPolicy: 'network-only',
@@ -367,22 +356,22 @@ function LaundryDetailDrawer({
   const [refund] = useRefundLaundryOrderMutation();
 
   const refRunners: Record<RefVerb, (orderId: string) => Promise<unknown>> = {
-    markAwaitingPayment: (orderId) =>
-      markAwaitingPayment({ variables: { input: { orderId } } }),
-    markPaid: (orderId) => markPaid({ variables: { input: { orderId } } }),
-    startProcessing: (orderId) =>
-      startProcessing({ variables: { input: { orderId } } }),
-    markReady: (orderId) => markReady({ variables: { input: { orderId } } }),
-    markAwaitingPickup: (orderId) =>
-      markAwaitingPickup({ variables: { input: { orderId } } }),
+    cancel: (orderId) => cancel({ variables: { input: { orderId } } }),
+    complete: (orderId) => complete({ variables: { input: { orderId } } }),
     markAwaitingDelivery: (orderId) =>
       markAwaitingDelivery({ variables: { input: { orderId } } }),
-    complete: (orderId) => complete({ variables: { input: { orderId } } }),
-    cancel: (orderId) => cancel({ variables: { input: { orderId } } }),
-    reject: (orderId) => reject({ variables: { input: { orderId } } }),
-    markLost: (orderId) => markLost({ variables: { input: { orderId } } }),
+    markAwaitingPayment: (orderId) =>
+      markAwaitingPayment({ variables: { input: { orderId } } }),
+    markAwaitingPickup: (orderId) =>
+      markAwaitingPickup({ variables: { input: { orderId } } }),
     markDamaged: (orderId) => markDamaged({ variables: { input: { orderId } } }),
+    markLost: (orderId) => markLost({ variables: { input: { orderId } } }),
+    markPaid: (orderId) => markPaid({ variables: { input: { orderId } } }),
+    markReady: (orderId) => markReady({ variables: { input: { orderId } } }),
     refund: (orderId) => refund({ variables: { input: { orderId } } }),
+    reject: (orderId) => reject({ variables: { input: { orderId } } }),
+    startProcessing: (orderId) =>
+      startProcessing({ variables: { input: { orderId } } }),
   };
 
   const [actionError, setActionError] = useState<string | undefined>(undefined);
@@ -564,9 +553,9 @@ function LaundryDetailDrawer({
                     price({
                       variables: {
                         input: {
-                          orderId: order.id,
-                          baseServiceId,
                           addOns: [],
+                          baseServiceId,
+                          orderId: order.id,
                         },
                       },
                     }),
@@ -643,8 +632,8 @@ function InvoiceSection({
   const { data: adminData } = useCurrentAdminQuery();
   const role = adminData?.currentAdmin.role;
   const invoiceQuery = useInvoiceForOrderQuery({
-    variables: { laundryOrderId: orderId },
     fetchPolicy: 'network-only',
+    variables: { laundryOrderId: orderId },
   });
   const [generate, { loading: generating }] =
     useGenerateInvoiceFromOrderMutation();

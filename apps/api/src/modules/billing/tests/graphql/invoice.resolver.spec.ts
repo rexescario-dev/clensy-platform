@@ -16,8 +16,8 @@ const F = Role.FINANCE;
 const A = Role.ANALYST;
 
 const RBAC: Record<string, Role[]> = {
-  invoice: [O, M, S, C, F, A],
   generateInvoiceFromOrder: [F, O],
+  invoice: [O, M, S, C, F, A],
 };
 
 function methodRef(name: string): (...args: unknown[]) => unknown {
@@ -41,31 +41,31 @@ describe('InvoiceResolver', () => {
 
   describe('behavior', () => {
     let service: jest.Mocked<
-      Pick<InvoicesService, 'getInvoice' | 'generateFromOrder'>
+      Pick<InvoicesService, 'generateFromOrder' | 'getInvoice'>
     >;
     let resolver: InvoiceResolver;
     const user = { id: 'actor-9' } as never;
     const invoice = {
       id: 'inv-1',
-      invoiceNumber: 'INV-2026-000042',
-      laundryOrderId: 'order-1',
       customerId: 'cust-1',
-      subtotalMinorUnits: 3725,
-      discountMinorUnits: 0,
-      totalMinorUnits: 3725,
+      laundryOrderId: 'order-1',
       amountPaidMinorUnits: 0,
+      createdAt: new Date(),
+      discountMinorUnits: 0,
+      dueDate: new Date(),
+      invoiceNumber: 'INV-2026-000042',
+      issueDate: new Date(),
       paymentStatus: InvoicePaymentStatus.UNPAID,
       paymentTerms: InvoicePaymentTerms.PAY_NOW,
-      issueDate: new Date(),
-      dueDate: new Date(),
-      createdAt: new Date(),
+      subtotalMinorUnits: 3725,
+      totalMinorUnits: 3725,
       updatedAt: new Date(),
     };
 
     beforeEach(() => {
       service = {
-        getInvoice: jest.fn(),
         generateFromOrder: jest.fn().mockResolvedValue(invoice),
+        getInvoice: jest.fn(),
       };
       resolver = new InvoiceResolver(service as never);
     });
@@ -84,17 +84,17 @@ describe('InvoiceResolver', () => {
         user,
       );
       expect(service.generateFromOrder).toHaveBeenCalledWith({
+        actorId: 'actor-9',
         laundryOrderId: 'order-1',
         paymentTerms: InvoicePaymentTerms.PAY_ON_COMPLETION,
-        actorId: 'actor-9',
       });
     });
 
     it('amountDueMinorUnits is total minus amount paid', () => {
       expect(
         resolver.amountDueMinorUnits({
-          totalMinorUnits: 3725,
           amountPaidMinorUnits: 1000,
+          totalMinorUnits: 3725,
         }),
       ).toBe(2725);
     });

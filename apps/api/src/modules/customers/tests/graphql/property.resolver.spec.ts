@@ -13,7 +13,7 @@ import { CustomerResolver } from '../../presentation/graphql/customer.resolver';
 import { PropertyResolver } from '../../presentation/graphql/property.resolver';
 
 type ResolverMethod =
-  'property' | 'customerProperties' | 'createProperty' | 'updateProperty';
+  'createProperty' | 'customerProperties' | 'property' | 'updateProperty';
 
 const VIEW_ROLES = [
   Role.OWNER,

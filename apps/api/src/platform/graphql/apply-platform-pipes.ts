@@ -10,9 +10,9 @@ export function applyPlatformPipes(app: INestApplication): void {
   app.useGlobalPipes(
     new ClampPagingLimitPipe(),
     new ValidationPipe({
+      forbidNonWhitelisted: true,
       transform: true,
       whitelist: true,
-      forbidNonWhitelisted: true,
     }),
   );
 }

@@ -229,8 +229,8 @@ describe('Cleaners & Teams (e2e)', () => {
     const ownerLoginResponse = await login(owner.email, owner.password);
     expect(ownerLoginResponse.body.errors).toBeUndefined();
     expect(ownerLoginResponse.body.data.login).toEqual({
-      success: true,
       admin: { id: owner.id, role: Role.OWNER },
+      success: true,
     });
     const ownerSessionCookie = extractSessionCookie(ownerLoginResponse);
 
@@ -244,20 +244,20 @@ describe('Cleaners & Teams (e2e)', () => {
       query: CREATE_CLEANER_MUTATION,
       variables: {
         input: {
-          fullName: 'Jane Cleaner',
-          phone: '555-0100',
           email: cleanerEmail,
+          fullName: 'Jane Cleaner',
           notes: 'Initial notes',
+          phone: '555-0100',
         },
       },
     });
     expect(createCleanerResponse.body.errors).toBeUndefined();
     const createdCleaner = createCleanerResponse.body.data.createCleaner;
     expect(createdCleaner).toMatchObject({
-      fullName: 'Jane Cleaner',
-      phone: '555-0100',
       email: cleanerEmail,
+      fullName: 'Jane Cleaner',
       notes: 'Initial notes',
+      phone: '555-0100',
     });
     const cleanerId: string = createdCleaner.id;
 
@@ -357,10 +357,10 @@ describe('Cleaners & Teams (e2e)', () => {
     expect(updateCleanerResponse.body.errors).toBeUndefined();
     expect(updateCleanerResponse.body.data.updateCleaner).toMatchObject({
       id: cleanerId,
-      fullName: 'Jane Cleaner',
       email: cleanerEmail,
-      phone: '555-9999',
+      fullName: 'Jane Cleaner',
       notes: 'Initial notes',
+      phone: '555-9999',
     });
 
     const cleanerUpdateAuditEvent = await auditEventRepository.findOneBy({
@@ -379,10 +379,10 @@ describe('Cleaners & Teams (e2e)', () => {
     expect(cleanerAfterUpdateResponse.body.errors).toBeUndefined();
     expect(cleanerAfterUpdateResponse.body.data.cleaner).toMatchObject({
       id: cleanerId,
-      fullName: 'Jane Cleaner',
       email: cleanerEmail,
-      phone: '555-9999',
+      fullName: 'Jane Cleaner',
       notes: 'Initial notes',
+      phone: '555-9999',
     });
 
     // --- Step 4: Fixture — Team A (2 cleaners), Team B (1 cleaner), Team C
@@ -396,7 +396,7 @@ describe('Cleaners & Teams (e2e)', () => {
       const response = await authedRequest(ownerSessionCookie).send({
         query: CREATE_CLEANER_MUTATION,
         variables: {
-          input: { fullName: label, phone: '555-0200', email },
+          input: { email, fullName: label, phone: '555-0200' },
         },
       });
       expect(response.body.errors).toBeUndefined();
@@ -460,12 +460,12 @@ describe('Cleaners & Teams (e2e)', () => {
       cleaners: { nodes: Array<{ id: string }> };
     }> = teamsFixtureResponse.body.data.teams.nodes;
     const teamsById = new Map(teamsFixtureRows.map((row) => [row.id, row]));
-    expect(new Set(teamsById.get(teamAId)?.cleaners.nodes.map((c) => c.id))).toEqual(
-      new Set([teamACleaner1Id, teamACleaner2Id]),
-    );
-    expect(new Set(teamsById.get(teamBId)?.cleaners.nodes.map((c) => c.id))).toEqual(
-      new Set([teamBCleaner1Id]),
-    );
+    expect(
+      new Set(teamsById.get(teamAId)?.cleaners.nodes.map((c) => c.id)),
+    ).toEqual(new Set([teamACleaner1Id, teamACleaner2Id]));
+    expect(
+      new Set(teamsById.get(teamBId)?.cleaners.nodes.map((c) => c.id)),
+    ).toEqual(new Set([teamBCleaner1Id]));
     expect(teamsById.get(teamCId)?.cleaners.nodes).toEqual([]);
 
     // --- Step 5: Batching/query-count proof, distinct from step 4. Spies
@@ -535,10 +535,14 @@ describe('Cleaners & Teams (e2e)', () => {
       teamsBeforeReassign.map((row) => [row.id, row]),
     );
     expect(
-      new Set(teamsBeforeReassignById.get(teamAId)?.cleaners.nodes.map((c) => c.id)),
+      new Set(
+        teamsBeforeReassignById.get(teamAId)?.cleaners.nodes.map((c) => c.id),
+      ),
     ).toEqual(new Set([teamACleaner1Id, teamACleaner2Id]));
     expect(
-      new Set(teamsBeforeReassignById.get(teamBId)?.cleaners.nodes.map((c) => c.id)),
+      new Set(
+        teamsBeforeReassignById.get(teamBId)?.cleaners.nodes.map((c) => c.id),
+      ),
     ).toEqual(new Set([teamBCleaner1Id]));
 
     await assignFixture(teamACleaner1Id, teamBId);
@@ -555,10 +559,14 @@ describe('Cleaners & Teams (e2e)', () => {
       teamsAfterReassign.map((row) => [row.id, row]),
     );
     expect(
-      new Set(teamsAfterReassignById.get(teamAId)?.cleaners.nodes.map((c) => c.id)),
+      new Set(
+        teamsAfterReassignById.get(teamAId)?.cleaners.nodes.map((c) => c.id),
+      ),
     ).toEqual(new Set([teamACleaner2Id]));
     expect(
-      new Set(teamsAfterReassignById.get(teamBId)?.cleaners.nodes.map((c) => c.id)),
+      new Set(
+        teamsAfterReassignById.get(teamBId)?.cleaners.nodes.map((c) => c.id),
+      ),
     ).toEqual(new Set([teamBCleaner1Id, teamACleaner1Id]));
 
     // --- Step 7: Owner creates a Scheduler, Customer Support, Finance, and
@@ -574,8 +582,8 @@ describe('Cleaners & Teams (e2e)', () => {
     );
     expect(scheduler).toMatchObject({
       email: schedulerEmail,
-      role: Role.SCHEDULER,
       isActive: true,
+      role: Role.SCHEDULER,
     });
 
     const customerSupportEmail = `customer-support-${runId}@example.com`;
@@ -588,8 +596,8 @@ describe('Cleaners & Teams (e2e)', () => {
     );
     expect(customerSupport).toMatchObject({
       email: customerSupportEmail,
-      role: Role.CUSTOMER_SUPPORT,
       isActive: true,
+      role: Role.CUSTOMER_SUPPORT,
     });
 
     const financeEmail = `finance-${runId}@example.com`;
@@ -602,8 +610,8 @@ describe('Cleaners & Teams (e2e)', () => {
     );
     expect(finance).toMatchObject({
       email: financeEmail,
-      role: Role.FINANCE,
       isActive: true,
+      role: Role.FINANCE,
     });
 
     const analystEmail = `analyst-${runId}@example.com`;
@@ -616,8 +624,8 @@ describe('Cleaners & Teams (e2e)', () => {
     );
     expect(analyst).toMatchObject({
       email: analystEmail,
-      role: Role.ANALYST,
       isActive: true,
+      role: Role.ANALYST,
     });
 
     // --- Step 8: Scheduler logs in -> cleaners query succeeds (view-
@@ -646,9 +654,9 @@ describe('Cleaners & Teams (e2e)', () => {
       query: CREATE_CLEANER_MUTATION,
       variables: {
         input: {
+          email: `should-not-be-created-scheduler-${runId}@example.com`,
           fullName: 'Should Not Be Created',
           phone: '555-0000',
-          email: `should-not-be-created-scheduler-${runId}@example.com`,
         },
       },
     });
@@ -702,9 +710,9 @@ describe('Cleaners & Teams (e2e)', () => {
       query: CREATE_CLEANER_MUTATION,
       variables: {
         input: {
+          email: `should-not-be-created-customer-support-${runId}@example.com`,
           fullName: 'Should Not Be Created',
           phone: '555-0000',
-          email: `should-not-be-created-customer-support-${runId}@example.com`,
         },
       },
     });
@@ -736,9 +744,9 @@ describe('Cleaners & Teams (e2e)', () => {
       query: CREATE_CLEANER_MUTATION,
       variables: {
         input: {
+          email: `should-not-be-created-finance-${runId}@example.com`,
           fullName: 'Should Not Be Created',
           phone: '555-0000',
-          email: `should-not-be-created-finance-${runId}@example.com`,
         },
       },
     });
@@ -803,7 +811,9 @@ describe('Cleaners & Teams (e2e)', () => {
     ).send({ query: TEAMS_QUERY });
     expect(teamsAfterDuplicateResponse.body.errors).toBeUndefined();
     const teamsNamedTeamName = (
-      teamsAfterDuplicateResponse.body.data.teams.nodes as Array<{ name: string }>
+      teamsAfterDuplicateResponse.body.data.teams.nodes as Array<{
+        name: string;
+      }>
     ).filter((t) => t.name === teamName);
     expect(teamsNamedTeamName).toHaveLength(1);
   });
@@ -824,9 +834,9 @@ describe('Cleaners & Teams (e2e)', () => {
       teamIds.push(team.id);
       const cleaner = await cleanersService.createCleaner({
         actorId: owner.id,
+        email: `nested-${runId}-${index}@example.com`,
         fullName: `Nested ${runId}-${index}`,
         phone: '555-0400',
-        email: `nested-${runId}-${index}@example.com`,
       });
       await cleanersService.assignCleanerToTeam({
         actorId: owner.id,
@@ -867,9 +877,9 @@ describe('Cleaners & Teams (e2e)', () => {
       teamIds.push(team.id);
       const cleaner = await cleanersService.createCleaner({
         actorId: owner.id,
+        email: `nested-${runId}-${index}@example.com`,
         fullName: `Nested ${runId}-${index}`,
         phone: '555-0400',
-        email: `nested-${runId}-${index}@example.com`,
       });
       await cleanersService.assignCleanerToTeam({
         actorId: owner.id,

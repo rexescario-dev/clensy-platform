@@ -150,8 +150,8 @@ describe('Admin Foundation (e2e)', () => {
     const ownerLoginResponse = await login(owner.email, owner.password);
     expect(ownerLoginResponse.body.errors).toBeUndefined();
     expect(ownerLoginResponse.body.data.login).toEqual({
-      success: true,
       admin: { id: owner.id, role: Role.OWNER },
+      success: true,
     });
     // The session cookie must actually have been issued — everything from
     // here on (including step 5's rejection) depends on that being true.
@@ -189,8 +189,8 @@ describe('Admin Foundation (e2e)', () => {
     const createdAdmin = createAdminResponse.body.data.createAdmin;
     expect(createdAdmin).toMatchObject({
       email: schedulerEmail,
-      role: Role.SCHEDULER,
       isActive: true,
+      role: Role.SCHEDULER,
     });
     const schedulerId: string = createdAdmin.id;
 
@@ -272,8 +272,8 @@ describe('Admin Foundation (e2e)', () => {
     expect(badPasswordError?.extensions?.code).toBe('UNAUTHENTICATED');
 
     const failedLoginAuditEvent = await auditEventRepository.findOne({
-      where: { action: 'admin.login.failed' },
       order: { occurredAt: 'DESC' },
+      where: { action: 'admin.login.failed' },
     });
     expect(failedLoginAuditEvent).not.toBeNull();
     expect(failedLoginAuditEvent?.actorId).toBeNull();

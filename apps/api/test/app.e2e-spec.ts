@@ -46,28 +46,28 @@ describe('Bookings (e2e)', () => {
 
     const customer = await customersService.create({
       actorId: 'e2e',
-      fullName: 'E2E Test Customer',
       email: `e2e-${Date.now()}@example.com`,
+      fullName: 'E2E Test Customer',
       phone: '555-0100',
     });
     const property = await propertiesService.create({
       actorId: 'e2e',
       customerId: customer.id,
-      label: 'Home',
       addressLine1: '1 Test St',
       city: 'City',
-      region: 'Region',
+      label: 'Home',
       postalCode: '00000',
+      region: 'Region',
     });
     const service = await servicesService.createService({
       actorId: 'e2e',
-      name: `E2E Test Service ${Date.now()}`,
       durationMinutes: 60,
+      name: `E2E Test Service ${Date.now()}`,
     });
     await pricingRulesService.createPricingRule({
       actorId: 'e2e',
-      serviceId: service.id,
       priceMinorUnits: 5000,
+      serviceId: service.id,
     });
 
     const createResponse = await request(server)

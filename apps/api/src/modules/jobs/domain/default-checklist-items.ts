@@ -5,7 +5,7 @@ export const DEFAULT_CHECKLIST_ITEMS: ReadonlyArray<{
   position: number;
   label: string;
 }> = [
-  { position: 0, label: 'Arrive on site' },
-  { position: 1, label: 'Complete assigned work' },
-  { position: 2, label: 'Final walkthrough' },
+  { label: 'Arrive on site', position: 0 },
+  { label: 'Complete assigned work', position: 1 },
+  { label: 'Final walkthrough', position: 2 },
 ];

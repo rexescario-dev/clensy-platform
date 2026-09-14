@@ -22,7 +22,7 @@ import { CreatePricingRuleCommand } from '../commands/create-pricing-rule.comman
 // of these two literal strings, decided by `resolveTarget` below — never
 // caller-supplied text — so interpolating it into a `WHERE` clause is safe.
 type PricingRuleTarget =
-  { column: 'serviceId'; id: string } | { column: 'addOnId'; id: string };
+  { column: 'addOnId'; id: string } | { column: 'serviceId'; id: string };
 
 // Postgres unique_violation — see
 // https://www.postgresql.org/docs/current/errcodes-appendix.html
@@ -135,7 +135,7 @@ export class PricingRulesService {
         if (target.column === 'serviceId' && effectiveFrom <= operationNow) {
           await manager.update(
             PricingRuleEntity,
-            { serviceId: target.id, active: true },
+            { active: true, serviceId: target.id },
             { active: false },
           );
           active = true;
@@ -143,14 +143,14 @@ export class PricingRulesService {
 
         // 5. Insert — exactly one new row, every column set together.
         const entity = manager.create(PricingRuleEntity, {
-          serviceId: target.column === 'serviceId' ? target.id : null,
           addOnId: target.column === 'addOnId' ? target.id : null,
-          priceMinorUnits: command.priceMinorUnits,
-          unit: command.unit ?? PricingUnit.PER_SERVICE,
+          serviceId: target.column === 'serviceId' ? target.id : null,
+          active,
           effectiveFrom,
           effectiveTo: null,
           minimumChargeMinorUnits: command.minimumChargeMinorUnits ?? null,
-          active,
+          priceMinorUnits: command.priceMinorUnits,
+          unit: command.unit ?? PricingUnit.PER_SERVICE,
         });
 
         try {
@@ -167,9 +167,9 @@ export class PricingRulesService {
         // 6. Audit — one event, unchanged shape, now also for addon targets.
         await this.auditLogger.log({
           actorId: command.actorId,
+          entityId: entity.id,
           action: 'pricing_rule.create',
           entityType: 'pricing_rule',
-          entityId: entity.id,
         });
 
         return entity;
@@ -183,7 +183,7 @@ export class PricingRulesService {
       throw new NotFoundException(`Service ${serviceId} not found`);
     }
 
-    return this.pricingRuleRepository.findOneBy({ serviceId, active: true });
+    return this.pricingRuleRepository.findOneBy({ active: true, serviceId });
   }
 
   // Bulk read for Task 4's GraphQL DataLoader — no existence check (spec
@@ -194,8 +194,8 @@ export class PricingRulesService {
   // `getTeamsByIds` precedent.
   getActivePricingForServiceIds(serviceIds: string[]): Promise<PricingRule[]> {
     return this.pricingRuleRepository.findBy({
-      serviceId: In(serviceIds),
       active: true,
+      serviceId: In(serviceIds),
     });
   }
 
@@ -207,7 +207,7 @@ export class PricingRulesService {
   // defensive `ORDER BY`/arbitration is added here; see the plan's explicit
   // rationale for declining one.
   async resolveEffectivePricing(
-    target: { serviceId: string } | { addOnId: string },
+    target: { addOnId: string } | { serviceId: string },
     asOf: Date,
   ): Promise<PricingRule | null> {
     const qb = this.pricingRuleRepository.createQueryBuilder('rule');
@@ -235,7 +235,7 @@ export class PricingRulesService {
   // }` must resolve to `serviceId`, not be rejected as "both provided."
   // Same idiom as `BookingsService.update`'s `command.teamId != null`.
   private resolveTarget(
-    command: Pick<CreatePricingRuleCommand, 'serviceId' | 'addOnId'>,
+    command: Pick<CreatePricingRuleCommand, 'addOnId' | 'serviceId'>,
   ): PricingRuleTarget {
     const hasServiceId = command.serviceId != null;
     const hasAddOnId = command.addOnId != null;
@@ -252,7 +252,7 @@ export class PricingRulesService {
   private assertValid(
     command: Pick<
       CreatePricingRuleCommand,
-      'priceMinorUnits' | 'minimumChargeMinorUnits'
+      'minimumChargeMinorUnits' | 'priceMinorUnits'
     >,
   ): void {
     if (

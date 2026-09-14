@@ -261,8 +261,8 @@ describe('Customers & Properties (e2e)', () => {
     const ownerLoginResponse = await login(owner.email, owner.password);
     expect(ownerLoginResponse.body.errors).toBeUndefined();
     expect(ownerLoginResponse.body.data.login).toEqual({
-      success: true,
       admin: { id: owner.id, role: Role.OWNER },
+      success: true,
     });
     const ownerSessionCookie = extractSessionCookie(ownerLoginResponse);
 
@@ -272,10 +272,10 @@ describe('Customers & Properties (e2e)', () => {
         query: CREATE_CUSTOMER_MUTATION,
         variables: {
           input: {
-            fullName: 'Jane E2E',
             email: customerEmail,
-            phone: '555-0100',
+            fullName: 'Jane E2E',
             notes: 'Initial notes',
+            phone: '555-0100',
           },
         },
       },
@@ -283,10 +283,10 @@ describe('Customers & Properties (e2e)', () => {
     expect(createCustomerResponse.body.errors).toBeUndefined();
     const createdCustomer = createCustomerResponse.body.data.createCustomer;
     expect(createdCustomer).toMatchObject({
-      fullName: 'Jane E2E',
       email: customerEmail,
-      phone: '555-0100',
+      fullName: 'Jane E2E',
       notes: 'Initial notes',
+      phone: '555-0100',
     });
     const customerId: string = createdCustomer.id;
 
@@ -303,13 +303,13 @@ describe('Customers & Properties (e2e)', () => {
         variables: {
           customerId,
           input: {
-            label: 'Home',
+            accessNotes: 'Gate code 1234',
             addressLine1: '123 Main St',
             addressLine2: 'Unit 4',
             city: 'Springfield',
-            region: 'IL',
+            label: 'Home',
             postalCode: '62704',
-            accessNotes: 'Gate code 1234',
+            region: 'IL',
           },
         },
       },
@@ -318,13 +318,13 @@ describe('Customers & Properties (e2e)', () => {
     const createdProperty = createPropertyResponse.body.data.createProperty;
     expect(createdProperty).toMatchObject({
       customerId,
-      label: 'Home',
+      accessNotes: 'Gate code 1234',
       addressLine1: '123 Main St',
       addressLine2: 'Unit 4',
       city: 'Springfield',
-      region: 'IL',
+      label: 'Home',
       postalCode: '62704',
-      accessNotes: 'Gate code 1234',
+      region: 'IL',
     });
     const propertyId: string = createdProperty.id;
 
@@ -343,13 +343,13 @@ describe('Customers & Properties (e2e)', () => {
     expect(propertyByIdResponse.body.data.property).toMatchObject({
       id: propertyId,
       customerId,
-      label: 'Home',
+      accessNotes: 'Gate code 1234',
       addressLine1: '123 Main St',
       addressLine2: 'Unit 4',
       city: 'Springfield',
-      region: 'IL',
+      label: 'Home',
       postalCode: '62704',
-      accessNotes: 'Gate code 1234',
+      region: 'IL',
     });
 
     const customerAfterCreateResponse = await authedRequest(
@@ -371,9 +371,10 @@ describe('Customers & Properties (e2e)', () => {
       query: CUSTOMERS_QUERY,
     });
     expect(customersListResponse.body.errors).toBeUndefined();
-    const customerIds: string[] = customersListResponse.body.data.customers.nodes.map(
-      (c: { id: string }) => c.id,
-    );
+    const customerIds: string[] =
+      customersListResponse.body.data.customers.nodes.map(
+        (c: { id: string }) => c.id,
+      );
     expect(customerIds).toContain(customerId);
 
     // --- Step 2: updateCustomer with only `phone` set; re-fetch confirms
@@ -390,10 +391,10 @@ describe('Customers & Properties (e2e)', () => {
     expect(updateCustomerResponse.body.errors).toBeUndefined();
     expect(updateCustomerResponse.body.data.updateCustomer).toMatchObject({
       id: customerId,
-      fullName: 'Jane E2E',
       email: customerEmail,
-      phone: '555-9999',
+      fullName: 'Jane E2E',
       notes: 'Initial notes',
+      phone: '555-9999',
     });
 
     const customerUpdateAuditEvent = await auditEventRepository.findOneBy({
@@ -412,10 +413,10 @@ describe('Customers & Properties (e2e)', () => {
     expect(customerAfterUpdateResponse.body.errors).toBeUndefined();
     expect(customerAfterUpdateResponse.body.data.customer).toMatchObject({
       id: customerId,
-      fullName: 'Jane E2E',
       email: customerEmail,
-      phone: '555-9999',
+      fullName: 'Jane E2E',
       notes: 'Initial notes',
+      phone: '555-9999',
     });
 
     // --- Step 3: updateProperty on the step-1 property, only `label` set;
@@ -456,14 +457,14 @@ describe('Customers & Properties (e2e)', () => {
     const refetchedProperty = properties.find((p) => p.id === propertyId);
     expect(refetchedProperty).toMatchObject({
       id: propertyId,
-      label: 'Updated Label',
+      accessNotes: 'Gate code 1234',
       // Address fields untouched by the label-only update.
       addressLine1: '123 Main St',
       addressLine2: 'Unit 4',
       city: 'Springfield',
-      region: 'IL',
+      label: 'Updated Label',
       postalCode: '62704',
-      accessNotes: 'Gate code 1234',
+      region: 'IL',
     });
 
     // --- Step 4: Owner creates a Scheduler, Customer Support, Analyst, and
@@ -478,8 +479,8 @@ describe('Customers & Properties (e2e)', () => {
     );
     expect(scheduler).toMatchObject({
       email: schedulerEmail,
-      role: Role.SCHEDULER,
       isActive: true,
+      role: Role.SCHEDULER,
     });
 
     const customerSupportEmail = `customer-support-${runId}@example.com`;
@@ -492,8 +493,8 @@ describe('Customers & Properties (e2e)', () => {
     );
     expect(customerSupport).toMatchObject({
       email: customerSupportEmail,
-      role: Role.CUSTOMER_SUPPORT,
       isActive: true,
+      role: Role.CUSTOMER_SUPPORT,
     });
 
     const analystEmail = `analyst-${runId}@example.com`;
@@ -506,8 +507,8 @@ describe('Customers & Properties (e2e)', () => {
     );
     expect(analyst).toMatchObject({
       email: analystEmail,
-      role: Role.ANALYST,
       isActive: true,
+      role: Role.ANALYST,
     });
 
     const financeEmail = `finance-${runId}@example.com`;
@@ -520,8 +521,8 @@ describe('Customers & Properties (e2e)', () => {
     );
     expect(finance).toMatchObject({
       email: financeEmail,
-      role: Role.FINANCE,
       isActive: true,
+      role: Role.FINANCE,
     });
 
     // --- Step 5: Scheduler logs in; customers query succeeds (view-allowed);
@@ -550,8 +551,8 @@ describe('Customers & Properties (e2e)', () => {
       query: CREATE_CUSTOMER_MUTATION,
       variables: {
         input: {
-          fullName: 'Should Not Be Created',
           email: `should-not-be-created-scheduler-${runId}@example.com`,
+          fullName: 'Should Not Be Created',
           phone: '555-0000',
         },
       },
@@ -602,8 +603,8 @@ describe('Customers & Properties (e2e)', () => {
       query: CREATE_CUSTOMER_MUTATION,
       variables: {
         input: {
-          fullName: 'Should Not Be Created',
           email: `should-not-be-created-finance-${runId}@example.com`,
+          fullName: 'Should Not Be Created',
           phone: '555-0000',
         },
       },
@@ -635,8 +636,8 @@ describe('Customers & Properties (e2e)', () => {
       query: CREATE_CUSTOMER_MUTATION,
       variables: {
         input: {
-          fullName: 'Created By Customer Support',
           email: `created-by-customer-support-${runId}@example.com`,
+          fullName: 'Created By Customer Support',
           phone: '555-0111',
         },
       },
@@ -645,8 +646,8 @@ describe('Customers & Properties (e2e)', () => {
     expect(
       customerSupportCreateCustomerResponse.body.data.createCustomer,
     ).toMatchObject({
-      fullName: 'Created By Customer Support',
       email: `created-by-customer-support-${runId}@example.com`,
+      fullName: 'Created By Customer Support',
       phone: '555-0111',
     });
 
@@ -669,11 +670,11 @@ describe('Customers & Properties (e2e)', () => {
       variables: {
         customerId: nonexistentCustomerId,
         input: {
-          label: uniquePropertyLabel,
           addressLine1: '1 Nowhere Ave',
           city: 'Nowhere',
-          region: 'NA',
+          label: uniquePropertyLabel,
           postalCode: '00000',
+          region: 'NA',
         },
       },
     });
@@ -699,42 +700,42 @@ describe('Customers & Properties (e2e)', () => {
 
     const customerA = await customersService.create({
       actorId: owner.id,
-      fullName: `Scope A ${runId}`,
       email: `scope-a-${runId}@example.com`,
+      fullName: `Scope A ${runId}`,
       phone: '555-0300',
     });
     const customerB = await customersService.create({
       actorId: owner.id,
-      fullName: `Scope B ${runId}`,
       email: `scope-b-${runId}@example.com`,
+      fullName: `Scope B ${runId}`,
       phone: '555-0301',
     });
     const propertyA = await propertiesService.create({
       actorId: owner.id,
       customerId: customerA.id,
-      label: 'A-home',
       addressLine1: `${runId}-A St`,
       city: 'City',
-      region: 'Region',
+      label: 'A-home',
       postalCode: '00000',
+      region: 'Region',
     });
     const extraA = await propertiesService.create({
       actorId: owner.id,
       customerId: customerA.id,
-      label: 'A-extra',
       addressLine1: `${runId}-A2 St`,
       city: 'City',
-      region: 'Region',
+      label: 'A-extra',
       postalCode: '00000',
+      region: 'Region',
     });
     await propertiesService.create({
       actorId: owner.id,
       customerId: customerB.id,
-      label: 'B-home',
       addressLine1: `${runId}-B St`,
       city: 'City',
-      region: 'Region',
+      label: 'B-home',
       postalCode: '00000',
+      region: 'Region',
     });
 
     const scoped = await authedRequest(cookie).send({
@@ -805,19 +806,19 @@ describe('Customers & Properties (e2e)', () => {
       for (let index = start; index < start + count; index += 1) {
         const customer = await customersService.create({
           actorId: owner.id,
-          fullName: `O1 ${runId} ${index}`,
           email: `o1-${runId}-${index}@example.com`,
+          fullName: `O1 ${runId} ${index}`,
           phone: '555-0400',
         });
         nestedIds.push(customer.id);
         await propertiesService.create({
           actorId: owner.id,
           customerId: customer.id,
-          label: `O1-p-${index}`,
           addressLine1: `${runId}-O1-${index} St`,
           city: 'City',
-          region: 'Region',
+          label: `O1-p-${index}`,
           postalCode: '00000',
+          region: 'Region',
         });
       }
     };

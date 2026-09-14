@@ -67,13 +67,13 @@ type PropertyFormState = {
 };
 
 const EMPTY_PROPERTY_FORM: PropertyFormState = {
-  label: '',
+  accessNotes: '',
   addressLine1: '',
   addressLine2: '',
   city: '',
-  region: '',
+  label: '',
   postalCode: '',
-  accessNotes: '',
+  region: '',
 };
 
 // Optional fields (`addressLine2`, `accessNotes`) are cleared to `null`
@@ -83,13 +83,13 @@ const EMPTY_PROPERTY_FORM: PropertyFormState = {
 // a deliberate correctness detail, not incidental formatting.
 function toPropertyInput(form: PropertyFormState) {
   return {
-    label: form.label,
+    accessNotes: form.accessNotes.trim() === '' ? null : form.accessNotes,
     addressLine1: form.addressLine1,
     addressLine2: form.addressLine2.trim() === '' ? null : form.addressLine2,
     city: form.city,
-    region: form.region,
+    label: form.label,
     postalCode: form.postalCode,
-    accessNotes: form.accessNotes.trim() === '' ? null : form.accessNotes,
+    region: form.region,
   };
 }
 
@@ -142,10 +142,10 @@ function CustomersPageContent() {
       await createCustomer({
         variables: {
           input: {
-            fullName,
             email,
-            phone,
+            fullName,
             notes: notes.trim() === '' ? undefined : notes,
+            phone,
           },
         },
       });
@@ -159,12 +159,12 @@ function CustomersPageContent() {
 
   const columns: DataTableColumn<CustomerRow>[] = [
     {
-      key: 'fullName',
       header: 'Name',
+      key: 'fullName',
       render: (row) => <span className="font-medium text-slate-900">{row.fullName}</span>,
     },
-    { key: 'email', header: 'Email' },
-    { key: 'phone', header: 'Phone' },
+    { header: 'Email', key: 'email' },
+    { header: 'Phone', key: 'phone' },
   ];
 
   const rows: CustomerRow[] = (data?.customers.nodes ?? []) as CustomerRow[];
@@ -189,10 +189,10 @@ function CustomersPageContent() {
         error={error ? 'Unable to load customers.' : undefined}
         onRowClick={(row) => openDetail(row.id)}
         pagination={{
+          onPageChange: setPage,
           page,
           pageSize,
           totalCount: data?.customers.totalCount ?? 0,
-          onPageChange: setPage,
         }}
       />
 
@@ -252,8 +252,8 @@ function CustomerDetailDrawer({
   onSaved: () => void;
 }) {
   const { data, loading, error, refetch } = useCustomerQuery({
-    variables: { id },
     fetchPolicy: 'network-only',
+    variables: { id },
   });
 
   const title = data?.customer?.fullName ?? 'Customer';
@@ -313,10 +313,10 @@ function CustomerEditForm({
         variables: {
           id: customer.id,
           input: {
-            fullName,
             email,
-            phone,
+            fullName,
             notes: notes.trim() === '' ? null : notes,
+            phone,
           },
         },
       });
@@ -418,13 +418,13 @@ function CustomerProperties({
   function startEditingProperty(row: PropertyRow) {
     setEditingPropertyId(row.id);
     setEditProperty({
-      label: row.label,
+      accessNotes: row.accessNotes ?? '',
       addressLine1: row.addressLine1,
       addressLine2: row.addressLine2 ?? '',
       city: row.city,
-      region: row.region,
+      label: row.label,
       postalCode: row.postalCode,
-      accessNotes: row.accessNotes ?? '',
+      region: row.region,
     });
     setEditPropertyError(undefined);
   }
@@ -456,16 +456,16 @@ function CustomerProperties({
   }
 
   const propertyColumns: DataTableColumn<PropertyRow>[] = [
-    { key: 'label', header: 'Label' },
+    { header: 'Label', key: 'label' },
     {
-      key: 'address',
       header: 'Address',
+      key: 'address',
       render: (row) => (row.addressLine2 ? `${row.addressLine1}, ${row.addressLine2}` : row.addressLine1),
     },
-    { key: 'city', header: 'City' },
+    { header: 'City', key: 'city' },
     {
-      key: 'actions',
       header: '',
+      key: 'actions',
       render: (row) => (
         <Button variant="secondary" onClick={() => startEditingProperty(row)}>
           Edit

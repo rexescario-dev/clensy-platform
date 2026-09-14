@@ -48,13 +48,13 @@ export class TokenService {
     return this.jwtService.sign(
       { sub: adminId },
       {
-        secret: this.secret,
         // `JwtSignOptions['expiresIn']` is typed against the `ms` package's
         // template-literal `StringValue` union (e.g. `'8h'`), which a
         // config-sourced `string` can't statically satisfy — the value
         // still comes from `JWT_EXPIRES_IN` at runtime, this cast only
         // relaxes the compile-time check.
         expiresIn: this.expiresIn as JwtSignOptions['expiresIn'],
+        secret: this.secret,
       },
     );
   }

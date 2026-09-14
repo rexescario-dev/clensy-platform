@@ -37,8 +37,8 @@ describe('TokenService', () => {
 
   it('issues a token whose decoded payload has exactly sub, iat, exp — no role, nothing else', async () => {
     const configStub = buildConfigStub({
-      JWT_SECRET: 'test-secret',
       JWT_EXPIRES_IN: '8h',
+      JWT_SECRET: 'test-secret',
     });
     const moduleRef = await buildModule(configStub);
     const tokenService = moduleRef.get(TokenService);

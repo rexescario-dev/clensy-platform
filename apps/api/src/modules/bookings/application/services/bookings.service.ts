@@ -278,9 +278,9 @@ export class BookingsService {
     }
     await this.auditLogger.log({
       actorId,
+      entityId,
       action,
       entityType: 'booking',
-      entityId,
     });
   }
 }

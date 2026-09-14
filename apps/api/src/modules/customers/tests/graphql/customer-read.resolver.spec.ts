@@ -84,10 +84,7 @@ describe('Customer GraphQL collections', () => {
       ) as unknown[] | undefined;
       expect(guards ?? []).toContain(AuthGuard);
       expect(
-        reflector.get<Role[] | undefined>(
-          ROLES_KEY,
-          mutationMethodRef(method),
-        ),
+        reflector.get<Role[] | undefined>(ROLES_KEY, mutationMethodRef(method)),
       ).toEqual(expectedRoles);
     });
   });
@@ -148,8 +145,9 @@ describe('Customer GraphQL collections', () => {
     expect(customerQuery.type.toString()).toBe('Customer');
     expect(schema.getQueryType()!.getFields().properties).toBeUndefined();
 
-    const customerProperties =
-      schema.getQueryType()!.getFields().customerProperties;
+    const customerProperties = schema
+      .getQueryType()!
+      .getFields().customerProperties;
     expect(customerProperties.type.toString()).toMatch(/Connection!$/);
     expect(customerProperties.args.map((arg) => arg.name)).toEqual(
       expect.arrayContaining(['customerId', 'paging']),
