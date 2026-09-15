@@ -7,17 +7,18 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { presentRole } from '../../lib/role-presentation';
-import { Avatar, AvatarFallback } from '../ui/avatar';
-import { Button } from '../ui/button';
 import {
+  Avatar,
+  AvatarFallback,
+  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '../ui/dropdown-menu';
-import { Skeleton } from '../ui/skeleton';
+  Skeleton,
+} from '@clensy/ui';
 import { useShellTheme } from './shell-chrome';
 
 const THEME_OPTIONS = [

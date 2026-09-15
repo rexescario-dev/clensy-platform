@@ -1,11 +1,10 @@
 'use client';
 
-import { ToastProvider } from '@clensy/ui';
+import { Button, ToastProvider } from '@clensy/ui';
 import { Menu } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
-import { Button } from '../ui/button';
 import { AppHeader } from './app-header';
 import { AppSidebar } from './app-sidebar';
 import { ShellChrome } from './shell-chrome';

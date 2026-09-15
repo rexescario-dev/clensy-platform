@@ -9,15 +9,17 @@ import { useEffect, useRef, useState } from 'react';
 import { NAV_GROUPS, findActiveHref } from '../../lib/nav-groups';
 import { useSidebarCollapsed } from '../../lib/use-sidebar-collapsed';
 import { cn } from '../../lib/utils';
-import { Button } from '../ui/button';
-import { Separator } from '../ui/separator';
-import { Sheet, SheetContent, SheetTitle } from '../ui/sheet';
 import {
+  Button,
+  Separator,
+  Sheet,
+  SheetContent,
+  SheetTitle,
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '../ui/tooltip';
+} from '@clensy/ui';
 import { BrandMark } from './brand-mark';
 
 export interface AppSidebarProps {

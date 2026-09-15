@@ -574,7 +574,7 @@ function LaundryDetailDrawer({
               <Button
                 key={verb}
                 type="button"
-                variant={DESTRUCTIVE.has(verb) ? 'secondary' : 'primary'}
+                variant={DESTRUCTIVE.has(verb) ? 'secondary' : 'default'}
                 disabled={pending !== null}
                 onClick={() => {
                   if (DESTRUCTIVE.has(verb)) {
