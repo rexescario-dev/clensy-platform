@@ -5,18 +5,28 @@
   "main": "src/index.ts",
   "scripts": {
     "build": "tsc --noEmit",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "test": "vitest run"
   },
   "peerDependencies": {
     "react": "^19.2.8"
   },
+  "dependencies": {
+    "class-variance-authority": "^0.7.1",
+    "cn": "^0.2.6",
+    "lucide-react": "^1.43.0",
+    "radix-ui": "^1.6.7"
+  },
   "devDependencies": {
     "@eslint/js": "^9.18.0",
     "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
     "eslint": "^9.18.0",
     "globals": "^17.0.0",
     "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "typescript": "^5.7.3",
-    "typescript-eslint": "^8.20.0"
+    "typescript-eslint": "^8.20.0",
+    "vitest": "^5.0.0"
   }
 }
