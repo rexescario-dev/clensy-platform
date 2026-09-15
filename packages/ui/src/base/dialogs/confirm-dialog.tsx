@@ -1,6 +1,6 @@
 'use client';
-import { Modal } from './modal';
-import { Button } from './button';
+import { Modal } from '../modal';
+import { Button } from '../button';
 
 export interface ConfirmDialogProps {
   open: boolean;
@@ -47,7 +47,7 @@ export function ConfirmDialog({
         </Button>
         <Button
           type="button"
-          variant="danger"
+          variant="destructive"
           onClick={() => void handleConfirmClick()}
           disabled={confirming}
         >

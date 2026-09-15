@@ -1,7 +1,7 @@
 'use client';
 import type { FormEvent, ReactNode } from 'react';
-import { Modal } from './modal';
-import { Button } from './button';
+import { Modal } from '../modal';
+import { Button } from '../button';
 
 export interface FormDialogProps {
   open: boolean;
@@ -35,7 +35,7 @@ export function FormDialog({
           <Button type="button" variant="secondary" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button type="submit" variant="primary" disabled={submitting}>
+          <Button type="submit" disabled={submitting}>
             {submitLabel}
           </Button>
         </div>

@@ -1,7 +1,7 @@
 'use client';
 import { useId } from 'react';
 import type { ReactNode } from 'react';
-import { useDialogBehavior } from './internal/use-dialog-behavior';
+import { useDialogBehavior } from '../internal/use-dialog-behavior';
 
 export interface ModalProps {
   open: boolean;
