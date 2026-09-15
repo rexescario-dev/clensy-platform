@@ -1,0 +1,39 @@
+{
+    "errors": [
+        {
+            "message": "Bad Request Exception",
+            "locations": [
+                {
+                    "line": 1,
+                    "column": 57
+                }
+            ],
+            "path": [
+                "createCustomer"
+            ],
+            "extensions": {
+                "code": "BAD_REQUEST",
+                "stacktrace": [
+                    "BadRequestException: Bad Request Exception",
+                    "    at ValidationPipe.exceptionFactory (/repo/node_modules/.pnpm/@nestjs+common@11.1.29_class-transformer@0.5.1_class-validator@0.15.1_reflect-metadata@0.2.2_rxjs@7.8.2/node_modules/@nestjs/common/pipes/validation.pipe.js:111:20)",
+                    "    at ValidationPipe.transform (/repo/node_modules/.pnpm/@nestjs+common@11.1.29_class-transformer@0.5.1_class-validator@0.15.1_reflect-metadata@0.2.2_rxjs@7.8.2/node_modules/@nestjs/common/pipes/validation.pipe.js:78:30)",
+                    "    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)",
+                    "    at async resolveParamValue (/repo/node_modules/.pnpm/@nestjs+core@11.1.29_@nestjs+common@11.1.29_class-transformer@0.5.1_class-validator@0.1_1ad4547326e562df795e5b64ae952dad/node_modules/@nestjs/core/helpers/external-context-creator.js:136:31)",
+                    "    at async Promise.all (index 1)",
+                    "    at async pipesFn (/repo/node_modules/.pnpm/@nestjs+core@11.1.29_@nestjs+common@11.1.29_class-transformer@0.5.1_class-validator@0.1_1ad4547326e562df795e5b64ae952dad/node_modules/@nestjs/core/helpers/external-context-creator.js:138:13)",
+                    "    at async /repo/node_modules/.pnpm/@nestjs+core@11.1.29_@nestjs+common@11.1.29_class-transformer@0.5.1_class-validator@0.1_1ad4547326e562df795e5b64ae952dad/node_modules/@nestjs/core/helpers/external-context-creator.js:66:17",
+                    "    at async target (/repo/node_modules/.pnpm/@nestjs+core@11.1.29_@nestjs+common@11.1.29_class-transformer@0.5.1_class-validator@0.1_1ad4547326e562df795e5b64ae952dad/node_modules/@nestjs/core/helpers/external-context-creator.js:74:28)",
+                    "    at async Object.createCustomer (/repo/node_modules/.pnpm/@nestjs+core@11.1.29_@nestjs+common@11.1.29_class-transformer@0.5.1_class-validator@0.1_1ad4547326e562df795e5b64ae952dad/node_modules/@nestjs/core/helpers/external-proxy.js:9:24)"
+                ],
+                "originalError": {
+                    "message": [
+                        "email must be an email"
+                    ],
+                    "error": "Bad Request",
+                    "statusCode": 400
+                }
+            }
+        }
+    ],
+    "data": null
+}
