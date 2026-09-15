@@ -61,19 +61,45 @@ type CustomerDetail = {
 // Add Customer's client-side validation contract (spec: docs/superpowers/specs/2026-09-15-clensy-validation-design.md §4.2).
 // Mirrors `CreateCustomerInput`'s real class-validator constraints — no
 // `max` length rule, since the backend DTO has none.
+//
+// Field keys are prefixed (`newFullName`, not `fullName`) so the rendered
+// `<input name="newFullName">` never collides with `CustomerEditForm`'s
+// plain `name="fullName"` (mounted independently via the detail drawer).
+// This can't be solved by overriding FormField's `name` prop after the
+// `register()` spread: React Hook Form's onChange/onBlur handlers read
+// `event.target.name` at runtime to know which field to update, so the
+// rendered DOM `name` attribute MUST equal the `register()` key exactly —
+// overriding just the display name silently disconnects the field from
+// RHF's tracked values. `API_TO_FORM_FIELD` below maps back to the actual
+// GraphQL field names for the mutation call and for routing normalized
+// server errors onto the right form field.
 interface CreateCustomerFormValues {
-  fullName: string;
-  email: string;
-  phone: string;
-  notes?: string;
+  newFullName: string;
+  newEmail: string;
+  newPhone: string;
+  newNotes?: string;
 }
 
 const createCustomerRules = {
-  email: 'required|email',
-  fullName: 'required|string',
-  notes: 'nullable|string',
-  phone: 'required|string',
+  newEmail: 'required|email',
+  newFullName: 'required|string',
+  newNotes: 'nullable|string',
+  newPhone: 'required|string',
 } satisfies Rules<CreateCustomerFormValues>;
+
+const CREATE_CUSTOMER_ATTRIBUTES: Record<keyof CreateCustomerFormValues, string> = {
+  newEmail: 'email',
+  newFullName: 'full name',
+  newNotes: 'notes',
+  newPhone: 'phone',
+};
+
+const API_TO_FORM_FIELD: Record<string, keyof CreateCustomerFormValues> = {
+  email: 'newEmail',
+  fullName: 'newFullName',
+  notes: 'newNotes',
+  phone: 'newPhone',
+};
 
 type PropertyFormState = {
   label: string;
@@ -138,7 +164,9 @@ function CustomersPageContent() {
   const [formOpen, setFormOpen] = useState(false);
   const [formError, setFormError] = useState<string | undefined>(undefined);
   const createCustomerForm = useForm<CreateCustomerFormValues>({
-    resolver: clensyResolver<CreateCustomerFormValues>(createCustomerRules),
+    resolver: clensyResolver<CreateCustomerFormValues>(createCustomerRules, {
+      attributes: CREATE_CUSTOMER_ATTRIBUTES,
+    }),
   });
 
   function openCreateForm() {
@@ -153,10 +181,10 @@ function CustomersPageContent() {
       await createCustomer({
         variables: {
           input: {
-            email: values.email,
-            fullName: values.fullName,
-            notes: values.notes?.trim() === '' ? undefined : values.notes,
-            phone: values.phone,
+            email: values.newEmail,
+            fullName: values.newFullName,
+            notes: values.newNotes?.trim() === '' ? undefined : values.newNotes,
+            phone: values.newPhone,
           },
         },
       });
@@ -166,11 +194,11 @@ function CustomersPageContent() {
     } catch (err) {
       const fieldErrors = normalizeApiValidationErrors(err, ['fullName', 'email', 'phone', 'notes']);
       if (fieldErrors) {
-        for (const [field, messages] of Object.entries(fieldErrors)) {
-          createCustomerForm.setError(field as keyof CreateCustomerFormValues, {
-            type: 'server',
-            message: messages[0],
-          });
+        for (const [apiField, messages] of Object.entries(fieldErrors)) {
+          const formField = API_TO_FORM_FIELD[apiField];
+          if (formField) {
+            createCustomerForm.setError(formField, { type: 'server', message: messages[0] });
+          }
         }
       } else {
         setFormError('Unable to create customer.');
@@ -227,28 +255,24 @@ function CustomersPageContent() {
       >
         <FormField
           label="Full name"
-          error={createCustomerForm.formState.errors.fullName?.message}
-          {...createCustomerForm.register('fullName')}
-          name="new-fullName"
+          error={createCustomerForm.formState.errors.newFullName?.message}
+          {...createCustomerForm.register('newFullName')}
         />
         <FormField
           label="Email"
           type="email"
-          error={createCustomerForm.formState.errors.email?.message}
-          {...createCustomerForm.register('email')}
-          name="new-email"
+          error={createCustomerForm.formState.errors.newEmail?.message}
+          {...createCustomerForm.register('newEmail')}
         />
         <FormField
           label="Phone"
-          error={createCustomerForm.formState.errors.phone?.message}
-          {...createCustomerForm.register('phone')}
-          name="new-phone"
+          error={createCustomerForm.formState.errors.newPhone?.message}
+          {...createCustomerForm.register('newPhone')}
         />
         <FormField
           label="Notes"
-          error={createCustomerForm.formState.errors.notes?.message}
-          {...createCustomerForm.register('notes')}
-          name="new-notes"
+          error={createCustomerForm.formState.errors.newNotes?.message}
+          {...createCustomerForm.register('newNotes')}
         />
         {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
       </FormDialog>
