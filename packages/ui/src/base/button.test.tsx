@@ -40,4 +40,9 @@ describe('Button (relocated shadcn primitive)', () => {
     expect(html).toContain('custom-class');
     expect(html).toContain('aria-label="Save"');
   });
+
+  it('does not default type to "button" when omitted (unlike the old @clensy/ui Button)', () => {
+    const html = renderToStaticMarkup(<Button>Save</Button>);
+    expect(html).not.toContain('type="button"');
+  });
 });

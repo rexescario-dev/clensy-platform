@@ -48,6 +48,15 @@ contract at the rendered-page level, not a module/package dependency:
 classes, and nothing about which application injects the tokens affects how
 `@clensy/ui` renders.
 
+## Migrating off the old `Button`
+
+`base/button.tsx` is a verbatim shadcn primitive and, unlike the old
+`@clensy/ui` `Button` it replaced, does not default `type` to `"button"` — it
+spreads `...props` straight onto the underlying `<button>`. A `<Button>`
+rendered without an explicit `type` inside a `<form>` now falls back to the
+browser's native `submit` behavior. Callers that want non-submit behavior
+inside a `<form>` must pass `type="button"` explicitly.
+
 ## Adding a new primitive
 
 Future shadcn component generation targets `packages/ui/src/base/`, not
