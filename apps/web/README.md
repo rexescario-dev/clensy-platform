@@ -8,6 +8,16 @@ Full application shell (sidebar/header/user menu/logout) mounted once for every 
 - `pnpm --filter web build` — production build.
 - See `.env.example` for the `NEXT_PUBLIC_API_URL` env var consumed by `@clensy/client`.
 
+## UI
+
+`apps/web` consumes UI only through [`@clensy/ui`](../../packages/ui/README.md)'s public API:
+
+- `apps/web` MUST NOT contain shadcn-generated components.
+- `apps/web` MUST NOT import shadcn or `radix-ui` components directly.
+- `apps/web` MUST NOT depend on shadcn-specific configuration (no `components.json`).
+
+`apps/web` does still keep `cn` and `lucide-react` as ordinary dependencies for its own non-primitive needs (its own `className` composition, its own icons) — that isn't an exception to the rule above, since neither is a shadcn-specific dependency.
+
 ## i18n
 
 `next-intl` is wired for a single locale, `en` (see [the design spec](../../docs/superpowers/specs/2026-09-13-web-i18n-architecture-design.md) for the full architecture). No second language ships yet, and no locale-prefixed routing exists — this is about getting product copy behind translation keys, not about shipping translations.
