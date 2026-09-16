@@ -50,6 +50,9 @@ services:
       DB_NAME: ${DB_NAME}
       # .env is dockerignored — pass through so the container sees the host value.
       APP_DEBUG: ${APP_DEBUG:-}
+      # Same reason: main.ts's CORS origin check otherwise always falls back
+      # to its http://localhost:3001 default, regardless of .env.
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3001}
     depends_on:
       postgres:
         condition: service_healthy
