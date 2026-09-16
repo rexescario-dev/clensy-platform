@@ -158,7 +158,7 @@ function OwnerAdminConsole() {
       render: (row) =>
         row.isActive ? (
           <Button
-            variant="danger"
+            variant="destructive"
             disabled={disabling}
             onClick={() => {
               setDisableError(undefined);

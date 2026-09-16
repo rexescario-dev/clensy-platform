@@ -13,8 +13,10 @@ apps/
 └── worker/   not yet implemented
 
 packages/
-├── ui/       shared React components: Button, DataTable, FormField, StatusBadge,
-│             Modal, FormDialog, ConfirmDialog, DetailDrawer, PageHeader,
+├── ui/       shared UI system (primitives and composition together) for apps/web
+│             (and any future consumer): Button, Avatar, DropdownMenu, Separator,
+│             Sheet, Skeleton, Tooltip, DataTable, FormField, StatusBadge, Modal,
+│             FormDialog, ConfirmDialog, DetailDrawer, PageHeader,
 │             ToastProvider/useToast, LoadingState, EmptyState, ErrorState
 ├── client/   Apollo Client + graphql-codegen-generated hooks against apps/api's schema
 ├── validation/ Laravel-inspired rule strings, field-error contract, React Hook Form

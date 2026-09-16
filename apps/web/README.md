@@ -8,6 +8,18 @@ Full application shell (sidebar/header/user menu/logout) mounted once for every 
 - `pnpm --filter web build` — production build.
 - See `.env.example` for the `NEXT_PUBLIC_API_URL` env var consumed by `@clensy/client`.
 
+## UI
+
+`apps/web` consumes UI only through [`@clensy/ui`](../../packages/ui/README.md)'s public API:
+
+- `apps/web` MUST NOT contain shadcn-generated components.
+- `apps/web` MUST NOT import shadcn or `radix-ui` components directly.
+- `apps/web` MUST NOT depend on shadcn-specific configuration (no `components.json`).
+
+`apps/web` does still keep `cn` and `lucide-react` as ordinary dependencies for its own non-primitive needs (its own `className` composition, its own icons) — that isn't an exception to the rule above, since neither is a shadcn-specific dependency.
+
+`apps/web` also still depends on the `shadcn` package itself, and `app/globals.css` still has `@import "shadcn/tailwind.css"`. This is not an exception to the rule above either: it's a CSS token dependency, not a component dependency. `apps/web/app/globals.css` owns the base theme-token layer that `@clensy/ui`'s primitives consume by class name (see the design spec §4.7), and that CSS import is the only reason the `shadcn` package stays in `apps/web/package.json`. Do not remove it — doing so breaks the Tailwind build.
+
 ## i18n
 
 `next-intl` is wired for a single locale, `en` (see [the design spec](../../docs/superpowers/specs/2026-09-13-web-i18n-architecture-design.md) for the full architecture). No second language ships yet, and no locale-prefixed routing exists — this is about getting product copy behind translation keys, not about shipping translations.

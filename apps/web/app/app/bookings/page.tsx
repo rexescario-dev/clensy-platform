@@ -533,7 +533,7 @@ function BookingDetailDrawer({
           <div className="border-t border-slate-200 pt-4">
             <Button
               type="button"
-              variant="danger"
+              variant="destructive"
               onClick={() => setConfirmDeleteOpen(true)}
             >
               Delete booking
