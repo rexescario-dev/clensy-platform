@@ -18,6 +18,10 @@ packages/
 │             Sheet, Skeleton, Tooltip, DataTable, FormField, StatusBadge, Modal,
 │             FormDialog, ConfirmDialog, DetailDrawer, PageHeader,
 │             ToastProvider/useToast, LoadingState, EmptyState, ErrorState
+├── web:      reusable Clensy domain components (components representing a Clensy
+│             business concept), positioned between @clensy/ui and apps/web —
+│             starting with auth/LoginForm. See packages/web/README.md for the
+│             boundary rules.
 ├── client/   Apollo Client + graphql-codegen-generated hooks against apps/api's schema
 ├── validation/ Laravel-inspired rule strings, field-error contract, React Hook Form
 │               resolver, and GraphQL validation-error normalizer for apps/web
