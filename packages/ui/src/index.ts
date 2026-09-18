@@ -66,3 +66,20 @@ export type { EmptyStateProps } from './base/empty-state';
 
 export { ErrorState } from './base/error-state';
 export type { ErrorStateProps } from './base/error-state';
+
+export { Input } from './base/input';
+
+export { Label } from './base/label';
+
+export {
+  Field,
+  FieldLabel,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLegend,
+  FieldSeparator,
+  FieldSet,
+  FieldContent,
+  FieldTitle,
+} from './base/field';
