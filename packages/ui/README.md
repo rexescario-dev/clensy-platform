@@ -23,12 +23,13 @@ for the full architecture and rationale.
 
 - `src/base/` — every generic primitive (`Avatar`, `Button`, `DropdownMenu`,
   `Input`, `Label`, `Separator`, `Sheet`, `Skeleton`, `Tooltip`) and every
-  generic composition (`Modal`, `DataTable`, `Field`/`FieldLabel`/`FieldDescription`/`FieldError`/`FieldGroup`, `FormField`, `StatusBadge`, `PageHeader`,
-  `LoadingState`, `EmptyState`, `ErrorState`, `ToastProvider`/`useToast`,
-  `DetailDrawer`), flat — including `base/dialogs/` for `FormDialog` and
-  `ConfirmDialog`. There's no separate "primitives" folder: a consumer
-  importing from `@clensy/ui` doesn't need to know or care whether a given
-  export is shadcn-backed or hand-composed.
+  generic composition (`Modal`, `DataTable`, the `Field` family (`Field`,
+  `FieldLabel`, `FieldGroup`, and related sub-components), `FormField`,
+  `StatusBadge`, `PageHeader`, `LoadingState`, `EmptyState`, `ErrorState`,
+  `ToastProvider`/`useToast`, `DetailDrawer`), flat — including
+  `base/dialogs/` for `FormDialog` and `ConfirmDialog`. There's no separate
+  "primitives" folder: a consumer importing from `@clensy/ui` doesn't need to
+  know or care whether a given export is shadcn-backed or hand-composed.
 - `src/domain/` — **legacy, no new content.** Domain-specific composition
   (components representing a Clensy business concept) now belongs in
   [`@clensy/web`](../../packages/web/README.md) instead; see [the design

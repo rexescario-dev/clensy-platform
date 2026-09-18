@@ -15,10 +15,11 @@ apps/
 packages/
 ├── ui/       shared UI system (primitives and composition together) for apps/web
 │             (and any future consumer): Button, Avatar, DropdownMenu, Separator,
-│             Sheet, Skeleton, Tooltip, DataTable, FormField, StatusBadge, Modal,
-│             FormDialog, ConfirmDialog, DetailDrawer, PageHeader,
-│             ToastProvider/useToast, LoadingState, EmptyState, ErrorState
-├── web:      reusable Clensy domain components (components representing a Clensy
+│             Sheet, Skeleton, Tooltip, Input, Label, Field, DataTable,
+│             FormField, StatusBadge, Modal, FormDialog, ConfirmDialog,
+│             DetailDrawer, PageHeader, ToastProvider/useToast, LoadingState,
+│             EmptyState, ErrorState
+├── web/      reusable Clensy domain components (components representing a Clensy
 │             business concept), positioned between @clensy/ui and apps/web —
 │             starting with auth/LoginForm. See packages/web/README.md for the
 │             boundary rules.

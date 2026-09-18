@@ -31,7 +31,9 @@ export interface LoginFormProps {
 // constraint. This MUST NOT become a way to distinguish *why* a login
 // failed: an invalid/empty/too-long field is caught before submission, but
 // once the mutation actually runs, a failure is always the single generic
-// message the caller passes as `errorMessage`, never a field-level error.
+// message the caller passes as `errorMessage`, never a field-level error —
+// unknown email, wrong password, and disabled account are all
+// indistinguishable here (see `onValid`'s single `catch`, below).
 const loginRules = {
   email: 'required|email|max:255',
   password: 'required|string|max:255',

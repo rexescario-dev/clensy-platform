@@ -10,7 +10,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [login] = useLoginMutation();
 
-  // Spec §4.8 / §4.3: on success the API has already set the HttpOnly
+  // Spec §4.5 / §3: on success the API has already set the HttpOnly
   // session cookie via `Set-Cookie` on the mutation response — this page
   // never reads or writes the cookie itself, it only redirects. `LoginForm`
   // resolves on success and rejects on failure, so a falsy

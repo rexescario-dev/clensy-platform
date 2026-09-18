@@ -12,4 +12,4 @@ Reusable Clensy domain components — the sole home for components representing 
 
 ## LoginForm
 
-`auth/LoginForm` is a client-side login form component that validates input, presents server-error feedback, and calls a host-provided `onLogin` callback to perform authentication. The component takes already-translated strings as props (`labels: { title, email, password, submit, submitting }`) and a generic `errorMessage` string for mutation failures — see [the design spec](../../docs/superpowers/specs/2026-09-19-clensy-web-login-form-design.md) §3 for the full contract and error-handling rationale.
+`auth/LoginForm` is a client-side login form component that validates input, presents server-error feedback, and calls a host-provided `onLogin` callback to perform authentication. The component takes already-translated strings as props (`labels: { title, email, password, submit, submitting }`) and a generic `errorMessage` string for mutation failures — see [the design spec](../../docs/superpowers/specs/2026-09-19-clensy-web-login-form-design.md) §4.4 for the full contract and §5 for the `onLogin` resolve/reject error-handling rationale.
