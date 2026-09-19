@@ -21,17 +21,21 @@ for the full architecture and rationale.
 
 ## Layout
 
-- `src/base/` — every generic primitive (`Button`, `Avatar`, `DropdownMenu`,
-  `Separator`, `Sheet`, `Skeleton`, `Tooltip`) and every generic composition
-  (`Modal`, `DataTable`, `FormField`, `StatusBadge`, `PageHeader`,
-  `LoadingState`, `EmptyState`, `ErrorState`, `ToastProvider`/`useToast`,
-  `DetailDrawer`), flat — including `base/dialogs/` for `FormDialog` and
-  `ConfirmDialog`. There's no separate "primitives" folder: a consumer
-  importing from `@clensy/ui` doesn't need to know or care whether a given
-  export is shadcn-backed or hand-composed.
-- `src/domain/` — reserved for future business-domain-specific composition.
-  Scaffolded, empty. See [`src/domain/README.md`](src/domain/README.md) for
-  what belongs there and when to populate it.
+- `src/base/` — every generic primitive (`Avatar`, `Button`, `DropdownMenu`,
+  `Input`, `Label`, `Separator`, `Sheet`, `Skeleton`, `Tooltip`) and every
+  generic composition (`Modal`, `DataTable`, the `Field` family (`Field`,
+  `FieldLabel`, `FieldGroup`, and related sub-components), `FormField`,
+  `StatusBadge`, `PageHeader`, `LoadingState`, `EmptyState`, `ErrorState`,
+  `ToastProvider`/`useToast`, `DetailDrawer`), flat — including
+  `base/dialogs/` for `FormDialog` and `ConfirmDialog`. There's no separate
+  "primitives" folder: a consumer importing from `@clensy/ui` doesn't need to
+  know or care whether a given export is shadcn-backed or hand-composed.
+- `src/domain/` — **legacy, no new content.** Domain-specific composition
+  (components representing a Clensy business concept) now belongs in
+  [`@clensy/web`](../../packages/web/README.md) instead; see [the design
+  spec](../../docs/superpowers/specs/2026-09-19-clensy-web-login-form-design.md)
+  §4.1. `src/domain/` stays scaffolded but receives no new content after
+  2026-09-19. See [`src/domain/README.md`](src/domain/README.md) for details.
 - `src/internal/` — implementation details not part of the public export
   surface.
 - `src/index.ts` — the public export surface: every `base/` export. `domain/`

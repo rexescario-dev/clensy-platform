@@ -18,6 +18,8 @@ Full application shell (sidebar/header/user menu/logout) mounted once for every 
 
 `apps/web` does still keep `cn` and `lucide-react` as ordinary dependencies for its own non-primitive needs (its own `className` composition, its own icons) — that isn't an exception to the rule above, since neither is a shadcn-specific dependency.
 
+`apps/web` also consumes reusable Clensy domain components (e.g. `LoginForm`) through [`@clensy/web`](../../packages/web/README.md)'s public API, following the same translated-strings-as-props convention as `@clensy/ui`.
+
 `apps/web` also still depends on the `shadcn` package itself, and `app/globals.css` still has `@import "shadcn/tailwind.css"`. This is not an exception to the rule above either: it's a CSS token dependency, not a component dependency. `apps/web/app/globals.css` owns the base theme-token layer that `@clensy/ui`'s primitives consume by class name (see the design spec §4.7), and that CSS import is the only reason the `shadcn` package stays in `apps/web/package.json`. Do not remove it — doing so breaks the Tailwind build.
 
 ## i18n
