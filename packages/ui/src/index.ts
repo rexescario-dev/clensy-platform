@@ -30,12 +30,16 @@ export {
 } from './base/sheet';
 export { Skeleton } from './base/skeleton';
 export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './base/tooltip';
+export { Table, TableHeader, TableBody, TableFooter, TableRow, TableHead, TableCell, TableCaption } from './base/table';
+export { Checkbox } from './base/checkbox';
+export { Pagination } from './base/pagination';
+export type { DataTablePaginationProps } from './base/pagination';
 
 export { FormField } from './base/form-field';
 export type { FormFieldProps } from './base/form-field';
 
 export { DataTable } from './base/data-table';
-export type { DataTableColumn, DataTableProps, DataTablePaginationProps } from './base/data-table';
+export type { DataTableColumn, DataTableProps, DataTableSortState, DataTableSelectionProps } from './base/data-table';
 
 export { StatusBadge } from './base/status-badge';
 export type { StatusBadgeProps, StatusTone } from './base/status-badge';
