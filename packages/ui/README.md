@@ -21,15 +21,19 @@ for the full architecture and rationale.
 
 ## Layout
 
-- `src/base/` — every generic primitive (`Avatar`, `Button`, `DropdownMenu`,
-  `Input`, `Label`, `Separator`, `Sheet`, `Skeleton`, `Tooltip`) and every
-  generic composition (`Modal`, `DataTable`, the `Field` family (`Field`,
-  `FieldLabel`, `FieldGroup`, and related sub-components), `FormField`,
-  `StatusBadge`, `PageHeader`, `LoadingState`, `EmptyState`, `ErrorState`,
-  `ToastProvider`/`useToast`, `DetailDrawer`), flat — including
-  `base/dialogs/` for `FormDialog` and `ConfirmDialog`. There's no separate
-  "primitives" folder: a consumer importing from `@clensy/ui` doesn't need to
-  know or care whether a given export is shadcn-backed or hand-composed.
+- `src/base/` — every generic primitive (`Avatar`, `Button`, `Checkbox`,
+  `DropdownMenu`, `Input`, `Label`, `Separator`, `Sheet`, `Skeleton`, `Table`,
+  `Tooltip`) and every generic composition (`Modal`, `DataTable`, `Pagination`,
+  the `Field` family (`Field`, `FieldLabel`, `FieldGroup`, and related
+  sub-components), `FormField`, `StatusBadge`, `PageHeader`, `LoadingState`,
+  `EmptyState`, `ErrorState`, `ToastProvider`/`useToast`, `DetailDrawer`),
+  flat — including `base/dialogs/` for `FormDialog` and `ConfirmDialog`.
+  There's no separate "primitives" folder: a consumer importing from
+  `@clensy/ui` doesn't need to know or care whether a given export is
+  shadcn-backed or hand-composed. `DataTable` is a behavior/composition layer
+  over `Table`, `Checkbox`, and `Pagination` — it is not a table primitive
+  itself; see [the design spec](../../docs/superpowers/specs/2026-09-19-reusable-data-table-design.md)
+  §4.3.
 - `src/domain/` — **legacy, no new content.** Domain-specific composition
   (components representing a Clensy business concept) now belongs in
   [`@clensy/web`](../../packages/web/README.md) instead; see [the design
@@ -64,8 +68,16 @@ inside a `<form>` must pass `type="button"` explicitly.
 ## Adding a new primitive
 
 Future shadcn component generation targets `packages/ui/src/base/`, not
-`apps/web` — `apps/web/components.json` is not (and after this package's
-`base/` migration, no longer) an architectural fixture of `apps/web`. The
-exact shadcn CLI workflow for generating directly into this package (as
-opposed to `apps/web`) is established when the next primitive is actually
-needed, not speculated on here.
+`apps/web` — `apps/web/components.json` is not an architectural fixture of
+`apps/web`. This package has its own `components.json` (aliases pointed at
+`src/base`, not the `@/`-prefixed convention `apps/web`'s used — this
+package has no such path alias configured in `tsconfig.json`, so the CLI
+writes relative to `packages/ui`'s own root instead). To add a primitive,
+run from within `packages/ui`:
+
+```bash
+npx shadcn@latest add <component>
+```
+
+This workflow was established while adding `Table` and `Checkbox` for the
+[reusable `DataTable` design](../../docs/superpowers/specs/2026-09-19-reusable-data-table-design.md).
