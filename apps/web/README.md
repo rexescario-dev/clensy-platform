@@ -18,7 +18,7 @@ Full application shell (sidebar/header/user menu/logout) mounted once for every 
 
 `apps/web` does still keep `cn` and `lucide-react` as ordinary dependencies for its own non-primitive needs (its own `className` composition, its own icons) — that isn't an exception to the rule above, since neither is a shadcn-specific dependency.
 
-`apps/web` also consumes reusable Clensy domain components (e.g. `LoginForm`) through [`@clensy/web`](../../packages/web/README.md)'s public API, following the same translated-strings-as-props convention as `@clensy/ui`.
+`apps/web` also consumes reusable Clensy domain components (e.g. `LoginForm`, `BookingDataTable`) through [`@clensy/web`](../../packages/web/README.md)'s public API. Unlike `@clensy/ui`, these are self-translating — they own their own UI copy via `@clensy/web`'s own i18n context, not via translated-strings-as-props from `apps/web`.
 
 `apps/web` also still depends on the `shadcn` package itself, and `app/globals.css` still has `@import "shadcn/tailwind.css"`. This is not an exception to the rule above either: it's a CSS token dependency, not a component dependency. `apps/web/app/globals.css` owns the base theme-token layer that `@clensy/ui`'s primitives consume by class name (see the design spec §4.7), and that CSS import is the only reason the `shadcn` package stays in `apps/web/package.json`. Do not remove it — doing so breaks the Tailwind build.
 
@@ -26,7 +26,7 @@ Full application shell (sidebar/header/user menu/logout) mounted once for every 
 
 `next-intl` is wired for a single locale, `en` (see [the design spec](../../docs/superpowers/specs/2026-09-13-web-i18n-architecture-design.md) for the full architecture). No second language ships yet, and no locale-prefixed routing exists — this is about getting product copy behind translation keys, not about shipping translations.
 
-**Catalogs** live at `apps/web/messages/en/*.json`, one file per namespace. Current namespaces: `common` (empty for now), `nav`, `auth`, `validation`. `apps/web/i18n/messages.ts` merges them; `apps/web/i18n/request.ts` is the next-intl plugin/runtime entry point that resolves the locale (always `en`) and calls it.
+**Catalogs** live at `apps/web/messages/en/*.json`, one file per namespace. Current namespaces: `common` (empty for now), `nav`, `validation`. `apps/web/i18n/messages.ts` merges them; `apps/web/i18n/request.ts` is the next-intl plugin/runtime entry point that resolves the locale (always `en`) and calls it. (An `auth` namespace previously lived here for `LoginForm`'s copy — retired once `LoginForm` became self-translating via `@clensy/web`'s own i18n context; see [the LoginForm self-translating spec](../../docs/superpowers/specs/2026-09-20-login-form-self-translating-design.md).)
 
 **Adding a key:** add it to the right namespace's JSON file (or a new namespace file, if you also add it to `i18n/messages.ts`'s merge), then consume it:
 
@@ -34,8 +34,8 @@ Full application shell (sidebar/header/user menu/logout) mounted once for every 
 'use client';
 import { useTranslations } from 'next-intl';
 
-const t = useTranslations('auth');
-t('title'); // -> the string at messages/en/auth.json's "title" key
+const t = useTranslations('nav');
+t('sidebar.primary'); // -> the string at messages/en/nav.json's "sidebar.primary" key
 ```
 
 A server component uses `getTranslations` (`next-intl/server`) against the same catalogs instead.
