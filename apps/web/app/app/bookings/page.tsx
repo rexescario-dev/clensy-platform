@@ -165,7 +165,7 @@ function BookingsPageContent() {
           bookings={rows}
           formatPrice={formatMinorUnits}
           loading={loading}
-          error={error ? 'Unable to load bookings.' : undefined}
+          hasError={Boolean(error)}
           onRowClick={(booking) => openDetail(booking.id)}
           pagination={{
             onPageChange: setPage,

@@ -35,7 +35,6 @@ export default function LoginPage() {
           submitting: t('submitting'),
           title: t('title'),
         }}
-        errorMessage={t('errors.invalidCredentials')}
         onLogin={handleLogin}
       />
     </main>
