@@ -1,7 +1,6 @@
 'use client';
 
 import { DataTable, type DataTableColumn, type DataTablePaginationProps } from '@clensy/ui';
-import { resolveMessage } from '../i18n/resolve-message';
 import { useClensyTranslations } from '../i18n/use-clensy-translations';
 
 export type BookingStatus = 'CANCELLED' | 'COMPLETED' | 'CONFIRMED' | 'PENDING';
@@ -46,7 +45,12 @@ export function BookingDataTable({
   pagination,
 }: BookingDataTableProps) {
   const t = useClensyTranslations('bookings');
-  const resolvedErrorMessage = hasError ? resolveMessage(errorMessage, t('error')) : undefined;
+  // Not resolveMessage(errorMessage, t('error')): DataTable's `error` prop
+  // (below) is an @clensy/ui primitive and out of bounds to change — it is
+  // itself truthy-gated and can never display an empty-string override as
+  // "an error occurred." An empty override therefore falls back to the
+  // default here, specifically because of that downstream constraint.
+  const resolvedErrorMessage = hasError ? errorMessage || t('error') : undefined;
 
   const columns: DataTableColumn<Booking>[] = [
     { header: t('columns.customer'), key: 'customer', render: 'customer.fullName' },

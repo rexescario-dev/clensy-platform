@@ -111,4 +111,17 @@ describe('BookingDataTable', () => {
     expect(html).toContain('Custom error');
     expect(html).not.toContain('Unable to load bookings.');
   });
+
+  it('falls back to the default when hasError is true and errorMessage is an explicit empty string', () => {
+    const html = renderToStaticMarkup(
+      <BookingDataTable
+        bookings={[booking]}
+        formatPrice={() => '₱0.00'}
+        hasError
+        errorMessage=""
+        pagination={pagination}
+      />,
+    );
+    expect(html).toContain('Unable to load bookings.');
+  });
 });

@@ -90,7 +90,7 @@ export function LoginForm({ errorMessage, onLogin }: LoginFormProps) {
           ) : null}
         </Field>
       </FieldGroup>
-      {error ? (
+      {error !== undefined ? (
         <p role="alert" className="text-sm text-red-600">
           {error}
         </p>
