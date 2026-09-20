@@ -18,7 +18,6 @@ import { useRouter } from 'next/navigation';
 import {
   Button,
   ConfirmDialog,
-  DataTable,
   DetailDrawer,
   ErrorState,
   FormDialog,
@@ -27,30 +26,13 @@ import {
   PageHeader,
   useToast,
 } from '@clensy/ui';
-import type { DataTableColumn } from '@clensy/ui';
+import { BookingDataTable, ClensyI18nProvider, type Booking } from '@clensy/web';
+import { useLocale } from 'next-intl';
 import { type ChangeEvent, type FormEvent, Suspense, useState } from 'react';
 import { formatMinorUnits } from '../../../lib/format-price';
 import { useDetailDrawer } from '../../../lib/use-detail-drawer';
 
-// `DataTable<T>` (packages/ui) constrains `T extends Record<string, unknown>`.
-type BookingRow = {
-  id: string;
-  scheduledAt: unknown;
-  status: BookingStatus;
-  pricingSnapshot: { priceMinorUnits: number };
-  customer: { id: string; fullName: string };
-  property: { id: string; addressLine1: string };
-  service: { id: string; name: string };
-  team: { id: string; name: string } | null;
-  [key: string]: unknown;
-};
-
 const BOOKING_STATUSES: BookingStatus[] = ['PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED'];
-
-function formatScheduledAt(value: unknown): string {
-  const date = new Date(value as string);
-  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
-}
 
 // `<input type="datetime-local">` both reads and writes its `value` as a
 // wall-clock string in the *browser's local* timezone — not UTC. Building
@@ -81,6 +63,7 @@ export default function BookingsPage() {
 }
 
 function BookingsPageContent() {
+  const locale = useLocale();
   const [page, setPage] = useState(1);
   const pageSize = 20;
   const { data, loading, error, refetch } = useBookingsQuery({
@@ -158,21 +141,7 @@ function BookingsPageContent() {
     }
   }
 
-  const columns: DataTableColumn<BookingRow>[] = [
-    { header: 'Customer', key: 'customer', render: (row) => row.customer.fullName },
-    { header: 'Property', key: 'property', render: (row) => row.property.addressLine1 },
-    { header: 'Service', key: 'service', render: (row) => row.service.name },
-    { header: 'Scheduled', key: 'scheduledAt', render: (row) => formatScheduledAt(row.scheduledAt) },
-    { header: 'Status', key: 'status', render: (row) => row.status },
-    { header: 'Team', key: 'team', render: (row) => row.team?.name ?? 'Unassigned' },
-    {
-      header: 'Price',
-      key: 'price',
-      render: (row) => formatMinorUnits(row.pricingSnapshot.priceMinorUnits),
-    },
-  ];
-
-  const rows: BookingRow[] = (data?.bookings.nodes ?? []) as BookingRow[];
+  const rows: Booking[] = data?.bookings.nodes ?? [];
   const customers = customersData?.customers.nodes ?? [];
   const properties = propertiesData?.customerProperties.nodes ?? [];
   const activeServices = (servicesData?.services.nodes ?? []).filter(
@@ -191,21 +160,21 @@ function BookingsPageContent() {
         }
       />
 
-      <DataTable
-        columns={columns}
-        rows={rows}
-        rowKey={(row) => row.id}
-        emptyMessage="No bookings."
-        loading={loading}
-        error={error ? 'Unable to load bookings.' : undefined}
-        onRowClick={(row) => openDetail(row.id)}
-        pagination={{
-          onPageChange: setPage,
-          page,
-          pageSize,
-          totalCount: data?.bookings.totalCount ?? 0,
-        }}
-      />
+      <ClensyI18nProvider locale={locale}>
+        <BookingDataTable
+          bookings={rows}
+          formatPrice={formatMinorUnits}
+          loading={loading}
+          error={error ? 'Unable to load bookings.' : undefined}
+          onRowClick={(booking) => openDetail(booking.id)}
+          pagination={{
+            onPageChange: setPage,
+            page,
+            pageSize,
+            totalCount: data?.bookings.totalCount ?? 0,
+          }}
+        />
+      </ClensyI18nProvider>
 
       <FormDialog
         open={formOpen}

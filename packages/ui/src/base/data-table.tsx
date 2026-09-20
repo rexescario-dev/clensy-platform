@@ -1,21 +1,32 @@
 import type { KeyboardEvent, ReactNode } from 'react';
-
-import { Button } from './button';
+import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon } from 'lucide-react';
+import { Checkbox } from './checkbox';
 import { ErrorState } from './error-state';
 import { LoadingState } from './loading-state';
+import { Pagination, type DataTablePaginationProps } from './pagination';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './table';
 
 export interface DataTableColumn<T> {
   key: string;
   header: string;
-  render?: (row: T) => ReactNode;
+  render?: string | ((row: T) => ReactNode);
+  sortable?: boolean;
+  align?: 'center' | 'left' | 'right';
+  width?: string;
 }
 
-export interface DataTablePaginationProps {
-  page: number;
-  pageSize: number;
-  totalCount: number;
-  onPageChange: (page: number) => void;
+export interface DataTableSortState {
+  key: string;
+  direction: 'asc' | 'desc';
 }
+
+export interface DataTableSelectionProps<T> {
+  selectedKeys: string[];
+  onSelectionChange: (keys: string[]) => void;
+  isRowSelectable?: (row: T) => boolean;
+}
+
+export type { DataTablePaginationProps };
 
 export interface DataTableProps<T> {
   columns: DataTableColumn<T>[];
@@ -26,6 +37,68 @@ export interface DataTableProps<T> {
   error?: string;
   onRowClick?: (row: T) => void;
   pagination?: DataTablePaginationProps;
+  sort?: DataTableSortState | null;
+  onSortChange?: (sort: DataTableSortState | null) => void;
+  selection?: DataTableSelectionProps<T>;
+  toolbar?: ReactNode;
+}
+
+const ALIGN_CLASS = {
+  left: 'text-left',
+  center: 'text-center',
+  right: 'text-right',
+} as const satisfies Record<NonNullable<DataTableColumn<unknown>['align']>, string>;
+
+export function nextSortState(
+  current: DataTableSortState | null | undefined,
+  key: string,
+): DataTableSortState | null {
+  if (!current || current.key !== key) return { key, direction: 'asc' };
+  if (current.direction === 'asc') return { key, direction: 'desc' };
+  return null;
+}
+
+// Toggles a single row's key, preserving every other entry in `selectedKeys`
+// untouched — including keys belonging to rows not currently rendered on
+// this page.
+export function toggleSelectionKey(selectedKeys: string[], key: string): string[] {
+  return selectedKeys.includes(key)
+    ? selectedKeys.filter((existingKey) => existingKey !== key)
+    : [...selectedKeys, key];
+}
+
+// Toggles "select all" for the current page. Contract: select-all only ever
+// adds or removes keys in `selectableKeys` (the current page's *selectable*
+// rows) — never a key belonging to another page, and never a key for a row
+// on this page that `isRowSelectable` returned false for. A pre-existing
+// selected key that happens to belong to a non-selectable row on this page
+// (or another page entirely) is left exactly as-is either way.
+export function togglePageSelection(
+  selectedKeys: string[],
+  selectableKeys: string[],
+  allSelected: boolean,
+): string[] {
+  const withoutSelectablePageKeys = selectedKeys.filter((key) => !selectableKeys.includes(key));
+  return allSelected ? withoutSelectablePageKeys : [...withoutSelectablePageKeys, ...selectableKeys];
+}
+
+// Resolves a dot-separated property path against a value, returning
+// `undefined` as soon as an intermediate value is missing/null rather than
+// throwing. No array indexing, no expression syntax, no eval — a plain
+// segment-by-segment property walk.
+export function resolvePath(row: unknown, path: string): unknown {
+  return path.split('.').reduce<unknown>((value, segment) => {
+    if (value === null || value === undefined) return undefined;
+    return (value as Record<string, unknown>)[segment];
+  }, row);
+}
+
+// `DataTableColumn.render`'s two forms: a nested property path (resolved via
+// `resolvePath`) or a callback (executed with the full row). Deliberately
+// the only two forms — no separate accessor/accessorKey/accessorFn.
+export function resolveCellValue<T>(row: T, render: string | ((row: T) => ReactNode)): ReactNode {
+  if (typeof render === 'function') return render(row);
+  return resolvePath(row, render) as ReactNode;
 }
 
 export function DataTable<T extends Record<string, unknown>>({
@@ -37,8 +110,12 @@ export function DataTable<T extends Record<string, unknown>>({
   error,
   onRowClick,
   pagination,
+  sort,
+  onSortChange,
+  selection,
+  toolbar,
 }: DataTableProps<T>) {
-  const handleRowKeyDown = (event: KeyboardEvent<HTMLTableRowElement>, row: T) => {
+  function handleRowKeyDown(event: KeyboardEvent<HTMLTableRowElement>, row: T) {
     if (!onRowClick) return;
     if (event.key === 'Enter') {
       onRowClick(row);
@@ -46,86 +123,149 @@ export function DataTable<T extends Record<string, unknown>>({
       event.preventDefault();
       onRowClick(row);
     }
-  };
+  }
 
-  const pageCount = pagination ? Math.max(1, Math.ceil(pagination.totalCount / pagination.pageSize)) : 0;
+  const selectableKeys = selection
+    ? rows.filter((row) => selection.isRowSelectable?.(row) ?? true).map(rowKey)
+    : [];
+  const selectedOnPage = selection
+    ? selectableKeys.filter((key) => selection.selectedKeys.includes(key))
+    : [];
+  const allSelected = selection ? selectableKeys.length > 0 && selectedOnPage.length === selectableKeys.length : false;
+  const someSelected = selection ? selectedOnPage.length > 0 && !allSelected : false;
+
+  function toggleSelectAll() {
+    if (!selection) return;
+    selection.onSelectionChange(togglePageSelection(selection.selectedKeys, selectableKeys, allSelected));
+  }
+
+  function toggleRow(row: T) {
+    if (!selection) return;
+    selection.onSelectionChange(toggleSelectionKey(selection.selectedKeys, rowKey(row)));
+  }
+
+  function handleSortClick(column: DataTableColumn<T>) {
+    if (!column.sortable) return;
+    onSortChange?.(nextSortState(sort, column.key));
+  }
+
+  const colSpan = columns.length + (selection ? 1 : 0);
 
   return (
     <div>
-      <table className="w-full border-collapse text-left text-sm">
-        <thead>
-          <tr className="border-b border-slate-200">
+      {toolbar ? <div className="flex items-center justify-between gap-3 pb-3">{toolbar}</div> : null}
+      <Table>
+        <TableHeader>
+          <TableRow>
+            {selection ? (
+              <TableHead className="w-10">
+                <Checkbox
+                  aria-label="Select all rows on this page"
+                  checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+                  onCheckedChange={toggleSelectAll}
+                  disabled={selectableKeys.length === 0}
+                />
+              </TableHead>
+            ) : null}
             {columns.map((column) => (
-              <th key={column.key} className="px-3 py-2 font-medium text-slate-600">
-                {column.header}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {loading ? (
-            <tr>
-              <td colSpan={columns.length} className="px-3 py-2">
-                <LoadingState />
-              </td>
-            </tr>
-          ) : error ? (
-            <tr>
-              <td colSpan={columns.length} className="px-3 py-2">
-                <ErrorState message={error} />
-              </td>
-            </tr>
-          ) : rows.length === 0 ? (
-            <tr>
-              <td colSpan={columns.length} className="px-3 py-6 text-center text-slate-500">
-                {emptyMessage}
-              </td>
-            </tr>
-          ) : (
-            rows.map((row) => (
-              <tr
-                key={rowKey(row)}
-                className={`border-b border-slate-100${onRowClick ? ' cursor-pointer hover:bg-slate-50' : ''}`}
-                {...(onRowClick
-                  ? {
-                      onClick: () => onRowClick(row),
-                      onKeyDown: (event: KeyboardEvent<HTMLTableRowElement>) => handleRowKeyDown(event, row),
-                      role: 'button',
-                      tabIndex: 0,
-                    }
-                  : {})}
+              <TableHead
+                key={column.key}
+                className={ALIGN_CLASS[column.align ?? 'left']}
+                style={column.width ? { width: column.width } : undefined}
               >
-                {columns.map((column) => (
-                  <td key={column.key} className="px-3 py-2">
-                    {column.render ? column.render(row) : String(row[column.key] ?? '')}
-                  </td>
-                ))}
-              </tr>
-            ))
+                {column.sortable ? (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 font-medium"
+                    onClick={() => handleSortClick(column)}
+                  >
+                    {column.header}
+                    {sort?.key === column.key ? (
+                      sort.direction === 'asc' ? (
+                        <ArrowUpIcon className="size-3.5" />
+                      ) : (
+                        <ArrowDownIcon className="size-3.5" />
+                      )
+                    ) : (
+                      <ChevronsUpDownIcon className="size-3.5 opacity-50" />
+                    )}
+                  </button>
+                ) : (
+                  column.header
+                )}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {loading ? (
+            <TableRow>
+              <TableCell colSpan={colSpan}>
+                <LoadingState />
+              </TableCell>
+            </TableRow>
+          ) : error ? (
+            <TableRow>
+              <TableCell colSpan={colSpan}>
+                <ErrorState message={error} />
+              </TableCell>
+            </TableRow>
+          ) : rows.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={colSpan} className="text-center text-muted-foreground">
+                {emptyMessage}
+              </TableCell>
+            </TableRow>
+          ) : (
+            rows.map((row) => {
+              const key = rowKey(row);
+              const rowSelectable = selection ? (selection.isRowSelectable?.(row) ?? true) : false;
+              return (
+                <TableRow
+                  key={key}
+                  data-state={selection?.selectedKeys.includes(key) ? 'selected' : undefined}
+                  className={onRowClick ? 'cursor-pointer' : undefined}
+                  {...(onRowClick
+                    ? {
+                        onClick: () => onRowClick(row),
+                        onKeyDown: (event: KeyboardEvent<HTMLTableRowElement>) => handleRowKeyDown(event, row),
+                        role: 'button',
+                        tabIndex: 0,
+                      }
+                    : {})}
+                >
+                  {selection ? (
+                    // Stop both click and keydown (Space/Enter on the
+                    // checkbox's own <button>) from bubbling to the row's
+                    // onRowClick/onKeyDown handlers above — a consumer using
+                    // `selection` and `onRowClick` together must be able to
+                    // toggle a row's checkbox without also "opening" the row.
+                    <TableCell
+                      onClick={(event) => event.stopPropagation()}
+                      onKeyDown={(event) => event.stopPropagation()}
+                    >
+                      <Checkbox
+                        aria-label={`Select row ${key}`}
+                        checked={selection.selectedKeys.includes(key)}
+                        onCheckedChange={() => toggleRow(row)}
+                        disabled={!rowSelectable}
+                      />
+                    </TableCell>
+                  ) : null}
+                  {columns.map((column) => (
+                    <TableCell key={column.key} className={ALIGN_CLASS[column.align ?? 'left']}>
+                      {column.render !== undefined
+                        ? resolveCellValue(row, column.render)
+                        : String(row[column.key] ?? '')}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              );
+            })
           )}
-        </tbody>
-      </table>
-      {pagination ? (
-        <div className="flex items-center justify-between border-t border-slate-100 px-3 py-2 text-sm text-slate-600">
-          <Button
-            variant="secondary"
-            disabled={pagination.page <= 1}
-            onClick={() => pagination.onPageChange(pagination.page - 1)}
-          >
-            Previous
-          </Button>
-          <span>
-            Page {pagination.page} of {pageCount}
-          </span>
-          <Button
-            variant="secondary"
-            disabled={pagination.page >= pageCount}
-            onClick={() => pagination.onPageChange(pagination.page + 1)}
-          >
-            Next
-          </Button>
-        </div>
-      ) : null}
+        </TableBody>
+      </Table>
+      {pagination ? <Pagination {...pagination} /> : null}
     </div>
   );
 }
