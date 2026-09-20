@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 export interface DataTableColumn<T> {
   key: string;
   header: string;
-  render?: (row: T) => ReactNode;
+  render?: string | ((row: T) => ReactNode);
   sortable?: boolean;
   align?: 'center' | 'left' | 'right';
   width?: string;
@@ -80,6 +80,25 @@ export function togglePageSelection(
 ): string[] {
   const withoutSelectablePageKeys = selectedKeys.filter((key) => !selectableKeys.includes(key));
   return allSelected ? withoutSelectablePageKeys : [...withoutSelectablePageKeys, ...selectableKeys];
+}
+
+// Resolves a dot-separated property path against a value, returning
+// `undefined` as soon as an intermediate value is missing/null rather than
+// throwing. No array indexing, no expression syntax, no eval — a plain
+// segment-by-segment property walk.
+export function resolvePath(row: unknown, path: string): unknown {
+  return path.split('.').reduce<unknown>((value, segment) => {
+    if (value === null || value === undefined) return undefined;
+    return (value as Record<string, unknown>)[segment];
+  }, row);
+}
+
+// `DataTableColumn.render`'s two forms: a nested property path (resolved via
+// `resolvePath`) or a callback (executed with the full row). Deliberately
+// the only two forms — no separate accessor/accessorKey/accessorFn.
+export function resolveCellValue<T>(row: T, render: string | ((row: T) => ReactNode)): ReactNode {
+  if (typeof render === 'function') return render(row);
+  return resolvePath(row, render) as ReactNode;
 }
 
 export function DataTable<T extends Record<string, unknown>>({
@@ -235,7 +254,9 @@ export function DataTable<T extends Record<string, unknown>>({
                   ) : null}
                   {columns.map((column) => (
                     <TableCell key={column.key} className={ALIGN_CLASS[column.align ?? 'left']}>
-                      {column.render ? column.render(row) : String(row[column.key] ?? '')}
+                      {column.render !== undefined
+                        ? resolveCellValue(row, column.render)
+                        : String(row[column.key] ?? '')}
                     </TableCell>
                   ))}
                 </TableRow>

@@ -5,6 +5,8 @@ import {
   nextSortState,
   toggleSelectionKey,
   togglePageSelection,
+  resolvePath,
+  resolveCellValue,
   type DataTableColumn,
 } from './data-table';
 
@@ -68,6 +70,46 @@ describe('togglePageSelection (pure) — the M5 round-1 contract', () => {
     const selectableKeys = ['row-1']; // row-2 excluded — not selectable
     expect(togglePageSelection(selectedKeys, selectableKeys, false)).toEqual(['row-2', 'row-1']);
     expect(togglePageSelection(selectedKeys, selectableKeys, true)).toEqual(['row-2']);
+  });
+});
+
+describe('resolvePath (pure)', () => {
+  it('resolves a simple nested path', () => {
+    expect(resolvePath({ customer: { fullName: 'John Doe' } }, 'customer.fullName')).toBe('John Doe');
+  });
+
+  it('resolves a deeper path', () => {
+    expect(resolvePath({ pricingSnapshot: { priceMinorUnits: 12500 } }, 'pricingSnapshot.priceMinorUnits')).toBe(
+      12500,
+    );
+  });
+
+  it('returns undefined, not a throw, when an intermediate value is missing', () => {
+    expect(resolvePath({}, 'customer.fullName')).toBeUndefined();
+    expect(resolvePath({ customer: null }, 'customer.fullName')).toBeUndefined();
+    expect(resolvePath(null, 'customer.fullName')).toBeUndefined();
+  });
+});
+
+describe('resolveCellValue (pure)', () => {
+  it('executes a function render with the complete row', () => {
+    const row = { id: '1', name: 'Alice' };
+    let received: unknown;
+    resolveCellValue(row, (r) => {
+      received = r;
+      return null;
+    });
+    expect(received).toBe(row);
+  });
+
+  it('returns a computed/formatted value from a function render', () => {
+    expect(resolveCellValue({ priceMinorUnits: 1250 }, (r) => `$${(r.priceMinorUnits / 100).toFixed(2)}`)).toBe(
+      '$12.50',
+    );
+  });
+
+  it('resolves a string render as a property path', () => {
+    expect(resolveCellValue({ customer: { fullName: 'John Doe' } }, 'customer.fullName')).toBe('John Doe');
   });
 });
 
@@ -181,5 +223,34 @@ describe('DataTable', () => {
       />,
     );
     expect(html).not.toContain('<select');
+  });
+
+  it('renders a string-path render as the resolved nested value', () => {
+    interface NestedRow extends Record<string, unknown> {
+      id: string;
+      customer: { fullName: string };
+    }
+    const nestedRows: NestedRow[] = [{ id: '1', customer: { fullName: 'John Doe' } }];
+    const columns: DataTableColumn<NestedRow>[] = [{ key: 'customer', header: 'Customer', render: 'customer.fullName' }];
+    const html = renderToStaticMarkup(<DataTable columns={columns} rows={nestedRows} rowKey={(r) => r.id} />);
+    expect(html).toContain('John Doe');
+  });
+
+  it('renders without throwing when a string-path render hits a missing intermediate value', () => {
+    interface NestedRow extends Record<string, unknown> {
+      id: string;
+      customer: { fullName: string } | null;
+    }
+    const nestedRows: NestedRow[] = [{ id: '1', customer: null }];
+    const columns: DataTableColumn<NestedRow>[] = [{ key: 'customer', header: 'Customer', render: 'customer.fullName' }];
+    expect(() =>
+      renderToStaticMarkup(<DataTable columns={columns} rows={nestedRows} rowKey={(r) => r.id} />),
+    ).not.toThrow();
+  });
+
+  it('preserves the no-render fallback (resolves the raw column key from the row)', () => {
+    const html = renderToStaticMarkup(<DataTable columns={mixedColumns} rows={rows} rowKey={(r) => r.id} />);
+    expect(html).toContain('Alice');
+    expect(html).toContain('1');
   });
 });
