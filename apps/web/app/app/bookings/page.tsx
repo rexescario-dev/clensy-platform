@@ -26,7 +26,8 @@ import {
   PageHeader,
   useToast,
 } from '@clensy/ui';
-import { BookingDataTable, type Booking } from '@clensy/web';
+import { BookingDataTable, ClensyI18nProvider, type Booking } from '@clensy/web';
+import { useLocale } from 'next-intl';
 import { type ChangeEvent, type FormEvent, Suspense, useState } from 'react';
 import { formatMinorUnits } from '../../../lib/format-price';
 import { useDetailDrawer } from '../../../lib/use-detail-drawer';
@@ -62,6 +63,7 @@ export default function BookingsPage() {
 }
 
 function BookingsPageContent() {
+  const locale = useLocale();
   const [page, setPage] = useState(1);
   const pageSize = 20;
   const { data, loading, error, refetch } = useBookingsQuery({
@@ -158,19 +160,21 @@ function BookingsPageContent() {
         }
       />
 
-      <BookingDataTable
-        bookings={rows}
-        formatPrice={formatMinorUnits}
-        loading={loading}
-        error={error ? 'Unable to load bookings.' : undefined}
-        onRowClick={(booking) => openDetail(booking.id)}
-        pagination={{
-          onPageChange: setPage,
-          page,
-          pageSize,
-          totalCount: data?.bookings.totalCount ?? 0,
-        }}
-      />
+      <ClensyI18nProvider locale={locale}>
+        <BookingDataTable
+          bookings={rows}
+          formatPrice={formatMinorUnits}
+          loading={loading}
+          error={error ? 'Unable to load bookings.' : undefined}
+          onRowClick={(booking) => openDetail(booking.id)}
+          pagination={{
+            onPageChange: setPage,
+            page,
+            pageSize,
+            totalCount: data?.bookings.totalCount ?? 0,
+          }}
+        />
+      </ClensyI18nProvider>
 
       <FormDialog
         open={formOpen}
