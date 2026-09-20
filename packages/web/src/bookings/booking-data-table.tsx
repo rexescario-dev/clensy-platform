@@ -40,11 +40,11 @@ export function BookingDataTable({
   pagination,
 }: BookingDataTableProps) {
   const columns: DataTableColumn<Booking>[] = [
-    { header: 'Customer', key: 'customer', render: (row) => row.customer.fullName },
-    { header: 'Property', key: 'property', render: (row) => row.property.addressLine1 },
-    { header: 'Service', key: 'service', render: (row) => row.service.name },
+    { header: 'Customer', key: 'customer', render: 'customer.fullName' },
+    { header: 'Property', key: 'property', render: 'property.addressLine1' },
+    { header: 'Service', key: 'service', render: 'service.name' },
     { header: 'Scheduled', key: 'scheduledAt', render: (row) => formatScheduledAt(row.scheduledAt) },
-    { header: 'Status', key: 'status', render: (row) => row.status },
+    { header: 'Status', key: 'status', render: 'status' },
     { header: 'Team', key: 'team', render: (row) => row.team?.name ?? 'Unassigned' },
     {
       header: 'Price',
