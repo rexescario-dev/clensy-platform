@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { BookingDataTable, type Booking } from './booking-data-table';
+import { ClensyI18nProvider } from '../i18n/i18n-context';
 
 const booking: Booking = {
   id: 'b1',
@@ -48,5 +49,27 @@ describe('BookingDataTable', () => {
       />,
     );
     expect(html).toContain('Page 2 of 2');
+  });
+
+  it('renders default @clensy/web column headers with zero application-level i18n integration', () => {
+    const html = renderToStaticMarkup(
+      <BookingDataTable bookings={[booking]} formatPrice={() => '₱0.00'} pagination={pagination} />,
+    );
+    for (const header of ['Customer', 'Property', 'Service', 'Scheduled', 'Status', 'Team', 'Price']) {
+      expect(html).toContain(header);
+    }
+  });
+
+  it('applies a partial application override to only the intended header, leaving the rest at package defaults', () => {
+    const html = renderToStaticMarkup(
+      <ClensyI18nProvider overrides={{ bookings: { columns: { customer: 'Client' } } }}>
+        <BookingDataTable bookings={[booking]} formatPrice={() => '₱0.00'} pagination={pagination} />
+      </ClensyI18nProvider>,
+    );
+    expect(html).toContain('Client');
+    expect(html).not.toContain('>Customer<');
+    for (const header of ['Property', 'Service', 'Scheduled', 'Status', 'Team', 'Price']) {
+      expect(html).toContain(header);
+    }
   });
 });

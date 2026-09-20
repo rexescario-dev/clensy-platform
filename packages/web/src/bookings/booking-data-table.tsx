@@ -1,4 +1,7 @@
+'use client';
+
 import { DataTable, type DataTableColumn, type DataTablePaginationProps } from '@clensy/ui';
+import { useClensyTranslations } from '../i18n/use-clensy-translations';
 
 export type BookingStatus = 'CANCELLED' | 'COMPLETED' | 'CONFIRMED' | 'PENDING';
 
@@ -39,15 +42,17 @@ export function BookingDataTable({
   onRowClick,
   pagination,
 }: BookingDataTableProps) {
+  const t = useClensyTranslations('bookings');
+
   const columns: DataTableColumn<Booking>[] = [
-    { header: 'Customer', key: 'customer', render: 'customer.fullName' },
-    { header: 'Property', key: 'property', render: 'property.addressLine1' },
-    { header: 'Service', key: 'service', render: 'service.name' },
-    { header: 'Scheduled', key: 'scheduledAt', render: (row) => formatScheduledAt(row.scheduledAt) },
-    { header: 'Status', key: 'status', render: 'status' },
-    { header: 'Team', key: 'team', render: (row) => row.team?.name ?? 'Unassigned' },
+    { header: t('columns.customer'), key: 'customer', render: 'customer.fullName' },
+    { header: t('columns.property'), key: 'property', render: 'property.addressLine1' },
+    { header: t('columns.service'), key: 'service', render: 'service.name' },
+    { header: t('columns.scheduled'), key: 'scheduledAt', render: (row) => formatScheduledAt(row.scheduledAt) },
+    { header: t('columns.status'), key: 'status', render: 'status' },
+    { header: t('columns.team'), key: 'team', render: (row) => row.team?.name ?? t('unassigned') },
     {
-      header: 'Price',
+      header: t('columns.price'),
       key: 'price',
       render: (row) => formatPrice(row.pricingSnapshot.priceMinorUnits),
     },
@@ -58,7 +63,7 @@ export function BookingDataTable({
       columns={columns}
       rows={bookings}
       rowKey={(row) => row.id}
-      emptyMessage="No bookings."
+      emptyMessage={t('empty')}
       loading={loading}
       error={error}
       onRowClick={onRowClick}
