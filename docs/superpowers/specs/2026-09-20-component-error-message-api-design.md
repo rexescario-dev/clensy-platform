@@ -12,20 +12,21 @@
 
 ## 1. Thesis
 
-`LoginForm` and `BookingDataTable` — the two existing `@clensy/web` domain components — each display a single generic error string, but disagree on how: `LoginForm`'s `errorMessage: string` is required, with `apps/web/app/login/page.tsx` supplying the only copy of its default text (`"Invalid email or password."`) via next-intl; `BookingDataTable`'s `error?: string` is optional but has no default at all, so `apps/web/app/app/bookings/page.tsx` supplies a hardcoded (non-translated) fallback (`"Unable to load bookings."`) inline. Neither component can be used without its host either supplying a string every time (`LoginForm`) or accepting a blank error state (`BookingDataTable`). This spec makes `errorMessage?: string` the one property name both components use for error *text*, moves each component's existing default English copy (unchanged wording) into a package-owned translated default resolved through `@clensy/web`'s own i18n context (the same `ClensyI18nProvider`/`useClensyTranslations`/default-messages-catalog mechanism `BookingDataTable` already uses for its column headers), and removes the now-redundant default-supplying code from both `apps/web` call sites. Because `BookingDataTable`'s error *occurrence* — unlike `LoginForm`'s — is decided by its host rather than internally, `BookingDataTable` also gains one small, explicit occurrence signal (`hasError?: boolean`) so that "no error" and "error, use the default" remain distinguishable once `errorMessage` always has a default to fall back to (§6). A project-wide sweep (§4.5) confirms these are the only two components this normalization applies to.
+`LoginForm` and `BookingDataTable` — the two existing `@clensy/web` domain components — each display a single generic error string, but disagree on how: `LoginForm`'s `errorMessage: string` is required, with `apps/web/app/login/page.tsx` supplying the only copy of its default text (`"Invalid email or password."`) via next-intl; `BookingDataTable`'s `error?: string` is optional but has no default at all, so `apps/web/app/app/bookings/page.tsx` supplies a hardcoded (non-translated) fallback (`"Unable to load bookings."`) inline. `LoginForm` requires its host to supply error text on every render (the required prop leaves no other option), while `BookingDataTable` requires its host to supply both the occurrence and the error text whenever an error actually occurs — there is no component-owned fallback for either. This spec makes `errorMessage?: string` the one property name both components use for error *text*, moves each component's existing default English copy (unchanged wording) into a package-owned translated default resolved through `@clensy/web`'s own i18n context (the same `ClensyI18nProvider`/`useClensyTranslations`/default-messages-catalog mechanism `BookingDataTable` already uses for its column headers), and removes the now-redundant default-supplying code from both `apps/web` call sites. Because `BookingDataTable`'s error *occurrence* — unlike `LoginForm`'s — is decided by its host rather than internally, `BookingDataTable` also gains one small, explicit occurrence signal (`hasError?: boolean`) so that "no error" and "error, use the default" remain distinguishable once `errorMessage` always has a default to fall back to (§6). A project-wide sweep (§4.5) confirms these are the only two components this normalization applies to.
 
 ## 2. Scope
 
 **In scope (normative):**
 
-- `LoginForm`: `errorMessage` becomes `errorMessage?: string` (was `errorMessage: string`). The existing `setError(errorMessage)` call (in `onValid`'s `catch`) becomes `setError(errorMessage ?? t('error'))`, where `t` comes from a new `useClensyTranslations('auth')` call — `LoginForm`'s first use of the `@clensy/web` i18n context. No other line in `LoginForm` changes (§4.2).
+- A new shared pure helper, `resolveMessage(override: string | undefined, fallback: string): string` (`packages/web/src/i18n/resolve-message.ts`), returning `override ?? fallback` — the one piece of override-vs-default logic both components need, extracted so it is independently unit-testable without rendering (§4.2, §4.3, §8).
+- `LoginForm`: `errorMessage` becomes `errorMessage?: string` (was `errorMessage: string`). The existing `setError(errorMessage)` call (in `onValid`'s `catch`) becomes `setError(resolveMessage(errorMessage, t('error')))`, where `t` comes from a new `useClensyTranslations('auth')` call — `LoginForm`'s first use of the `@clensy/web` i18n context. No other line in `LoginForm` changes (§4.2).
 - A new `auth` namespace in `@clensy/web`'s default-messages catalog (`packages/web/src/i18n/messages/en/auth.ts`), registered in `getDefaultMessages()`: `{ error: 'Invalid email or password.' }` — the exact existing wording, relocated, not reworded (§4.2).
-- `BookingDataTable`: `error?: string` is renamed to `errorMessage?: string`, and a new `hasError?: boolean` (default `false`) is added as the error-occurrence signal (§6). Internally, `const resolvedErrorMessage = hasError ? (errorMessage ?? t('error')) : undefined;` (using the `t` from its existing `useClensyTranslations('bookings')` call) is passed to the underlying `@clensy/ui` `DataTable`'s existing `error` prop, which is **not** renamed (§4.3).
+- `BookingDataTable`: `error?: string` is renamed to `errorMessage?: string`, and a new `hasError?: boolean` (semantically `false` when omitted) is added as the error-occurrence signal (§6). Internally, `const resolvedErrorMessage = hasError ? resolveMessage(errorMessage, t('error')) : undefined;` (using the `t` from its existing `useClensyTranslations('bookings')` call) is passed to the underlying `@clensy/ui` `DataTable`'s existing `error` prop, which is **not** renamed (§4.3).
 - A new `error: 'Unable to load bookings.'` key added to the existing `bookings` namespace in `packages/web/src/i18n/messages/en/bookings.ts` — the exact existing wording, relocated, not reworded (§4.3).
 - `apps/web/app/login/page.tsx`: remove the `errorMessage={t('errors.invalidCredentials')}` line from its `<LoginForm ... />` call entirely — no replacement prop.
 - `apps/web/messages/en/auth.json`: delete the now-unused `errors.invalidCredentials` key (and its now-empty `errors` object).
 - `apps/web/app/app/bookings/page.tsx`: replace `error={error ? 'Unable to load bookings.' : undefined}` with `hasError={Boolean(error)}` on its `<BookingDataTable ... />` call — no `errorMessage` prop passed (the page has no custom wording to supply; `BookingDataTable`'s default covers it) (§4.4).
-- Tests: extend `booking-data-table.test.tsx` for the rename, the new `hasError` prop, and the new default-vs-override behavior; add `login-form.test.tsx` (new file — `LoginForm` has no test file today) for the same default-vs-override behavior (§8).
+- Tests: add `resolve-message.test.ts` for the new shared helper; extend `booking-data-table.test.tsx` for the rename, the new `hasError` prop, and the new default-vs-override rendering behavior. No `login-form.test.tsx` is added — see §8 for why `LoginForm`'s error-display behavior specifically isn't automatable under this repository's existing (non-interactive) test setup.
 
 **Informative:** the full project-wide sweep confirming `LoginForm` and `BookingDataTable` are the only two `@clensy/web` (or otherwise caller-facing, non-`@clensy/ui`) components with an error-display prop today (§4.5).
 
@@ -41,7 +42,7 @@
 ## 3. Terminology
 
 - **Component-owned default:** a translated string a `@clensy/web` component resolves itself, via `useClensyTranslations`, when its host supplies no override — the same mechanism `BookingDataTable` already uses for column headers, now extended to error text for both components.
-- **Override:** a truthy `errorMessage` value a host explicitly passes, always used in place of the component-owned default when an error is occurring. Passing `errorMessage={undefined}` (or omitting the prop) is not an override — both mean "use the default text," identically.
+- **Override:** a supplied, non-nullish `errorMessage` value a host explicitly passes, always used in place of the component-owned default when an error is occurring — resolved via `errorMessage ?? t('error')`, so an empty string (`errorMessage=""`) is itself a valid (if unusual) override, not treated as "use the default." Passing `errorMessage={undefined}` or omitting the prop is not an override — both mean "use the default text," identically, because `??` only falls through on `undefined`/`null`.
 - **Occurrence signal:** the separate, boolean piece of information that tells a component *whether* to display an error at all, distinct from *what* text to show. `LoginForm` derives this internally (a rejected `onLogin` promise); `BookingDataTable` takes it explicitly as `hasError` because its host, not the component itself, knows whether the underlying data fetch failed (§6).
 - **Resolved error message:** the final string a component actually displays or forwards, after applying its occurrence signal and `errorMessage ?? t('error')`. `BookingDataTable`'s resolved error message is what reaches `@clensy/ui`'s `DataTable.error` prop, which itself performs no resolution of its own (§4.3).
 
@@ -68,6 +69,7 @@ export interface LoginFormProps {
 
 ```ts
 import { useClensyTranslations } from '../i18n/use-clensy-translations';
+import { resolveMessage } from '../i18n/resolve-message';
 // ...
 export function LoginForm({ labels, errorMessage, onLogin }: LoginFormProps) {
   const t = useClensyTranslations('auth');
@@ -78,7 +80,7 @@ export function LoginForm({ labels, errorMessage, onLogin }: LoginFormProps) {
     try {
       await onLogin(values);
     } catch {
-      setError(errorMessage ?? t('error'));   // was: setError(errorMessage)
+      setError(resolveMessage(errorMessage, t('error')));   // was: setError(errorMessage)
     } finally {
       setSubmitting(false);
     }
@@ -116,7 +118,7 @@ export interface BookingDataTableProps {
   bookings: Booking[];
   formatPrice: (minorUnits: number) => string;
   loading?: boolean;
-  hasError?: boolean;       // new — occurrence signal, default false
+  hasError?: boolean;       // new — occurrence signal, semantically false when omitted
   errorMessage?: string;    // was: error?: string — text only, never implies occurrence
   onRowClick?: (booking: Booking) => void;
   pagination: DataTablePaginationProps;
@@ -132,7 +134,7 @@ export function BookingDataTable({
   pagination,
 }: BookingDataTableProps) {
   const t = useClensyTranslations('bookings');   // unchanged call, same namespace
-  const resolvedErrorMessage = hasError ? (errorMessage ?? t('error')) : undefined;
+  const resolvedErrorMessage = hasError ? resolveMessage(errorMessage, t('error')) : undefined;
   // ...unchanged columns...
   return (
     <DataTable
@@ -156,6 +158,8 @@ Semantics (§6 has the full rationale for why `hasError` exists):
 | `false` / omitted | (any) | `undefined` — no error state, regardless of `errorMessage` |
 | `true` | omitted | `t('error')` → `"Unable to load bookings."` |
 | `true` | supplied | the supplied string |
+
+`hasError` is optional for backward-compatible omission — `undefined` is treated identically to `false` because `hasError ? ... : undefined` already evaluates falsy for either. **No destructuring default (`hasError = false`) is required**; the destructured value stays `undefined` when omitted, and the ternary above handles that correctly as-is.
 
 `@clensy/ui`'s `DataTable` renders its error branch whenever its `error` prop is truthy, taking priority over `loading` and the empty/row-list branches (`packages/ui/src/base/data-table.tsx`, confirmed by reading its render logic — not assumed from the prop name). Because `resolvedErrorMessage` is `undefined` whenever `hasError` is falsy, `DataTable`'s error branch renders only when `BookingDataTable`'s host explicitly signals an error — matching today's behavior exactly for the one existing caller (§4.4).
 
@@ -252,11 +256,14 @@ None. This is a complete, self-contained normalization; Governing references (he
 
 ## 8. Testing and acceptance
 
-Consistent with this repository's existing precedent (`vitest` + `renderToStaticMarkup`, no `jsdom`/`@testing-library/react`, per `booking-data-table.test.tsx`):
+Consistent with this repository's existing precedent (`vitest` + `renderToStaticMarkup`, no `jsdom`/`@testing-library/react`, no `fireEvent`/`userEvent`/interaction simulation anywhere in this repository today, verified by grep across every existing `.test.tsx`) — this spec does not introduce interaction testing, and states explicitly, per component, what is and is not automatable as a result:
 
-**`packages/web/src/auth/login-form.test.tsx` (new file):**
-- Omitting `errorMessage` and causing `onLogin` to reject renders `"Invalid email or password."` (the package default, resolved via the real `@clensy/web` i18n fallback — no mocking of `useClensyTranslations`).
-- Supplying `errorMessage` and causing `onLogin` to reject renders the supplied string instead.
+**`packages/web/src/i18n/resolve-message.test.ts` (new file, plain `vitest`, no rendering):**
+- `resolveMessage(undefined, 'default')` → `'default'`.
+- `resolveMessage('custom', 'default')` → `'custom'`.
+- `resolveMessage('', 'default')` → `''` — documents, as an explicit test, that an empty-string override is honored rather than treated as "use the default" (§3).
+
+This is the automated coverage for the override-vs-default *resolution logic* both components share. It is not, and cannot be (without introducing interaction testing this repository has never had), a test of `LoginForm` actually calling `setError` with the resolved value: `LoginForm`'s error state is only ever set from inside `onValid`'s `catch`, reachable only by simulating a form submission and an `onLogin` rejection — `renderToStaticMarkup` performs a single, non-interactive render and cannot trigger this. `LoginForm` has no test file today for the same structural reason (all of its behavior beyond initial render is post-interaction). This spec does not add `login-form.test.tsx` and does not close that pre-existing gap — doing so would require introducing `jsdom`/`@testing-library/react` (or an equivalent interaction-simulation mechanism), which is an explicit non-goal (§9) consistent with this repository's existing precedent. The `catch → setError(resolveMessage(...))` wiring itself is a one-line change reviewed at M6 and exercised by the manual golden path below, not by an automated test.
 
 **`packages/web/src/bookings/booking-data-table.test.tsx` (extended):**
 - Existing tests updated for the `error` → `errorMessage`/`hasError` rename where they touch that prop (verify at M4/M6 against the file's exact current test list — none of the four existing tests shown in §4.1's source currently exercise the error branch, so this may be additive-only).
@@ -268,6 +275,7 @@ Consistent with this repository's existing precedent (`vitest` + `renderToStatic
 - No remaining reference to `apps/web/messages/en/auth.json`'s `errors.invalidCredentials` anywhere in `apps/web`.
 - `BookingDataTable`'s public props are `hasError`/`errorMessage`, not `error`, in both its interface and its one `apps/web` call site.
 - `DataTable.error` (the `@clensy/ui` primitive prop) is unrenamed.
+- Both `LoginForm` and `BookingDataTable` import `resolveMessage` from `packages/web/src/i18n/resolve-message.ts` rather than each inlining `??` resolution separately.
 
 **Build gates:** `pnpm --filter @clensy/web build`/`lint`/`test` and `pnpm --filter web build`/`lint`/`test` succeed.
 
@@ -280,6 +288,7 @@ Consistent with this repository's existing precedent (`vitest` + `renderToStatic
 - A second locale, `locale`/`messages` override props, or a structured `errorMessage` (§2 — explicit issue constraints).
 - Any change to *when* either component's underlying error condition occurs, only what string is shown and (for `BookingDataTable`) how occurrence is signaled (§2, §6).
 - A `CustomerDataTable` or any other new domain component (unrelated to this ticket).
+- Introducing `jsdom`, `@testing-library/react`, or any interaction-simulation mechanism to close `LoginForm`'s pre-existing lack of automated error-display coverage (§8). That gap predates this ticket and stays closed by manual testing, as it is for every other interaction-triggered behavior in this repository today.
 
 ## 10. Acceptance criteria (for this specification)
 
@@ -290,3 +299,5 @@ Consistent with this repository's existing precedent (`vitest` + `renderToStatic
 - Documents a project-wide sweep with its exact results (table, §4.5), closing the issue's "inspect other reusable components" instruction with evidence rather than assertion.
 - States precisely what apps/web-side code and translation keys are removed, and why each is genuinely dead rather than assumed dead (§4.4).
 - Defines a testing and acceptance bar consistent with this repository's existing precedent, including tests that specifically prove `hasError` prevents the always-truthy default from firing when no error has occurred (§8).
+- States an explicit, executable testing mechanism for `LoginForm`'s override-vs-default resolution (the shared `resolveMessage` unit test) and explicitly names what remains uncovered by automation and why, rather than describing a desired behavior ("causing `onLogin` to reject renders...") without a mechanism to produce it (§8).
+- Uses precise, `??`-accurate language for "override" (supplied, non-nullish) rather than "truthy," so an empty-string override isn't ambiguously specified (§3).
