@@ -8,17 +8,24 @@
 
 **Tech Stack:** TypeScript, React 19, `vitest` (+ `renderToStaticMarkup`, no `jsdom`/`@testing-library/react`), pnpm workspaces (`@clensy/web`, `@clensy/ui`, `web`/`apps/web`), `next-intl` (apps/web only), the `@clensy/web` i18n context (`ClensyI18nProvider`/`useClensyTranslations`/`getDefaultMessages`).
 
-**Spec:** [docs/superpowers/specs/2026-09-20-component-error-message-api-design.md](../specs/2026-09-20-component-error-message-api-design.md)
+**Spec:** [docs/superpowers/specs/2026-09-20-component-error-message-api-design.md](../specs/2026-09-20-component-error-message-api-design.md) (Accepted, M3 2026-09-20). Where this plan and the spec disagree, the spec wins — stop and return to M2/M3 rather than resolving the conflict here.
+
+**Also relies on (Accepted, unmodified by this plan beyond what the spec authorizes):** [Reusable `DataTable` and `BookingDataTable`](../specs/2026-09-19-reusable-data-table-design.md) (this plan renames/extends `BookingDataTable`'s error prop exactly as the Accepted spec §4.3 specifies; its columns, formatting, and pagination are untouched). [`@clensy/web` / `LoginForm`](../specs/2026-09-19-clensy-web-login-form-design.md) (this plan touches only `LoginForm`'s error-resolution line and prop optionality per the Accepted spec §4.2; `labels`, validation, and submission flow are untouched). [App Router i18n Architecture (next-intl)](../specs/2026-09-13-web-i18n-architecture-design.md) (this plan deletes one now-dead key from `apps/web/messages/en/auth.json`; the catalog structure and loading mechanism are untouched).
+
+**M5 decision:** **Accepted** — 2026-09-20. Self-review against `docs/workflows/prompts/plan-review.md`'s checklist found no plan blockers: the authoritative-spec rule is stated explicitly (above); every Global Constraint and task traces to a specific spec section; task ordering (helper → consumers → callers → verification) is executable without inventing missing work; Task 2's absence of an automated `LoginForm` test is not a missing verification strategy but an explicit, spec-authorized substitution (typecheck/lint + Task 5's manual golden path), matching the Accepted spec §8/§9's own non-goal; every in-scope Accepted-spec requirement (§2's full bullet list) maps to a task, with no silent omissions and no hidden redesign beyond the Accepted spec. Ready for M6 implementation.
 
 ## Global Constraints
 
-- `errorMessage` is the canonical property name on both components (issue #63).
-- Default wording is preserved **verbatim**, relocated only: `"Invalid email or password."` (LoginForm), `"Unable to load bookings."` (BookingDataTable).
-- No `locale`/`messages` override props, no structured (object/union) `errorMessage`, no second i18n mechanism (spec §2, §9).
-- `@clensy/ui`'s `DataTable.error` prop is **not** renamed and gains no new logic — it keeps taking an already-resolved string (spec §2, §5).
-- `LoginForm`'s `labels` prop is unchanged — no migration into the i18n catalog (spec §2, §9).
-- No `jsdom`/`@testing-library/react`/interaction-simulation is introduced anywhere (spec §8, §9) — every automated test uses `vitest` + `renderToStaticMarkup`, or is a plain non-rendering unit test.
-- No unrelated refactoring (issue #63's explicit acceptance criterion).
+- SHALL make `errorMessage?: string` the canonical error-text property name on both `LoginForm` and `BookingDataTable` (spec §2, §4.2, §4.3; issue #63).
+- SHALL add `hasError?: boolean` to `BookingDataTable` only, as its error-occurrence signal (spec §2, §4.3, §6). SHALL NOT add an equivalent prop to `LoginForm` — its occurrence signal stays fully internal (spec §4.2).
+- SHALL preserve both components' default wording **verbatim**, relocated only: `"Invalid email or password."` (LoginForm, into `packages/web/src/i18n/messages/en/auth.ts`), `"Unable to load bookings."` (BookingDataTable, into `packages/web/src/i18n/messages/en/bookings.ts`) (spec §2, §4.1).
+- SHALL add `resolveMessage(override: string | undefined, fallback: string): string` (`packages/web/src/i18n/resolve-message.ts`) as the single shared override/default resolution used by both components — SHALL NOT let either component inline its own separate `??` resolution (spec §2, §8; grep gate).
+- SHALL NOT rename, or add resolution logic to, `@clensy/ui`'s `DataTable.error` prop — it keeps taking an already-resolved string with no changes (spec §2, §4.3, §5).
+- SHALL NOT change `LoginForm`'s `labels` prop, validation rules, submission flow, or accessibility attributes; SHALL NOT change `BookingDataTable`'s columns, formatting, or pagination behavior (spec §2, §9).
+- SHALL NOT introduce a second locale, `locale`/`messages` override props, or a structured (object/union) `errorMessage` (spec §2, §9 — explicit issue constraints).
+- SHALL NOT introduce `jsdom`, `@testing-library/react`, or any interaction-simulation mechanism (spec §8, §9) — every automated test in this plan is either `vitest` + `renderToStaticMarkup` (matching this repository's existing precedent) or a plain non-rendering unit test (`resolveMessage`).
+- SHALL NOT modify any file outside `packages/web/src/**`, `apps/web/app/login/page.tsx`, `apps/web/app/app/bookings/page.tsx`, and `apps/web/messages/en/auth.json`.
+- SHALL NOT perform unrelated refactoring (issue #63's explicit acceptance criterion).
 
 ---
 
