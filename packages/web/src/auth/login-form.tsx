@@ -7,21 +7,12 @@ import { useForm } from 'react-hook-form';
 import { useClensyTranslations } from '../i18n/use-clensy-translations';
 import { resolveMessage } from '../i18n/resolve-message';
 
-export interface LoginFormLabels {
-  title: string;
-  email: string;
-  password: string;
-  submit: string;
-  submitting: string;
-}
-
 export interface LoginFormValues {
   email: string;
   password: string;
 }
 
 export interface LoginFormProps {
-  labels: LoginFormLabels;
   errorMessage?: string;
   onLogin: (values: LoginFormValues) => Promise<void>;
 }
@@ -41,13 +32,13 @@ const loginRules = {
   password: 'required|string|max:255',
 } satisfies Rules<LoginFormValues>;
 
-export function LoginForm({ labels, errorMessage, onLogin }: LoginFormProps) {
+export function LoginForm({ errorMessage, onLogin }: LoginFormProps) {
   const t = useClensyTranslations('auth');
   const [error, setError] = useState<string | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
   const form = useForm<LoginFormValues>({
     resolver: clensyResolver<LoginFormValues>(loginRules, {
-      attributes: { email: labels.email.toLowerCase(), password: labels.password.toLowerCase() },
+      attributes: { email: t('email').toLowerCase(), password: t('password').toLowerCase() },
     }),
   });
 
@@ -68,10 +59,10 @@ export function LoginForm({ labels, errorMessage, onLogin }: LoginFormProps) {
       onSubmit={form.handleSubmit(onValid)}
       className="flex w-full max-w-sm flex-col gap-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
     >
-      <h1 className="text-lg font-semibold text-slate-900">{labels.title}</h1>
+      <h1 className="text-lg font-semibold text-slate-900">{t('title')}</h1>
       <FieldGroup>
         <Field>
-          <FieldLabel htmlFor="email">{labels.email}</FieldLabel>
+          <FieldLabel htmlFor="email">{t('email')}</FieldLabel>
           <Input
             id="email"
             type="email"
@@ -85,7 +76,7 @@ export function LoginForm({ labels, errorMessage, onLogin }: LoginFormProps) {
           ) : null}
         </Field>
         <Field>
-          <FieldLabel htmlFor="password">{labels.password}</FieldLabel>
+          <FieldLabel htmlFor="password">{t('password')}</FieldLabel>
           <Input
             id="password"
             type="password"
@@ -105,7 +96,7 @@ export function LoginForm({ labels, errorMessage, onLogin }: LoginFormProps) {
         </p>
       ) : null}
       <Button type="submit" disabled={submitting}>
-        {submitting ? labels.submitting : labels.submit}
+        {submitting ? t('submitting') : t('submit')}
       </Button>
     </form>
   );
