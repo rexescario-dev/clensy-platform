@@ -255,7 +255,7 @@ In `packages/web/src/bookings/booking-data-table.test.tsx`, add three new `it` b
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm --filter @clensy/web test -- booking-data-table`
-Expected: FAIL — `BookingDataTableProps` has no `hasError`/`errorMessage` members yet (TypeScript compile error under vitest, or the three new assertions fail against the still-`error`-only component, depending on how strict the vitest/tsc integration surfaces it). Confirm the failure is in the three new tests, not the five pre-existing ones.
+Expected: FAIL — `BookingDataTableProps` has no `hasError`/`errorMessage` members yet (TypeScript compile error under vitest, or the three new assertions fail against the still-`error`-only component, depending on how strict the vitest/tsc integration surfaces it). Before proceeding, run `grep -c "^  it(" packages/web/src/bookings/booking-data-table.test.tsx` to confirm the pre-existing test count in the file as it stands right now (5 as of plan-writing time, per spec §8's own "verify at M4/M6" instruction — do not assume this hasn't changed), and confirm the failure is isolated to the three new tests.
 
 - [ ] **Step 3: Add the `bookings.error` default message**
 
@@ -331,7 +331,7 @@ Change the `DataTable` call's `error` prop (inside the existing `return` block, 
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `pnpm --filter @clensy/web test -- booking-data-table`
-Expected: PASS — all 8 tests (5 pre-existing + 3 new).
+Expected: PASS — all existing tests (verified count from Step 2) plus the three new error-state tests.
 
 - [ ] **Step 6: Commit**
 
@@ -485,3 +485,7 @@ git status
 ```
 
 Expected: clean working tree (nothing beyond what Tasks 1-4 already committed).
+
+- [ ] **Step 6: Stop for manual review — do not proceed further**
+
+This plan's scope ends here. Do not push any branch, open or update a pull request, merge anything, or make any further code change beyond what Steps 1-5 verified. Report the verification results (Step 1's build/lint/test output, Step 2's grep results, Step 3-4's manual test outcomes) and the final `git log`/`git status` to the requester, then wait for explicit review and approval before any PR or push activity begins.
