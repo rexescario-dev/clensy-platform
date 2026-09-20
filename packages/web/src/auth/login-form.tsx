@@ -4,6 +4,8 @@ import { Button, Field, FieldError, FieldGroup, FieldLabel, Input } from '@clens
 import { clensyResolver, type Rules } from '@clensy/validation';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useClensyTranslations } from '../i18n/use-clensy-translations';
+import { resolveMessage } from '../i18n/resolve-message';
 
 export interface LoginFormLabels {
   title: string;
@@ -20,7 +22,7 @@ export interface LoginFormValues {
 
 export interface LoginFormProps {
   labels: LoginFormLabels;
-  errorMessage: string;
+  errorMessage?: string;
   onLogin: (values: LoginFormValues) => Promise<void>;
 }
 
@@ -40,6 +42,7 @@ const loginRules = {
 } satisfies Rules<LoginFormValues>;
 
 export function LoginForm({ labels, errorMessage, onLogin }: LoginFormProps) {
+  const t = useClensyTranslations('auth');
   const [error, setError] = useState<string | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
   const form = useForm<LoginFormValues>({
@@ -54,7 +57,7 @@ export function LoginForm({ labels, errorMessage, onLogin }: LoginFormProps) {
     try {
       await onLogin(values);
     } catch {
-      setError(errorMessage);
+      setError(resolveMessage(errorMessage, t('error')));
     } finally {
       setSubmitting(false);
     }
