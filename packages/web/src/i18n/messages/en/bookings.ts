@@ -13,5 +13,6 @@ export const bookings = {
     team: 'Team',
   },
   empty: 'No bookings.',
+  error: 'Unable to load bookings.',
   unassigned: 'Unassigned',
 };

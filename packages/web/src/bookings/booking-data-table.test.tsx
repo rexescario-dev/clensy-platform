@@ -72,4 +72,43 @@ describe('BookingDataTable', () => {
       expect(html).toContain(header);
     }
   });
+
+  it('renders no error state when hasError is omitted, even if errorMessage is supplied', () => {
+    const html = renderToStaticMarkup(
+      <BookingDataTable
+        bookings={[booking]}
+        formatPrice={() => '₱0.00'}
+        errorMessage="Custom error"
+        pagination={pagination}
+      />,
+    );
+    expect(html).not.toContain('Custom error');
+    expect(html).toContain('Jane Doe');
+  });
+
+  it('renders the package default error message when hasError is true and errorMessage is omitted', () => {
+    const html = renderToStaticMarkup(
+      <BookingDataTable
+        bookings={[booking]}
+        formatPrice={() => '₱0.00'}
+        hasError
+        pagination={pagination}
+      />,
+    );
+    expect(html).toContain('Unable to load bookings.');
+  });
+
+  it('renders the supplied errorMessage instead of the default when hasError is true', () => {
+    const html = renderToStaticMarkup(
+      <BookingDataTable
+        bookings={[booking]}
+        formatPrice={() => '₱0.00'}
+        hasError
+        errorMessage="Custom error"
+        pagination={pagination}
+      />,
+    );
+    expect(html).toContain('Custom error');
+    expect(html).not.toContain('Unable to load bookings.');
+  });
 });

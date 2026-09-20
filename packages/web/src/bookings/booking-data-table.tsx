@@ -1,6 +1,7 @@
 'use client';
 
 import { DataTable, type DataTableColumn, type DataTablePaginationProps } from '@clensy/ui';
+import { resolveMessage } from '../i18n/resolve-message';
 import { useClensyTranslations } from '../i18n/use-clensy-translations';
 
 export type BookingStatus = 'CANCELLED' | 'COMPLETED' | 'CONFIRMED' | 'PENDING';
@@ -21,7 +22,8 @@ export interface BookingDataTableProps {
   bookings: Booking[];
   formatPrice: (minorUnits: number) => string;
   loading?: boolean;
-  error?: string;
+  hasError?: boolean;
+  errorMessage?: string;
   onRowClick?: (booking: Booking) => void;
   pagination: DataTablePaginationProps;
 }
@@ -38,11 +40,13 @@ export function BookingDataTable({
   bookings,
   formatPrice,
   loading,
-  error,
+  hasError,
+  errorMessage,
   onRowClick,
   pagination,
 }: BookingDataTableProps) {
   const t = useClensyTranslations('bookings');
+  const resolvedErrorMessage = hasError ? resolveMessage(errorMessage, t('error')) : undefined;
 
   const columns: DataTableColumn<Booking>[] = [
     { header: t('columns.customer'), key: 'customer', render: 'customer.fullName' },
@@ -65,7 +69,7 @@ export function BookingDataTable({
       rowKey={(row) => row.id}
       emptyMessage={t('empty')}
       loading={loading}
-      error={error}
+      error={resolvedErrorMessage}
       onRowClick={onRowClick}
       pagination={pagination}
     />
