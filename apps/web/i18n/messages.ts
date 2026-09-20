@@ -1,4 +1,3 @@
-import auth from '../messages/en/auth.json';
 import common from '../messages/en/common.json';
 import nav from '../messages/en/nav.json';
 import validation from '../messages/en/validation.json';
@@ -8,5 +7,5 @@ import validation from '../messages/en/validation.json';
 // read message text directly; use useTranslations()/getTranslations().
 // Enforced by the eslint restriction in Task 3.
 export function getMessages() {
-  return { auth, common, nav, validation };
+  return { common, nav, validation };
 }
