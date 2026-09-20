@@ -12,6 +12,6 @@ export const bookings = {
     status: 'Status',
     team: 'Team',
   },
-  unassigned: 'Unassigned',
   empty: 'No bookings.',
+  unassigned: 'Unassigned',
 };
