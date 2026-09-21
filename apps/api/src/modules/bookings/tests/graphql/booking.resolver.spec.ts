@@ -176,10 +176,13 @@ describe('Booking GraphQL reads and mutations', () => {
 
       const sortFields = schema.getType('BookingSortFields') as GraphQLEnumType;
       expect(sortFields).toBeDefined();
-      const sortFieldNames = sortFields.getValues().map((value) => value.name);
-      expect(sortFieldNames).toEqual(
-        expect.arrayContaining(['id', 'scheduledAt']),
-      );
+      const sortFieldNames = sortFields.getValues().map((value) => value.name).sort();
+      // Whitelist proof (#65 spec §4.2 item 2): BookingSortFields exposes
+      // exactly the four fields the schema currently permits sorting on
+      // (id, scheduledAt, status, createdAt) — none of Booking's four
+      // relations (customer/property/service/team) and no non-filterable
+      // field (pricingSnapshot) is sortable.
+      expect(sortFieldNames).toEqual(['createdAt', 'id', 'scheduledAt', 'status'].sort());
 
       const queryNames = Object.keys(schema.getQueryType()!.getFields());
       for (const name of queryNames) {
