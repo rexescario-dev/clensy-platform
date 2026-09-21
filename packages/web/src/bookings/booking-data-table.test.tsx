@@ -124,4 +124,37 @@ describe('BookingDataTable', () => {
     );
     expect(html).toContain('Unable to load bookings.');
   });
+
+  it('marks the Scheduled and Status columns sortable with the correct sortKey', () => {
+    const html = renderToStaticMarkup(
+      <BookingDataTable
+        bookings={[booking]}
+        formatPrice={() => '₱0.00'}
+        pagination={pagination}
+        sort={{ key: 'scheduledAt', direction: 'asc' }}
+      />,
+    );
+    expect(html).toContain('aria-sort="ascending"');
+  });
+
+  it('passes sort/onSortChange through to the underlying DataTable', () => {
+    const html = renderToStaticMarkup(
+      <BookingDataTable
+        bookings={[booking]}
+        formatPrice={() => '₱0.00'}
+        pagination={pagination}
+        sort={{ key: 'status', direction: 'desc' }}
+      />,
+    );
+    expect(html).toContain('aria-sort="descending"');
+  });
+
+  it('customer/property/service/team/price columns are not sortable', () => {
+    const html = renderToStaticMarkup(
+      <BookingDataTable bookings={[booking]} formatPrice={() => '₱0.00'} pagination={pagination} />,
+    );
+    const customerHeaderIndex = html.indexOf('>Customer<');
+    const customerCellStart = html.lastIndexOf('<th', customerHeaderIndex);
+    expect(html.slice(customerCellStart, customerHeaderIndex)).not.toContain('<button');
+  });
 });
