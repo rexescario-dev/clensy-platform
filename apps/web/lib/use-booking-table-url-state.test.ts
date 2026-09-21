@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseBookingTableUrlState, serializeBookingTableUrlState } from './use-booking-table-url-state';
+import { BOOKING_PAGE_SIZES, parseBookingTableUrlState, serializeBookingTableUrlState } from './use-booking-table-url-state';
 
 describe('parseBookingTableUrlState', () => {
   it('returns the canonical defaults for an empty URLSearchParams', () => {
@@ -45,6 +45,27 @@ describe('parseBookingTableUrlState', () => {
     // Documents the spec §4.6/§8 requirement directly: a URL using `cursor`
     // instead of `offset` must NOT be treated as carrying pagination state.
     expect(parseBookingTableUrlState(new URLSearchParams('cursor=25')).offset).toBe(0);
+  });
+});
+
+// #65 finding 3 (final review): before this fix, `page.tsx`'s
+// `pageSizeOptions` was an independently-maintained literal that could
+// drift from this parser's whitelist — a value the selector offers but the
+// parser rejects would silently snap the URL back to the default limit
+// with no visible error. Pinning both to the exact same exported array
+// (imported by `page.tsx`, not duplicated) makes that drift impossible.
+describe('BOOKING_PAGE_SIZES (single source of truth for the row-limit selector)', () => {
+  it('is the exact whitelist parseBookingTableUrlState accepts', () => {
+    expect(BOOKING_PAGE_SIZES).toEqual([10, 20, 25, 50, 100]);
+    for (const limit of BOOKING_PAGE_SIZES) {
+      expect(parseBookingTableUrlState(new URLSearchParams(`limit=${limit}`)).limit).toBe(limit);
+    }
+  });
+
+  it('rejects a value outside BOOKING_PAGE_SIZES, falling back to the default rather than propagating it', () => {
+    const outsideOfWhitelist = 200;
+    expect(BOOKING_PAGE_SIZES as readonly number[]).not.toContain(outsideOfWhitelist);
+    expect(parseBookingTableUrlState(new URLSearchParams(`limit=${outsideOfWhitelist}`)).limit).toBe(20);
   });
 });
 

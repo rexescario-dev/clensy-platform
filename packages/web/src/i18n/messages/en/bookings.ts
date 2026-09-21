@@ -14,6 +14,11 @@ export const bookings = {
   },
   empty: 'No bookings.',
   error: 'Unable to load bookings.',
+  sort: {
+    ascending: 'Sort ascending (tap to sort descending)',
+    descending: 'Sort descending (tap to sort ascending)',
+    label: 'Sort by',
+  },
   status: {
     cancelled: 'Cancelled',
     completed: 'Completed',

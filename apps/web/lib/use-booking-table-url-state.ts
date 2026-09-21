@@ -14,7 +14,14 @@ export interface BookingTableUrlState {
 
 const DEFAULT_STATE: BookingTableUrlState = { limit: 20, offset: 0, sortBy: 'scheduledAt', sortOrder: 'desc' };
 const SORT_KEYS: readonly BookingSortKey[] = ['scheduledAt', 'status'];
-const LIMITS: readonly BookingPageSize[] = [10, 20, 25, 50, 100];
+
+// #65 finding 3 (final review): the single source of truth for supported
+// page sizes. `parseBookingTableUrlState` below whitelists against this
+// exact array, and `apps/web/app/app/bookings/page.tsx` derives its
+// row-limit selector's options from this same array (not an independently
+// maintained literal) — so the selector can never offer a value the parser
+// would silently reject and snap back to the default from.
+export const BOOKING_PAGE_SIZES: readonly BookingPageSize[] = [10, 20, 25, 50, 100];
 
 // Pure: no next/navigation dependency, independently unit-testable.
 // Every branch MUST fall back to DEFAULT_STATE's corresponding field for
@@ -28,7 +35,9 @@ export function parseBookingTableUrlState(searchParams: URLSearchParams): Bookin
   const sortOrder = sortOrderRaw === 'asc' || sortOrderRaw === 'desc' ? sortOrderRaw : DEFAULT_STATE.sortOrder;
 
   const limitRaw = Number(searchParams.get('limit'));
-  const limit = LIMITS.includes(limitRaw as BookingPageSize) ? (limitRaw as BookingPageSize) : DEFAULT_STATE.limit;
+  const limit = BOOKING_PAGE_SIZES.includes(limitRaw as BookingPageSize)
+    ? (limitRaw as BookingPageSize)
+    : DEFAULT_STATE.limit;
 
   const offsetRaw = Number(searchParams.get('offset'));
   const offset = Number.isInteger(offsetRaw) && offsetRaw >= 0 ? offsetRaw : DEFAULT_STATE.offset;

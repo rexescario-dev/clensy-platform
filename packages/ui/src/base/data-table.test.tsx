@@ -1,8 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
   DataTable,
+  handleRowKeyDown,
   nextSortState,
+  rowInteractionProps,
   toggleSelectionKey,
   togglePageSelection,
   resolvePath,
@@ -407,5 +409,92 @@ describe('DataTable — mobileRow (#65)', () => {
     );
     expect(html).toContain('Nothing here.');
     expect(html).not.toContain('Card:');
+  });
+});
+
+// #65 finding 2 (final review): before this fix, the mobile card list
+// rendered plain non-interactive <div>s, so on a narrow viewport (where
+// the desktop table is `hidden`) there was NO way to open a row's detail
+// drawer — a regression vs. the pre-#65 desktop table, which was always
+// clickable via onRowClick. rowInteractionProps/handleRowKeyDown are the
+// single shared mechanism behind both the desktop row and the mobile
+// card; they're tested directly here (pure functions) because this repo's
+// renderToStaticMarkup-only setup cannot simulate a real click or
+// keypress — the same constraint the M5 round-1 sort-click comment above
+// already documents for nextSortState.
+describe('DataTable — rowInteractionProps / handleRowKeyDown (pure) (#65 finding 2)', () => {
+  it('rowInteractionProps.onClick calls onRowClick with the exact row it was built for', () => {
+    const onRowClick = vi.fn();
+    const row = rows[1];
+    const props = rowInteractionProps(row, onRowClick);
+    expect('onClick' in props).toBe(true);
+    (props as { onClick: () => void }).onClick();
+    expect(onRowClick).toHaveBeenCalledTimes(1);
+    expect(onRowClick).toHaveBeenCalledWith(row);
+  });
+
+  it('rowInteractionProps includes role="button" and tabIndex=0 when onRowClick is supplied', () => {
+    const props = rowInteractionProps(rows[0], vi.fn());
+    expect(props).toMatchObject({ role: 'button', tabIndex: 0 });
+  });
+
+  it('rowInteractionProps returns no attributes at all when onRowClick is omitted (no false affordance)', () => {
+    expect(rowInteractionProps(rows[0], undefined)).toEqual({});
+  });
+
+  it('handleRowKeyDown calls onRowClick with the row on Enter', () => {
+    const onRowClick = vi.fn();
+    handleRowKeyDown({ key: 'Enter', preventDefault: () => {} }, rows[1], onRowClick);
+    expect(onRowClick).toHaveBeenCalledWith(rows[1]);
+  });
+
+  it('handleRowKeyDown calls onRowClick with the row on Space, and prevents the default scroll', () => {
+    const onRowClick = vi.fn();
+    const preventDefault = vi.fn();
+    handleRowKeyDown({ key: ' ', preventDefault }, rows[1], onRowClick);
+    expect(onRowClick).toHaveBeenCalledWith(rows[1]);
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+  });
+
+  it('handleRowKeyDown ignores every other key', () => {
+    const onRowClick = vi.fn();
+    handleRowKeyDown({ key: 'Tab', preventDefault: () => {} }, rows[0], onRowClick);
+    expect(onRowClick).not.toHaveBeenCalled();
+  });
+
+  it('handleRowKeyDown is a no-op (never throws) when onRowClick is omitted', () => {
+    expect(() => handleRowKeyDown({ key: 'Enter', preventDefault: () => {} }, rows[0], undefined)).not.toThrow();
+  });
+});
+
+describe('DataTable — mobile card click/keyboard affordance (rendered) (#65 finding 2)', () => {
+  const mobileRow = (row: Row) => <div>Card: {row.name}</div>;
+
+  it('renders each mobile card with role="button" and tabindex="0" when onRowClick is supplied', () => {
+    const html = renderToStaticMarkup(
+      <DataTable columns={sortableColumns} rows={rows} rowKey={(r) => r.id} mobileRow={mobileRow} onRowClick={() => {}} />,
+    );
+    const mobileSection = html.slice(html.indexOf('sm:hidden'));
+    expect((mobileSection.match(/role="button"/g) ?? []).length).toBe(rows.length);
+    expect((mobileSection.match(/tabindex="0"/g) ?? []).length).toBe(rows.length);
+    expect(mobileSection).toContain('cursor-pointer');
+  });
+
+  it('renders mobile cards with no interactive attributes when onRowClick is omitted', () => {
+    const html = renderToStaticMarkup(
+      <DataTable columns={sortableColumns} rows={rows} rowKey={(r) => r.id} mobileRow={mobileRow} />,
+    );
+    const mobileSection = html.slice(html.indexOf('sm:hidden'));
+    expect(mobileSection).not.toContain('role="button"');
+    expect(mobileSection).not.toContain('tabindex');
+    expect(mobileSection).not.toContain('cursor-pointer');
+  });
+
+  it('still renders every mobileRow card even with the click affordance wrapper added', () => {
+    const html = renderToStaticMarkup(
+      <DataTable columns={sortableColumns} rows={rows} rowKey={(r) => r.id} mobileRow={mobileRow} onRowClick={() => {}} />,
+    );
+    expect(html).toContain('Card: Alice');
+    expect(html).toContain('Card: Bob');
   });
 });

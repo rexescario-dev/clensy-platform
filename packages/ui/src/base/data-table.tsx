@@ -1,4 +1,4 @@
-import type { KeyboardEvent, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon } from 'lucide-react';
 import { Checkbox } from './checkbox';
 import { ErrorState } from './error-state';
@@ -61,6 +61,54 @@ export function nextSortState(
   return null;
 }
 
+// Pure, independently-testable row-activation logic — the ONE mechanism
+// behind both the desktop <TableRow>'s onKeyDown and the mobile card's
+// onKeyDown (#65 finding 2: a mobile card must reuse the exact same
+// click-handling mechanism as a desktop row, not a second one). The event
+// parameter is intentionally the minimal structural shape actually used
+// (not React's element-specific KeyboardEvent<HTMLTableRowElement>) so the
+// same function type-checks against both a <tr>'s and a <div>'s onKeyDown,
+// and so it can be unit-tested with a plain mock object — this repo's
+// renderToStaticMarkup-only test setup cannot simulate real key events.
+export function handleRowKeyDown<T>(
+  event: { key: string; preventDefault: () => void },
+  row: T,
+  onRowClick: ((row: T) => void) | undefined,
+): void {
+  if (!onRowClick) return;
+  if (event.key === 'Enter') {
+    onRowClick(row);
+  } else if (event.key === ' ') {
+    event.preventDefault();
+    onRowClick(row);
+  }
+}
+
+// Pure, independently-testable interactive-attribute set for a clickable
+// row/card — shared by the desktop <TableRow> and the mobile card wrapper
+// so "is this row clickable" has exactly one derivation. Returns {} (no
+// attributes at all) when onRowClick is omitted, so a non-interactive
+// row/card renders with no false affordance (#65 finding 2c).
+export function rowInteractionProps<T>(
+  row: T,
+  onRowClick: ((row: T) => void) | undefined,
+):
+  | Record<string, never>
+  | {
+      onClick: () => void;
+      onKeyDown: (event: { key: string; preventDefault: () => void }) => void;
+      role: 'button';
+      tabIndex: 0;
+    } {
+  if (!onRowClick) return {};
+  return {
+    onClick: () => onRowClick(row),
+    onKeyDown: (event) => handleRowKeyDown(event, row, onRowClick),
+    role: 'button',
+    tabIndex: 0,
+  };
+}
+
 // Toggles a single row's key, preserving every other entry in `selectedKeys`
 // untouched — including keys belonging to rows not currently rendered on
 // this page.
@@ -120,16 +168,6 @@ export function DataTable<T extends Record<string, unknown>>({
   refreshing = false,
   mobileRow,
 }: DataTableProps<T>) {
-  function handleRowKeyDown(event: KeyboardEvent<HTMLTableRowElement>, row: T) {
-    if (!onRowClick) return;
-    if (event.key === 'Enter') {
-      onRowClick(row);
-    } else if (event.key === ' ') {
-      event.preventDefault();
-      onRowClick(row);
-    }
-  }
-
   const selectableKeys = selection
     ? rows.filter((row) => selection.isRowSelectable?.(row) ?? true).map(rowKey)
     : [];
@@ -180,14 +218,7 @@ export function DataTable<T extends Record<string, unknown>>({
           key={key}
           data-state={selection?.selectedKeys.includes(key) ? 'selected' : undefined}
           className={onRowClick ? 'cursor-pointer' : undefined}
-          {...(onRowClick
-            ? {
-                onClick: () => onRowClick(row),
-                onKeyDown: (event: KeyboardEvent<HTMLTableRowElement>) => handleRowKeyDown(event, row),
-                role: 'button',
-                tabIndex: 0,
-              }
-            : {})}
+          {...rowInteractionProps(row, onRowClick)}
         >
           {selection ? (
             // Stop both click and keydown (Space/Enter on the
@@ -215,6 +246,24 @@ export function DataTable<T extends Record<string, unknown>>({
             </TableCell>
           ))}
         </TableRow>
+      );
+    });
+  }
+
+  // #65 finding 2: mirrors renderRows' click/keyboard wiring for the
+  // mobile card list, which was previously plain non-interactive <div>s —
+  // on a narrow viewport (where the desktop table is hidden), this was the
+  // only way to open a row's detail drawer. `DataTable` owns `rowKey`, so
+  // the wrapping <div> (not `mobileRow`'s own returned markup) carries the
+  // key — `mobileRow` only needs to return content, matching how
+  // `columns`/`render` never key their own output either.
+  function renderMobileRows(rowsToRender: T[]) {
+    return rowsToRender.map((row) => {
+      const key = rowKey(row);
+      return (
+        <div key={key} className={onRowClick ? 'cursor-pointer' : undefined} {...rowInteractionProps(row, onRowClick)}>
+          {mobileRow!(row)}
+        </div>
       );
     });
   }
@@ -310,7 +359,7 @@ export function DataTable<T extends Record<string, unknown>>({
           ) : bodyState === 'empty' ? (
             <div className="text-center text-muted-foreground">{emptyMessage}</div>
           ) : (
-            rows.map(mobileRow)
+            renderMobileRows(rows)
           )}
         </div>
       ) : null}

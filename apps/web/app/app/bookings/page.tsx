@@ -29,9 +29,11 @@ import {
 import { BookingDataTable, ClensyI18nProvider, type Booking } from '@clensy/web';
 import { useLocale } from 'next-intl';
 import { type ChangeEvent, type FormEvent, Suspense, useState } from 'react';
+import { resolveBookingNavigationPagination } from '../../../lib/booking-navigation-pagination';
 import { formatMinorUnits } from '../../../lib/format-price';
 import { useDetailDrawer } from '../../../lib/use-detail-drawer';
 import {
+  BOOKING_PAGE_SIZES,
   useBookingTableUrlState,
   type BookingTableUrlState,
 } from '../../../lib/use-booking-table-url-state';
@@ -162,6 +164,12 @@ function BookingsPageContent() {
   // fast-resolving refetch that already landed) or `previousData`.
   const refreshing = loading && Boolean(effectiveData);
   const initialLoading = loading && !effectiveData;
+  // #65 finding 4 (final review): gates Previous/Next on `loading` (true
+  // during the initial fetch AND any background refetch) so both buttons
+  // are disabled for the full duration of any in-flight request — closing
+  // the rapid-Next-click race where two clicks land before the first
+  // request's `router.replace()` URL update has taken effect.
+  const navigationPagination = resolveBookingNavigationPagination(loading, effectiveData?.bookings.pageInfo);
   const customers = customersData?.customers.nodes ?? [];
   const properties = propertiesData?.customerProperties.nodes ?? [];
   const activeServices = (servicesData?.services.nodes ?? []).filter(
@@ -205,8 +213,8 @@ function BookingsPageContent() {
             }))
           }
           pagination={{
-            hasNextPage: effectiveData?.bookings.pageInfo.hasNextPage ?? false,
-            hasPreviousPage: effectiveData?.bookings.pageInfo.hasPreviousPage ?? false,
+            hasNextPage: navigationPagination.hasNextPage,
+            hasPreviousPage: navigationPagination.hasPreviousPage,
             mode: 'navigation',
             onNext: () => setTableState((current) => ({ ...current, offset: current.offset + current.limit })),
             onPageSizeChange: (limit) =>
@@ -214,7 +222,7 @@ function BookingsPageContent() {
             onPrevious: () =>
               setTableState((current) => ({ ...current, offset: Math.max(0, current.offset - current.limit) })),
             pageSize: tableState.limit,
-            pageSizeOptions: [10, 20, 25, 50, 100],
+            pageSizeOptions: [...BOOKING_PAGE_SIZES], // single source of truth (#65 finding 3) — never an independently-maintained literal
             totalCount: effectiveData?.bookings.totalCount,
           }}
         />

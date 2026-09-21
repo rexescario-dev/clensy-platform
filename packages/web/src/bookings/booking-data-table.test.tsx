@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { BookingDataTable, type Booking } from './booking-data-table';
+import {
+  BookingDataTable,
+  nextMobileSortState,
+  toggledMobileSortDirection,
+  type Booking,
+} from './booking-data-table';
 import { ClensyI18nProvider } from '../i18n/i18n-context';
 
 const booking: Booking = {
@@ -214,5 +219,94 @@ describe('BookingDataTable', () => {
       />,
     );
     expect(html).toContain('Jane Doe');
+  });
+});
+
+// #65 finding 1 (final review): before this fix, the mobile card list had
+// no sort affordance of its own — on a narrow viewport the entire desktop
+// header (including its sortable-column buttons) is hidden, so sorting was
+// completely unreachable. This block covers both the reducers (pure) and
+// the rendered control (structural), matching how the rest of this file
+// and data-table.test.tsx already split coverage between the two.
+describe('BookingDataTable — mobile sort control (#65 finding 1)', () => {
+  it('nextMobileSortState changes the key but preserves the current direction (pure)', () => {
+    expect(nextMobileSortState({ key: 'scheduledAt', direction: 'asc' }, 'status')).toEqual({
+      key: 'status',
+      direction: 'asc',
+    });
+    expect(nextMobileSortState({ key: 'status', direction: 'desc' }, 'scheduledAt')).toEqual({
+      key: 'scheduledAt',
+      direction: 'desc',
+    });
+  });
+
+  it('nextMobileSortState defaults to the table-wide default direction (desc) when there is no active sort', () => {
+    expect(nextMobileSortState(null, 'status')).toEqual({ key: 'status', direction: 'desc' });
+    expect(nextMobileSortState(undefined, 'status')).toEqual({ key: 'status', direction: 'desc' });
+  });
+
+  it('toggledMobileSortDirection flips asc<->desc, preserving the key (pure)', () => {
+    expect(toggledMobileSortDirection({ key: 'status', direction: 'asc' })).toEqual({
+      key: 'status',
+      direction: 'desc',
+    });
+    expect(toggledMobileSortDirection({ key: 'status', direction: 'desc' })).toEqual({
+      key: 'status',
+      direction: 'asc',
+    });
+  });
+
+  it('toggledMobileSortDirection defaults to the table-wide default key/direction when there is no active sort', () => {
+    expect(toggledMobileSortDirection(null)).toEqual({ key: 'scheduledAt', direction: 'asc' });
+  });
+
+  it('renders a mobile-only (sm:hidden) sort select with Scheduled/Status options when onSortChange is provided', () => {
+    const html = renderToStaticMarkup(
+      <BookingDataTable
+        bookings={[booking]}
+        formatPrice={() => '₱0.00'}
+        pagination={pagination}
+        sort={{ key: 'scheduledAt', direction: 'desc' }}
+        onSortChange={() => {}}
+      />,
+    );
+    const toolbarStart = html.indexOf('sm:hidden');
+    expect(toolbarStart).toBeGreaterThan(-1);
+    expect(html).toContain('<select');
+    expect(html).toContain('Sort by');
+  });
+
+  it('reflects the current sort key as the selected mobile option', () => {
+    const html = renderToStaticMarkup(
+      <BookingDataTable
+        bookings={[booking]}
+        formatPrice={() => '₱0.00'}
+        pagination={pagination}
+        sort={{ key: 'status', direction: 'asc' }}
+        onSortChange={() => {}}
+      />,
+    );
+    expect(html).toContain('<option value="status" selected');
+  });
+
+  it('labels the direction toggle for the current direction (ascending -> tap to sort descending)', () => {
+    const html = renderToStaticMarkup(
+      <BookingDataTable
+        bookings={[booking]}
+        formatPrice={() => '₱0.00'}
+        pagination={pagination}
+        sort={{ key: 'status', direction: 'asc' }}
+        onSortChange={() => {}}
+      />,
+    );
+    expect(html).toContain('Sort ascending');
+  });
+
+  it('omits the mobile sort control entirely when onSortChange is not provided (no disconnected sort UI)', () => {
+    const html = renderToStaticMarkup(
+      <BookingDataTable bookings={[booking]} formatPrice={() => '₱0.00'} pagination={pagination} />,
+    );
+    expect(html).not.toContain('<select');
+    expect(html).not.toContain('Sort by');
   });
 });
