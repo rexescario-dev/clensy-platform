@@ -254,3 +254,69 @@ describe('DataTable', () => {
     expect(html).toContain('1');
   });
 });
+
+describe('DataTable — aria-sort and sortKey (#65)', () => {
+  const columnsWithSortKey: DataTableColumn<Row>[] = [
+    { key: 'name', header: 'Name', sortable: true, sortKey: 'displayName' },
+  ];
+
+  it('renders aria-sort="none" when unsorted, keyed off sortKey not key', () => {
+    const html = renderToStaticMarkup(
+      <DataTable columns={columnsWithSortKey} rows={rows} rowKey={(r) => r.id} sort={null} />,
+    );
+    expect(html).toContain('aria-sort="none"');
+  });
+
+  it('renders aria-sort="ascending"/"descending" matched against sortKey, not key', () => {
+    const asc = renderToStaticMarkup(
+      <DataTable
+        columns={columnsWithSortKey}
+        rows={rows}
+        rowKey={(r) => r.id}
+        sort={{ key: 'displayName', direction: 'asc' }}
+      />,
+    );
+    expect(asc).toContain('aria-sort="ascending"');
+    const desc = renderToStaticMarkup(
+      <DataTable
+        columns={columnsWithSortKey}
+        rows={rows}
+        rowKey={(r) => r.id}
+        sort={{ key: 'displayName', direction: 'desc' }}
+      />,
+    );
+    expect(desc).toContain('aria-sort="descending"');
+  });
+
+  // M5 round-1 finding: a prior draft of this test rendered with an
+  // onSortChange spy and then asserted the spy was NEVER called — which
+  // proves nothing about what onSortChange *reports*, only that
+  // renderToStaticMarkup doesn't simulate clicks (already known). The
+  // actual click→report behavior is a pure computation
+  // (nextSortState(sort, column.sortKey ?? column.key)) and is tested
+  // directly, the same way nextSortState's own cycle tests already work —
+  // no rendering or callback-spy involved.
+  it('the value a click would report is sortKey, not key, when sortKey differs (pure)', () => {
+    const column = columnsWithSortKey[0];
+    expect(nextSortState(null, column.sortKey ?? column.key)).toEqual({ key: 'displayName', direction: 'asc' });
+  });
+
+  it('a sortable column without sortKey still keys off key (backward compatible)', () => {
+    const html = renderToStaticMarkup(
+      <DataTable
+        columns={[{ key: 'name', header: 'Name', sortable: true }]}
+        rows={rows}
+        rowKey={(r) => r.id}
+        sort={{ key: 'name', direction: 'asc' }}
+      />,
+    );
+    expect(html).toContain('aria-sort="ascending"');
+  });
+
+  it('renders no aria-sort attribute on a non-sortable column', () => {
+    const html = renderToStaticMarkup(<DataTable columns={mixedColumns} rows={rows} rowKey={(r) => r.id} />);
+    const idHeaderIndex = html.indexOf('>ID<');
+    const idCellStart = html.lastIndexOf('<th', idHeaderIndex);
+    expect(html.slice(idCellStart, idHeaderIndex)).not.toContain('aria-sort');
+  });
+});

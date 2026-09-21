@@ -11,6 +11,7 @@ export interface DataTableColumn<T> {
   header: string;
   render?: string | ((row: T) => ReactNode);
   sortable?: boolean;
+  sortKey?: string;
   align?: 'center' | 'left' | 'right';
   width?: string;
 }
@@ -146,7 +147,7 @@ export function DataTable<T extends Record<string, unknown>>({
 
   function handleSortClick(column: DataTableColumn<T>) {
     if (!column.sortable) return;
-    onSortChange?.(nextSortState(sort, column.key));
+    onSortChange?.(nextSortState(sort, column.sortKey ?? column.key));
   }
 
   const colSpan = columns.length + (selection ? 1 : 0);
@@ -167,34 +168,39 @@ export function DataTable<T extends Record<string, unknown>>({
                 />
               </TableHead>
             ) : null}
-            {columns.map((column) => (
-              <TableHead
-                key={column.key}
-                className={ALIGN_CLASS[column.align ?? 'left']}
-                style={column.width ? { width: column.width } : undefined}
-              >
-                {column.sortable ? (
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1 font-medium"
-                    onClick={() => handleSortClick(column)}
-                  >
-                    {column.header}
-                    {sort?.key === column.key ? (
-                      sort.direction === 'asc' ? (
-                        <ArrowUpIcon className="size-3.5" />
+            {columns.map((column) => {
+              const effectiveSortKey = column.sortKey ?? column.key;
+              const isSorted = column.sortable && sort?.key === effectiveSortKey;
+              return (
+                <TableHead
+                  key={column.key}
+                  className={ALIGN_CLASS[column.align ?? 'left']}
+                  style={column.width ? { width: column.width } : undefined}
+                  aria-sort={column.sortable ? (isSorted ? (sort!.direction === 'asc' ? 'ascending' : 'descending') : 'none') : undefined}
+                >
+                  {column.sortable ? (
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 font-medium"
+                      onClick={() => handleSortClick(column)}
+                    >
+                      {column.header}
+                      {isSorted ? (
+                        sort!.direction === 'asc' ? (
+                          <ArrowUpIcon className="size-3.5" />
+                        ) : (
+                          <ArrowDownIcon className="size-3.5" />
+                        )
                       ) : (
-                        <ArrowDownIcon className="size-3.5" />
-                      )
-                    ) : (
-                      <ChevronsUpDownIcon className="size-3.5 opacity-50" />
-                    )}
-                  </button>
-                ) : (
-                  column.header
-                )}
-              </TableHead>
-            ))}
+                        <ChevronsUpDownIcon className="size-3.5 opacity-50" />
+                      )}
+                    </button>
+                  ) : (
+                    column.header
+                  )}
+                </TableHead>
+              );
+            })}
           </TableRow>
         </TableHeader>
         <TableBody>
