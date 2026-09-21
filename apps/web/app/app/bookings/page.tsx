@@ -13,7 +13,7 @@ import {
   useTeamsQuery,
   useUpdateBookingMutation,
 } from '@clensy/client';
-import type { BookingStatus } from '@clensy/client';
+import type { BookingSort, BookingStatus } from '@clensy/client';
 import { useRouter } from 'next/navigation';
 import {
   Button,
@@ -29,8 +29,14 @@ import {
 import { BookingDataTable, ClensyI18nProvider, type Booking } from '@clensy/web';
 import { useLocale } from 'next-intl';
 import { type ChangeEvent, type FormEvent, Suspense, useState } from 'react';
+import { resolveBookingNavigationPagination } from '../../../lib/booking-navigation-pagination';
 import { formatMinorUnits } from '../../../lib/format-price';
 import { useDetailDrawer } from '../../../lib/use-detail-drawer';
+import {
+  BOOKING_PAGE_SIZES,
+  useBookingTableUrlState,
+  type BookingTableUrlState,
+} from '../../../lib/use-booking-table-url-state';
 
 const BOOKING_STATUSES: BookingStatus[] = ['PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED'];
 
@@ -64,11 +70,19 @@ export default function BookingsPage() {
 
 function BookingsPageContent() {
   const locale = useLocale();
-  const [page, setPage] = useState(1);
-  const pageSize = 20;
-  const { data, loading, error, refetch } = useBookingsQuery({
+  const { state: tableState, setState: setTableState } = useBookingTableUrlState();
+  const sortingVariable: BookingSort[] = [
+    { field: tableState.sortBy, direction: tableState.sortOrder === 'asc' ? 'ASC' : 'DESC' },
+    { field: 'id', direction: 'ASC' }, // deterministic tie-breaker (spec §4.6, §8) — required whenever the
+                                        // primary key (e.g. status) is non-unique, not only for the default sort.
+  ];
+  const { data, loading, previousData, error, refetch } = useBookingsQuery({
     fetchPolicy: 'network-only',
-    variables: { paging: { limit: pageSize, offset: (page - 1) * pageSize } },
+    notifyOnNetworkStatusChange: true,
+    variables: {
+      paging: { limit: tableState.limit, offset: tableState.offset },
+      sorting: sortingVariable,
+    },
   });
   const [createBooking, { loading: creating }] = useCreateBookingMutation();
   const { activeId, open: openDetail, close: closeDetail } = useDetailDrawer();
@@ -141,7 +155,21 @@ function BookingsPageContent() {
     }
   }
 
-  const rows: Booking[] = data?.bookings.nodes ?? [];
+  const effectiveData = data ?? previousData;
+  const rows: Booking[] = effectiveData?.bookings.nodes ?? [];
+  // M5 round-1 correction: keyed off effectiveData (the actual displayed
+  // dataset), not strictly previousData — the UI invariant is "something
+  // is currently on screen while a request is pending," which holds
+  // whenever effectiveData exists, whether it came from `data` (e.g. a
+  // fast-resolving refetch that already landed) or `previousData`.
+  const refreshing = loading && Boolean(effectiveData);
+  const initialLoading = loading && !effectiveData;
+  // #65 finding 4 (final review): gates Previous/Next on `loading` (true
+  // during the initial fetch AND any background refetch) so both buttons
+  // are disabled for the full duration of any in-flight request — closing
+  // the rapid-Next-click race where two clicks land before the first
+  // request's `router.replace()` URL update has taken effect.
+  const navigationPagination = resolveBookingNavigationPagination(loading, effectiveData?.bookings.pageInfo);
   const customers = customersData?.customers.nodes ?? [];
   const properties = propertiesData?.customerProperties.nodes ?? [];
   const activeServices = (servicesData?.services.nodes ?? []).filter(
@@ -164,14 +192,38 @@ function BookingsPageContent() {
         <BookingDataTable
           bookings={rows}
           formatPrice={formatMinorUnits}
-          loading={loading}
+          loading={initialLoading}
+          refreshing={refreshing}
           hasError={Boolean(error)}
           onRowClick={(booking) => openDetail(booking.id)}
+          sort={{ key: tableState.sortBy, direction: tableState.sortOrder }}
+          onSortChange={(next) =>
+            setTableState((current) => ({
+              ...current,
+              // Sort-cycling-to-none resolution (spec §4.6, Post-Accept
+              // correction): DataTable.sort is single-valued, so cycling
+              // ANY sortable column back to its unsorted state resolves to
+              // the table's one canonical default (scheduledAt desc), not
+              // to "no sort" — nestjs-query always needs a deterministic
+              // order, and this table had no sort UI (hence this exact
+              // default) before #65 existed.
+              sortBy: next?.key ?? 'scheduledAt',
+              sortOrder: next?.direction ?? 'desc',
+              offset: 0, // reset rule (spec §4.6, §8): sort change always resets offset
+            }))
+          }
           pagination={{
-            onPageChange: setPage,
-            page,
-            pageSize,
-            totalCount: data?.bookings.totalCount ?? 0,
+            hasNextPage: navigationPagination.hasNextPage,
+            hasPreviousPage: navigationPagination.hasPreviousPage,
+            mode: 'navigation',
+            onNext: () => setTableState((current) => ({ ...current, offset: current.offset + current.limit })),
+            onPageSizeChange: (limit) =>
+              setTableState((current) => ({ ...current, limit: limit as BookingTableUrlState['limit'], offset: 0 })), // reset rule: limit change resets offset
+            onPrevious: () =>
+              setTableState((current) => ({ ...current, offset: Math.max(0, current.offset - current.limit) })),
+            pageSize: tableState.limit,
+            pageSizeOptions: [...BOOKING_PAGE_SIZES], // single source of truth (#65 finding 3) — never an independently-maintained literal
+            totalCount: effectiveData?.bookings.totalCount,
           }}
         />
       </ClensyI18nProvider>

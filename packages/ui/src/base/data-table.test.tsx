@@ -1,8 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
   DataTable,
+  handleRowKeyDown,
   nextSortState,
+  rowInteractionProps,
   toggleSelectionKey,
   togglePageSelection,
   resolvePath,
@@ -135,11 +137,34 @@ describe('DataTable', () => {
     expect(html).not.toContain('Alice');
   });
 
-  it('renders ErrorState when error is set', () => {
+  it('renders ErrorState (full replace) when error is set and there are no rows to fall back on', () => {
+    const html = renderToStaticMarkup(
+      <DataTable columns={sortableColumns} rows={[]} rowKey={(r) => r.id} error="Failed." />,
+    );
+    expect(html).toContain('Failed.');
+  });
+
+  // Post-merge fix (#65 acceptance-criteria verification): a background
+  // request failing after rows already loaded must NOT blank the table —
+  // the issue's own wording is "preserve the existing displayed rows where
+  // practical and show an appropriate error state." Only the true "nothing
+  // to show yet" case (rows is empty, tested above) still full-replaces.
+  it('keeps existing rows visible and shows a background-error banner when error is set but rows are non-empty', () => {
     const html = renderToStaticMarkup(
       <DataTable columns={sortableColumns} rows={rows} rowKey={(r) => r.id} error="Failed." />,
     );
+    expect(html).toContain('Alice');
+    expect(html).toContain('Bob');
+    expect(html).toContain('role="alert"');
     expect(html).toContain('Failed.');
+  });
+
+  it('omits the background-error banner while refreshing (avoids showing a stale error alongside the progress indicator)', () => {
+    const html = renderToStaticMarkup(
+      <DataTable columns={sortableColumns} rows={rows} rowKey={(r) => r.id} error="Failed." refreshing />,
+    );
+    expect(html).toContain('role="progressbar"');
+    expect(html).not.toContain('role="alert"');
   });
 
   it('never reorders rows regardless of sort state (rendering contract)', () => {
@@ -252,5 +277,247 @@ describe('DataTable', () => {
     const html = renderToStaticMarkup(<DataTable columns={mixedColumns} rows={rows} rowKey={(r) => r.id} />);
     expect(html).toContain('Alice');
     expect(html).toContain('1');
+  });
+});
+
+describe('DataTable — aria-sort and sortKey (#65)', () => {
+  const columnsWithSortKey: DataTableColumn<Row>[] = [
+    { header: 'Name', key: 'name', sortable: true, sortKey: 'displayName' },
+  ];
+
+  it('renders aria-sort="none" when unsorted, keyed off sortKey not key', () => {
+    const html = renderToStaticMarkup(
+      <DataTable columns={columnsWithSortKey} rows={rows} rowKey={(r) => r.id} sort={null} />,
+    );
+    expect(html).toContain('aria-sort="none"');
+  });
+
+  it('renders aria-sort="ascending"/"descending" matched against sortKey, not key', () => {
+    const asc = renderToStaticMarkup(
+      <DataTable
+        columns={columnsWithSortKey}
+        rows={rows}
+        rowKey={(r) => r.id}
+        sort={{ key: 'displayName', direction: 'asc' }}
+      />,
+    );
+    expect(asc).toContain('aria-sort="ascending"');
+    const desc = renderToStaticMarkup(
+      <DataTable
+        columns={columnsWithSortKey}
+        rows={rows}
+        rowKey={(r) => r.id}
+        sort={{ key: 'displayName', direction: 'desc' }}
+      />,
+    );
+    expect(desc).toContain('aria-sort="descending"');
+  });
+
+  // M5 round-1 finding: a prior draft of this test rendered with an
+  // onSortChange spy and then asserted the spy was NEVER called — which
+  // proves nothing about what onSortChange *reports*, only that
+  // renderToStaticMarkup doesn't simulate clicks (already known). The
+  // actual click→report behavior is a pure computation
+  // (nextSortState(sort, column.sortKey ?? column.key)) and is tested
+  // directly, the same way nextSortState's own cycle tests already work —
+  // no rendering or callback-spy involved.
+  it('the value a click would report is sortKey, not key, when sortKey differs (pure)', () => {
+    const column = columnsWithSortKey[0];
+    expect(nextSortState(null, column.sortKey ?? column.key)).toEqual({ key: 'displayName', direction: 'asc' });
+  });
+
+  it('a sortable column without sortKey still keys off key (backward compatible)', () => {
+    const html = renderToStaticMarkup(
+      <DataTable
+        columns={[{ key: 'name', header: 'Name', sortable: true }]}
+        rows={rows}
+        rowKey={(r) => r.id}
+        sort={{ key: 'name', direction: 'asc' }}
+      />,
+    );
+    expect(html).toContain('aria-sort="ascending"');
+  });
+
+  it('renders no aria-sort attribute on a non-sortable column', () => {
+    const html = renderToStaticMarkup(<DataTable columns={mixedColumns} rows={rows} rowKey={(r) => r.id} />);
+    const idHeaderIndex = html.indexOf('>ID<');
+    const idCellStart = html.lastIndexOf('<th', idHeaderIndex);
+    expect(html.slice(idCellStart, idHeaderIndex)).not.toContain('aria-sort');
+  });
+});
+
+describe('DataTable — refreshing (#65)', () => {
+  it('renders rows normally (not the loading branch) when refreshing is true, even if loading is also true', () => {
+    const html = renderToStaticMarkup(
+      <DataTable columns={sortableColumns} rows={rows} rowKey={(r) => r.id} loading refreshing />,
+    );
+    expect(html).toContain('Alice');
+    expect(html).toContain('Bob');
+  });
+
+  it('renders a progress indicator when refreshing is true', () => {
+    const html = renderToStaticMarkup(
+      <DataTable columns={sortableColumns} rows={rows} rowKey={(r) => r.id} refreshing />,
+    );
+    expect(html).toContain('role="progressbar"');
+  });
+
+  it('omits the progress indicator when refreshing is false or omitted', () => {
+    const html = renderToStaticMarkup(<DataTable columns={sortableColumns} rows={rows} rowKey={(r) => r.id} />);
+    expect(html).not.toContain('role="progressbar"');
+  });
+
+  it('loading alone (refreshing omitted) still replaces the body as today (regression)', () => {
+    const html = renderToStaticMarkup(
+      <DataTable columns={sortableColumns} rows={rows} rowKey={(r) => r.id} loading />,
+    );
+    expect(html).not.toContain('Alice');
+  });
+
+  // M5 round-1 finding: refreshing takes priority even over an empty rows
+  // array — this is a deliberate consequence of the contract above (the
+  // consumer's responsibility, not DataTable's to second-guess), pinned
+  // here so a future change to this precedence is a visible, intentional
+  // diff rather than an accidental regression.
+  it('refreshing with an empty rows array renders the empty branch\'s absence, not a crash, and still shows the indicator', () => {
+    const html = renderToStaticMarkup(
+      <DataTable columns={sortableColumns} rows={[]} rowKey={(r) => r.id} refreshing emptyMessage="Nothing here." />,
+    );
+    expect(html).toContain('role="progressbar"');
+    expect(html).not.toContain('Nothing here.');
+  });
+});
+
+describe('DataTable — mobileRow (#65)', () => {
+  it('renders mobileRow output for each row when supplied', () => {
+    const html = renderToStaticMarkup(
+      <DataTable
+        columns={sortableColumns}
+        rows={rows}
+        rowKey={(r) => r.id}
+        mobileRow={(row) => <div key={row.id}>Card: {row.name}</div>}
+      />,
+    );
+    expect(html).toContain('Card: Alice');
+    expect(html).toContain('Card: Bob');
+  });
+
+  it('renders no card content when mobileRow is omitted (backward-compatible default)', () => {
+    const html = renderToStaticMarkup(<DataTable columns={sortableColumns} rows={rows} rowKey={(r) => r.id} />);
+    expect(html).not.toContain('Card:');
+  });
+
+  it('still renders the desktop table when mobileRow is supplied', () => {
+    const html = renderToStaticMarkup(
+      <DataTable
+        columns={sortableColumns}
+        rows={rows}
+        rowKey={(r) => r.id}
+        mobileRow={(row) => <div key={row.id}>Card: {row.name}</div>}
+      />,
+    );
+    expect(html).toContain('data-slot="table"');
+    expect(html).toContain('Alice'); // still present in the desktop table's own cell content
+  });
+
+  it('mobileRow respects loading/error/empty state the same as the desktop table', () => {
+    const html = renderToStaticMarkup(
+      <DataTable
+        columns={sortableColumns}
+        rows={[]}
+        rowKey={(r) => r.id}
+        emptyMessage="Nothing here."
+        mobileRow={(row) => <div key={row.id}>Card: {row.name}</div>}
+      />,
+    );
+    expect(html).toContain('Nothing here.');
+    expect(html).not.toContain('Card:');
+  });
+});
+
+// #65 finding 2 (final review): before this fix, the mobile card list
+// rendered plain non-interactive <div>s, so on a narrow viewport (where
+// the desktop table is `hidden`) there was NO way to open a row's detail
+// drawer — a regression vs. the pre-#65 desktop table, which was always
+// clickable via onRowClick. rowInteractionProps/handleRowKeyDown are the
+// single shared mechanism behind both the desktop row and the mobile
+// card; they're tested directly here (pure functions) because this repo's
+// renderToStaticMarkup-only setup cannot simulate a real click or
+// keypress — the same constraint the M5 round-1 sort-click comment above
+// already documents for nextSortState.
+describe('DataTable — rowInteractionProps / handleRowKeyDown (pure) (#65 finding 2)', () => {
+  it('rowInteractionProps.onClick calls onRowClick with the exact row it was built for', () => {
+    const onRowClick = vi.fn();
+    const row = rows[1];
+    const props = rowInteractionProps(row, onRowClick);
+    expect('onClick' in props).toBe(true);
+    (props as { onClick: () => void }).onClick();
+    expect(onRowClick).toHaveBeenCalledTimes(1);
+    expect(onRowClick).toHaveBeenCalledWith(row);
+  });
+
+  it('rowInteractionProps includes role="button" and tabIndex=0 when onRowClick is supplied', () => {
+    const props = rowInteractionProps(rows[0], vi.fn());
+    expect(props).toMatchObject({ role: 'button', tabIndex: 0 });
+  });
+
+  it('rowInteractionProps returns no attributes at all when onRowClick is omitted (no false affordance)', () => {
+    expect(rowInteractionProps(rows[0], undefined)).toEqual({});
+  });
+
+  it('handleRowKeyDown calls onRowClick with the row on Enter', () => {
+    const onRowClick = vi.fn();
+    handleRowKeyDown({ key: 'Enter', preventDefault: () => {} }, rows[1], onRowClick);
+    expect(onRowClick).toHaveBeenCalledWith(rows[1]);
+  });
+
+  it('handleRowKeyDown calls onRowClick with the row on Space, and prevents the default scroll', () => {
+    const onRowClick = vi.fn();
+    const preventDefault = vi.fn();
+    handleRowKeyDown({ key: ' ', preventDefault }, rows[1], onRowClick);
+    expect(onRowClick).toHaveBeenCalledWith(rows[1]);
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+  });
+
+  it('handleRowKeyDown ignores every other key', () => {
+    const onRowClick = vi.fn();
+    handleRowKeyDown({ key: 'Tab', preventDefault: () => {} }, rows[0], onRowClick);
+    expect(onRowClick).not.toHaveBeenCalled();
+  });
+
+  it('handleRowKeyDown is a no-op (never throws) when onRowClick is omitted', () => {
+    expect(() => handleRowKeyDown({ key: 'Enter', preventDefault: () => {} }, rows[0], undefined)).not.toThrow();
+  });
+});
+
+describe('DataTable — mobile card click/keyboard affordance (rendered) (#65 finding 2)', () => {
+  const mobileRow = (row: Row) => <div>Card: {row.name}</div>;
+
+  it('renders each mobile card with role="button" and tabindex="0" when onRowClick is supplied', () => {
+    const html = renderToStaticMarkup(
+      <DataTable columns={sortableColumns} rows={rows} rowKey={(r) => r.id} mobileRow={mobileRow} onRowClick={() => {}} />,
+    );
+    const mobileSection = html.slice(html.indexOf('sm:hidden'));
+    expect((mobileSection.match(/role="button"/g) ?? []).length).toBe(rows.length);
+    expect((mobileSection.match(/tabindex="0"/g) ?? []).length).toBe(rows.length);
+    expect(mobileSection).toContain('cursor-pointer');
+  });
+
+  it('renders mobile cards with no interactive attributes when onRowClick is omitted', () => {
+    const html = renderToStaticMarkup(
+      <DataTable columns={sortableColumns} rows={rows} rowKey={(r) => r.id} mobileRow={mobileRow} />,
+    );
+    const mobileSection = html.slice(html.indexOf('sm:hidden'));
+    expect(mobileSection).not.toContain('role="button"');
+    expect(mobileSection).not.toContain('tabindex');
+    expect(mobileSection).not.toContain('cursor-pointer');
+  });
+
+  it('still renders every mobileRow card even with the click affordance wrapper added', () => {
+    const html = renderToStaticMarkup(
+      <DataTable columns={sortableColumns} rows={rows} rowKey={(r) => r.id} mobileRow={mobileRow} onRowClick={() => {}} />,
+    );
+    expect(html).toContain('Card: Alice');
+    expect(html).toContain('Card: Bob');
   });
 });

@@ -76,3 +76,43 @@ describe('Pagination', () => {
     expect(html).toContain('25 / page');
   });
 });
+
+describe('Pagination — navigation mode (#65)', () => {
+  it('disables Previous when hasPreviousPage is false, enables when true', () => {
+    const noPrev = renderToStaticMarkup(
+      <Pagination mode="navigation" pageSize={20} hasNextPage hasPreviousPage={false} onNext={() => {}} onPrevious={() => {}} />,
+    );
+    expect(extractButtonByLabel(noPrev, 'Previous page')).toContain('disabled=""');
+    const withPrev = renderToStaticMarkup(
+      <Pagination mode="navigation" pageSize={20} hasNextPage hasPreviousPage onNext={() => {}} onPrevious={() => {}} />,
+    );
+    expect(extractButtonByLabel(withPrev, 'Previous page')).not.toContain('disabled=""');
+  });
+
+  it('disables Next when hasNextPage is false, enables when true', () => {
+    const noNext = renderToStaticMarkup(
+      <Pagination mode="navigation" pageSize={20} hasNextPage={false} hasPreviousPage onNext={() => {}} onPrevious={() => {}} />,
+    );
+    expect(extractButtonByLabel(noNext, 'Next page')).toContain('disabled=""');
+  });
+
+  it('renders totalCount when supplied, omits page-number text', () => {
+    const html = renderToStaticMarkup(
+      <Pagination mode="navigation" pageSize={20} totalCount={142} hasNextPage hasPreviousPage onNext={() => {}} onPrevious={() => {}} />,
+    );
+    expect(html).toContain('142');
+    expect(html).not.toContain('Page ');
+  });
+
+  it('renders without a totalCount when it is not supplied', () => {
+    const html = renderToStaticMarkup(
+      <Pagination mode="navigation" pageSize={20} hasNextPage hasPreviousPage onNext={() => {}} onPrevious={() => {}} />,
+    );
+    expect(html).not.toContain('Page ');
+  });
+
+  it('offset (default) mode is completely unchanged — regression gate for the eleven untouched consumers', () => {
+    const html = renderToStaticMarkup(<Pagination page={1} pageSize={20} totalCount={100} onPageChange={() => {}} />);
+    expect(html).toContain('Page 1 of 5');
+  });
+});

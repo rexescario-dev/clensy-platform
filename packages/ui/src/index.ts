@@ -1,5 +1,6 @@
 export { Avatar, AvatarImage, AvatarFallback, AvatarGroup, AvatarGroupCount, AvatarBadge } from './base/avatar';
 export { Button, buttonVariants } from './base/button';
+export { Badge, badgeVariants } from './base/badge';
 export {
   DropdownMenu,
   DropdownMenuPortal,
