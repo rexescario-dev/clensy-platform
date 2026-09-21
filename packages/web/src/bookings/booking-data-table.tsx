@@ -146,7 +146,13 @@ export function BookingDataTable({
       onRowClick={onRowClick}
       pagination={pagination}
       sort={sort}
-      onSortChange={onSortChange}
+      // DataTable's onSortChange accepts DataTableSortState (key: string),
+      // wider than BookingSortState (key: BookingSortKey). Narrowing cast is
+      // safe here because DataTable only ever reports a `key` that round-
+      // trips one of this component's own columns' sortKey values above
+      // ('scheduledAt' | 'status', both BookingSortKey members) — never an
+      // arbitrary string.
+      onSortChange={onSortChange ? (sort) => onSortChange(sort as BookingSortState | null) : undefined}
       refreshing={refreshing}
       mobileRow={renderMobileRow}
     />
