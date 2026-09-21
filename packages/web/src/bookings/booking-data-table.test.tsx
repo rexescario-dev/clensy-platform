@@ -134,7 +134,10 @@ describe('BookingDataTable', () => {
         sort={{ key: 'scheduledAt', direction: 'asc' }}
       />,
     );
-    expect(html).toContain('aria-sort="ascending"');
+    const scheduledHeaderIndex = html.indexOf('>Scheduled<');
+    const scheduledCellStart = html.lastIndexOf('<th', scheduledHeaderIndex);
+    const scheduledCellEnd = html.indexOf('</th>', scheduledHeaderIndex);
+    expect(html.slice(scheduledCellStart, scheduledCellEnd)).toContain('aria-sort="ascending"');
   });
 
   it('passes sort/onSortChange through to the underlying DataTable', () => {
@@ -146,7 +149,10 @@ describe('BookingDataTable', () => {
         sort={{ key: 'status', direction: 'desc' }}
       />,
     );
-    expect(html).toContain('aria-sort="descending"');
+    const statusHeaderIndex = html.indexOf('>Status<');
+    const statusCellStart = html.lastIndexOf('<th', statusHeaderIndex);
+    const statusCellEnd = html.indexOf('</th>', statusHeaderIndex);
+    expect(html.slice(statusCellStart, statusCellEnd)).toContain('aria-sort="descending"');
   });
 
   it('customer/property/service/team/price columns are not sortable', () => {
