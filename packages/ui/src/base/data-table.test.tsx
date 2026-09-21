@@ -320,3 +320,45 @@ describe('DataTable — aria-sort and sortKey (#65)', () => {
     expect(html.slice(idCellStart, idHeaderIndex)).not.toContain('aria-sort');
   });
 });
+
+describe('DataTable — refreshing (#65)', () => {
+  it('renders rows normally (not the loading branch) when refreshing is true, even if loading is also true', () => {
+    const html = renderToStaticMarkup(
+      <DataTable columns={sortableColumns} rows={rows} rowKey={(r) => r.id} loading refreshing />,
+    );
+    expect(html).toContain('Alice');
+    expect(html).toContain('Bob');
+  });
+
+  it('renders a progress indicator when refreshing is true', () => {
+    const html = renderToStaticMarkup(
+      <DataTable columns={sortableColumns} rows={rows} rowKey={(r) => r.id} refreshing />,
+    );
+    expect(html).toContain('role="progressbar"');
+  });
+
+  it('omits the progress indicator when refreshing is false or omitted', () => {
+    const html = renderToStaticMarkup(<DataTable columns={sortableColumns} rows={rows} rowKey={(r) => r.id} />);
+    expect(html).not.toContain('role="progressbar"');
+  });
+
+  it('loading alone (refreshing omitted) still replaces the body as today (regression)', () => {
+    const html = renderToStaticMarkup(
+      <DataTable columns={sortableColumns} rows={rows} rowKey={(r) => r.id} loading />,
+    );
+    expect(html).not.toContain('Alice');
+  });
+
+  // M5 round-1 finding: refreshing takes priority even over an empty rows
+  // array — this is a deliberate consequence of the contract above (the
+  // consumer's responsibility, not DataTable's to second-guess), pinned
+  // here so a future change to this precedence is a visible, intentional
+  // diff rather than an accidental regression.
+  it('refreshing with an empty rows array renders the empty branch\'s absence, not a crash, and still shows the indicator', () => {
+    const html = renderToStaticMarkup(
+      <DataTable columns={sortableColumns} rows={[]} rowKey={(r) => r.id} refreshing emptyMessage="Nothing here." />,
+    );
+    expect(html).toContain('role="progressbar"');
+    expect(html).not.toContain('Nothing here.');
+  });
+});

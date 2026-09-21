@@ -42,6 +42,7 @@ export interface DataTableProps<T> {
   onSortChange?: (sort: DataTableSortState | null) => void;
   selection?: DataTableSelectionProps<T>;
   toolbar?: ReactNode;
+  refreshing?: boolean;
 }
 
 const ALIGN_CLASS = {
@@ -115,6 +116,7 @@ export function DataTable<T extends Record<string, unknown>>({
   onSortChange,
   selection,
   toolbar,
+  refreshing = false,
 }: DataTableProps<T>) {
   function handleRowKeyDown(event: KeyboardEvent<HTMLTableRowElement>, row: T) {
     if (!onRowClick) return;
@@ -152,9 +154,60 @@ export function DataTable<T extends Record<string, unknown>>({
 
   const colSpan = columns.length + (selection ? 1 : 0);
 
+  function renderRows(rowsToRender: T[]) {
+    return rowsToRender.map((row) => {
+      const key = rowKey(row);
+      const rowSelectable = selection ? (selection.isRowSelectable?.(row) ?? true) : false;
+      return (
+        <TableRow
+          key={key}
+          data-state={selection?.selectedKeys.includes(key) ? 'selected' : undefined}
+          className={onRowClick ? 'cursor-pointer' : undefined}
+          {...(onRowClick
+            ? {
+                onClick: () => onRowClick(row),
+                onKeyDown: (event: KeyboardEvent<HTMLTableRowElement>) => handleRowKeyDown(event, row),
+                role: 'button',
+                tabIndex: 0,
+              }
+            : {})}
+        >
+          {selection ? (
+            // Stop both click and keydown (Space/Enter on the
+            // checkbox's own <button>) from bubbling to the row's
+            // onRowClick/onKeyDown handlers above — a consumer using
+            // `selection` and `onRowClick` together must be able to
+            // toggle a row's checkbox without also "opening" the row.
+            <TableCell
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
+              <Checkbox
+                aria-label={`Select row ${key}`}
+                checked={selection.selectedKeys.includes(key)}
+                onCheckedChange={() => toggleRow(row)}
+                disabled={!rowSelectable}
+              />
+            </TableCell>
+          ) : null}
+          {columns.map((column) => (
+            <TableCell key={column.key} className={ALIGN_CLASS[column.align ?? 'left']}>
+              {column.render !== undefined
+                ? resolveCellValue(row, column.render)
+                : String(row[column.key] ?? '')}
+            </TableCell>
+          ))}
+        </TableRow>
+      );
+    });
+  }
+
   return (
     <div>
       {toolbar ? <div className="flex items-center justify-between gap-3 pb-3">{toolbar}</div> : null}
+      {refreshing ? (
+        <div role="progressbar" aria-label="Refreshing" className="h-0.5 w-full animate-pulse bg-primary/50" />
+      ) : null}
       <Table>
         <TableHeader>
           <TableRow>
@@ -204,7 +257,9 @@ export function DataTable<T extends Record<string, unknown>>({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {loading ? (
+          {refreshing ? (
+            renderRows(rows)
+          ) : loading ? (
             <TableRow>
               <TableCell colSpan={colSpan}>
                 <LoadingState />
@@ -223,51 +278,7 @@ export function DataTable<T extends Record<string, unknown>>({
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((row) => {
-              const key = rowKey(row);
-              const rowSelectable = selection ? (selection.isRowSelectable?.(row) ?? true) : false;
-              return (
-                <TableRow
-                  key={key}
-                  data-state={selection?.selectedKeys.includes(key) ? 'selected' : undefined}
-                  className={onRowClick ? 'cursor-pointer' : undefined}
-                  {...(onRowClick
-                    ? {
-                        onClick: () => onRowClick(row),
-                        onKeyDown: (event: KeyboardEvent<HTMLTableRowElement>) => handleRowKeyDown(event, row),
-                        role: 'button',
-                        tabIndex: 0,
-                      }
-                    : {})}
-                >
-                  {selection ? (
-                    // Stop both click and keydown (Space/Enter on the
-                    // checkbox's own <button>) from bubbling to the row's
-                    // onRowClick/onKeyDown handlers above — a consumer using
-                    // `selection` and `onRowClick` together must be able to
-                    // toggle a row's checkbox without also "opening" the row.
-                    <TableCell
-                      onClick={(event) => event.stopPropagation()}
-                      onKeyDown={(event) => event.stopPropagation()}
-                    >
-                      <Checkbox
-                        aria-label={`Select row ${key}`}
-                        checked={selection.selectedKeys.includes(key)}
-                        onCheckedChange={() => toggleRow(row)}
-                        disabled={!rowSelectable}
-                      />
-                    </TableCell>
-                  ) : null}
-                  {columns.map((column) => (
-                    <TableCell key={column.key} className={ALIGN_CLASS[column.align ?? 'left']}>
-                      {column.render !== undefined
-                        ? resolveCellValue(row, column.render)
-                        : String(row[column.key] ?? '')}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              );
-            })
+            renderRows(rows)
           )}
         </TableBody>
       </Table>
