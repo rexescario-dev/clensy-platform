@@ -103,6 +103,24 @@ describe('BookingDataTable', () => {
     expect(html).toContain('Unable to load bookings.');
   });
 
+  // Acceptance-criteria verification fix: a background request failing
+  // after bookings are already loaded must keep those rows visible
+  // (issue #65: "preserve the existing displayed rows where practical and
+  // show an appropriate error state"), not replace the whole table with
+  // the error message.
+  it('keeps existing bookings visible alongside the error message when hasError is true and bookings are non-empty', () => {
+    const html = renderToStaticMarkup(
+      <BookingDataTable
+        bookings={[booking]}
+        formatPrice={() => '₱0.00'}
+        hasError
+        pagination={pagination}
+      />,
+    );
+    expect(html).toContain('Jane Doe');
+    expect(html).toContain('Unable to load bookings.');
+  });
+
   it('renders the supplied errorMessage instead of the default when hasError is true', () => {
     const html = renderToStaticMarkup(
       <BookingDataTable

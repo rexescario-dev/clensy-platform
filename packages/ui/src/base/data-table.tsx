@@ -195,19 +195,31 @@ export function DataTable<T extends Record<string, unknown>>({
   const colSpan = columns.length + (selection ? 1 : 0);
 
   // Single source of truth for "what should the body currently show",
-  // shared by the desktop `<TableBody>` and the mobile card list below —
-  // same precedence as before: `refreshing` short-circuits straight to
-  // 'rows' (even over loading/error/empty), matching the desktop table's
-  // existing behavior.
+  // shared by the desktop `<TableBody>` and the mobile card list below.
+  // `refreshing` short-circuits straight to 'rows' (even over
+  // loading/error/empty). `error` only forces the full-replace 'error'
+  // state when there are no rows to fall back on — e.g. the very first
+  // load failing. A background request that fails *after* rows already
+  // loaded (acceptance criterion: "preserve the existing displayed rows
+  // where practical and show an appropriate error state") keeps showing
+  // those rows; the error itself is surfaced via `backgroundError` below,
+  // not by blanking the table.
   const bodyState: 'empty' | 'error' | 'loading' | 'rows' = refreshing
     ? 'rows'
     : loading
       ? 'loading'
-      : error
+      : error && rows.length === 0
         ? 'error'
         : rows.length === 0
           ? 'empty'
           : 'rows';
+
+  // A background error while rows are still being shown (bodyState
+  // resolved to 'rows' despite `error` being set). Excludes `refreshing`
+  // deliberately: while a new request is in flight we don't yet know
+  // whether it will succeed, so a stale error from a *previous* failure
+  // shouldn't display alongside the progress indicator.
+  const backgroundError = !refreshing && error && bodyState === 'rows' ? error : undefined;
 
   function renderRows(rowsToRender: T[]) {
     return rowsToRender.map((row) => {
@@ -348,6 +360,11 @@ export function DataTable<T extends Record<string, unknown>>({
       {toolbar ? <div className="flex items-center justify-between gap-3 pb-3">{toolbar}</div> : null}
       {refreshing ? (
         <div role="progressbar" aria-label="Refreshing" className="h-0.5 w-full animate-pulse bg-primary/50" />
+      ) : null}
+      {backgroundError ? (
+        <div role="alert" className="border-b border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {backgroundError}
+        </div>
       ) : null}
       {mobileRow ? <div className="hidden sm:block">{table}</div> : table}
       {mobileRow ? (

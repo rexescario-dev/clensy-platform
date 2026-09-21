@@ -137,11 +137,34 @@ describe('DataTable', () => {
     expect(html).not.toContain('Alice');
   });
 
-  it('renders ErrorState when error is set', () => {
+  it('renders ErrorState (full replace) when error is set and there are no rows to fall back on', () => {
+    const html = renderToStaticMarkup(
+      <DataTable columns={sortableColumns} rows={[]} rowKey={(r) => r.id} error="Failed." />,
+    );
+    expect(html).toContain('Failed.');
+  });
+
+  // Post-merge fix (#65 acceptance-criteria verification): a background
+  // request failing after rows already loaded must NOT blank the table —
+  // the issue's own wording is "preserve the existing displayed rows where
+  // practical and show an appropriate error state." Only the true "nothing
+  // to show yet" case (rows is empty, tested above) still full-replaces.
+  it('keeps existing rows visible and shows a background-error banner when error is set but rows are non-empty', () => {
     const html = renderToStaticMarkup(
       <DataTable columns={sortableColumns} rows={rows} rowKey={(r) => r.id} error="Failed." />,
     );
+    expect(html).toContain('Alice');
+    expect(html).toContain('Bob');
+    expect(html).toContain('role="alert"');
     expect(html).toContain('Failed.');
+  });
+
+  it('omits the background-error banner while refreshing (avoids showing a stale error alongside the progress indicator)', () => {
+    const html = renderToStaticMarkup(
+      <DataTable columns={sortableColumns} rows={rows} rowKey={(r) => r.id} error="Failed." refreshing />,
+    );
+    expect(html).toContain('role="progressbar"');
+    expect(html).not.toContain('role="alert"');
   });
 
   it('never reorders rows regardless of sort state (rendering contract)', () => {
