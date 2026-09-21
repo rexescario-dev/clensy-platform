@@ -34,6 +34,7 @@ export interface BookingDataTableProps {
   pagination: DataTablePaginationProps;
   sort?: BookingSortState | null;
   onSortChange?: (sort: BookingSortState | null) => void;
+  refreshing?: boolean;
 }
 
 // Copied verbatim from apps/web/app/app/bookings/page.tsx (2026-09-19) — not
@@ -80,6 +81,7 @@ export function BookingDataTable({
   pagination,
   sort,
   onSortChange,
+  refreshing,
 }: BookingDataTableProps) {
   const t = useClensyTranslations('bookings');
   // Not resolveMessage(errorMessage, t('error')): DataTable's `error` prop
@@ -112,6 +114,27 @@ export function BookingDataTable({
     },
   ];
 
+  // Reuses the exact same formatScheduledAt/formatPrice/bookingStatusBadge
+  // helpers as the desktop columns above — no second data mapping.
+  function renderMobileRow(row: Booking) {
+    const { variant, label } = bookingStatusBadge(row.status, t);
+    return (
+      <div key={row.id} className="rounded-lg border p-3 text-sm">
+        <div className="flex items-center justify-between">
+          <span className="font-mono text-xs text-muted-foreground">{row.id}</span>
+          <Badge variant={variant}>{label}</Badge>
+        </div>
+        <div className="font-medium">{row.customer.fullName}</div>
+        <div className="text-muted-foreground">{formatScheduledAt(row.scheduledAt)}</div>
+        <div className="text-muted-foreground">{row.property.addressLine1}</div>
+        <div className="flex items-center justify-between pt-1">
+          <span>{row.service.name}</span>
+          <span>{formatPrice(row.pricingSnapshot.priceMinorUnits)}</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <DataTable
       columns={columns}
@@ -124,6 +147,8 @@ export function BookingDataTable({
       pagination={pagination}
       sort={sort}
       onSortChange={onSortChange}
+      refreshing={refreshing}
+      mobileRow={renderMobileRow}
     />
   );
 }

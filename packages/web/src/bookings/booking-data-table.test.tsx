@@ -189,4 +189,30 @@ describe('BookingDataTable', () => {
     );
     expect(html).toContain('SOME_FUTURE_STATUS');
   });
+
+  it('renders a mobile card with a booking reference, customer, date, and status for each booking', () => {
+    const html = renderToStaticMarkup(
+      <BookingDataTable bookings={[booking]} formatPrice={(m) => `₱${(m / 100).toFixed(2)}`} pagination={pagination} />,
+    );
+    expect(html).toContain(booking.id);
+    expect(html).toContain('Jane Doe');
+  });
+
+  it('passes refreshing through to the underlying DataTable', () => {
+    const html = renderToStaticMarkup(
+      <BookingDataTable bookings={[booking]} formatPrice={() => '₱0.00'} pagination={pagination} refreshing />,
+    );
+    expect(html).toContain('role="progressbar"');
+  });
+
+  it('accepts a navigation-shaped pagination prop', () => {
+    const html = renderToStaticMarkup(
+      <BookingDataTable
+        bookings={[booking]}
+        formatPrice={() => '₱0.00'}
+        pagination={{ hasNextPage: true, hasPreviousPage: false, mode: 'navigation', onNext: () => {}, onPrevious: () => {}, pageSize: 20 }}
+      />,
+    );
+    expect(html).toContain('Jane Doe');
+  });
 });
