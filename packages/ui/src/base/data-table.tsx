@@ -43,6 +43,7 @@ export interface DataTableProps<T> {
   selection?: DataTableSelectionProps<T>;
   toolbar?: ReactNode;
   refreshing?: boolean;
+  mobileRow?: (row: T) => ReactNode;
 }
 
 const ALIGN_CLASS = {
@@ -117,6 +118,7 @@ export function DataTable<T extends Record<string, unknown>>({
   selection,
   toolbar,
   refreshing = false,
+  mobileRow,
 }: DataTableProps<T>) {
   function handleRowKeyDown(event: KeyboardEvent<HTMLTableRowElement>, row: T) {
     if (!onRowClick) return;
@@ -153,6 +155,21 @@ export function DataTable<T extends Record<string, unknown>>({
   }
 
   const colSpan = columns.length + (selection ? 1 : 0);
+
+  // Single source of truth for "what should the body currently show",
+  // shared by the desktop `<TableBody>` and the mobile card list below —
+  // same precedence as before: `refreshing` short-circuits straight to
+  // 'rows' (even over loading/error/empty), matching the desktop table's
+  // existing behavior.
+  const bodyState: 'empty' | 'error' | 'loading' | 'rows' = refreshing
+    ? 'rows'
+    : loading
+      ? 'loading'
+      : error
+        ? 'error'
+        : rows.length === 0
+          ? 'empty'
+          : 'rows';
 
   function renderRows(rowsToRender: T[]) {
     return rowsToRender.map((row) => {
@@ -202,86 +219,101 @@ export function DataTable<T extends Record<string, unknown>>({
     });
   }
 
+  const table = (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          {selection ? (
+            <TableHead className="w-10">
+              <Checkbox
+                aria-label="Select all rows on this page"
+                checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+                onCheckedChange={toggleSelectAll}
+                disabled={selectableKeys.length === 0}
+              />
+            </TableHead>
+          ) : null}
+          {columns.map((column) => {
+            const effectiveSortKey = column.sortKey ?? column.key;
+            const isSorted = column.sortable && sort?.key === effectiveSortKey;
+            return (
+              <TableHead
+                key={column.key}
+                className={ALIGN_CLASS[column.align ?? 'left']}
+                style={column.width ? { width: column.width } : undefined}
+                aria-sort={column.sortable ? (isSorted ? (sort!.direction === 'asc' ? 'ascending' : 'descending') : 'none') : undefined}
+              >
+                {column.sortable ? (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 font-medium"
+                    onClick={() => handleSortClick(column)}
+                  >
+                    {column.header}
+                    {isSorted ? (
+                      sort!.direction === 'asc' ? (
+                        <ArrowUpIcon className="size-3.5" />
+                      ) : (
+                        <ArrowDownIcon className="size-3.5" />
+                      )
+                    ) : (
+                      <ChevronsUpDownIcon className="size-3.5 opacity-50" />
+                    )}
+                  </button>
+                ) : (
+                  column.header
+                )}
+              </TableHead>
+            );
+          })}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {bodyState === 'loading' ? (
+          <TableRow>
+            <TableCell colSpan={colSpan}>
+              <LoadingState />
+            </TableCell>
+          </TableRow>
+        ) : bodyState === 'error' ? (
+          <TableRow>
+            <TableCell colSpan={colSpan}>
+              <ErrorState message={error!} />
+            </TableCell>
+          </TableRow>
+        ) : bodyState === 'empty' ? (
+          <TableRow>
+            <TableCell colSpan={colSpan} className="text-center text-muted-foreground">
+              {emptyMessage}
+            </TableCell>
+          </TableRow>
+        ) : (
+          renderRows(rows)
+        )}
+      </TableBody>
+    </Table>
+  );
+
   return (
     <div>
       {toolbar ? <div className="flex items-center justify-between gap-3 pb-3">{toolbar}</div> : null}
       {refreshing ? (
         <div role="progressbar" aria-label="Refreshing" className="h-0.5 w-full animate-pulse bg-primary/50" />
       ) : null}
-      <Table>
-        <TableHeader>
-          <TableRow>
-            {selection ? (
-              <TableHead className="w-10">
-                <Checkbox
-                  aria-label="Select all rows on this page"
-                  checked={allSelected ? true : someSelected ? 'indeterminate' : false}
-                  onCheckedChange={toggleSelectAll}
-                  disabled={selectableKeys.length === 0}
-                />
-              </TableHead>
-            ) : null}
-            {columns.map((column) => {
-              const effectiveSortKey = column.sortKey ?? column.key;
-              const isSorted = column.sortable && sort?.key === effectiveSortKey;
-              return (
-                <TableHead
-                  key={column.key}
-                  className={ALIGN_CLASS[column.align ?? 'left']}
-                  style={column.width ? { width: column.width } : undefined}
-                  aria-sort={column.sortable ? (isSorted ? (sort!.direction === 'asc' ? 'ascending' : 'descending') : 'none') : undefined}
-                >
-                  {column.sortable ? (
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 font-medium"
-                      onClick={() => handleSortClick(column)}
-                    >
-                      {column.header}
-                      {isSorted ? (
-                        sort!.direction === 'asc' ? (
-                          <ArrowUpIcon className="size-3.5" />
-                        ) : (
-                          <ArrowDownIcon className="size-3.5" />
-                        )
-                      ) : (
-                        <ChevronsUpDownIcon className="size-3.5 opacity-50" />
-                      )}
-                    </button>
-                  ) : (
-                    column.header
-                  )}
-                </TableHead>
-              );
-            })}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {refreshing ? (
-            renderRows(rows)
-          ) : loading ? (
-            <TableRow>
-              <TableCell colSpan={colSpan}>
-                <LoadingState />
-              </TableCell>
-            </TableRow>
-          ) : error ? (
-            <TableRow>
-              <TableCell colSpan={colSpan}>
-                <ErrorState message={error} />
-              </TableCell>
-            </TableRow>
-          ) : rows.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={colSpan} className="text-center text-muted-foreground">
-                {emptyMessage}
-              </TableCell>
-            </TableRow>
+      {mobileRow ? <div className="hidden sm:block">{table}</div> : table}
+      {mobileRow ? (
+        <div className="sm:hidden flex flex-col gap-2">
+          {bodyState === 'loading' ? (
+            <LoadingState />
+          ) : bodyState === 'error' ? (
+            <ErrorState message={error!} />
+          ) : bodyState === 'empty' ? (
+            <div className="text-center text-muted-foreground">{emptyMessage}</div>
           ) : (
-            renderRows(rows)
+            rows.map(mobileRow)
           )}
-        </TableBody>
-      </Table>
+        </div>
+      ) : null}
       {pagination ? <Pagination {...pagination} /> : null}
     </div>
   );

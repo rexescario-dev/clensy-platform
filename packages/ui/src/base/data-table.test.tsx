@@ -362,3 +362,50 @@ describe('DataTable — refreshing (#65)', () => {
     expect(html).not.toContain('Nothing here.');
   });
 });
+
+describe('DataTable — mobileRow (#65)', () => {
+  it('renders mobileRow output for each row when supplied', () => {
+    const html = renderToStaticMarkup(
+      <DataTable
+        columns={sortableColumns}
+        rows={rows}
+        rowKey={(r) => r.id}
+        mobileRow={(row) => <div key={row.id}>Card: {row.name}</div>}
+      />,
+    );
+    expect(html).toContain('Card: Alice');
+    expect(html).toContain('Card: Bob');
+  });
+
+  it('renders no card content when mobileRow is omitted (backward-compatible default)', () => {
+    const html = renderToStaticMarkup(<DataTable columns={sortableColumns} rows={rows} rowKey={(r) => r.id} />);
+    expect(html).not.toContain('Card:');
+  });
+
+  it('still renders the desktop table when mobileRow is supplied', () => {
+    const html = renderToStaticMarkup(
+      <DataTable
+        columns={sortableColumns}
+        rows={rows}
+        rowKey={(r) => r.id}
+        mobileRow={(row) => <div key={row.id}>Card: {row.name}</div>}
+      />,
+    );
+    expect(html).toContain('data-slot="table"');
+    expect(html).toContain('Alice'); // still present in the desktop table's own cell content
+  });
+
+  it('mobileRow respects loading/error/empty state the same as the desktop table', () => {
+    const html = renderToStaticMarkup(
+      <DataTable
+        columns={sortableColumns}
+        rows={[]}
+        rowKey={(r) => r.id}
+        emptyMessage="Nothing here."
+        mobileRow={(row) => <div key={row.id}>Card: {row.name}</div>}
+      />,
+    );
+    expect(html).toContain('Nothing here.');
+    expect(html).not.toContain('Card:');
+  });
+});
