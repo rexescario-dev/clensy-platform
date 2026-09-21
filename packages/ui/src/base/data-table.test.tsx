@@ -257,7 +257,7 @@ describe('DataTable', () => {
 
 describe('DataTable — aria-sort and sortKey (#65)', () => {
   const columnsWithSortKey: DataTableColumn<Row>[] = [
-    { key: 'name', header: 'Name', sortable: true, sortKey: 'displayName' },
+    { header: 'Name', key: 'name', sortable: true, sortKey: 'displayName' },
   ];
 
   it('renders aria-sort="none" when unsorted, keyed off sortKey not key', () => {
