@@ -14,5 +14,11 @@ export const bookings = {
   },
   empty: 'No bookings.',
   error: 'Unable to load bookings.',
+  status: {
+    cancelled: 'Cancelled',
+    completed: 'Completed',
+    confirmed: 'Confirmed',
+    pending: 'Pending',
+  },
   unassigned: 'Unassigned',
 };

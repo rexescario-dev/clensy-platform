@@ -1,6 +1,6 @@
 'use client';
 
-import { DataTable, type DataTableColumn, type DataTablePaginationProps } from '@clensy/ui';
+import { Badge, DataTable, type DataTableColumn, type DataTablePaginationProps } from '@clensy/ui';
 import { useClensyTranslations } from '../i18n/use-clensy-translations';
 
 export type BookingStatus = 'CANCELLED' | 'COMPLETED' | 'CONFIRMED' | 'PENDING';
@@ -44,6 +44,32 @@ function formatScheduledAt(value: unknown): string {
   return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
 }
 
+type BadgeVariant = 'default' | 'destructive' | 'outline' | 'secondary';
+
+interface BookingStatusConfig {
+  variant: BadgeVariant;
+  labelKey: string;
+}
+
+// One centralized status → { Badge variant, translation key } lookup — not
+// two independently-maintained maps. row.status crosses a GraphQL API
+// boundary this component does not control, so a status value outside the
+// four known members (e.g. the backend ships a fifth status before this
+// table is updated) must degrade safely rather than render undefined/throw.
+const BOOKING_STATUS_CONFIG: Record<BookingStatus, BookingStatusConfig> = {
+  CANCELLED: { variant: 'destructive', labelKey: 'status.cancelled' },
+  COMPLETED: { variant: 'secondary', labelKey: 'status.completed' },
+  CONFIRMED: { variant: 'default', labelKey: 'status.confirmed' },
+  PENDING: { variant: 'outline', labelKey: 'status.pending' },
+};
+
+function bookingStatusBadge(status: BookingStatus, t: (key: string) => string): { variant: BadgeVariant; label: string } {
+  const config = BOOKING_STATUS_CONFIG[status];
+  if (!config) return { variant: 'outline', label: status };
+  const label = t(config.labelKey);
+  return { variant: config.variant, label: label === config.labelKey ? status : label }; // t() returns the key itself on a miss
+}
+
 export function BookingDataTable({
   bookings,
   formatPrice,
@@ -68,7 +94,16 @@ export function BookingDataTable({
     { header: t('columns.property'), key: 'property', render: 'property.addressLine1' },
     { header: t('columns.service'), key: 'service', render: 'service.name' },
     { header: t('columns.scheduled'), key: 'scheduledAt', render: (row) => formatScheduledAt(row.scheduledAt), sortable: true, sortKey: 'scheduledAt' },
-    { header: t('columns.status'), key: 'status', render: 'status', sortable: true, sortKey: 'status' },
+    {
+      header: t('columns.status'),
+      key: 'status',
+      render: (row) => {
+        const { variant, label } = bookingStatusBadge(row.status, t);
+        return <Badge variant={variant}>{label}</Badge>;
+      },
+      sortable: true,
+      sortKey: 'status',
+    },
     { header: t('columns.team'), key: 'team', render: (row) => row.team?.name ?? t('unassigned') },
     {
       header: t('columns.price'),

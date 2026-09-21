@@ -28,7 +28,7 @@ describe('BookingDataTable', () => {
     expect(html).toContain('Jane Doe');
     expect(html).toContain('123 Main St');
     expect(html).toContain('Deep Clean');
-    expect(html).toContain('CONFIRMED');
+    expect(html).toContain('Confirmed');
     expect(html).toContain('Team A');
     expect(html).toContain('₱123.45');
   });
@@ -162,5 +162,31 @@ describe('BookingDataTable', () => {
     const customerHeaderIndex = html.indexOf('>Customer<');
     const customerCellStart = html.lastIndexOf('<th', customerHeaderIndex);
     expect(html.slice(customerCellStart, customerHeaderIndex)).not.toContain('<button');
+  });
+
+  it('renders each BookingStatus as a Badge with the correct translated label', () => {
+    for (const [status, label] of [
+      ['PENDING', 'Pending'],
+      ['CONFIRMED', 'Confirmed'],
+      ['CANCELLED', 'Cancelled'],
+      ['COMPLETED', 'Completed'],
+    ] as const) {
+      const html = renderToStaticMarkup(
+        <BookingDataTable bookings={[{ ...booking, status }]} formatPrice={() => '₱0.00'} pagination={pagination} />,
+      );
+      expect(html).toContain(label);
+      expect(html).not.toContain(`>${status}<`);
+    }
+  });
+
+  it('falls back to an outline Badge with the raw status string for an unrecognized status', () => {
+    const html = renderToStaticMarkup(
+      <BookingDataTable
+        bookings={[{ ...booking, status: 'SOME_FUTURE_STATUS' as never }]}
+        formatPrice={() => '₱0.00'}
+        pagination={pagination}
+      />,
+    );
+    expect(html).toContain('SOME_FUTURE_STATUS');
   });
 });
