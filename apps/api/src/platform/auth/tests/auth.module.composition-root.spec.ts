@@ -6,8 +6,10 @@ import { DataSource } from 'typeorm';
 import { AdminsModule } from '../../../modules/admins/admins.module';
 import { AdminIdentityLookupService } from '../../../modules/admins/infrastructure/admin-identity-lookup.service';
 import { AdminUserEntity } from '../../../modules/admins/infrastructure/persistence/admin-user.entity';
+import { TenantEntity } from '../../../modules/admins/infrastructure/persistence/tenant.entity';
 import { AuditEventEntity } from '../../audit/infrastructure/persistence/audit-event.entity';
 import { AuthModule } from '../auth.module';
+import { AdminScope } from '../domain/admin-scope';
 import { Role } from '../domain/role';
 import { AuthGuard } from '../guards/auth.guard';
 import { JwtStrategy } from '../infrastructure/jwt.strategy';
@@ -41,7 +43,7 @@ class FakeGlobalDataSourceModule {}
 // import only ever appears here, at this test's (composition-root-standin)
 // call site, and inside `AppModule` once Task 6 exists.
 //
-// `AdminUserEntity`/`AuditEventEntity` repositories are overridden with
+// `AdminUserEntity`/`AuditEventEntity`/`TenantEntity` repositories are overridden with
 // plain mocks (same technique as
 // `modules/admins/tests/infrastructure/admin-identity-lookup.service.spec.ts`)
 // so this test needs no real database — it is exercising DI wiring, not
@@ -68,6 +70,8 @@ describe('AuthModule.forRootAsync — composition-root wiring (real AdminsModule
       .useValue(adminUserRepository)
       .overrideProvider(getRepositoryToken(AuditEventEntity))
       .useValue({ create: jest.fn(), save: jest.fn() })
+      .overrideProvider(getRepositoryToken(TenantEntity))
+      .useValue({})
       .compile();
   });
 
@@ -82,14 +86,21 @@ describe('AuthModule.forRootAsync — composition-root wiring (real AdminsModule
   it('binds ADMIN_IDENTITY_LOOKUP to the real AdminIdentityLookupService (not a stub) — validate() reaches the actual repository', async () => {
     adminUserRepository.findOneBy.mockResolvedValue({
       id: 'admin-1',
+      tenantId: 'tenant-1',
       isActive: true,
-      role: Role.OWNER,
+      role: Role.TENANT_OWNER,
+      scope: AdminScope.TENANT,
     });
 
     const strategy = moduleRef.get(JwtStrategy);
     const principal = await strategy.validate({ sub: 'admin-1' });
 
-    expect(principal).toEqual({ id: 'admin-1', role: Role.OWNER });
+    expect(principal).toEqual({
+      id: 'admin-1',
+      tenantId: 'tenant-1',
+      role: Role.TENANT_OWNER,
+      scope: AdminScope.TENANT,
+    });
     expect(adminUserRepository.findOneBy).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'admin-1', isActive: true }),
     );

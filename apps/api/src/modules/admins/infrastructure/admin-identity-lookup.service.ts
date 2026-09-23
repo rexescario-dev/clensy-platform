@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AdminIdentityLookupPort } from '../../../platform/auth/application/admin-identity-lookup.port';
 import { AuthenticatedPrincipal } from '../../../platform/auth/domain/authenticated-principal';
+import { toAuthenticatedPrincipal } from '../domain/to-authenticated-principal';
 import { AdminUserEntity } from './persistence/admin-user.entity';
 
 // Implements Task 2's `AdminIdentityLookupPort` (spec §5.2's cross-module
@@ -28,6 +29,6 @@ export class AdminIdentityLookupService implements AdminIdentityLookupPort {
       id,
       isActive: true,
     });
-    return admin ? { id: admin.id, role: admin.role } : null;
+    return admin ? toAuthenticatedPrincipal(admin) : null;
   }
 }
