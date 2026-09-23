@@ -58,9 +58,7 @@ describe('AddTenantAndAdminScope migration (real Postgres)', () => {
   const opsManager = randomUUID();
 
   beforeAll(async () => {
-    admin = new DataSource(
-      connectionOptions(process.env.DB_NAME ?? 'clensy'),
-    );
+    admin = new DataSource(connectionOptions(process.env.DB_NAME ?? 'clensy'));
     await admin.initialize();
     await admin.query(`CREATE DATABASE "${database}"`);
 
@@ -174,17 +172,14 @@ describe('AddTenantAndAdminScope migration (real Postgres)', () => {
     ['TENANT without a tenant', 'TENANT', null],
     ['PLATFORM with a tenant', 'PLATFORM', 'some-tenant'],
     ['no scope with a tenant', null, 'some-tenant'],
-  ])(
-    'rejects an audit event that is %s',
-    async (_label, scope, tenantId) => {
-      await expect(
-        queryRunner.query(
-          `INSERT INTO "audit_event_entity" ("action", "scope", "tenantId") VALUES ('test', $1, $2)`,
-          [scope, tenantId],
-        ),
-      ).rejects.toThrow(/ck_audit_event_scope_tenant/);
-    },
-  );
+  ])('rejects an audit event that is %s', async (_label, scope, tenantId) => {
+    await expect(
+      queryRunner.query(
+        `INSERT INTO "audit_event_entity" ("action", "scope", "tenantId") VALUES ('test', $1, $2)`,
+        [scope, tenantId],
+      ),
+    ).rejects.toThrow(/ck_audit_event_scope_tenant/);
+  });
 
   it('refuses to revert', async () => {
     await expect(

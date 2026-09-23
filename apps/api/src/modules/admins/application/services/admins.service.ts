@@ -57,7 +57,9 @@ export class AdminsService {
   async create(command: CreateAdminCommand): Promise<AdminUser> {
     const tenantId = requireTenantOwnerTenant(command.actor);
     if (command.role === Role.SUPER_ADMIN) {
-      throw new ForbiddenException('A Tenant Owner cannot create a Super Admin');
+      throw new ForbiddenException(
+        'A Tenant Owner cannot create a Super Admin',
+      );
     }
 
     const email = command.email.toLowerCase();

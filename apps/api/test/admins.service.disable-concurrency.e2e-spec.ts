@@ -78,7 +78,7 @@ describe('AdminsService.disable — last-active-Tenant-Owner race (real Postgres
     serviceB = new AdminsService(dataSourceB, noopAuditLogger);
   });
 
-  it("allows at most one of two concurrent disable-each-other calls to succeed, leaving exactly one active Tenant Owner in that tenant", async () => {
+  it('allows at most one of two concurrent disable-each-other calls to succeed, leaving exactly one active Tenant Owner in that tenant', async () => {
     const ownerA = await seedTenantAdmin(dataSourceA);
     const ownerB = await seedTenantAdmin(dataSourceA);
     // An active owner of ANOTHER tenant must not count toward this

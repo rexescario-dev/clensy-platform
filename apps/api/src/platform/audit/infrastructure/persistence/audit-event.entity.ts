@@ -30,10 +30,10 @@ export class AuditEventEntity implements AuditEvent {
   // the hand-written `ck_audit_event_scope_tenant` CHECK in
   // `AddTenantAndAdminScope` — do not apply a generated drop of it.
   @Column({
-    type: 'enum',
     enum: AdminScope,
     enumName: 'admin_scope_enum',
     nullable: true,
+    type: 'enum',
   })
   scope!: AdminScope | null;
 

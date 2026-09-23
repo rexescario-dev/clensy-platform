@@ -70,7 +70,10 @@ describe('AuditLoggerService', () => {
     });
 
     expect(repository.save).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: 'tenant-1', scope: AdminScope.TENANT }),
+      expect.objectContaining({
+        tenantId: 'tenant-1',
+        scope: AdminScope.TENANT,
+      }),
     );
   });
 

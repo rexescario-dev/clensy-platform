@@ -92,9 +92,9 @@ export class AddTenantAndAdminScope1790180877633 implements MigrationInterface {
     );
 
     // 4. Validate designations against every OWNER row — abort point.
-    const owners: { id: string }[] = await queryRunner.query(
+    const owners = (await queryRunner.query(
       `SELECT "id" FROM "admin_user_entity" WHERE "role" = 'OWNER'`,
-    );
+    )) as { id: string }[];
     const designated = validateOwnerDesignations(
       owners.map((owner) => owner.id),
       this.designations,
@@ -120,9 +120,9 @@ export class AddTenantAndAdminScope1790180877633 implements MigrationInterface {
     );
 
     // 6. Nothing may still be OWNER before the enum loses it.
-    const [{ count }]: { count: string }[] = await queryRunner.query(
+    const [{ count }] = (await queryRunner.query(
       `SELECT count(*) AS "count" FROM "admin_user_entity" WHERE "role" = 'OWNER'`,
-    );
+    )) as { count: string }[];
     if (Number(count) !== 0) {
       throw new Error(
         `AddTenantAndAdminScope: ${count} OWNER row(s) remain after conversion; refusing to remove OWNER from the role enum.`,
@@ -161,9 +161,11 @@ export class AddTenantAndAdminScope1790180877633 implements MigrationInterface {
   // cross-tenant staff administration to every Tenant Owner created after
   // this migration, and would discard which accounts were designated
   // platform vs tenant. Restore from a backup instead.
-  public async down(): Promise<void> {
-    throw new Error(
-      'AddTenantAndAdminScope is irreversible: reverting would collapse SUPER_ADMIN/TENANT_OWNER back into the global OWNER role. Restore from a pre-migration backup instead.',
+  public down(): Promise<void> {
+    return Promise.reject(
+      new Error(
+        'AddTenantAndAdminScope is irreversible: reverting would collapse SUPER_ADMIN/TENANT_OWNER back into the global OWNER role. Restore from a pre-migration backup instead.',
+      ),
     );
   }
 

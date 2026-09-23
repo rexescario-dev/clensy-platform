@@ -22,7 +22,9 @@ export interface SeededAdmin {
 // created by the `AddTenantAndAdminScope` migration and only ever looked up
 // here; every other tenant is an additional, test-only row with a random
 // name so repeated runs against the same database never collide.
-export async function createTestTenant(dataSource: DataSource): Promise<string> {
+export async function createTestTenant(
+  dataSource: DataSource,
+): Promise<string> {
   const repository = dataSource.getRepository(TenantEntity);
   const tenant = await repository.save(
     repository.create({ name: `test-tenant-${randomUUID()}` }),
