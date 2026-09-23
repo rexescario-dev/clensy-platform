@@ -158,7 +158,7 @@ const BILLABLE_STATUSES: ReadonlySet<LaundryOrderStatus> = new Set<LaundryOrderS
     'COMPLETED',
   ],
 );
-const INVOICE_ROLES: ReadonlySet<string> = new Set(['FINANCE', 'OWNER']);
+const INVOICE_ROLES: ReadonlySet<string> = new Set(['FINANCE', 'TENANT_OWNER']);
 const PAYMENT_TERMS = [
   'PAY_NOW',
   'PAY_ON_COMPLETION',

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { presentRole } from './role-presentation';
 
 const CASES = [
-  ['OWNER', 'Owner', 'OW'],
+  ['SUPER_ADMIN', 'Super Admin', 'SA'],
+  ['TENANT_OWNER', 'Tenant Owner', 'TO'],
   ['OPS_MANAGER', 'Ops Manager', 'OM'],
   ['SCHEDULER', 'Scheduler', 'SC'],
   ['CUSTOMER_SUPPORT', 'Customer Support', 'CS'],
@@ -20,5 +21,9 @@ describe('presentRole', () => {
     expect(presentRole(undefined)).toBeUndefined();
     expect(presentRole('')).toBeUndefined();
     expect(presentRole('SUPERADMIN')).toBeUndefined();
+  });
+
+  it('no longer presents the retired OWNER role', () => {
+    expect(presentRole('OWNER')).toBeUndefined();
   });
 });
