@@ -1,4 +1,6 @@
+import type { AuthenticatedPrincipal } from '../../../../platform/auth/domain/authenticated-principal';
+
 export interface DisableAdminCommand {
-  actorId: string;
+  actor: AuthenticatedPrincipal;
   targetId: string;
 }
