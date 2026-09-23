@@ -26,6 +26,10 @@ export type AddOnSortFields =
   | 'id'
   | 'name';
 
+export type AdminScope =
+  | 'PLATFORM'
+  | 'TENANT';
+
 export type AssignTeamToJobInput = {
   jobId: string | number;
   teamId: string | number;
@@ -442,8 +446,9 @@ export type Role =
   | 'CUSTOMER_SUPPORT'
   | 'FINANCE'
   | 'OPS_MANAGER'
-  | 'OWNER'
-  | 'SCHEDULER';
+  | 'SCHEDULER'
+  | 'SUPER_ADMIN'
+  | 'TENANT_OWNER';
 
 export type ServiceFilter = {
   active?: BooleanFieldComparison | null | undefined;
@@ -589,7 +594,7 @@ export type UpdateAddOnMutation = { updateAddOn: { id: string } };
 export type AdminsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type AdminsQuery = { admins: Array<{ id: string, email: string, role: Role, isActive: boolean }> };
+export type AdminsQuery = { admins: Array<{ id: string, email: string, role: Role, isActive: boolean, scope: AdminScope, tenantId: string | null }> };
 
 export type InvoiceRowFragment = { id: string, invoiceNumber: string, totalMinorUnits: number, amountDueMinorUnits: number, paymentStatus: InvoicePaymentStatus, issueDate: unknown, customer: { id: string, fullName: string } };
 
@@ -710,7 +715,7 @@ export type CreateAdminMutation = { createAdmin: { id: string, email: string, ro
 export type CurrentAdminQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type CurrentAdminQuery = { currentAdmin: { id: string, role: Role } };
+export type CurrentAdminQuery = { currentAdmin: { id: string, role: Role, scope: AdminScope, tenantId: string | null } };
 
 export type CustomersQueryVariables = Exact<{
   paging?: OffsetPaging | null | undefined;
@@ -932,7 +937,7 @@ export type LoginMutationVariables = Exact<{
 }>;
 
 
-export type LoginMutation = { login: { success: boolean, admin: { id: string, role: Role } } };
+export type LoginMutation = { login: { success: boolean, admin: { id: string, role: Role, scope: AdminScope, tenantId: string | null } } };
 
 export type LogoutMutationVariables = Exact<{ [key: string]: never; }>;
 
@@ -1286,6 +1291,8 @@ export const AdminsDocument = gql`
     email
     role
     isActive
+    scope
+    tenantId
   }
 }
     `;
@@ -1993,6 +2000,8 @@ export const CurrentAdminDocument = gql`
   currentAdmin {
     id
     role
+    scope
+    tenantId
   }
 }
     `;
@@ -3119,6 +3128,8 @@ export const LoginDocument = gql`
     admin {
       id
       role
+      scope
+      tenantId
     }
   }
 }
