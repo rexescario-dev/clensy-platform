@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { EntityManager } from 'typeorm';
+import { AdminScope } from '../../auth/domain/admin-scope';
 import { AuditEventEntity } from '../infrastructure/persistence/audit-event.entity';
 import {
   AuditLoggerService,
@@ -53,6 +54,38 @@ describe('AuditLoggerService', () => {
         entityType: null,
         metadata: { email: 'x@example.com', reason: 'invalid_credentials' },
       }),
+    );
+  });
+
+  it('persists the principal scope and tenantId when given (multi-tenant spec §4.6)', async () => {
+    repository.save.mockResolvedValue(undefined);
+
+    await service.log({
+      actorId: 'admin-1',
+      entityId: 'admin-1',
+      tenantId: 'tenant-1',
+      action: 'admin.login.succeeded',
+      entityType: 'AdminUser',
+      scope: AdminScope.TENANT,
+    });
+
+    expect(repository.save).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: 'tenant-1', scope: AdminScope.TENANT }),
+    );
+  });
+
+  it('stores null scope and tenantId when the event carries no principal', async () => {
+    repository.save.mockResolvedValue(undefined);
+
+    await service.log({
+      actorId: null,
+      entityId: null,
+      action: 'admin.login.failed',
+      entityType: null,
+    });
+
+    expect(repository.save).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: null, scope: null }),
     );
   });
 
