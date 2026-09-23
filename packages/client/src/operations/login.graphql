@@ -4,6 +4,8 @@ mutation Login($loginInput: LoginInput!) {
     admin {
       id
       role
+      scope
+      tenantId
     }
   }
 }

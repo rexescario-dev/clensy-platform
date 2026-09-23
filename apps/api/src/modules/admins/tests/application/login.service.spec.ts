@@ -3,6 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import type { AuditLogEvent } from '../../../../platform/audit/application/audit-logger.port';
+import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { Role } from '../../../../platform/auth/domain/role';
 import { LoginService } from '../../application/services/login.service';
 import { AdminUserEntity } from '../../infrastructure/persistence/admin-user.entity';
@@ -156,14 +157,16 @@ describe('LoginService', () => {
     });
   });
 
-  it('returns the principal and records admin.login.succeeded for correct credentials on an active account', async () => {
+  it('returns the full principal and records admin.login.succeeded with the tenant for a tenant admin', async () => {
     repository.findOneBy.mockResolvedValue({
       id: activeAdminId,
+      tenantId: 'tenant-1',
       createdAt: new Date(),
       email: 'active@example.com',
       isActive: true,
       passwordHash: activeAdminPasswordHash,
-      role: Role.OWNER,
+      role: Role.TENANT_OWNER,
+      scope: AdminScope.TENANT,
     });
 
     const result = await service.login(
@@ -171,14 +174,55 @@ describe('LoginService', () => {
       'correct-password',
     );
 
-    expect(result).toEqual({ id: activeAdminId, role: Role.OWNER });
+    expect(result).toEqual({
+      id: activeAdminId,
+      tenantId: 'tenant-1',
+      role: Role.TENANT_OWNER,
+      scope: AdminScope.TENANT,
+    });
     expect(auditLogger.log).toHaveBeenCalledWith(
       expect.objectContaining({
         actorId: activeAdminId,
         entityId: activeAdminId,
+        tenantId: 'tenant-1',
         action: 'admin.login.succeeded',
         entityType: 'AdminUser',
+        scope: AdminScope.TENANT,
       }),
     );
+  });
+
+  it('records a Super Admin login with explicit PLATFORM scope and no tenant (spec §4.6)', async () => {
+    repository.findOneBy.mockResolvedValue({
+      id: activeAdminId,
+      tenantId: null,
+      createdAt: new Date(),
+      email: 'active@example.com',
+      isActive: true,
+      passwordHash: activeAdminPasswordHash,
+      role: Role.SUPER_ADMIN,
+      scope: AdminScope.PLATFORM,
+    });
+
+    await service.login('active@example.com', 'correct-password');
+
+    expect(auditLogger.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: null,
+        action: 'admin.login.succeeded',
+        scope: AdminScope.PLATFORM,
+      }),
+    );
+  });
+
+  it('records a failed login with no scope and no tenant — not PLATFORM (spec §4.6)', async () => {
+    repository.findOneBy.mockResolvedValue(null);
+
+    await service.login('nobody@example.com', 'whatever');
+
+    const [event] = auditLogger.log.mock.calls[0];
+    expect(event.action).toBe('admin.login.failed');
+    expect(event.scope ?? null).toBeNull();
+    expect(event.tenantId ?? null).toBeNull();
   });
 });

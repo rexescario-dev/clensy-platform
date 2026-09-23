@@ -27,9 +27,22 @@ import { LoginResultType } from './login-result.type';
 function toAdminType(admin: AdminUser): AdminType {
   return {
     id: admin.id,
+    tenantId: admin.tenantId,
     email: admin.email,
     isActive: admin.isActive,
     role: admin.role,
+    scope: admin.scope,
+  };
+}
+
+function toCurrentAdminType(
+  principal: AuthenticatedPrincipal,
+): CurrentAdminType {
+  return {
+    id: principal.id,
+    tenantId: principal.tenantId,
+    role: principal.role,
+    scope: principal.scope,
   };
 }
 
@@ -85,7 +98,7 @@ export class AdminResolver {
     this.setSessionCookie(context.res, token);
 
     return {
-      admin: { id: principal.id, role: principal.role },
+      admin: toCurrentAdminType(principal),
       success: true,
     };
   }
@@ -100,13 +113,13 @@ export class AdminResolver {
 
   @Mutation(() => AdminType)
   @UseGuards(AuthGuard)
-  @Roles(Role.OWNER)
+  @Roles(Role.TENANT_OWNER)
   async createAdmin(
     @Args('createAdminInput') input: CreateAdminInput,
     @CurrentUser() currentUser: AuthenticatedPrincipal,
   ): Promise<AdminType> {
     const command: CreateAdminCommand = {
-      actorId: currentUser.id,
+      actor: currentUser,
       email: input.email,
       password: input.password,
       role: input.role,
@@ -117,13 +130,13 @@ export class AdminResolver {
 
   @Mutation(() => AdminType)
   @UseGuards(AuthGuard)
-  @Roles(Role.OWNER)
+  @Roles(Role.TENANT_OWNER)
   async disableAdmin(
     @Args('id', { type: () => ID }) id: string,
     @CurrentUser() currentUser: AuthenticatedPrincipal,
   ): Promise<AdminType> {
     const command: DisableAdminCommand = {
-      actorId: currentUser.id,
+      actor: currentUser,
       targetId: id,
     };
     const admin = await this.adminsService.disable(command);
@@ -132,9 +145,11 @@ export class AdminResolver {
 
   @Query(() => [AdminType], { name: 'admins' })
   @UseGuards(AuthGuard)
-  @Roles(Role.OWNER)
-  async admins(): Promise<AdminType[]> {
-    const list = await this.adminsService.list();
+  @Roles(Role.TENANT_OWNER)
+  async admins(
+    @CurrentUser() currentUser: AuthenticatedPrincipal,
+  ): Promise<AdminType[]> {
+    const list = await this.adminsService.list(currentUser);
     return list.map(toAdminType);
   }
 
@@ -144,7 +159,7 @@ export class AdminResolver {
   currentAdmin(
     @CurrentUser() currentUser: AuthenticatedPrincipal,
   ): CurrentAdminType {
-    return { id: currentUser.id, role: currentUser.role };
+    return toCurrentAdminType(currentUser);
   }
 
   // `Max-Age` is derived from the exact same `JWT_EXPIRES_IN` config value

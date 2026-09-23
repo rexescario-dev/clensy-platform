@@ -1,7 +1,9 @@
 import { Field, ID, ObjectType, registerEnumType } from '@nestjs/graphql';
+import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { Role } from '../../../../platform/auth/domain/role';
 
 registerEnumType(Role, { name: 'Role' });
+registerEnumType(AdminScope, { name: 'AdminScope' });
 
 // Explicit, hand-defined presentation type — never `AdminUser` (the domain
 // interface) or `AdminUserEntity` (the TypeORM entity) returned directly as
@@ -23,4 +25,12 @@ export class AdminType {
 
   @Field()
   isActive!: boolean;
+
+  // Multi-tenant spec §4.1: clients branch on `scope`, never on
+  // `tenantId === null`.
+  @Field(() => AdminScope)
+  scope!: AdminScope;
+
+  @Field(() => ID, { nullable: true })
+  tenantId!: string | null;
 }
