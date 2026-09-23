@@ -8,7 +8,7 @@ import { InvoicePaymentStatus } from '../../domain/invoice-payment-status';
 import { InvoicePaymentTerms } from '../../domain/invoice-payment-terms';
 import { InvoiceResolver } from '../../presentation/graphql/invoice.resolver';
 
-const O = Role.OWNER;
+const O = Role.TENANT_OWNER;
 const M = Role.OPS_MANAGER;
 const S = Role.SCHEDULER;
 const C = Role.CUSTOMER_SUPPORT;

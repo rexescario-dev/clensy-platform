@@ -27,7 +27,7 @@ export class PricingRuleResolver {
   @Query(() => PricingRuleType, { name: 'activePricing', nullable: true })
   @UseGuards(AuthGuard)
   @Roles(
-    Role.OWNER,
+    Role.TENANT_OWNER,
     Role.OPS_MANAGER,
     Role.SCHEDULER,
     Role.CUSTOMER_SUPPORT,
@@ -43,7 +43,7 @@ export class PricingRuleResolver {
 
   @Mutation(() => PricingRuleType)
   @UseGuards(AuthGuard)
-  @Roles(Role.OWNER, Role.OPS_MANAGER)
+  @Roles(Role.TENANT_OWNER, Role.OPS_MANAGER)
   async createPricingRule(
     @Args('input') input: CreatePricingRuleInput,
     @CurrentUser() currentUser: AuthenticatedPrincipal,

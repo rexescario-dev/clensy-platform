@@ -8,7 +8,7 @@ import { LaundryFulfillmentType } from '../../domain/laundry-fulfillment-type';
 import { LaundryOrderStatus } from '../../domain/laundry-order-status';
 import { LaundryOrderResolver } from '../../presentation/graphql/laundry-order.resolver';
 
-const O = Role.OWNER;
+const O = Role.TENANT_OWNER;
 const M = Role.OPS_MANAGER;
 const S = Role.SCHEDULER;
 const C = Role.CUSTOMER_SUPPORT;

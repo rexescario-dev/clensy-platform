@@ -20,9 +20,14 @@ type ResolverMethod =
 // View matrix per spec §4.3: Customer Support and Finance excluded (unlike
 // the Customers module) — this module's RBAC matrix is deliberately
 // different, not copied from `property.resolver.ts`.
-const VIEW_ROLES = [Role.OWNER, Role.OPS_MANAGER, Role.SCHEDULER, Role.ANALYST];
+const VIEW_ROLES = [
+  Role.TENANT_OWNER,
+  Role.OPS_MANAGER,
+  Role.SCHEDULER,
+  Role.ANALYST,
+];
 
-const WRITE_ROLES = [Role.OWNER, Role.OPS_MANAGER];
+const WRITE_ROLES = [Role.TENANT_OWNER, Role.OPS_MANAGER];
 
 // Same technique as `customer.resolver.spec.ts`/`property.resolver.spec.ts`:
 // reads the method's own function value off `CleanerResolver.prototype` —

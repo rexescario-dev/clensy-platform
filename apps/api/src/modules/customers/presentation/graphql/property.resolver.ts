@@ -23,7 +23,7 @@ import { CustomerPropertiesQueryArgs, PropertyType } from './property.type';
 import { UpdatePropertyInput } from './update-property.input';
 
 const VIEW_ROLES = [
-  Role.OWNER,
+  Role.TENANT_OWNER,
   Role.OPS_MANAGER,
   Role.SCHEDULER,
   Role.CUSTOMER_SUPPORT,
@@ -101,7 +101,7 @@ export class PropertyResolver {
 
   @Mutation(() => PropertyType)
   @UseGuards(AuthGuard)
-  @Roles(Role.OWNER, Role.OPS_MANAGER, Role.CUSTOMER_SUPPORT)
+  @Roles(Role.TENANT_OWNER, Role.OPS_MANAGER, Role.CUSTOMER_SUPPORT)
   async createProperty(
     @Args('customerId', { type: () => ID }) customerId: string,
     @Args('input') input: CreatePropertyInput,
@@ -118,7 +118,7 @@ export class PropertyResolver {
 
   @Mutation(() => PropertyType)
   @UseGuards(AuthGuard)
-  @Roles(Role.OWNER, Role.OPS_MANAGER, Role.CUSTOMER_SUPPORT)
+  @Roles(Role.TENANT_OWNER, Role.OPS_MANAGER, Role.CUSTOMER_SUPPORT)
   async updateProperty(
     @Args('id', { type: () => ID }) id: string,
     @Args('input') input: UpdatePropertyInput,

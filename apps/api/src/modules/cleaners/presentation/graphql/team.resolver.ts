@@ -30,7 +30,7 @@ export class TeamResolver {
 
   @Mutation(() => TeamType)
   @UseGuards(AuthGuard)
-  @Roles(Role.OWNER, Role.OPS_MANAGER)
+  @Roles(Role.TENANT_OWNER, Role.OPS_MANAGER)
   async createTeam(
     @Args('input') input: CreateTeamInput,
     @CurrentUser() currentUser: AuthenticatedPrincipal,

@@ -17,9 +17,14 @@ import { TeamReadResolver } from '../../presentation/graphql/team-read.resolver'
 type ResolverMethod = 'createTeam' | 'team';
 
 // View matrix per spec §4.3: Customer Support and Finance excluded.
-const VIEW_ROLES = [Role.OWNER, Role.OPS_MANAGER, Role.SCHEDULER, Role.ANALYST];
+const VIEW_ROLES = [
+  Role.TENANT_OWNER,
+  Role.OPS_MANAGER,
+  Role.SCHEDULER,
+  Role.ANALYST,
+];
 
-const WRITE_ROLES = [Role.OWNER, Role.OPS_MANAGER];
+const WRITE_ROLES = [Role.TENANT_OWNER, Role.OPS_MANAGER];
 
 function methodRef(method: ResolverMethod): (...args: unknown[]) => unknown {
   const descriptor = Object.getOwnPropertyDescriptor(

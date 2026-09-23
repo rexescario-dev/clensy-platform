@@ -24,7 +24,7 @@ export class AddOnResolver {
 
   @Mutation(() => AddOnType)
   @UseGuards(AuthGuard)
-  @Roles(Role.OWNER, Role.OPS_MANAGER)
+  @Roles(Role.TENANT_OWNER, Role.OPS_MANAGER)
   async createAddOn(
     @Args('input') input: CreateAddOnInput,
     @CurrentUser() currentUser: AuthenticatedPrincipal,
@@ -39,7 +39,7 @@ export class AddOnResolver {
 
   @Mutation(() => AddOnType)
   @UseGuards(AuthGuard)
-  @Roles(Role.OWNER, Role.OPS_MANAGER)
+  @Roles(Role.TENANT_OWNER, Role.OPS_MANAGER)
   async updateAddOn(
     @Args('id', { type: () => ID }) id: string,
     @Args('input') input: UpdateAddOnInput,

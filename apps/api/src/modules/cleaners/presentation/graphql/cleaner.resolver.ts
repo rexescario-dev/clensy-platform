@@ -46,7 +46,7 @@ export class CleanerResolver {
 
   @Mutation(() => CleanerType)
   @UseGuards(AuthGuard)
-  @Roles(Role.OWNER, Role.OPS_MANAGER)
+  @Roles(Role.TENANT_OWNER, Role.OPS_MANAGER)
   async createCleaner(
     @Args('input') input: CreateCleanerInput,
     @CurrentUser() currentUser: AuthenticatedPrincipal,
@@ -61,7 +61,7 @@ export class CleanerResolver {
 
   @Mutation(() => CleanerType)
   @UseGuards(AuthGuard)
-  @Roles(Role.OWNER, Role.OPS_MANAGER)
+  @Roles(Role.TENANT_OWNER, Role.OPS_MANAGER)
   async updateCleaner(
     @Args('id', { type: () => ID }) id: string,
     @Args('input') input: UpdateCleanerInput,
@@ -77,7 +77,7 @@ export class CleanerResolver {
 
   @Mutation(() => CleanerType)
   @UseGuards(AuthGuard)
-  @Roles(Role.OWNER, Role.OPS_MANAGER)
+  @Roles(Role.TENANT_OWNER, Role.OPS_MANAGER)
   async assignCleanerToTeam(
     @Args('cleanerId', { type: () => ID }) cleanerId: string,
     @Args('teamId', { type: () => ID }) teamId: string,

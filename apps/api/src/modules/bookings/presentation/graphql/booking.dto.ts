@@ -24,7 +24,7 @@ import { BookingPricingSnapshotType } from './booking-pricing-snapshot.type';
 registerEnumType(BookingStatus, { name: 'BookingStatus' });
 
 const VIEW_ROLES = [
-  Role.OWNER,
+  Role.TENANT_OWNER,
   Role.OPS_MANAGER,
   Role.SCHEDULER,
   Role.CUSTOMER_SUPPORT,

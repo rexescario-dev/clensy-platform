@@ -19,7 +19,7 @@ type ResolverMethod = 'activePricing' | 'createPricingRule';
 // View matrix per spec §4.3: deliberately BROADER than the Cleaners
 // module's — all six roles, not just Owner/Ops Manager/Scheduler/Analyst.
 const VIEW_ROLES = [
-  Role.OWNER,
+  Role.TENANT_OWNER,
   Role.OPS_MANAGER,
   Role.SCHEDULER,
   Role.CUSTOMER_SUPPORT,
@@ -27,7 +27,7 @@ const VIEW_ROLES = [
   Role.ANALYST,
 ];
 
-const WRITE_ROLES = [Role.OWNER, Role.OPS_MANAGER];
+const WRITE_ROLES = [Role.TENANT_OWNER, Role.OPS_MANAGER];
 
 function methodRef(method: ResolverMethod): (...args: unknown[]) => unknown {
   const descriptor = Object.getOwnPropertyDescriptor(

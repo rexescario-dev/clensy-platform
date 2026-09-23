@@ -20,7 +20,12 @@ import { BookingReadResolver } from '../../../bookings/presentation/graphql/book
 
 type ReadMethod = 'queryMany';
 
-const VIEW_ROLES = [Role.OWNER, Role.OPS_MANAGER, Role.SCHEDULER, Role.ANALYST];
+const VIEW_ROLES = [
+  Role.TENANT_OWNER,
+  Role.OPS_MANAGER,
+  Role.SCHEDULER,
+  Role.ANALYST,
+];
 
 function readMethodRef(
   ctor: { prototype: object },

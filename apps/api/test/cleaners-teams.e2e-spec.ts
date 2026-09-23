@@ -229,7 +229,7 @@ describe('Cleaners & Teams (e2e)', () => {
     const ownerLoginResponse = await login(owner.email, owner.password);
     expect(ownerLoginResponse.body.errors).toBeUndefined();
     expect(ownerLoginResponse.body.data.login).toEqual({
-      admin: { id: owner.id, role: Role.OWNER },
+      admin: { id: owner.id, role: Role.TENANT_OWNER },
       success: true,
     });
     const ownerSessionCookie = extractSessionCookie(ownerLoginResponse);

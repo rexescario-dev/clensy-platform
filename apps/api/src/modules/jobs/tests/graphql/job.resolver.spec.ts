@@ -30,7 +30,7 @@ type ResolverMethod =
   | 'job';
 
 const VIEW_ROLES = [
-  Role.OWNER,
+  Role.TENANT_OWNER,
   Role.OPS_MANAGER,
   Role.SCHEDULER,
   Role.CUSTOMER_SUPPORT,
@@ -38,12 +38,12 @@ const VIEW_ROLES = [
   Role.ANALYST,
 ];
 const CREATE_ROLES = [
-  Role.OWNER,
+  Role.TENANT_OWNER,
   Role.OPS_MANAGER,
   Role.SCHEDULER,
   Role.CUSTOMER_SUPPORT,
 ];
-const EXECUTE_ROLES = [Role.OWNER, Role.OPS_MANAGER, Role.SCHEDULER];
+const EXECUTE_ROLES = [Role.TENANT_OWNER, Role.OPS_MANAGER, Role.SCHEDULER];
 
 function methodRef(method: ResolverMethod): (...args: unknown[]) => unknown {
   const descriptor = Object.getOwnPropertyDescriptor(

@@ -16,14 +16,18 @@ type ResolverMethod =
   'createProperty' | 'customerProperties' | 'property' | 'updateProperty';
 
 const VIEW_ROLES = [
-  Role.OWNER,
+  Role.TENANT_OWNER,
   Role.OPS_MANAGER,
   Role.SCHEDULER,
   Role.CUSTOMER_SUPPORT,
   Role.ANALYST,
 ];
 
-const WRITE_ROLES = [Role.OWNER, Role.OPS_MANAGER, Role.CUSTOMER_SUPPORT];
+const WRITE_ROLES = [
+  Role.TENANT_OWNER,
+  Role.OPS_MANAGER,
+  Role.CUSTOMER_SUPPORT,
+];
 
 // Same technique as `admin.resolver.spec.ts`/`customer.resolver.spec.ts`.
 function methodRef(method: ResolverMethod): (...args: unknown[]) => unknown {
