@@ -1,12 +1,8 @@
-import * as bcrypt from 'bcrypt';
-import { randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { AdminUserEntity } from '../../src/modules/admins/infrastructure/persistence/admin-user.entity';
-import { AdminScope } from '../../src/platform/auth/domain/admin-scope';
 import { Role } from '../../src/platform/auth/domain/role';
 import { BOOTSTRAP_TENANT_ID } from '../../src/platform/database/bootstrap-tenant';
-
-const BCRYPT_SALT_ROUNDS = 4; // low cost — this is a test fixture, not production hashing
+import { seedTenantAdmin } from './seed-tenant-admin';
 
 export interface SeededOwner {
   id: string;
@@ -29,26 +25,16 @@ export interface SeededOwner {
 // inserted (plan Task 8). Business data stays unscoped in this slice, so
 // these suites exercise exactly what they did under the retired OWNER role.
 //
-// A random email per call keeps repeated test runs against the same
-// (non-truncated, real) Postgres database collision-free with each other
-// and with any pre-existing dev data.
+// Kept as a repository-taking entry point for the module suites; the
+// seeding itself is `seedTenantAdmin`'s (random email per call, so repeated
+// runs against the same real database never collide).
 export async function seedOwner(
   repository: Repository<AdminUserEntity>,
 ): Promise<SeededOwner> {
-  const password = `owner-pw-${randomUUID()}`;
-  const email = `owner-${randomUUID()}@example.com`;
-  const passwordHash = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
-
-  const entity = await repository.save(
-    repository.create({
-      tenantId: BOOTSTRAP_TENANT_ID,
-      email,
-      isActive: true,
-      passwordHash,
-      role: Role.TENANT_OWNER,
-      scope: AdminScope.TENANT,
-    }),
+  const { id, email, password } = await seedTenantAdmin(
+    repository.manager.connection,
+    Role.TENANT_OWNER,
+    BOOTSTRAP_TENANT_ID,
   );
-
-  return { id: entity.id, tenantId: BOOTSTRAP_TENANT_ID, email, password };
+  return { id, tenantId: BOOTSTRAP_TENANT_ID, email, password };
 }
