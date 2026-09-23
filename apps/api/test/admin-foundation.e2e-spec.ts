@@ -390,7 +390,7 @@ describe('Admin Foundation (e2e)', () => {
     const listed = listResponse.body.data.admins as {
       id: string;
       tenantId: string;
-      scope: string;
+      scope: AdminScope;
     }[];
     expect(listed.map((admin) => admin.id).sort()).toEqual(
       [ownerB.id, staffB.id].sort(),
