@@ -5,7 +5,7 @@
 | **Status** | Accepted |
 | **Kind** | Implementation plan (M4) for **one** delivery slice |
 | **Date** | 2026-09-23 |
-| **Tracking** | GitHub [#68](https://github.com/rexescario-dev/clensy-platform/issues/68). One PR for this Accepted plan + implementation (process §2.8). |
+| **Tracking** | GitHub [#68](https://github.com/rexescario-dev/clensy-platform/issues/68). One PR for this Accepted plan + implementation (process §2.8): [#93](https://github.com/rexescario-dev/clensy-platform/pull/93). |
 | **Package / repo** | `clensy-platform` — `apps/api`, `apps/web`, `packages/client` |
 | **Depends on (Accepted)** | [Multi-Tenant Architecture](../specs/2026-09-23-multi-tenant-architecture-design.md) (Accepted, M3 2026-09-23). **Where this plan and that specification disagree, the specification wins** — stop and return to M2/M3. Also relies on [Admin Foundation](../specs/2026-08-14-admin-foundation-design.md) (cookie JWT `{ sub }`, `AuthGuard`, `@Roles()`, login indistinguishability) without redesigning those mechanics. |
 
