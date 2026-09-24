@@ -19,6 +19,21 @@ import { UpdateCustomerInput } from './update-customer.input';
 export class CustomerResolver {
   constructor(private readonly customersService: CustomersService) {}
 
+  @Mutation(() => CustomerType)
+  @UseGuards(AuthGuard)
+  @Roles(Role.TENANT_OWNER, Role.OPS_MANAGER, Role.CUSTOMER_SUPPORT)
+  async createCustomer(
+    @Args('input') input: CreateCustomerInput,
+    @CurrentUser() currentUser: AuthenticatedPrincipal,
+  ): Promise<CustomerType> {
+    const command: CreateCustomerCommand = {
+      ...input,
+      actorId: currentUser.id,
+    };
+    const customer = await this.customersService.create(command);
+    return toCustomerType(customer);
+  }
+
   @Query(() => CustomerType, { name: 'customer', nullable: true })
   @UseGuards(AuthGuard)
   @Roles(
@@ -33,21 +48,6 @@ export class CustomerResolver {
   ): Promise<CustomerType | null> {
     const customer = await this.customersService.getCustomer(id);
     return customer ? toCustomerType(customer) : null;
-  }
-
-  @Mutation(() => CustomerType)
-  @UseGuards(AuthGuard)
-  @Roles(Role.TENANT_OWNER, Role.OPS_MANAGER, Role.CUSTOMER_SUPPORT)
-  async createCustomer(
-    @Args('input') input: CreateCustomerInput,
-    @CurrentUser() currentUser: AuthenticatedPrincipal,
-  ): Promise<CustomerType> {
-    const command: CreateCustomerCommand = {
-      ...input,
-      actorId: currentUser.id,
-    };
-    const customer = await this.customersService.create(command);
-    return toCustomerType(customer);
   }
 
   @Mutation(() => CustomerType)

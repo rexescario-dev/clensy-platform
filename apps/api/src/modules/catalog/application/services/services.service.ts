@@ -59,6 +59,27 @@ export class ServicesService {
     );
   }
 
+  getService(id: string): Promise<Service | null> {
+    return this.serviceRepository.findOneBy({ id });
+  }
+
+  // Bulk lookup for Bookings' GraphQL relation-batching loader (Bookings
+  // spec §4.5); deliberately not exposed over GraphQL directly. Returns
+  // exactly the rows that exist for the given ids — no synthetic entries
+  // for missing ones, the caller's loader handles gaps.
+  getServicesByIds(ids: string[]): Promise<Service[]> {
+    if (ids.length === 0) {
+      return Promise.resolve([]);
+    }
+    return this.serviceRepository.findBy({ id: In(ids) });
+  }
+
+  // Catalog reads are unfiltered (spec §4.1) — no `active` filter, no
+  // arguments; the full set, active and inactive alike.
+  listServices(): Promise<Service[]> {
+    return this.serviceRepository.find();
+  }
+
   // Uses `manager.update()`, not `Object.assign(entity, changes)` +
   // `manager.save(entity)` — same rationale as `CleanersService#updateCleaner`
   // (spec §3): `save()` diffs the in-memory entity against the currently-
@@ -111,27 +132,6 @@ export class ServicesService {
     );
   }
 
-  getService(id: string): Promise<Service | null> {
-    return this.serviceRepository.findOneBy({ id });
-  }
-
-  // Catalog reads are unfiltered (spec §4.1) — no `active` filter, no
-  // arguments; the full set, active and inactive alike.
-  listServices(): Promise<Service[]> {
-    return this.serviceRepository.find();
-  }
-
-  // Bulk lookup for Bookings' GraphQL relation-batching loader (Bookings
-  // spec §4.5); deliberately not exposed over GraphQL directly. Returns
-  // exactly the rows that exist for the given ids — no synthetic entries
-  // for missing ones, the caller's loader handles gaps.
-  getServicesByIds(ids: string[]): Promise<Service[]> {
-    if (ids.length === 0) {
-      return Promise.resolve([]);
-    }
-    return this.serviceRepository.findBy({ id: In(ids) });
-  }
-
   // Case-insensitive name uniqueness pre-check (spec §3) — the application-
   // layer half of the enforcement; the Postgres expression index
   // (`uq_service_name_lower`, added by hand in this module's migration) is
@@ -155,19 +155,6 @@ export class ServicesService {
     }
   }
 
-  // Shared by `createService`/`updateService` — the race-window fallback
-  // behind `assertNameAvailable`'s pre-check.
-  private async translateUniqueViolation<T>(fn: () => Promise<T>): Promise<T> {
-    try {
-      return await fn();
-    } catch (error) {
-      if ((error as { code?: string }).code === POSTGRES_UNIQUE_VIOLATION) {
-        throw new ConflictException('Service name is already in use');
-      }
-      throw error;
-    }
-  }
-
   private assertValid(
     service: Pick<Service, 'durationMinutes' | 'name'>,
   ): void {
@@ -181,6 +168,19 @@ export class ServicesService {
       throw new BadRequestException(
         'durationMinutes must be a positive integer',
       );
+    }
+  }
+
+  // Shared by `createService`/`updateService` — the race-window fallback
+  // behind `assertNameAvailable`'s pre-check.
+  private async translateUniqueViolation<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (error) {
+      if ((error as { code?: string }).code === POSTGRES_UNIQUE_VIOLATION) {
+        throw new ConflictException('Service name is already in use');
+      }
+      throw error;
     }
   }
 }

@@ -58,6 +58,54 @@ shape, errors, and maintainability.
   with a blank line or disable the next line.
 - Functions that both compute and write must make the write obvious in the
   name (`saveInvoice`, not `prepareInvoice`).
+- Function declaration order is `contextforge/function-order` (see
+  below). It checks source order only and does not change runtime
+  behavior.
+
+## Function order
+
+Readers find a constructor, then the property accessors, then the
+method contract. The check is declaration order. Call sites still use
+names, so reordering declarations does not change behavior.
+
+`@typescript-eslint/member-ordering` can list `get` and `set` as
+separate groups, which sorts every getter before every setter.
+Getter and setter for one property are one API and must stay adjacent,
+so this package uses the ContextForge rule instead of that native rule.
+
+Order, among functions only:
+
+1. Constructor. It is not sorted by name.
+2. Getter/setter properties, ascending by property name. A lone getter
+   or setter still belongs here. When both exist, their existing
+   `get`/`set` order is kept.
+3. Public methods, ascending by name.
+4. Protected methods, ascending by name.
+5. Private methods, ascending by name.
+
+A method with no visibility keyword is public. Do not add `public`
+just to satisfy the rule. `#reset()` is private because it is an
+ECMAScript private method. `static` is not an extra group. Function
+valued properties (`create = () => {}`) use the same visibility and
+name rules as methods. Overloads of one name stay together in their
+existing source order. Fields that are not functions are left where
+they are.
+
+GraphQL resolver methods are ordinary class methods. Decorators stay
+on the method they decorate. Generated `schema.gql` is not an ordering
+target. With `sortSchema: true`, NestJS already prints that file in
+lexicographic order, independent of resolver declaration order.
+
+Top-level `function` declarations follow the same idea: `export function`
+and named `export default function` first, then module-private
+functions, each group by name. An anonymous `export default function`
+has no name to sort and is skipped.
+
+The rule applies to `src/**/*.{js,mjs,cjs,ts,tsx,jsx}` and ignores
+`src/**/migrations/**` and `src/**/generated/**`, so TypeORM classes
+keep `up` then `down` and generated clients stay as the generator
+wrote them. Tests, `codegen.ts`, and anything else outside `src/` are
+not checked.
 
 ## Typing (TypeScript)
 

@@ -10,28 +10,6 @@ import type { MouseEvent } from 'react';
 const FOCUSABLE_SELECTOR =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
-function getFocusableElements(container: HTMLElement): HTMLElement[] {
-  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
-    (element) =>
-      !element.hasAttribute('disabled') &&
-      element.getAttribute('aria-hidden') !== 'true' &&
-      // `offsetParent` is null for elements that are `display: none` (or not
-      // in the layout tree at all) — a cheap, dependency-free visibility check.
-      element.offsetParent !== null,
-  );
-}
-
-// Module-level stack of currently-open dialog instances, in the order they
-// became open. Every `useDialogBehavior` call gets a stable identity (an
-// opaque object created once via lazy `useRef` init) that it pushes onto
-// this stack while `open` and pops off when it closes/unmounts — see the
-// dedicated effect below. The Escape handler in the keydown effect consults
-// this stack so that, when dialogs are nested (e.g. a `ConfirmDialog` opened
-// from inside an already-open `DetailDrawer`), only the topmost instance
-// responds to a single Escape keypress instead of every open instance
-// closing at once.
-const openDialogStack: object[] = [];
-
 export function useDialogBehavior(open: boolean, onClose: () => void) {
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<Element | null>(null);
@@ -160,4 +138,26 @@ export function useDialogBehavior(open: boolean, onClose: () => void) {
   }
 
   return { backdropProps, containerRef };
+}
+
+// Module-level stack of currently-open dialog instances, in the order they
+// became open. Every `useDialogBehavior` call gets a stable identity (an
+// opaque object created once via lazy `useRef` init) that it pushes onto
+// this stack while `open` and pops off when it closes/unmounts — see the
+// dedicated effect below. The Escape handler in the keydown effect consults
+// this stack so that, when dialogs are nested (e.g. a `ConfirmDialog` opened
+// from inside an already-open `DetailDrawer`), only the topmost instance
+// responds to a single Escape keypress instead of every open instance
+// closing at once.
+const openDialogStack: object[] = [];
+
+function getFocusableElements(container: HTMLElement): HTMLElement[] {
+  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+    (element) =>
+      !element.hasAttribute('disabled') &&
+      element.getAttribute('aria-hidden') !== 'true' &&
+      // `offsetParent` is null for elements that are `display: none` (or not
+      // in the layout tree at all) — a cheap, dependency-free visibility check.
+      element.offsetParent !== null,
+  );
 }

@@ -52,106 +52,6 @@ const ALIGN_CLASS = {
   right: 'text-right',
 } as const satisfies Record<NonNullable<DataTableColumn<unknown>['align']>, string>;
 
-export function nextSortState(
-  current: DataTableSortState | null | undefined,
-  key: string,
-): DataTableSortState | null {
-  if (!current || current.key !== key) return { key, direction: 'asc' };
-  if (current.direction === 'asc') return { key, direction: 'desc' };
-  return null;
-}
-
-// Pure, independently-testable row-activation logic — the ONE mechanism
-// behind both the desktop <TableRow>'s onKeyDown and the mobile card's
-// onKeyDown (#65 finding 2: a mobile card must reuse the exact same
-// click-handling mechanism as a desktop row, not a second one). The event
-// parameter is intentionally the minimal structural shape actually used
-// (not React's element-specific KeyboardEvent<HTMLTableRowElement>) so the
-// same function type-checks against both a <tr>'s and a <div>'s onKeyDown,
-// and so it can be unit-tested with a plain mock object — this repo's
-// renderToStaticMarkup-only test setup cannot simulate real key events.
-export function handleRowKeyDown<T>(
-  event: { key: string; preventDefault: () => void },
-  row: T,
-  onRowClick: ((row: T) => void) | undefined,
-): void {
-  if (!onRowClick) return;
-  if (event.key === 'Enter') {
-    onRowClick(row);
-  } else if (event.key === ' ') {
-    event.preventDefault();
-    onRowClick(row);
-  }
-}
-
-// Pure, independently-testable interactive-attribute set for a clickable
-// row/card — shared by the desktop <TableRow> and the mobile card wrapper
-// so "is this row clickable" has exactly one derivation. Returns {} (no
-// attributes at all) when onRowClick is omitted, so a non-interactive
-// row/card renders with no false affordance (#65 finding 2c).
-export function rowInteractionProps<T>(
-  row: T,
-  onRowClick: ((row: T) => void) | undefined,
-):
-  | Record<string, never>
-  | {
-      onClick: () => void;
-      onKeyDown: (event: { key: string; preventDefault: () => void }) => void;
-      role: 'button';
-      tabIndex: 0;
-    } {
-  if (!onRowClick) return {};
-  return {
-    onClick: () => onRowClick(row),
-    onKeyDown: (event) => handleRowKeyDown(event, row, onRowClick),
-    role: 'button',
-    tabIndex: 0,
-  };
-}
-
-// Toggles a single row's key, preserving every other entry in `selectedKeys`
-// untouched — including keys belonging to rows not currently rendered on
-// this page.
-export function toggleSelectionKey(selectedKeys: string[], key: string): string[] {
-  return selectedKeys.includes(key)
-    ? selectedKeys.filter((existingKey) => existingKey !== key)
-    : [...selectedKeys, key];
-}
-
-// Toggles "select all" for the current page. Contract: select-all only ever
-// adds or removes keys in `selectableKeys` (the current page's *selectable*
-// rows) — never a key belonging to another page, and never a key for a row
-// on this page that `isRowSelectable` returned false for. A pre-existing
-// selected key that happens to belong to a non-selectable row on this page
-// (or another page entirely) is left exactly as-is either way.
-export function togglePageSelection(
-  selectedKeys: string[],
-  selectableKeys: string[],
-  allSelected: boolean,
-): string[] {
-  const withoutSelectablePageKeys = selectedKeys.filter((key) => !selectableKeys.includes(key));
-  return allSelected ? withoutSelectablePageKeys : [...withoutSelectablePageKeys, ...selectableKeys];
-}
-
-// Resolves a dot-separated property path against a value, returning
-// `undefined` as soon as an intermediate value is missing/null rather than
-// throwing. No array indexing, no expression syntax, no eval — a plain
-// segment-by-segment property walk.
-export function resolvePath(row: unknown, path: string): unknown {
-  return path.split('.').reduce<unknown>((value, segment) => {
-    if (value === null || value === undefined) return undefined;
-    return (value as Record<string, unknown>)[segment];
-  }, row);
-}
-
-// `DataTableColumn.render`'s two forms: a nested property path (resolved via
-// `resolvePath`) or a callback (executed with the full row). Deliberately
-// the only two forms — no separate accessor/accessorKey/accessorFn.
-export function resolveCellValue<T>(row: T, render: string | ((row: T) => ReactNode)): ReactNode {
-  if (typeof render === 'function') return render(row);
-  return resolvePath(row, render) as ReactNode;
-}
-
 export function DataTable<T extends Record<string, unknown>>({
   columns,
   rows,
@@ -383,4 +283,104 @@ export function DataTable<T extends Record<string, unknown>>({
       {pagination ? <Pagination {...pagination} /> : null}
     </div>
   );
+}
+
+// Pure, independently-testable row-activation logic — the ONE mechanism
+// behind both the desktop <TableRow>'s onKeyDown and the mobile card's
+// onKeyDown (#65 finding 2: a mobile card must reuse the exact same
+// click-handling mechanism as a desktop row, not a second one). The event
+// parameter is intentionally the minimal structural shape actually used
+// (not React's element-specific KeyboardEvent<HTMLTableRowElement>) so the
+// same function type-checks against both a <tr>'s and a <div>'s onKeyDown,
+// and so it can be unit-tested with a plain mock object — this repo's
+// renderToStaticMarkup-only test setup cannot simulate real key events.
+export function handleRowKeyDown<T>(
+  event: { key: string; preventDefault: () => void },
+  row: T,
+  onRowClick: ((row: T) => void) | undefined,
+): void {
+  if (!onRowClick) return;
+  if (event.key === 'Enter') {
+    onRowClick(row);
+  } else if (event.key === ' ') {
+    event.preventDefault();
+    onRowClick(row);
+  }
+}
+
+export function nextSortState(
+  current: DataTableSortState | null | undefined,
+  key: string,
+): DataTableSortState | null {
+  if (!current || current.key !== key) return { key, direction: 'asc' };
+  if (current.direction === 'asc') return { key, direction: 'desc' };
+  return null;
+}
+
+// `DataTableColumn.render`'s two forms: a nested property path (resolved via
+// `resolvePath`) or a callback (executed with the full row). Deliberately
+// the only two forms — no separate accessor/accessorKey/accessorFn.
+export function resolveCellValue<T>(row: T, render: string | ((row: T) => ReactNode)): ReactNode {
+  if (typeof render === 'function') return render(row);
+  return resolvePath(row, render) as ReactNode;
+}
+
+// Resolves a dot-separated property path against a value, returning
+// `undefined` as soon as an intermediate value is missing/null rather than
+// throwing. No array indexing, no expression syntax, no eval — a plain
+// segment-by-segment property walk.
+export function resolvePath(row: unknown, path: string): unknown {
+  return path.split('.').reduce<unknown>((value, segment) => {
+    if (value === null || value === undefined) return undefined;
+    return (value as Record<string, unknown>)[segment];
+  }, row);
+}
+
+// Pure, independently-testable interactive-attribute set for a clickable
+// row/card — shared by the desktop <TableRow> and the mobile card wrapper
+// so "is this row clickable" has exactly one derivation. Returns {} (no
+// attributes at all) when onRowClick is omitted, so a non-interactive
+// row/card renders with no false affordance (#65 finding 2c).
+export function rowInteractionProps<T>(
+  row: T,
+  onRowClick: ((row: T) => void) | undefined,
+):
+  | Record<string, never>
+  | {
+      onClick: () => void;
+      onKeyDown: (event: { key: string; preventDefault: () => void }) => void;
+      role: 'button';
+      tabIndex: 0;
+    } {
+  if (!onRowClick) return {};
+  return {
+    onClick: () => onRowClick(row),
+    onKeyDown: (event) => handleRowKeyDown(event, row, onRowClick),
+    role: 'button',
+    tabIndex: 0,
+  };
+}
+
+// Toggles "select all" for the current page. Contract: select-all only ever
+// adds or removes keys in `selectableKeys` (the current page's *selectable*
+// rows) — never a key belonging to another page, and never a key for a row
+// on this page that `isRowSelectable` returned false for. A pre-existing
+// selected key that happens to belong to a non-selectable row on this page
+// (or another page entirely) is left exactly as-is either way.
+export function togglePageSelection(
+  selectedKeys: string[],
+  selectableKeys: string[],
+  allSelected: boolean,
+): string[] {
+  const withoutSelectablePageKeys = selectedKeys.filter((key) => !selectableKeys.includes(key));
+  return allSelected ? withoutSelectablePageKeys : [...withoutSelectablePageKeys, ...selectableKeys];
+}
+
+// Toggles a single row's key, preserving every other entry in `selectedKeys`
+// untouched — including keys belonging to rows not currently rendered on
+// this page.
+export function toggleSelectionKey(selectedKeys: string[], key: string): string[] {
+  return selectedKeys.includes(key)
+    ? selectedKeys.filter((existingKey) => existingKey !== key)
+    : [...selectedKeys, key];
 }

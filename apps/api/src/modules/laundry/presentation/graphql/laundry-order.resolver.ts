@@ -34,6 +34,26 @@ const REFUND = [Role.TENANT_OWNER, Role.OPS_MANAGER, Role.FINANCE];
 export class LaundryOrderResolver {
   constructor(private readonly service: LaundryOrdersService) {}
 
+  @Mutation(() => LaundryOrderType)
+  @UseGuards(AuthGuard)
+  @Roles(...CANCEL)
+  cancelLaundryOrder(
+    @Args('input') input: LaundryOrderRefInput,
+    @CurrentUser() user: AuthenticatedPrincipal,
+  ): Promise<LaundryOrderType> {
+    return this.run(input, user, (c) => this.service.cancel(c));
+  }
+
+  @Mutation(() => LaundryOrderType)
+  @UseGuards(AuthGuard)
+  @Roles(...INTAKE)
+  completeLaundryOrder(
+    @Args('input') input: LaundryOrderRefInput,
+    @CurrentUser() user: AuthenticatedPrincipal,
+  ): Promise<LaundryOrderType> {
+    return this.run(input, user, (c) => this.service.complete(c));
+  }
+
   @Query(() => LaundryOrderType, { name: 'laundryOrder', nullable: true })
   @UseGuards(AuthGuard)
   @Roles(...VIEW_ROLES)
@@ -46,26 +66,72 @@ export class LaundryOrderResolver {
 
   @Mutation(() => LaundryOrderType)
   @UseGuards(AuthGuard)
-  @Roles(...INTAKE)
-  async receiveLaundryOrder(
-    @Args('input') input: ReceiveLaundryOrderInput,
+  @Roles(...OPERATIONAL)
+  markLaundryOrderAwaitingDelivery(
+    @Args('input') input: LaundryOrderRefInput,
     @CurrentUser() user: AuthenticatedPrincipal,
   ): Promise<LaundryOrderType> {
-    return toLaundryOrderType(
-      await this.service.receive({ ...input, actorId: user.id }),
-    );
+    return this.run(input, user, (c) => this.service.markAwaitingDelivery(c));
+  }
+
+  @Mutation(() => LaundryOrderType)
+  @UseGuards(AuthGuard)
+  @Roles(...PAYMENT)
+  markLaundryOrderAwaitingPayment(
+    @Args('input') input: LaundryOrderRefInput,
+    @CurrentUser() user: AuthenticatedPrincipal,
+  ): Promise<LaundryOrderType> {
+    return this.run(input, user, (c) => this.service.markAwaitingPayment(c));
   }
 
   @Mutation(() => LaundryOrderType)
   @UseGuards(AuthGuard)
   @Roles(...OPERATIONAL)
-  async weighLaundryOrder(
-    @Args('input') input: WeighLaundryOrderInput,
+  markLaundryOrderAwaitingPickup(
+    @Args('input') input: LaundryOrderRefInput,
     @CurrentUser() user: AuthenticatedPrincipal,
   ): Promise<LaundryOrderType> {
-    return toLaundryOrderType(
-      await this.service.weigh({ ...input, actorId: user.id }),
-    );
+    return this.run(input, user, (c) => this.service.markAwaitingPickup(c));
+  }
+
+  @Mutation(() => LaundryOrderType)
+  @UseGuards(AuthGuard)
+  @Roles(...EXCEPTION)
+  markLaundryOrderDamaged(
+    @Args('input') input: LaundryOrderRefInput,
+    @CurrentUser() user: AuthenticatedPrincipal,
+  ): Promise<LaundryOrderType> {
+    return this.run(input, user, (c) => this.service.markDamaged(c));
+  }
+
+  @Mutation(() => LaundryOrderType)
+  @UseGuards(AuthGuard)
+  @Roles(...EXCEPTION)
+  markLaundryOrderLost(
+    @Args('input') input: LaundryOrderRefInput,
+    @CurrentUser() user: AuthenticatedPrincipal,
+  ): Promise<LaundryOrderType> {
+    return this.run(input, user, (c) => this.service.markLost(c));
+  }
+
+  @Mutation(() => LaundryOrderType)
+  @UseGuards(AuthGuard)
+  @Roles(...PAYMENT)
+  markLaundryOrderPaid(
+    @Args('input') input: LaundryOrderRefInput,
+    @CurrentUser() user: AuthenticatedPrincipal,
+  ): Promise<LaundryOrderType> {
+    return this.run(input, user, (c) => this.service.markPaid(c));
+  }
+
+  @Mutation(() => LaundryOrderType)
+  @UseGuards(AuthGuard)
+  @Roles(...OPERATIONAL)
+  markLaundryOrderReady(
+    @Args('input') input: LaundryOrderRefInput,
+    @CurrentUser() user: AuthenticatedPrincipal,
+  ): Promise<LaundryOrderType> {
+    return this.run(input, user, (c) => this.service.markReady(c));
   }
 
   @Mutation(() => LaundryOrderType)
@@ -82,22 +148,34 @@ export class LaundryOrderResolver {
 
   @Mutation(() => LaundryOrderType)
   @UseGuards(AuthGuard)
-  @Roles(...PAYMENT)
-  markLaundryOrderAwaitingPayment(
-    @Args('input') input: LaundryOrderRefInput,
+  @Roles(...INTAKE)
+  async receiveLaundryOrder(
+    @Args('input') input: ReceiveLaundryOrderInput,
     @CurrentUser() user: AuthenticatedPrincipal,
   ): Promise<LaundryOrderType> {
-    return this.run(input, user, (c) => this.service.markAwaitingPayment(c));
+    return toLaundryOrderType(
+      await this.service.receive({ ...input, actorId: user.id }),
+    );
   }
 
   @Mutation(() => LaundryOrderType)
   @UseGuards(AuthGuard)
-  @Roles(...PAYMENT)
-  markLaundryOrderPaid(
+  @Roles(...REFUND)
+  refundLaundryOrder(
     @Args('input') input: LaundryOrderRefInput,
     @CurrentUser() user: AuthenticatedPrincipal,
   ): Promise<LaundryOrderType> {
-    return this.run(input, user, (c) => this.service.markPaid(c));
+    return this.run(input, user, (c) => this.service.refund(c));
+  }
+
+  @Mutation(() => LaundryOrderType)
+  @UseGuards(AuthGuard)
+  @Roles(...EXCEPTION)
+  rejectLaundryOrder(
+    @Args('input') input: LaundryOrderRefInput,
+    @CurrentUser() user: AuthenticatedPrincipal,
+  ): Promise<LaundryOrderType> {
+    return this.run(input, user, (c) => this.service.reject(c));
   }
 
   @Mutation(() => LaundryOrderType)
@@ -113,91 +191,13 @@ export class LaundryOrderResolver {
   @Mutation(() => LaundryOrderType)
   @UseGuards(AuthGuard)
   @Roles(...OPERATIONAL)
-  markLaundryOrderReady(
-    @Args('input') input: LaundryOrderRefInput,
+  async weighLaundryOrder(
+    @Args('input') input: WeighLaundryOrderInput,
     @CurrentUser() user: AuthenticatedPrincipal,
   ): Promise<LaundryOrderType> {
-    return this.run(input, user, (c) => this.service.markReady(c));
-  }
-
-  @Mutation(() => LaundryOrderType)
-  @UseGuards(AuthGuard)
-  @Roles(...OPERATIONAL)
-  markLaundryOrderAwaitingPickup(
-    @Args('input') input: LaundryOrderRefInput,
-    @CurrentUser() user: AuthenticatedPrincipal,
-  ): Promise<LaundryOrderType> {
-    return this.run(input, user, (c) => this.service.markAwaitingPickup(c));
-  }
-
-  @Mutation(() => LaundryOrderType)
-  @UseGuards(AuthGuard)
-  @Roles(...OPERATIONAL)
-  markLaundryOrderAwaitingDelivery(
-    @Args('input') input: LaundryOrderRefInput,
-    @CurrentUser() user: AuthenticatedPrincipal,
-  ): Promise<LaundryOrderType> {
-    return this.run(input, user, (c) => this.service.markAwaitingDelivery(c));
-  }
-
-  @Mutation(() => LaundryOrderType)
-  @UseGuards(AuthGuard)
-  @Roles(...INTAKE)
-  completeLaundryOrder(
-    @Args('input') input: LaundryOrderRefInput,
-    @CurrentUser() user: AuthenticatedPrincipal,
-  ): Promise<LaundryOrderType> {
-    return this.run(input, user, (c) => this.service.complete(c));
-  }
-
-  @Mutation(() => LaundryOrderType)
-  @UseGuards(AuthGuard)
-  @Roles(...CANCEL)
-  cancelLaundryOrder(
-    @Args('input') input: LaundryOrderRefInput,
-    @CurrentUser() user: AuthenticatedPrincipal,
-  ): Promise<LaundryOrderType> {
-    return this.run(input, user, (c) => this.service.cancel(c));
-  }
-
-  @Mutation(() => LaundryOrderType)
-  @UseGuards(AuthGuard)
-  @Roles(...EXCEPTION)
-  rejectLaundryOrder(
-    @Args('input') input: LaundryOrderRefInput,
-    @CurrentUser() user: AuthenticatedPrincipal,
-  ): Promise<LaundryOrderType> {
-    return this.run(input, user, (c) => this.service.reject(c));
-  }
-
-  @Mutation(() => LaundryOrderType)
-  @UseGuards(AuthGuard)
-  @Roles(...EXCEPTION)
-  markLaundryOrderLost(
-    @Args('input') input: LaundryOrderRefInput,
-    @CurrentUser() user: AuthenticatedPrincipal,
-  ): Promise<LaundryOrderType> {
-    return this.run(input, user, (c) => this.service.markLost(c));
-  }
-
-  @Mutation(() => LaundryOrderType)
-  @UseGuards(AuthGuard)
-  @Roles(...EXCEPTION)
-  markLaundryOrderDamaged(
-    @Args('input') input: LaundryOrderRefInput,
-    @CurrentUser() user: AuthenticatedPrincipal,
-  ): Promise<LaundryOrderType> {
-    return this.run(input, user, (c) => this.service.markDamaged(c));
-  }
-
-  @Mutation(() => LaundryOrderType)
-  @UseGuards(AuthGuard)
-  @Roles(...REFUND)
-  refundLaundryOrder(
-    @Args('input') input: LaundryOrderRefInput,
-    @CurrentUser() user: AuthenticatedPrincipal,
-  ): Promise<LaundryOrderType> {
-    return this.run(input, user, (c) => this.service.refund(c));
+    return toLaundryOrderType(
+      await this.service.weigh({ ...input, actorId: user.id }),
+    );
   }
 
   private async run(

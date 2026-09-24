@@ -70,6 +70,38 @@ export class PropertiesService {
     );
   }
 
+  // Bulk lookup for Bookings' GraphQL relation-batching loader (Bookings
+  // spec §4.5); deliberately not exposed over GraphQL directly. Returns
+  // exactly the rows that exist for the given ids — no synthetic entries
+  // for missing ones, the caller's loader handles gaps.
+  getPropertiesByIds(ids: string[]): Promise<Property[]> {
+    if (ids.length === 0) {
+      return Promise.resolve([]);
+    }
+    return this.propertyRepository.findBy({ id: In(ids) });
+  }
+
+  getProperty(id: string): Promise<Property | null> {
+    return this.propertyRepository.findOneBy({ id });
+  }
+
+  // Guards a query explicitly scoped to a single customer (spec §4.2):
+  // silently returning `[]` for a typo'd/stale `customerId` would be
+  // indistinguishable from "this customer genuinely has no properties," so
+  // a nonexistent `customerId` is surfaced as `NotFoundException` instead.
+  // This is a read path, so it uses the injected `customerRepository`
+  // directly rather than opening a transaction.
+  async listCustomerProperties(customerId: string): Promise<Property[]> {
+    const customer = await this.customerRepository.findOneBy({
+      id: customerId,
+    });
+    if (!customer) {
+      throw new NotFoundException(`Customer ${customerId} not found`);
+    }
+
+    return this.propertyRepository.findBy({ customerId });
+  }
+
   update(id: string, command: UpdatePropertyCommand): Promise<Property> {
     return this.dataSource.transaction((manager) =>
       runAuditInTransaction(manager, async () => {
@@ -101,38 +133,6 @@ export class PropertiesService {
         return entity;
       }),
     );
-  }
-
-  getProperty(id: string): Promise<Property | null> {
-    return this.propertyRepository.findOneBy({ id });
-  }
-
-  // Guards a query explicitly scoped to a single customer (spec §4.2):
-  // silently returning `[]` for a typo'd/stale `customerId` would be
-  // indistinguishable from "this customer genuinely has no properties," so
-  // a nonexistent `customerId` is surfaced as `NotFoundException` instead.
-  // This is a read path, so it uses the injected `customerRepository`
-  // directly rather than opening a transaction.
-  async listCustomerProperties(customerId: string): Promise<Property[]> {
-    const customer = await this.customerRepository.findOneBy({
-      id: customerId,
-    });
-    if (!customer) {
-      throw new NotFoundException(`Customer ${customerId} not found`);
-    }
-
-    return this.propertyRepository.findBy({ customerId });
-  }
-
-  // Bulk lookup for Bookings' GraphQL relation-batching loader (Bookings
-  // spec §4.5); deliberately not exposed over GraphQL directly. Returns
-  // exactly the rows that exist for the given ids — no synthetic entries
-  // for missing ones, the caller's loader handles gaps.
-  getPropertiesByIds(ids: string[]): Promise<Property[]> {
-    if (ids.length === 0) {
-      return Promise.resolve([]);
-    }
-    return this.propertyRepository.findBy({ id: In(ids) });
   }
 
   // Application-layer validation (spec §4.7), run on the merged entity

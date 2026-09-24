@@ -102,14 +102,6 @@ export class AdminsService {
     }
   }
 
-  // Never returns another tenant's staff or any platform Super Admin.
-  list(actor: AuthenticatedPrincipal): Promise<AdminUser[]> {
-    const tenantId = requireTenantOwnerTenant(actor);
-    return this.dataSource
-      .getRepository(AdminUserEntity)
-      .find({ where: { tenantId } });
-  }
-
   // Self-disable check (spec §4.4) is a pure id comparison with no
   // concurrent-mutation risk — done before opening the transaction. The
   // last-active-Tenant-Owner check MUST run inside the transaction, as a
@@ -175,5 +167,13 @@ export class AdminsService {
         return target;
       }),
     );
+  }
+
+  // Never returns another tenant's staff or any platform Super Admin.
+  list(actor: AuthenticatedPrincipal): Promise<AdminUser[]> {
+    const tenantId = requireTenantOwnerTenant(actor);
+    return this.dataSource
+      .getRepository(AdminUserEntity)
+      .find({ where: { tenantId } });
   }
 }

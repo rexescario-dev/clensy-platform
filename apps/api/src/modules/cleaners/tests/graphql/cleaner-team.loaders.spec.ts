@@ -13,15 +13,6 @@ import { Team } from '../../domain/team';
 // private `_batchLoadFn` property) to assert ordering/grouping precisely and
 // deterministically.
 
-function makeTeam(id: string): Team {
-  return {
-    id,
-    createdAt: new Date(),
-    name: `Team ${id}`,
-    updatedAt: new Date(),
-  };
-}
-
 function makeCleaner(id: string, teamId: string | null): Cleaner {
   return {
     id,
@@ -31,6 +22,15 @@ function makeCleaner(id: string, teamId: string | null): Cleaner {
     fullName: `Cleaner ${id}`,
     notes: null,
     phone: '555-0000',
+    updatedAt: new Date(),
+  };
+}
+
+function makeTeam(id: string): Team {
+  return {
+    id,
+    createdAt: new Date(),
+    name: `Team ${id}`,
     updatedAt: new Date(),
   };
 }

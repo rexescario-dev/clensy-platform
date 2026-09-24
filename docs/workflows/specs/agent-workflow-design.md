@@ -127,7 +127,7 @@ Workflow validation (M10) MUST verify at least:
 
 ### 2.11 Slice completion reporting *(normative)*
 
-At the completion of **M6, M7, M8, M9**, and at **final slice acceptance** (merge/closeout summary), agents MUST produce a concise **Slice Completion Report** using the standard tabular format.
+At the completion of **M6, M7, M8, M9**, and at **final slice acceptance** (the closeout procedure — §2.12), agents MUST produce a concise **Slice Completion Report** using the standard tabular format.
 
 The report MUST include:
 
@@ -141,6 +141,17 @@ Vocabulary: use **Gate**, not Phase. Split M4 and M5 when both apply. Status and
 Authoritative template: [reporting-conventions.md](../conventions/reporting-conventions.md).
 
 M5 Plan Review SHOULD emit the same report when Accepting a plan (Status: Ready for M6).
+
+### 2.12 Closeout (final acceptance) *(normative)*
+
+**Closeout** is the final acceptance sequence for a delivery slice, entered once M7 has Approved for merge (and M8/M9 are Complete, N/A, or explicitly deferred per §2.7/§2.9):
+
+1. **Merge** the slice's pull request (§2.8) per human/project norms. No stage prompt in this workflow grants merge authority by itself (§2.6) — closeout does not change that; it is the point at which a human-authorized merge occurs, not a mechanism for authorizing one.
+2. **Verify** the merge succeeded before proceeding — closeout MUST NOT continue past this point on an unconfirmed or failed merge.
+3. **Perform applicable project-defined post-merge cleanup**, if any. This workflow does not itself define what cleanup is available or how it is configured — that is project-specific policy, resolved outside this document. Where no such policy applies, this step is a no-op.
+4. **Produce the final Slice Completion Report** (§2.11) — `Status` is **Slice complete**, `Next Gate` is none.
+
+Closeout is tool-agnostic: a developer working this workflow with no Context Forge dispatch involved performs the same four steps and stops at the completed Slice Completion Report. Any additional dispatch-specific reporting a particular tool or integration layer requires beyond that report is that layer's own concern, not part of this workflow.
 
 ---
 

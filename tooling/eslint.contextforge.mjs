@@ -57,6 +57,155 @@ export function contextforgeCompareKeys(a, b) {
 }
 
 /**
+ * Declaration groups. Constructors and accessor properties are not
+ * visibility groups. Methods fall through to public / protected / private.
+ * `kind` defaults to `method` so callers that only know visibility still work.
+ *
+ * @param {{ kind?: 'constructor' | 'accessor' | 'method', accessibility?: 'public' | 'protected' | 'private' }} member
+ */
+export function contextforgeFunctionGroupRank(member) {
+  const kind = member.kind ?? 'method';
+  if (kind === 'constructor') {
+    return 0;
+  }
+  if (kind === 'accessor') {
+    return 1;
+  }
+  if (member.accessibility === 'protected') {
+    return 3;
+  }
+  if (member.accessibility === 'private') {
+    return 4;
+  }
+  return 2;
+}
+
+/**
+ * @param {'public' | 'protected' | 'private'} accessibility
+ */
+export function contextforgeFunctionVisibilityRank(accessibility) {
+  if (accessibility === 'public') {
+    return 0;
+  }
+  if (accessibility === 'protected') {
+    return 1;
+  }
+  return 2;
+}
+
+/**
+ * Total order: constructor, then getter/setter properties by name,
+ * then public, protected, and private methods by name.
+ * Equal names compare as 0 so overloads and an existing get/set pair
+ * keep their source order. `static` is not its own group.
+ *
+ * @param {{ name: string, kind?: 'constructor' | 'accessor' | 'method', accessibility?: 'public' | 'protected' | 'private', index?: number }} a
+ * @param {{ name: string, kind?: 'constructor' | 'accessor' | 'method', accessibility?: 'public' | 'protected' | 'private', index?: number }} b
+ */
+export function contextforgeCompareFunctions(a, b) {
+  const rank = contextforgeFunctionGroupRank(a) - contextforgeFunctionGroupRank(b);
+  if (rank !== 0) {
+    return rank;
+  }
+  if ((a.kind ?? 'method') === 'constructor') {
+    return (a.index ?? 0) - (b.index ?? 0);
+  }
+  const byName = String(a.name).localeCompare(String(b.name), 'en', {
+    numeric: true,
+    sensitivity: 'variant',
+  });
+  if (byName !== 0) {
+    return byName;
+  }
+  return (a.index ?? 0) - (b.index ?? 0);
+}
+
+/**
+ * @param {import('estree').Node} node
+ * @returns {'public' | 'protected' | 'private'}
+ */
+function functionAccessibility(node) {
+  if (
+    node.accessibility === 'public' ||
+    node.accessibility === 'protected' ||
+    node.accessibility === 'private'
+  ) {
+    return node.accessibility;
+  }
+  if (node.key && node.key.type === 'PrivateIdentifier') {
+    return 'private';
+  }
+  return 'public';
+}
+
+/**
+ * @param {import('estree').Node} node
+ * @returns {string | null}
+ */
+function functionName(node) {
+  const key = node.key;
+  if (!key || node.computed) {
+    return null;
+  }
+  if (key.type === 'Identifier' || key.type === 'PrivateIdentifier') {
+    return key.name;
+  }
+  if (key.type === 'Literal' || key.type === 'StringLiteral') {
+    return String(key.value);
+  }
+  return null;
+}
+
+/**
+ * Class constructors, getters, setters, methods, and function-valued
+ * properties. Other fields are ignored so this stays a function order.
+ * A missing visibility modifier is public. `#private` is private.
+ * Getters and setters use the property name so a pair sorts as one group.
+ *
+ * @param {import('estree').Node} node
+ * @returns {{ name: string, kind: 'constructor' | 'accessor' | 'method', accessibility: 'public' | 'protected' | 'private', node: import('estree').Node } | null}
+ */
+function classFunctionMember(node) {
+  let kind = 'method';
+  if (
+    node.type === 'MethodDefinition' ||
+    node.type === 'TSAbstractMethodDefinition'
+  ) {
+    if (node.kind === 'constructor') {
+      kind = 'constructor';
+    } else if (node.kind === 'get' || node.kind === 'set') {
+      kind = 'accessor';
+    }
+  } else if (
+    node.type === 'PropertyDefinition' ||
+    node.type === 'TSAbstractPropertyDefinition' ||
+    node.type === 'AccessorProperty'
+  ) {
+    const value = node.value;
+    if (
+      !value ||
+      (value.type !== 'ArrowFunctionExpression' &&
+        value.type !== 'FunctionExpression')
+    ) {
+      return null;
+    }
+  } else {
+    return null;
+  }
+
+  const name = kind === 'constructor' ? 'constructor' : functionName(node);
+  if (!name) {
+    return null;
+  }
+  return {
+    name,
+    kind,
+    accessibility: functionAccessibility(node),
+    node,
+  };
+}
+
+/**
  * @param {import('estree').Node} node
  * @returns {{ name: string } | { computed: true } | { spread: true } | null}
  */
@@ -90,7 +239,7 @@ function hasBlankLineBetween(source, prev, next) {
   return /\n[ \t]*\n/.test(source.slice(prev.range[1], next.range[0]));
 }
 
-const contextforgePlugin = {
+export const contextforgePlugin = {
   meta: { name: 'contextforge' },
   rules: {
     'record-key-order': {
@@ -171,6 +320,69 @@ const contextforgePlugin = {
         };
       },
     },
+    'function-order': {
+      meta: {
+        type: 'suggestion',
+        docs: {
+          description:
+            'Require constructor, then getter/setter properties by name, then public, protected, and private methods by name. Does not reorder non-function fields.',
+        },
+        schema: [],
+        messages: {
+          sortFunctions:
+            "Expected '{{thisName}}' to come before '{{prevName}}' (constructor, then getter/setter properties, then public, protected, and private methods).",
+        },
+      },
+      create(context) {
+        function checkFunctions(functions) {
+          let prev = null;
+          for (const fn of functions) {
+            if (prev && contextforgeCompareFunctions(fn, prev) < 0) {
+              context.report({
+                node: fn.node,
+                messageId: 'sortFunctions',
+                data: { thisName: fn.name, prevName: prev.name },
+              });
+            }
+            prev = fn;
+          }
+        }
+
+        return {
+          ClassBody(node) {
+            const functions = [];
+            for (const member of node.body) {
+              const fn = classFunctionMember(member);
+              if (!fn) {
+                continue;
+              }
+              functions.push({ ...fn, index: functions.length });
+            }
+            checkFunctions(functions);
+          },
+          Program(node) {
+            const functions = [];
+            for (const stmt of node.body) {
+              const exported =
+                stmt.type === 'ExportNamedDeclaration' ||
+                stmt.type === 'ExportDefaultDeclaration';
+              const decl = exported ? stmt.declaration : stmt;
+              if (!decl || decl.type !== 'FunctionDeclaration' || !decl.id) {
+                continue;
+              }
+              functions.push({
+                name: decl.id.name,
+                kind: 'method',
+                accessibility: exported ? 'public' : 'private',
+                index: functions.length,
+                node: decl,
+              });
+            }
+            checkFunctions(functions);
+          },
+        };
+      },
+    },
   },
 };
 
@@ -194,6 +406,16 @@ export function contextforgeJavascript({ eslint, tseslint }) {
             minKeys: 4,
           },
         ],
+      },
+    },
+    {
+      // Declaration order only. `src/` so tests and package-root scripts
+      // stay out. Migrations live under `src/` and keep `up` then `down`.
+      files: ['src/**/*.{js,mjs,cjs,ts,tsx,jsx}'],
+      ignores: ['src/**/migrations/**', 'src/**/generated/**'],
+      plugins: { contextforge: contextforgePlugin },
+      rules: {
+        'contextforge/function-order': 'error',
       },
     },
   ];

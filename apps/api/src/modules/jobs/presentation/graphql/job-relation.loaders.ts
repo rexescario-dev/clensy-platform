@@ -5,16 +5,6 @@ import { TeamsService } from '../../../cleaners/application/services/teams.servi
 import { Checklist } from '../../domain/checklist';
 import { JobsService } from '../../application/services/jobs.service';
 
-export function createJobTeamBatchFn(
-  teamsService: Pick<TeamsService, 'getTeamsByIds'>,
-): DataLoader.BatchLoadFn<string, Team | null> {
-  return async (ids) => {
-    const teams = await teamsService.getTeamsByIds([...ids]);
-    const byId = new Map(teams.map((team) => [team.id, team]));
-    return ids.map((id) => byId.get(id) ?? null);
-  };
-}
-
 export function createChecklistBatchFn(
   jobsService: Pick<JobsService, 'getChecklistsByJobIds'>,
 ): DataLoader.BatchLoadFn<string, Checklist | null> {
@@ -24,6 +14,16 @@ export function createChecklistBatchFn(
       checklists.map((checklist) => [checklist.jobId, checklist]),
     );
     return jobIds.map((id) => byJobId.get(id) ?? null);
+  };
+}
+
+export function createJobTeamBatchFn(
+  teamsService: Pick<TeamsService, 'getTeamsByIds'>,
+): DataLoader.BatchLoadFn<string, Team | null> {
+  return async (ids) => {
+    const teams = await teamsService.getTeamsByIds([...ids]);
+    const byId = new Map(teams.map((team) => [team.id, team]));
+    return ids.map((id) => byId.get(id) ?? null);
   };
 }
 

@@ -18,10 +18,6 @@ const DEFAULT_MESSAGES: Record<string, string> = {
   url: 'The :attribute must be a valid URL.',
 };
 
-function humanize(field: string): string {
-  return field.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase();
-}
-
 export function formatMessage(
   ruleName: string,
   field: string,
@@ -38,4 +34,8 @@ export function formatMessage(
     message = message.replace(new RegExp(`:param${index}`, 'g'), param);
   });
   return message;
+}
+
+function humanize(field: string): string {
+  return field.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase();
 }

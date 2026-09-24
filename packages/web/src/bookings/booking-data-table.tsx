@@ -38,112 +38,6 @@ export interface BookingDataTableProps {
   refreshing?: boolean;
 }
 
-// Copied verbatim from apps/web/app/app/bookings/page.tsx (2026-09-19) — not
-// reconstructed. Date formatting has enough locale/timezone subtlety that a
-// re-derivation would risk a silent behavior change.
-function formatScheduledAt(value: unknown): string {
-  const date = new Date(value as string);
-  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
-}
-
-type BadgeVariant = 'default' | 'destructive' | 'outline' | 'secondary';
-
-interface BookingStatusConfig {
-  variant: BadgeVariant;
-  labelKey: string;
-}
-
-// One centralized status → { Badge variant, translation key } lookup — not
-// two independently-maintained maps. row.status crosses a GraphQL API
-// boundary this component does not control, so a status value outside the
-// four known members (e.g. the backend ships a fifth status before this
-// table is updated) must degrade safely rather than render undefined/throw.
-const BOOKING_STATUS_CONFIG: Record<BookingStatus, BookingStatusConfig> = {
-  CANCELLED: { variant: 'destructive', labelKey: 'status.cancelled' },
-  COMPLETED: { variant: 'secondary', labelKey: 'status.completed' },
-  CONFIRMED: { variant: 'default', labelKey: 'status.confirmed' },
-  PENDING: { variant: 'outline', labelKey: 'status.pending' },
-};
-
-function bookingStatusBadge(status: BookingStatus, t: (key: string) => string): { variant: BadgeVariant; label: string } {
-  const config = BOOKING_STATUS_CONFIG[status];
-  if (!config) return { variant: 'outline', label: status };
-  const label = t(config.labelKey);
-  return { variant: config.variant, label: label === config.labelKey ? status : label }; // t() returns the key itself on a miss
-}
-
-// #65 finding 1 (final review): changing the sort key from the mobile
-// select preserves whatever direction is currently active (or the
-// table-wide default direction, 'desc', if there is no active sort yet) —
-// it never resets to a hardcoded direction. Pure/exported so the reducer
-// itself is directly testable without simulating a <select> change event
-// (this repo's renderToStaticMarkup-only test setup can't do that).
-export function nextMobileSortState(
-  current: BookingSortState | null | undefined,
-  changedKey: BookingSortKey,
-): BookingSortState {
-  return { key: changedKey, direction: current?.direction ?? 'desc' };
-}
-
-// Flips the current direction, defaulting to the same table-wide default
-// (scheduledAt desc) as everything else in this table when there is no
-// active sort yet. Pure/exported for the same reason as above.
-export function toggledMobileSortDirection(current: BookingSortState | null | undefined): BookingSortState {
-  const key = current?.key ?? 'scheduledAt';
-  const direction = current?.direction === 'asc' ? 'desc' : 'asc';
-  return { key, direction };
-}
-
-// #65 finding 1 (final review): DataTable's `toolbar` prop renders above
-// BOTH the desktop table and the mobile card list (see data-table.tsx) —
-// wrapping this control's own markup in `sm:hidden` makes it visible only
-// on the mobile card list, giving mobile a sort affordance without adding
-// any sort-domain knowledge to the generic `@clensy/ui` DataTable. It
-// calls the exact same `onSortChange` the desktop sortable headers already
-// use — no separate, disconnected sort state.
-function BookingMobileSortControl({
-  sort,
-  onSortChange,
-  t,
-}: {
-  sort: BookingSortState | null | undefined;
-  onSortChange: (sort: BookingSortState | null) => void;
-  t: (key: string) => string;
-}) {
-  const activeKey: BookingSortKey = sort?.key ?? 'scheduledAt';
-  const activeDirection: 'asc' | 'desc' = sort?.direction ?? 'desc';
-
-  function handleKeyChange(event: ChangeEvent<HTMLSelectElement>) {
-    onSortChange(nextMobileSortState(sort, event.currentTarget.value as BookingSortKey));
-  }
-
-  function handleDirectionToggle() {
-    onSortChange(toggledMobileSortDirection(sort));
-  }
-
-  return (
-    <div className="sm:hidden flex w-full items-center gap-2">
-      <select
-        aria-label={t('sort.label')}
-        value={activeKey}
-        onChange={handleKeyChange}
-        className="rounded-md border border-input bg-background px-2 py-1 text-sm"
-      >
-        <option value="scheduledAt">{t('columns.scheduled')}</option>
-        <option value="status">{t('columns.status')}</option>
-      </select>
-      <button
-        type="button"
-        onClick={handleDirectionToggle}
-        aria-label={activeDirection === 'asc' ? t('sort.ascending') : t('sort.descending')}
-        className="rounded-md border border-input bg-background px-2 py-1 text-sm"
-      >
-        {activeDirection === 'asc' ? '↑' : '↓'}
-      </button>
-    </div>
-  );
-}
-
 export function BookingDataTable({
   bookings,
   formatPrice,
@@ -241,4 +135,110 @@ export function BookingDataTable({
       toolbar={mobileSortControl}
     />
   );
+}
+
+type BadgeVariant = 'default' | 'destructive' | 'outline' | 'secondary';
+
+interface BookingStatusConfig {
+  variant: BadgeVariant;
+  labelKey: string;
+}
+
+// One centralized status → { Badge variant, translation key } lookup — not
+// two independently-maintained maps. row.status crosses a GraphQL API
+// boundary this component does not control, so a status value outside the
+// four known members (e.g. the backend ships a fifth status before this
+// table is updated) must degrade safely rather than render undefined/throw.
+const BOOKING_STATUS_CONFIG: Record<BookingStatus, BookingStatusConfig> = {
+  CANCELLED: { variant: 'destructive', labelKey: 'status.cancelled' },
+  COMPLETED: { variant: 'secondary', labelKey: 'status.completed' },
+  CONFIRMED: { variant: 'default', labelKey: 'status.confirmed' },
+  PENDING: { variant: 'outline', labelKey: 'status.pending' },
+};
+
+// #65 finding 1 (final review): changing the sort key from the mobile
+// select preserves whatever direction is currently active (or the
+// table-wide default direction, 'desc', if there is no active sort yet) —
+// it never resets to a hardcoded direction. Pure/exported so the reducer
+// itself is directly testable without simulating a <select> change event
+// (this repo's renderToStaticMarkup-only test setup can't do that).
+export function nextMobileSortState(
+  current: BookingSortState | null | undefined,
+  changedKey: BookingSortKey,
+): BookingSortState {
+  return { key: changedKey, direction: current?.direction ?? 'desc' };
+}
+
+// Flips the current direction, defaulting to the same table-wide default
+// (scheduledAt desc) as everything else in this table when there is no
+// active sort yet. Pure/exported for the same reason as above.
+export function toggledMobileSortDirection(current: BookingSortState | null | undefined): BookingSortState {
+  const key = current?.key ?? 'scheduledAt';
+  const direction = current?.direction === 'asc' ? 'desc' : 'asc';
+  return { key, direction };
+}
+
+// #65 finding 1 (final review): DataTable's `toolbar` prop renders above
+// BOTH the desktop table and the mobile card list (see data-table.tsx) —
+// wrapping this control's own markup in `sm:hidden` makes it visible only
+// on the mobile card list, giving mobile a sort affordance without adding
+// any sort-domain knowledge to the generic `@clensy/ui` DataTable. It
+// calls the exact same `onSortChange` the desktop sortable headers already
+// use — no separate, disconnected sort state.
+function BookingMobileSortControl({
+  sort,
+  onSortChange,
+  t,
+}: {
+  sort: BookingSortState | null | undefined;
+  onSortChange: (sort: BookingSortState | null) => void;
+  t: (key: string) => string;
+}) {
+  const activeKey: BookingSortKey = sort?.key ?? 'scheduledAt';
+  const activeDirection: 'asc' | 'desc' = sort?.direction ?? 'desc';
+
+  function handleKeyChange(event: ChangeEvent<HTMLSelectElement>) {
+    onSortChange(nextMobileSortState(sort, event.currentTarget.value as BookingSortKey));
+  }
+
+  function handleDirectionToggle() {
+    onSortChange(toggledMobileSortDirection(sort));
+  }
+
+  return (
+    <div className="sm:hidden flex w-full items-center gap-2">
+      <select
+        aria-label={t('sort.label')}
+        value={activeKey}
+        onChange={handleKeyChange}
+        className="rounded-md border border-input bg-background px-2 py-1 text-sm"
+      >
+        <option value="scheduledAt">{t('columns.scheduled')}</option>
+        <option value="status">{t('columns.status')}</option>
+      </select>
+      <button
+        type="button"
+        onClick={handleDirectionToggle}
+        aria-label={activeDirection === 'asc' ? t('sort.ascending') : t('sort.descending')}
+        className="rounded-md border border-input bg-background px-2 py-1 text-sm"
+      >
+        {activeDirection === 'asc' ? '↑' : '↓'}
+      </button>
+    </div>
+  );
+}
+
+function bookingStatusBadge(status: BookingStatus, t: (key: string) => string): { variant: BadgeVariant; label: string } {
+  const config = BOOKING_STATUS_CONFIG[status];
+  if (!config) return { variant: 'outline', label: status };
+  const label = t(config.labelKey);
+  return { variant: config.variant, label: label === config.labelKey ? status : label }; // t() returns the key itself on a miss
+}
+
+// Copied verbatim from apps/web/app/app/bookings/page.tsx (2026-09-19) — not
+// reconstructed. Date formatting has enough locale/timezone subtlety that a
+// re-derivation would risk a silent behavior change.
+function formatScheduledAt(value: unknown): string {
+  const date = new Date(value as string);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
 }

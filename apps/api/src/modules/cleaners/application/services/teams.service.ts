@@ -66,15 +66,15 @@ export class TeamsService {
     return this.teamRepository.findOneBy({ id });
   }
 
-  listTeams(): Promise<Team[]> {
-    return this.teamRepository.find();
-  }
-
   // Bulk lookup for Task 3's DataLoader; deliberately not exposed over
   // GraphQL directly. Returns exactly the rows that exist for the given
   // ids — no synthetic entries for missing ones, the loader handles gaps.
   getTeamsByIds(ids: string[]): Promise<Team[]> {
     return this.teamRepository.findBy({ id: In(ids) });
+  }
+
+  listTeams(): Promise<Team[]> {
+    return this.teamRepository.find();
   }
 
   private assertValid(team: Pick<Team, 'name'>): void {

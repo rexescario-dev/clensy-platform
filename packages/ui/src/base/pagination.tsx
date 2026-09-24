@@ -26,37 +26,6 @@ export interface DataTableNavigationPaginationProps {
 
 export type DataTablePaginationProps = DataTableNavigationPaginationProps | DataTableOffsetPaginationProps;
 
-function PageSizeSelect({
-  pageSize,
-  pageSizeOptions,
-  onPageSizeChange,
-}: {
-  pageSize: number;
-  pageSizeOptions: number[];
-  onPageSizeChange?: (pageSize: number) => void;
-}) {
-  function handleChange(event: ChangeEvent<HTMLSelectElement>) {
-    onPageSizeChange?.(Number(event.currentTarget.value));
-  }
-  const options = pageSizeOptions.includes(pageSize)
-    ? pageSizeOptions
-    : [...pageSizeOptions, pageSize].sort((a, b) => a - b);
-  return (
-    <select
-      aria-label="Rows per page"
-      value={pageSize}
-      onChange={handleChange}
-      className="rounded-md border border-input bg-background px-2 py-1 text-sm"
-    >
-      {options.map((option) => (
-        <option key={option} value={option}>
-          {option} / page
-        </option>
-      ))}
-    </select>
-  );
-}
-
 export function Pagination(props: DataTablePaginationProps) {
   if (props.mode === 'navigation') {
     const { pageSize, totalCount, hasNextPage, hasPreviousPage, onNext, onPrevious, pageSizeOptions, onPageSizeChange } = props;
@@ -95,5 +64,36 @@ export function Pagination(props: DataTablePaginationProps) {
         Next <ChevronRightIcon />
       </Button>
     </div>
+  );
+}
+
+function PageSizeSelect({
+  pageSize,
+  pageSizeOptions,
+  onPageSizeChange,
+}: {
+  pageSize: number;
+  pageSizeOptions: number[];
+  onPageSizeChange?: (pageSize: number) => void;
+}) {
+  function handleChange(event: ChangeEvent<HTMLSelectElement>) {
+    onPageSizeChange?.(Number(event.currentTarget.value));
+  }
+  const options = pageSizeOptions.includes(pageSize)
+    ? pageSizeOptions
+    : [...pageSizeOptions, pageSize].sort((a, b) => a - b);
+  return (
+    <select
+      aria-label="Rows per page"
+      value={pageSize}
+      onChange={handleChange}
+      className="rounded-md border border-input bg-background px-2 py-1 text-sm"
+    >
+      {options.map((option) => (
+        <option key={option} value={option}>
+          {option} / page
+        </option>
+      ))}
+    </select>
   );
 }

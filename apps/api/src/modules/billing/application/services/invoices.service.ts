@@ -61,10 +61,6 @@ export class InvoicesService {
     @Inject(AUDIT_LOGGER) private readonly auditLogger: AuditLogger,
   ) {}
 
-  getInvoice(id: string): Promise<Invoice | null> {
-    return this.invoiceRepository.findOneBy({ id });
-  }
-
   // The one-time generation of an immutable invoice from a priced laundry
   // order (spec §4.3, §4.4, §4.6). All eligibility and catalog-resolution
   // checks run BEFORE the write transaction; `uq_invoice_laundry_order` —
@@ -153,6 +149,10 @@ export class InvoicesService {
         return manager.findOneByOrFail(InvoiceEntity, { id: invoice.id });
       }),
     );
+  }
+
+  getInvoice(id: string): Promise<Invoice | null> {
+    return this.invoiceRepository.findOneBy({ id });
   }
 
   private assertEligible(order: OrderForInvoicing): void {

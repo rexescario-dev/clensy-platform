@@ -41,14 +41,14 @@ export class BookingController {
     return this.bookingsService.findOne(id);
   }
 
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.bookingsService.remove(id, null);
+  }
+
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateBookingDto) {
     const command: UpdateBookingCommand = { ...dto, actorId: null };
     return this.bookingsService.update(id, command);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.bookingsService.remove(id, null);
   }
 }

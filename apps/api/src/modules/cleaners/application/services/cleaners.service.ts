@@ -34,6 +34,50 @@ export class CleanersService {
     @Inject(AUDIT_LOGGER) private readonly auditLogger: AuditLogger,
   ) {}
 
+  // Same `manager.update()` rationale as `updateCleaner` above: `teamId`
+  // could already equal its current value (re-assigning to the same team),
+  // and `save()`'s diffing would risk a no-op `UPDATE` in that case, silently
+  // violating the requirement that `updatedAt` bump and an audit event fire
+  // unconditionally on every successful call.
+  assignCleanerToTeam(command: AssignCleanerToTeamCommand): Promise<Cleaner> {
+    return this.dataSource.transaction((manager) =>
+      runAuditInTransaction(manager, async () => {
+        const team = await manager.findOneBy(TeamEntity, {
+          id: command.teamId,
+        });
+        if (!team) {
+          throw new NotFoundException(`Team ${command.teamId} not found`);
+        }
+
+        const cleaner = await manager.findOneBy(CleanerEntity, {
+          id: command.cleanerId,
+        });
+        if (!cleaner) {
+          throw new NotFoundException(`Cleaner ${command.cleanerId} not found`);
+        }
+
+        await manager.update(
+          CleanerEntity,
+          { id: command.cleanerId },
+          { teamId: command.teamId, updatedAt: new Date() },
+        );
+
+        const updated = await manager.findOneByOrFail(CleanerEntity, {
+          id: command.cleanerId,
+        });
+
+        await this.auditLogger.log({
+          actorId: command.actorId,
+          entityId: updated.id,
+          action: 'cleaner.assign_team',
+          entityType: 'cleaner',
+        });
+
+        return updated;
+      }),
+    );
+  }
+
   // Mirrors `TeamsService.createTeam` exactly — a fresh INSERT via
   // `manager.create`/`manager.save`, no diffing risk, so plain `save()` is
   // correct here (only the two UPDATE-path methods below need
@@ -63,6 +107,28 @@ export class CleanersService {
         return entity;
       }),
     );
+  }
+
+  getCleaner(id: string): Promise<Cleaner | null> {
+    return this.cleanerRepository.findOneBy({ id });
+  }
+
+  listCleaners(): Promise<Cleaner[]> {
+    return this.cleanerRepository.find();
+  }
+
+  // Bulk lookup for Task 3's DataLoader; deliberately not exposed over
+  // GraphQL directly. Exists alongside `listTeamCleaners`, not instead of
+  // it — see this module's plan notes.
+  listCleanersByTeamIds(teamIds: string[]): Promise<Cleaner[]> {
+    return this.cleanerRepository.findBy({ teamId: In(teamIds) });
+  }
+
+  // No existence check on `teamId` (spec §4.2, §4.5) — `[]` for a team with
+  // no members is indistinguishable from, and treated the same as, a
+  // nonexistent team at this layer; existence is the caller's concern.
+  listTeamCleaners(teamId: string): Promise<Cleaner[]> {
+    return this.cleanerRepository.findBy({ teamId });
   }
 
   // Uses `manager.update()`, not `Object.assign(entity, changes)` +
@@ -111,70 +177,18 @@ export class CleanersService {
     );
   }
 
-  // Same `manager.update()` rationale as `updateCleaner` above: `teamId`
-  // could already equal its current value (re-assigning to the same team),
-  // and `save()`'s diffing would risk a no-op `UPDATE` in that case, silently
-  // violating the requirement that `updatedAt` bump and an audit event fire
-  // unconditionally on every successful call.
-  assignCleanerToTeam(command: AssignCleanerToTeamCommand): Promise<Cleaner> {
-    return this.dataSource.transaction((manager) =>
-      runAuditInTransaction(manager, async () => {
-        const team = await manager.findOneBy(TeamEntity, {
-          id: command.teamId,
-        });
-        if (!team) {
-          throw new NotFoundException(`Team ${command.teamId} not found`);
-        }
-
-        const cleaner = await manager.findOneBy(CleanerEntity, {
-          id: command.cleanerId,
-        });
-        if (!cleaner) {
-          throw new NotFoundException(`Cleaner ${command.cleanerId} not found`);
-        }
-
-        await manager.update(
-          CleanerEntity,
-          { id: command.cleanerId },
-          { teamId: command.teamId, updatedAt: new Date() },
-        );
-
-        const updated = await manager.findOneByOrFail(CleanerEntity, {
-          id: command.cleanerId,
-        });
-
-        await this.auditLogger.log({
-          actorId: command.actorId,
-          entityId: updated.id,
-          action: 'cleaner.assign_team',
-          entityType: 'cleaner',
-        });
-
-        return updated;
-      }),
-    );
-  }
-
-  getCleaner(id: string): Promise<Cleaner | null> {
-    return this.cleanerRepository.findOneBy({ id });
-  }
-
-  listCleaners(): Promise<Cleaner[]> {
-    return this.cleanerRepository.find();
-  }
-
-  // No existence check on `teamId` (spec §4.2, §4.5) — `[]` for a team with
-  // no members is indistinguishable from, and treated the same as, a
-  // nonexistent team at this layer; existence is the caller's concern.
-  listTeamCleaners(teamId: string): Promise<Cleaner[]> {
-    return this.cleanerRepository.findBy({ teamId });
-  }
-
-  // Bulk lookup for Task 3's DataLoader; deliberately not exposed over
-  // GraphQL directly. Exists alongside `listTeamCleaners`, not instead of
-  // it — see this module's plan notes.
-  listCleanersByTeamIds(teamIds: string[]): Promise<Cleaner[]> {
-    return this.cleanerRepository.findBy({ teamId: In(teamIds) });
+  private assertValid(
+    cleaner: Pick<Cleaner, 'email' | 'fullName' | 'phone'>,
+  ): void {
+    if (!cleaner.fullName?.trim()) {
+      throw new BadRequestException('fullName must not be empty');
+    }
+    if (!cleaner.phone?.trim()) {
+      throw new BadRequestException('phone must not be empty');
+    }
+    if (!cleaner.email?.trim()) {
+      throw new BadRequestException('email must not be empty');
+    }
   }
 
   // Shared by `createCleaner`/`updateCleaner` (M8 dedup — behavior
@@ -187,20 +201,6 @@ export class CleanersService {
         throw new ConflictException('Email is already in use');
       }
       throw error;
-    }
-  }
-
-  private assertValid(
-    cleaner: Pick<Cleaner, 'email' | 'fullName' | 'phone'>,
-  ): void {
-    if (!cleaner.fullName?.trim()) {
-      throw new BadRequestException('fullName must not be empty');
-    }
-    if (!cleaner.phone?.trim()) {
-      throw new BadRequestException('phone must not be empty');
-    }
-    if (!cleaner.email?.trim()) {
-      throw new BadRequestException('email must not be empty');
     }
   }
 }

@@ -83,19 +83,6 @@ const DEFAULT_SORTS: Array<{
   },
 ];
 
-function walkTsFiles(dir: string): string[] {
-  const files: string[] = [];
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) {
-      files.push(...walkTsFiles(full));
-    } else if (full.endsWith('.ts') && !full.endsWith('.spec.ts')) {
-      files.push(full);
-    }
-  }
-  return files;
-}
-
 function decoratorBlocks(src: string, name: string): string[] {
   const blocks: string[] = [];
   const marker = `@${name}(`;
@@ -136,6 +123,19 @@ function graphqlPresentationFiles(): string[] {
       }
     } catch {
       // module has no GraphQL presentation folder
+    }
+  }
+  return files;
+}
+
+function walkTsFiles(dir: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) {
+      files.push(...walkTsFiles(full));
+    } else if (full.endsWith('.ts') && !full.endsWith('.spec.ts')) {
+      files.push(full);
     }
   }
   return files;

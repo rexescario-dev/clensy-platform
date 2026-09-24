@@ -41,30 +41,6 @@ export class JobResolver {
     private readonly loaders: JobRelationLoaders,
   ) {}
 
-  @Query(() => CleaningJobType, { name: 'job', nullable: true })
-  @UseGuards(AuthGuard)
-  @Roles(...VIEW_ROLES)
-  async job(
-    @Args('id', { type: () => ID }) id: string,
-  ): Promise<CleaningJobType | null> {
-    const found = await this.jobsService.getJob(id);
-    return found ? toCleaningJobType(found) : null;
-  }
-
-  @Mutation(() => CleaningJobType)
-  @UseGuards(AuthGuard)
-  @Roles(...CREATE_ROLES)
-  async createJobFromBooking(
-    @Args('input') input: CreateJobFromBookingInput,
-    @CurrentUser() currentUser: AuthenticatedPrincipal,
-  ): Promise<CleaningJobType> {
-    const job = await this.jobsService.createFromBooking({
-      actorId: currentUser.id,
-      bookingId: input.bookingId,
-    });
-    return toCleaningJobType(job);
-  }
-
   @Mutation(() => CleaningJobType)
   @UseGuards(AuthGuard)
   @Roles(...EXECUTE_ROLES)
@@ -78,6 +54,14 @@ export class JobResolver {
       teamId: input.teamId,
     });
     return toCleaningJobType(job);
+  }
+
+  @ResolveField(() => ChecklistType)
+  async checklist(
+    @Parent() job: Pick<CleaningJob, 'id'>,
+  ): Promise<ChecklistType> {
+    const checklist = await this.loaders.checklistLoader.load(job.id);
+    return toChecklistType(checklist!);
   }
 
   @Mutation(() => CleaningJobType)
@@ -109,6 +93,30 @@ export class JobResolver {
     return toCleaningJobType(job);
   }
 
+  @Mutation(() => CleaningJobType)
+  @UseGuards(AuthGuard)
+  @Roles(...CREATE_ROLES)
+  async createJobFromBooking(
+    @Args('input') input: CreateJobFromBookingInput,
+    @CurrentUser() currentUser: AuthenticatedPrincipal,
+  ): Promise<CleaningJobType> {
+    const job = await this.jobsService.createFromBooking({
+      actorId: currentUser.id,
+      bookingId: input.bookingId,
+    });
+    return toCleaningJobType(job);
+  }
+
+  @Query(() => CleaningJobType, { name: 'job', nullable: true })
+  @UseGuards(AuthGuard)
+  @Roles(...VIEW_ROLES)
+  async job(
+    @Args('id', { type: () => ID }) id: string,
+  ): Promise<CleaningJobType | null> {
+    const found = await this.jobsService.getJob(id);
+    return found ? toCleaningJobType(found) : null;
+  }
+
   @ResolveField(() => TeamType, { nullable: true })
   async team(
     @Parent() job: Pick<CleaningJob, 'teamId'>,
@@ -118,13 +126,5 @@ export class JobResolver {
     }
     const team = await this.loaders.teamLoader.load(job.teamId);
     return team ? toTeamType(team) : null;
-  }
-
-  @ResolveField(() => ChecklistType)
-  async checklist(
-    @Parent() job: Pick<CleaningJob, 'id'>,
-  ): Promise<ChecklistType> {
-    const checklist = await this.loaders.checklistLoader.load(job.id);
-    return toChecklistType(checklist!);
   }
 }
