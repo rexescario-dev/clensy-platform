@@ -141,6 +141,20 @@ describe('CustomersService', () => {
       ).rejects.toThrow(ConflictException);
     });
 
+    it('translates a unique violation with no constraint name at all (code-only fallback)', async () => {
+      manager.save.mockRejectedValue({ code: '23505' });
+
+      await expect(
+        service.create({
+          actorId: 'actor-1',
+          tenantId: 't-a',
+          email: 'jane@example.com',
+          fullName: 'Jane Doe',
+          phone: '555-0100',
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
+
     it('rethrows a unique violation on an unrelated constraint unchanged', async () => {
       const error = Object.assign(new Error('duplicate key'), {
         code: '23505',
@@ -244,11 +258,18 @@ describe('CustomersService', () => {
     // `tenantId` is server-owned (multi-tenant spec invariant 1) — never a
     // writable input field. The command's `tenantId` is used only to scope
     // the `findOneBy` lookup above; it must not be `Object.assign`-ed onto
-    // the entity, which would make it a de facto writable field.
+    // the entity, which would make it a de facto writable field. The mocked
+    // entity's `tenantId` ('t-old') deliberately differs from the command's
+    // ('t-a') — `manager.findOneBy` is mocked and returns the entity
+    // regardless of its where-clause, so this is the only way this
+    // mocked-manager unit test can distinguish "destructured out, entity
+    // untouched" from the regression it guards against (in a real DB the two
+    // would always match, since the lookup itself is scoped by
+    // `command.tenantId`).
     it('does not overwrite the entity tenantId from the command', async () => {
       manager.findOneBy.mockResolvedValue({
         id: 'customer-1',
-        tenantId: 't-a',
+        tenantId: 't-old',
         createdAt: new Date(),
         email: 'jane@example.com',
         fullName: 'Jane Doe',
@@ -263,9 +284,9 @@ describe('CustomersService', () => {
         phone: '555-9999',
       });
 
-      expect(result.tenantId).toBe('t-a');
+      expect(result.tenantId).toBe('t-old');
       expect(manager.save).toHaveBeenCalledWith(
-        expect.objectContaining({ tenantId: 't-a' }),
+        expect.objectContaining({ tenantId: 't-old' }),
       );
     });
 
