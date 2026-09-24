@@ -69,6 +69,7 @@ describe('BookingController', () => {
       propertyId: 'property-1',
       serviceId: 'service-1',
       teamId: 'team-1',
+      tenantId: null,
       scheduledAt,
     });
   });

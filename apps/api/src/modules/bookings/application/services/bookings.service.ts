@@ -242,6 +242,7 @@ export class BookingsService {
   ): Promise<{ pricingSnapshot: BookingPricingSnapshot }> {
     const customer = await this.customersService.getCustomer(
       command.customerId,
+      command.tenantId,
     );
     if (!customer) {
       throw new NotFoundException(`Customer ${command.customerId} not found`);
@@ -249,6 +250,7 @@ export class BookingsService {
 
     const property = await this.propertiesService.getProperty(
       command.propertyId,
+      command.tenantId,
     );
     if (!property) {
       throw new NotFoundException(`Property ${command.propertyId} not found`);

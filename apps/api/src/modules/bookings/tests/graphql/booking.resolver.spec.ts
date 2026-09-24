@@ -246,7 +246,10 @@ describe('Booking GraphQL reads and mutations', () => {
         currentUser,
       );
       expect(bookingsService.create).toHaveBeenCalledWith(
-        expect.objectContaining({ actorId: 'admin-1' }),
+        expect.objectContaining({
+          actorId: 'admin-1',
+          tenantId: 'tenant-1',
+        }),
       );
 
       await resolver.updateBooking(

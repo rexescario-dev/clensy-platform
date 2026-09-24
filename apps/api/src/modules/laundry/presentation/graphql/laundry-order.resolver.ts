@@ -154,7 +154,11 @@ export class LaundryOrderResolver {
     @CurrentUser() user: AuthenticatedPrincipal,
   ): Promise<LaundryOrderType> {
     return toLaundryOrderType(
-      await this.service.receive({ ...input, actorId: user.id }),
+      await this.service.receive({
+        ...input,
+        actorId: user.id,
+        tenantId: user.tenantId,
+      }),
     );
   }
 

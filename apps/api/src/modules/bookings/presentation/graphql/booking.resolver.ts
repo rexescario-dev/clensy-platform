@@ -31,7 +31,11 @@ export class BookingMutationResolver {
     @Args('createBookingInput') input: CreateBookingInput,
     @CurrentUser() currentUser: AuthenticatedPrincipal,
   ): Promise<BookingDTO> {
-    const command: CreateBookingCommand = { ...input, actorId: currentUser.id };
+    const command: CreateBookingCommand = {
+      ...input,
+      actorId: currentUser.id,
+      tenantId: currentUser.tenantId,
+    };
     const booking = await this.bookingsService.create(command);
     return toBookingDto(booking);
   }

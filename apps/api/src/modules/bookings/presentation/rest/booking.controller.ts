@@ -27,7 +27,16 @@ export class BookingController {
     // `actorId: null` — REST has no `AuthGuard`/`@CurrentUser()`, and
     // spec §4.4 requires this surface stay unaudited; `null` is the
     // explicit signal `BookingsService` uses to skip its audit call.
-    const command: CreateBookingCommand = { ...dto, actorId: null };
+    // `tenantId: null` — no principal means no tenant scope (#82 Slice
+    // decision 4; never bootstrap-tenant traffic, tracked for
+    // removal/rebuild by #85/#91): `CustomersService.getCustomer` /
+    // `PropertiesService.getProperty` never resolve a row for a null
+    // tenant, so this fails closed with the existing `NotFoundException`.
+    const command: CreateBookingCommand = {
+      ...dto,
+      actorId: null,
+      tenantId: null,
+    };
     return this.bookingsService.create(command);
   }
 
