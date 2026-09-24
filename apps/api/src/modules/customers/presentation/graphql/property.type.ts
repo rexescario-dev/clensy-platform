@@ -1,5 +1,6 @@
 import { SortDirection } from '@ptc-org/nestjs-query-core';
 import {
+  Authorize,
   FilterableField,
   IDField,
   OffsetConnection,
@@ -12,6 +13,7 @@ import {
   PLATFORM_PAGE_DEFAULT,
   PLATFORM_PAGE_MAX,
 } from '../../../../platform/graphql/paging';
+import { tenantReadAuthorizer } from '../../../../platform/auth/authorization/tenant-read.authorizer';
 import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
 import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
@@ -49,6 +51,11 @@ const PROPERTY_SORT = [
 // GraphQL type (spec §4.5). Nested `bookings` is Relatable-owned; do not add
 // a Clensy `@ResolveField` for it.
 @ObjectType('Property')
+// Security invariant (multi-tenant spec §4.5): every nestjs-query read of
+// this type — the root list/count and every relation that targets it — is
+// ANDed with the principal's tenant. `tenantId` is deliberately not a
+// GraphQL field; the filter applies to the entity column.
+@Authorize(tenantReadAuthorizer<PropertyType>())
 @QueryOptions({
   defaultResultSize: PLATFORM_PAGE_DEFAULT,
   defaultSort: PROPERTY_SORT,
