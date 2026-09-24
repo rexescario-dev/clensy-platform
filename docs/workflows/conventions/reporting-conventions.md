@@ -15,7 +15,7 @@ This document is **workflow infrastructure**. Agents MUST use it for gate handof
 | **M7** Code Review complete | **Required** |
 | **M8** Refactoring complete or N/A | **Required** |
 | **M9** Documentation complete | **Required** |
-| Final acceptance / merge closeout | **Required** when summarizing the closed slice |
+| Final acceptance / closeout (agent-workflow-design.md §2.12) | **Required** when summarizing the closed slice |
 
 Use **Gate**, never “Phase,” when naming M1–M10 positions.
 

@@ -16,7 +16,7 @@ workflow:
     - path: docs/workflows/specs/agent-workflow-design.md
       package: generic
       version: 1.2.0
-      digest: sha256:2b04f7790be41a0d0a2bd9c2e9762a1a9d848d52f06290e8c9cb669d77b142e1
+      digest: sha256:c79e1a7d6ab0a4c9a150a7a288e934275a7f821706eb1b10cf14bd48b49e4d0c
     - path: docs/workflows/conventions/prompt-library.md
       package: generic
       version: 1.2.0
@@ -24,7 +24,7 @@ workflow:
     - path: docs/workflows/conventions/reporting-conventions.md
       package: generic
       version: 1.2.0
-      digest: sha256:f5d3ee015f184bb866c0770c5de2aa3d8abcfb1b95b550026ef2c2a14d4e6208
+      digest: sha256:52a5a0e332ca03da31126137c9a2c268e221db758bf72f0768f4846b9977692d
     - path: docs/workflows/prompts/specification.md
       package: generic
       version: 1.2.0
