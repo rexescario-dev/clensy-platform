@@ -1,15 +1,17 @@
 import { UseGuards, BadRequestException } from '@nestjs/common';
 import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
 import {
+  Filter,
   InjectQueryService,
   QueryService,
   getFilterOmitting,
   mergeFilter,
-  mergeQuery,
 } from '@ptc-org/nestjs-query-core';
 import { PropertiesService } from '../../application/services/properties.service';
 import { CreatePropertyCommand } from '../../application/commands/create-property.command';
 import { UpdatePropertyCommand } from '../../application/commands/update-property.command';
+import { requireTenantId } from '../../../../platform/auth/authorization/require-tenant-id';
+import { tenantFilterFor } from '../../../../platform/auth/authorization/tenant-read.authorizer';
 import { CurrentUser } from '../../../../platform/auth/decorators/current-user.decorator';
 import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
 import type { AuthenticatedPrincipal } from '../../../../platform/auth/domain/authenticated-principal';
@@ -34,6 +36,11 @@ const VIEW_ROLES = [
 // `customerProperties` keeps its Clensy name and required `customerId`, and
 // builds the page through 9.5.0 QueryArgsType / ConnectionType.createFromPromise
 // / QueryService (not a hand-rolled connection).
+//
+// Tenant isolation (#82): the tenant comes only from the principal. Reads
+// pass it through (the service / `tenantFilterFor` fail closed on `null`);
+// writes require it. A command's `tenantId` is set after `...input` so no
+// input key can override it.
 @Resolver(() => PropertyType)
 export class PropertyResolver {
   constructor(
@@ -54,6 +61,7 @@ export class PropertyResolver {
       ...input,
       actorId: currentUser.id,
       customerId,
+      tenantId: requireTenantId(currentUser),
     };
     const property = await this.propertiesService.create(command);
     return toPropertyType(property);
@@ -66,6 +74,7 @@ export class PropertyResolver {
   @Roles(...VIEW_ROLES)
   async customerProperties(
     @Args('customerId', { type: () => ID }) customerId: string,
+    @CurrentUser() currentUser: AuthenticatedPrincipal,
     @Args('paging', {
       type: () => CustomerPropertiesQueryArgs.PageType,
       nullable: true,
@@ -86,23 +95,34 @@ export class PropertyResolver {
     if (!customerId.trim()) {
       throw new BadRequestException('customerId is required');
     }
-    const withoutClientScope = {
-      filter: getFilterOmitting(filter ?? {}, 'customerId'),
+    // `customerId` and `tenantId` are server-owned: any client predicate on
+    // either is discarded before the server scope is ANDed in, for both the
+    // page and the count. The tenant never comes from the GraphQL filter.
+    // (`tenantId` is not a `PropertyType` field — hence the key cast; it is
+    // omitted anyway as defense in depth, including inside `and`/`or`.)
+    const serverScope = mergeFilter<PropertyType>(
+      { customerId: { eq: customerId } },
+      tenantFilterFor(currentUser.tenantId),
+    );
+    const scopeFilter = (clientFilter?: Filter<PropertyType>) =>
+      mergeFilter(
+        getFilterOmitting(
+          clientFilter ?? {},
+          'customerId',
+          'tenantId' as never,
+        ),
+        serverScope,
+      );
+    const scoped = {
+      filter: scopeFilter(filter),
       paging: paging ?? { limit: PLATFORM_PAGE_DEFAULT },
       sorting,
     };
-    const scoped = mergeQuery(withoutClientScope, {
-      filter: { customerId: { eq: customerId } },
-    });
     return CustomerPropertiesQueryArgs.ConnectionType.createFromPromise(
       (pageQuery) => this.propertyQueryService.query(pageQuery),
       scoped,
       (countFilter) =>
-        this.propertyQueryService.count(
-          mergeFilter(getFilterOmitting(countFilter ?? {}, 'customerId'), {
-            customerId: { eq: customerId },
-          }),
-        ),
+        this.propertyQueryService.count(scopeFilter(countFilter)),
     );
   }
 
@@ -111,8 +131,12 @@ export class PropertyResolver {
   @Roles(...VIEW_ROLES)
   async property(
     @Args('id', { type: () => ID }) id: string,
+    @CurrentUser() currentUser: AuthenticatedPrincipal,
   ): Promise<PropertyType | null> {
-    const property = await this.propertiesService.getProperty(id);
+    const property = await this.propertiesService.getProperty(
+      id,
+      currentUser.tenantId,
+    );
     return property ? toPropertyType(property) : null;
   }
 
@@ -127,6 +151,7 @@ export class PropertyResolver {
     const command: UpdatePropertyCommand = {
       ...input,
       actorId: currentUser.id,
+      tenantId: requireTenantId(currentUser),
     };
     const property = await this.propertiesService.update(id, command);
     return toPropertyType(property);

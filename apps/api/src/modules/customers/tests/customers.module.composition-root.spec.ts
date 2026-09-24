@@ -1,4 +1,6 @@
 import { getQueryServiceToken } from '@ptc-org/nestjs-query-core';
+import { Authorizer } from '@ptc-org/nestjs-query-graphql';
+import { getAuthorizerToken } from '@ptc-org/nestjs-query-graphql/src/auth';
 import { Global, Module } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -10,6 +12,8 @@ import { CustomersService } from '../application/services/customers.service';
 import { PropertiesService } from '../application/services/properties.service';
 import { CustomerEntity } from '../infrastructure/persistence/customer.entity';
 import { PropertyEntity } from '../infrastructure/persistence/property.entity';
+import { CustomerType } from '../presentation/graphql/customer.type';
+import { PropertyType } from '../presentation/graphql/property.type';
 
 // Proves `AUDIT_LOGGER` actually resolves through real NestJS DI when only
 // `CustomersModule` (not `AppModule`) is imported — not just that
@@ -77,4 +81,26 @@ describe('CustomersModule — composition-root wiring (real AuditModule)', () =>
   it('resolves AUDIT_LOGGER from the imported AuditModule', () => {
     expect(moduleRef.get(AUDIT_LOGGER)).toBeDefined();
   });
+
+  // The DI-registered authorizer is what nestjs-query's interceptor and
+  // every parent's `authorizeRelation` resolve (`getAuthorizerToken(DTO)`),
+  // so prove the tenant authorizer — not the library's allow-all default —
+  // is the one wired for both types (#82).
+  it.each([
+    ['CustomerType', CustomerType],
+    ['PropertyType', PropertyType],
+  ] as const)(
+    'registers the tenant read authorizer for %s',
+    async (_name, DTOClass) => {
+      const authorizer = moduleRef.get<Authorizer<unknown>>(
+        getAuthorizerToken(DTOClass as never),
+        { strict: false },
+      );
+      await expect(
+        authorizer.authorize({ req: { user: { tenantId: 't-a' } } }, {
+          operationGroup: 'read',
+        } as never),
+      ).resolves.toEqual({ tenantId: { eq: 't-a' } });
+    },
+  );
 });

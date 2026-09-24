@@ -3,6 +3,7 @@ import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { CustomersService } from '../../application/services/customers.service';
 import { CreateCustomerCommand } from '../../application/commands/create-customer.command';
 import { UpdateCustomerCommand } from '../../application/commands/update-customer.command';
+import { requireTenantId } from '../../../../platform/auth/authorization/require-tenant-id';
 import { CurrentUser } from '../../../../platform/auth/decorators/current-user.decorator';
 import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
 import type { AuthenticatedPrincipal } from '../../../../platform/auth/domain/authenticated-principal';
@@ -14,7 +15,11 @@ import { toCustomerType } from './mappers';
 import { UpdateCustomerInput } from './update-customer.input';
 
 // Clensy nullable get-by-id plus writes. Root `customers` and nested
-// `properties` are Relatable / ReadResolver owned.
+// `properties` are Relatable / ReadResolver owned (tenant-scoped by
+// `CustomerType`'s `@Authorize`). The tenant comes only from the principal
+// (#82): reads pass it through and the service fails closed on `null`;
+// writes require it. A command's `tenantId` is set after `...input` so no
+// input key can override it.
 @Resolver(() => CustomerType)
 export class CustomerResolver {
   constructor(private readonly customersService: CustomersService) {}
@@ -29,6 +34,7 @@ export class CustomerResolver {
     const command: CreateCustomerCommand = {
       ...input,
       actorId: currentUser.id,
+      tenantId: requireTenantId(currentUser),
     };
     const customer = await this.customersService.create(command);
     return toCustomerType(customer);
@@ -45,8 +51,12 @@ export class CustomerResolver {
   )
   async customer(
     @Args('id', { type: () => ID }) id: string,
+    @CurrentUser() currentUser: AuthenticatedPrincipal,
   ): Promise<CustomerType | null> {
-    const customer = await this.customersService.getCustomer(id);
+    const customer = await this.customersService.getCustomer(
+      id,
+      currentUser.tenantId,
+    );
     return customer ? toCustomerType(customer) : null;
   }
 
@@ -61,6 +71,7 @@ export class CustomerResolver {
     const command: UpdateCustomerCommand = {
       ...input,
       actorId: currentUser.id,
+      tenantId: requireTenantId(currentUser),
     };
     const customer = await this.customersService.update(id, command);
     return toCustomerType(customer);

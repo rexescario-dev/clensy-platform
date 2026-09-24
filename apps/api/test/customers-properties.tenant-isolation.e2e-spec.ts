@@ -262,6 +262,35 @@ describe('Customers & Properties tenant isolation (e2e)', () => {
     },
   );
 
+  // `@Authorize` is relied on for reads only; write isolation comes from the
+  // four custom service-backed mutations. Any nestjs-query-generated
+  // Customer/Property mutation (CRUD or relation — e.g. `createOneCustomer`,
+  // `addPropertiesToCustomer`, `setCustomerOnBooking`) would bypass that, so
+  // the whole-app schema is matched by pattern, not a fixed deny-list.
+  it('exposes no generated Customer/Property mutation', async () => {
+    const response = await gql(
+      cookieB,
+      '{ __schema { mutationType { fields { name } } } }',
+    );
+    const names = (
+      response.body as {
+        data: { __schema: { mutationType: { fields: { name: string }[] } } };
+      }
+    ).data.__schema.mutationType.fields.map((field) => field.name);
+    expect(names.length).toBeGreaterThan(0);
+    const touchingCustomerOrProperty = names.filter((name) =>
+      /customer|propert/i.test(name),
+    );
+    expect(touchingCustomerOrProperty.sort()).toEqual(
+      [
+        'createCustomer',
+        'createProperty',
+        'updateCustomer',
+        'updateProperty',
+      ].sort(),
+    );
+  });
+
   it('matches no rows with the no-tenant filter on real Postgres', async () => {
     const queryService = app.get<QueryService<CustomerEntity>>(
       getQueryServiceToken(CustomerEntity),
