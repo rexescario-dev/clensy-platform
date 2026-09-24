@@ -25,10 +25,20 @@ import { JobStatus } from '../src/modules/jobs/domain/job-status';
 import { CleaningJobEntity } from '../src/modules/jobs/infrastructure/persistence/cleaning-job.entity';
 import { ChecklistEntity } from '../src/modules/jobs/infrastructure/persistence/checklist.entity';
 import { ChecklistItemEntity } from '../src/modules/jobs/infrastructure/persistence/checklist-item.entity';
+import { TenantEntity } from '../src/modules/admins/infrastructure/persistence/tenant.entity';
+import { BOOTSTRAP_TENANT_ID } from '../src/platform/database/bootstrap-tenant';
 import {
   acquireJobDbTestLock,
   JobDbTestLock,
 } from './helpers/job-db-test-lock';
+
+// This whole file runs under `acquireJobDbTestLock` and truncates
+// `customer_entity`/`property_entity`/`booking_entity` (among others) in
+// its own `beforeEach` — no other spec file's rows can be present, so
+// every fixture here is safely attached to the bootstrap tenant (the one
+// tenant row every migrated database is guaranteed to have) without
+// colliding across runs or files.
+const TENANT_ID = BOOTSTRAP_TENANT_ID;
 
 function createTestDataSource(): DataSource {
   return new DataSource({
@@ -45,6 +55,7 @@ function createTestDataSource(): DataSource {
       TeamEntity,
       CleanerEntity, // TeamEntity#cleaners inverse metadata
       AuditEventEntity,
+      TenantEntity, // CustomerEntity#tenant / PropertyEntity#tenant (#82)
     ],
     host: process.env.DB_HOST ?? 'localhost',
     password: process.env.DB_PASSWORD ?? 'clensy_dev',
@@ -140,6 +151,7 @@ describe('JobsService (real Postgres)', () => {
   async function createFixture() {
     const customer = await customersService.create({
       actorId: 'actor-1',
+      tenantId: TENANT_ID,
       email: 'jane@example.com',
       fullName: 'Jane Doe',
       phone: '555-0100',
@@ -147,6 +159,7 @@ describe('JobsService (real Postgres)', () => {
     const property = await propertiesService.create({
       actorId: 'actor-1',
       customerId: customer.id,
+      tenantId: TENANT_ID,
       addressLine1: '1 Main St',
       city: 'City',
       label: 'Home',
@@ -179,6 +192,7 @@ describe('JobsService (real Postgres)', () => {
       propertyId: fixture.property.id,
       serviceId: fixture.service.id,
       teamId: fixture.team.id,
+      tenantId: TENANT_ID,
       scheduledAt: new Date('2026-09-01T09:00:00Z'),
     });
     if (status !== undefined) {
@@ -621,6 +635,7 @@ describe('JobsService (real Postgres)', () => {
         customerId: customer.id,
         propertyId: property.id,
         serviceId: service.id,
+        tenantId: TENANT_ID,
         scheduledAt: new Date('2026-09-01T09:00:00Z'),
       });
       const job = await jobsService.createFromBooking({

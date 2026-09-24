@@ -226,9 +226,14 @@ describe('Bookings (e2e)', () => {
   // application service (not through this suite's own GraphQL mutations —
   // those modules' own e2e suites already prove their own mutation wiring;
   // this file only needs valid upstream rows to exist).
-  async function createFixture(runId: string, priceMinorUnits = 5000) {
+  async function createFixture(
+    runId: string,
+    tenantId: string,
+    priceMinorUnits = 5000,
+  ) {
     const customer = await customersService.create({
       actorId: 'e2e',
+      tenantId,
       email: `fixture-${runId}@example.com`,
       fullName: `Fixture Customer ${runId}`,
       phone: '555-0100',
@@ -236,6 +241,7 @@ describe('Bookings (e2e)', () => {
     const property = await propertiesService.create({
       actorId: 'e2e',
       customerId: customer.id,
+      tenantId,
       addressLine1: `${runId} Main St`,
       city: 'City',
       label: 'Home',
@@ -269,6 +275,7 @@ describe('Bookings (e2e)', () => {
     // GraphQL mutation instead of reaching into its service. ---
     const { customer, property, service, team } = await createFixture(
       runId,
+      owner.tenantId,
       5000,
     );
     const createPricingRuleResponse = await authedRequest(
@@ -381,7 +388,7 @@ describe('Bookings (e2e)', () => {
       property: p2,
       service: s2,
       team: t2,
-    } = await createFixture(`${runId}-2`, 4000);
+    } = await createFixture(`${runId}-2`, owner.tenantId, 4000);
     await authedRequest(ownerSessionCookie).send({
       query: `mutation CreatePricingRule($input: CreatePricingRuleInput!) {
         createPricingRule(input: $input) { id }
@@ -428,7 +435,11 @@ describe('Bookings (e2e)', () => {
 
     // --- Step 5: SQL O(1) in N (spec §4.8) — same four-relation list at
     // N=6 and N=12. Counts must be constant in N, not per-parent. ---
-    const batchFixture = await createFixture(`${runId}-batch`, 5500);
+    const batchFixture = await createFixture(
+      `${runId}-batch`,
+      owner.tenantId,
+      5500,
+    );
     const batchPricing = await authedRequest(ownerSessionCookie).send({
       query: `mutation CreatePricingRule($input: CreatePricingRuleInput!) {
         createPricingRule(input: $input) { id }
@@ -448,6 +459,7 @@ describe('Bookings (e2e)', () => {
           propertyId: batchFixture.property.id,
           serviceId: batchFixture.service.id,
           teamId: batchFixture.team.id,
+          tenantId: owner.tenantId,
           scheduledAt: new Date(`2026-10-${day}T09:00:00.000Z`),
         });
       }
@@ -714,7 +726,11 @@ describe('Bookings (e2e)', () => {
     expect(ownerLoginResponse.body.errors).toBeUndefined();
     const ownerSessionCookie = extractSessionCookie(ownerLoginResponse);
 
-    const fixture = await createFixture(`paging-${owner.id}`, 5000);
+    const fixture = await createFixture(
+      `paging-${owner.id}`,
+      owner.tenantId,
+      5000,
+    );
     const pricing = await authedRequest(ownerSessionCookie).send({
       query: `mutation CreatePricingRule($input: CreatePricingRuleInput!) {
         createPricingRule(input: $input) { id }
@@ -735,6 +751,7 @@ describe('Bookings (e2e)', () => {
           propertyId: fixture.property.id,
           serviceId: fixture.service.id,
           teamId: fixture.team.id,
+          tenantId: owner.tenantId,
           scheduledAt:
             index < 2
               ? sameScheduledAt

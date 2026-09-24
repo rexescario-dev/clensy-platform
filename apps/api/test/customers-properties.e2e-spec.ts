@@ -700,12 +700,14 @@ describe('Customers & Properties (e2e)', () => {
 
     const customerA = await customersService.create({
       actorId: owner.id,
+      tenantId: owner.tenantId,
       email: `scope-a-${runId}@example.com`,
       fullName: `Scope A ${runId}`,
       phone: '555-0300',
     });
     const customerB = await customersService.create({
       actorId: owner.id,
+      tenantId: owner.tenantId,
       email: `scope-b-${runId}@example.com`,
       fullName: `Scope B ${runId}`,
       phone: '555-0301',
@@ -713,6 +715,7 @@ describe('Customers & Properties (e2e)', () => {
     const propertyA = await propertiesService.create({
       actorId: owner.id,
       customerId: customerA.id,
+      tenantId: owner.tenantId,
       addressLine1: `${runId}-A St`,
       city: 'City',
       label: 'A-home',
@@ -722,6 +725,7 @@ describe('Customers & Properties (e2e)', () => {
     const extraA = await propertiesService.create({
       actorId: owner.id,
       customerId: customerA.id,
+      tenantId: owner.tenantId,
       addressLine1: `${runId}-A2 St`,
       city: 'City',
       label: 'A-extra',
@@ -731,6 +735,7 @@ describe('Customers & Properties (e2e)', () => {
     await propertiesService.create({
       actorId: owner.id,
       customerId: customerB.id,
+      tenantId: owner.tenantId,
       addressLine1: `${runId}-B St`,
       city: 'City',
       label: 'B-home',
@@ -806,6 +811,7 @@ describe('Customers & Properties (e2e)', () => {
       for (let index = start; index < start + count; index += 1) {
         const customer = await customersService.create({
           actorId: owner.id,
+          tenantId: owner.tenantId,
           email: `o1-${runId}-${index}@example.com`,
           fullName: `O1 ${runId} ${index}`,
           phone: '555-0400',
@@ -814,6 +820,7 @@ describe('Customers & Properties (e2e)', () => {
         await propertiesService.create({
           actorId: owner.id,
           customerId: customer.id,
+          tenantId: owner.tenantId,
           addressLine1: `${runId}-O1-${index} St`,
           city: 'City',
           label: `O1-p-${index}`,

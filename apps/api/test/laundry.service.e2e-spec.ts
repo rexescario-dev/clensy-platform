@@ -20,10 +20,20 @@ import { LaundryOrderStatus } from '../src/modules/laundry/domain/laundry-order-
 import { LaundryOrderStatusTransitionPolicy } from '../src/modules/laundry/domain/laundry-order-status-transition-policy';
 import { LaundryOrderEntity } from '../src/modules/laundry/infrastructure/persistence/laundry-order.entity';
 import { LaundryOrderLineEntity } from '../src/modules/laundry/infrastructure/persistence/laundry-order-line.entity';
+import { TenantEntity } from '../src/modules/admins/infrastructure/persistence/tenant.entity';
+import { BOOTSTRAP_TENANT_ID } from '../src/platform/database/bootstrap-tenant';
 import {
   acquireLaundryDbTestLock,
   LaundryDbTestLock,
 } from './helpers/laundry-db-test-lock';
+import { uniqueEmail } from './helpers/unique-email';
+
+// This whole file runs under `acquireLaundryDbTestLock` and truncates
+// `customer_entity` (among others) in its own `beforeEach` — no other spec
+// file's rows can be present, so every fixture here is safely attached to
+// the bootstrap tenant (the one tenant row every migrated database is
+// guaranteed to have) without colliding across runs or files.
+const TENANT_ID = BOOTSTRAP_TENANT_ID;
 
 // The customer/property -> booking -> team -> cleaner inverse chain must be
 // registered together for TypeORM metadata to resolve (the
@@ -41,6 +51,7 @@ const ENTITIES = [
   TeamEntity,
   CleanerEntity,
   AuditEventEntity,
+  TenantEntity, // CustomerEntity#tenant / PropertyEntity#tenant (#82)
 ];
 
 const makeDataSource = () =>
@@ -139,7 +150,8 @@ describe('LaundryOrdersService (real Postgres)', () => {
   }) {
     const customer = await svc.customers.create({
       actorId: 'actor-1',
-      email: `jane-${Date.now()}-${Math.random()}@example.com`,
+      tenantId: TENANT_ID,
+      email: uniqueEmail('jane'),
       fullName: 'Jane Doe',
       phone: '555-0100',
     });
@@ -187,6 +199,7 @@ describe('LaundryOrdersService (real Postgres)', () => {
     let order = await svc.laundry.receive({
       actorId: 'actor-1',
       customerId: customer.id,
+      tenantId: TENANT_ID,
       fulfillmentType: LaundryFulfillmentType.PICKUP,
     });
     expect(order.status).toBe(LaundryOrderStatus.RECEIVED);
@@ -276,6 +289,7 @@ describe('LaundryOrdersService (real Postgres)', () => {
     let order = await svc.laundry.receive({
       actorId: 'actor-1',
       customerId: customer.id,
+      tenantId: TENANT_ID,
       fulfillmentType: LaundryFulfillmentType.PICKUP,
     });
     order = await svc.laundry.weigh({
@@ -320,6 +334,7 @@ describe('LaundryOrdersService (real Postgres)', () => {
     let order = await svc.laundry.receive({
       actorId: 'actor-1',
       customerId: customer.id,
+      tenantId: TENANT_ID,
       fulfillmentType: LaundryFulfillmentType.DELIVERY,
     });
     order = await svc.laundry.weigh({
@@ -363,6 +378,7 @@ describe('LaundryOrdersService (real Postgres)', () => {
     let order = await svc.laundry.receive({
       actorId: 'actor-1',
       customerId: customer.id,
+      tenantId: TENANT_ID,
       fulfillmentType: LaundryFulfillmentType.PICKUP,
     });
     order = await svc.laundry.weigh({
@@ -397,6 +413,7 @@ describe('LaundryOrdersService (real Postgres)', () => {
       let order = await svc.laundry.receive({
         actorId: 'actor-1',
         customerId: customer.id,
+        tenantId: TENANT_ID,
         fulfillmentType: LaundryFulfillmentType.PICKUP,
       });
       order = await svc.laundry.weigh({

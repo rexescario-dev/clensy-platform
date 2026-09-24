@@ -23,10 +23,20 @@ import { InvoicesService } from '../src/modules/billing/application/services/inv
 import { InvoicePaymentTerms } from '../src/modules/billing/domain/invoice-payment-terms';
 import { InvoiceEntity } from '../src/modules/billing/infrastructure/persistence/invoice.entity';
 import { InvoiceLineEntity } from '../src/modules/billing/infrastructure/persistence/invoice-line.entity';
+import { TenantEntity } from '../src/modules/admins/infrastructure/persistence/tenant.entity';
+import { BOOTSTRAP_TENANT_ID } from '../src/platform/database/bootstrap-tenant';
 import {
   acquireBillingDbTestLock,
   BillingDbTestLock,
 } from './helpers/billing-db-test-lock';
+import { uniqueEmail } from './helpers/unique-email';
+
+// This whole file runs under `acquireBillingDbTestLock` and truncates
+// `customer_entity` (among others) in its own `beforeEach` — no other spec
+// file's rows can be present, so every fixture here is safely attached to
+// the bootstrap tenant (the one tenant row every migrated database is
+// guaranteed to have) without colliding across runs or files.
+const TENANT_ID = BOOTSTRAP_TENANT_ID;
 
 const ENTITIES = [
   InvoiceEntity,
@@ -42,6 +52,7 @@ const ENTITIES = [
   TeamEntity,
   CleanerEntity,
   AuditEventEntity,
+  TenantEntity, // CustomerEntity#tenant / PropertyEntity#tenant (#82)
 ];
 
 const makeDataSource = () =>
@@ -166,7 +177,8 @@ describe('InvoicesService (real Postgres) — concurrent generation', () => {
     const stamp = `${Date.now()}-${Math.random()}`;
     const customer = await customers.create({
       actorId: 'a',
-      email: `race-${stamp}@example.com`,
+      tenantId: TENANT_ID,
+      email: uniqueEmail('race'),
       fullName: 'Race Jane',
       phone: '555-0',
     });
@@ -184,6 +196,7 @@ describe('InvoicesService (real Postgres) — concurrent generation', () => {
     const order = await laundry.receive({
       actorId: 'a',
       customerId: customer.id,
+      tenantId: TENANT_ID,
       fulfillmentType: LaundryFulfillmentType.PICKUP,
     });
     await laundry.weigh({ actorId: 'a', orderId: order.id, weightGrams: 2000 });
