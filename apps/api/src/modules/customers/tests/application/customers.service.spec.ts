@@ -1,7 +1,12 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
+import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import { CustomersService } from '../../application/services/customers.service';
 import { CustomerEntity } from '../../infrastructure/persistence/customer.entity';
@@ -65,16 +70,149 @@ describe('CustomersService', () => {
     service = module.get<CustomersService>(CustomersService);
   });
 
+  describe('create', () => {
+    it('persists tenantId from the command', async () => {
+      const result = await service.create({
+        actorId: 'actor-1',
+        tenantId: 't-a',
+        email: 'jane@example.com',
+        fullName: 'Jane Doe',
+        phone: '555-0100',
+      });
+
+      expect(result).toMatchObject({ tenantId: 't-a' });
+      expect(manager.save).toHaveBeenCalledWith(
+        expect.objectContaining({ tenantId: 't-a' }),
+      );
+    });
+
+    it('audits customer.create with tenant scope and tenantId', async () => {
+      const result = await service.create({
+        actorId: 'actor-1',
+        tenantId: 't-a',
+        email: 'jane@example.com',
+        fullName: 'Jane Doe',
+        phone: '555-0100',
+      });
+
+      expect(auditLogger.log).toHaveBeenCalledWith({
+        actorId: 'actor-1',
+        entityId: result.id,
+        tenantId: 't-a',
+        action: 'customer.create',
+        entityType: 'customer',
+        scope: AdminScope.TENANT,
+      });
+    });
+
+    it('translates a uq_customer_tenant_email violation into ConflictException', async () => {
+      manager.save.mockRejectedValue(
+        Object.assign(new Error('duplicate key'), {
+          code: '23505',
+          constraint: 'uq_customer_tenant_email',
+        }),
+      );
+
+      await expect(
+        service.create({
+          actorId: 'actor-1',
+          tenantId: 't-a',
+          email: 'jane@example.com',
+          fullName: 'Jane Doe',
+          phone: '555-0100',
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('translates a unique violation reported via driverError.constraint', async () => {
+      manager.save.mockRejectedValue({
+        code: '23505',
+        driverError: { constraint: 'uq_customer_tenant_email' },
+      });
+
+      await expect(
+        service.create({
+          actorId: 'actor-1',
+          tenantId: 't-a',
+          email: 'jane@example.com',
+          fullName: 'Jane Doe',
+          phone: '555-0100',
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('rethrows a unique violation on an unrelated constraint unchanged', async () => {
+      const error = Object.assign(new Error('duplicate key'), {
+        code: '23505',
+        constraint: 'some_other_constraint',
+      });
+      manager.save.mockRejectedValue(error);
+
+      await expect(
+        service.create({
+          actorId: 'actor-1',
+          tenantId: 't-a',
+          email: 'jane@example.com',
+          fullName: 'Jane Doe',
+          phone: '555-0100',
+        }),
+      ).rejects.toBe(error);
+    });
+
+    it('rethrows a non-unique-violation error unchanged', async () => {
+      const error = new Error('connection lost');
+      manager.save.mockRejectedValue(error);
+
+      await expect(
+        service.create({
+          actorId: 'actor-1',
+          tenantId: 't-a',
+          email: 'jane@example.com',
+          fullName: 'Jane Doe',
+          phone: '555-0100',
+        }),
+      ).rejects.toBe(error);
+    });
+  });
+
   describe('update', () => {
     it('throws NotFoundException for a nonexistent id', async () => {
       manager.findOneBy.mockResolvedValue(null);
 
       await expect(
-        service.update('missing-id', { actorId: 'actor-1', phone: '555' }),
+        service.update('missing-id', {
+          actorId: 'actor-1',
+          tenantId: 't-a',
+          phone: '555',
+        }),
       ).rejects.toThrow(NotFoundException);
 
       expect(manager.save).not.toHaveBeenCalled();
       expect(auditLogger.log).not.toHaveBeenCalled();
+    });
+
+    it('looks up the entity scoped by id and tenantId', async () => {
+      manager.findOneBy.mockResolvedValue({
+        id: 'customer-1',
+        tenantId: 't-a',
+        createdAt: new Date(),
+        email: 'jane@example.com',
+        fullName: 'Jane Doe',
+        notes: null,
+        phone: '555-0100',
+        updatedAt: new Date(),
+      });
+
+      await service.update('customer-1', {
+        actorId: 'actor-1',
+        tenantId: 't-a',
+        phone: '555-9999',
+      });
+
+      expect(manager.findOneBy).toHaveBeenCalledWith(CustomerEntity, {
+        id: 'customer-1',
+        tenantId: 't-a',
+      });
     });
 
     // Regression test: `command.actorId` is required by `UpdateCustomerCommand`
@@ -85,6 +223,7 @@ describe('CustomersService', () => {
     it('does not leak actorId from the command onto the returned entity', async () => {
       manager.findOneBy.mockResolvedValue({
         id: 'customer-1',
+        tenantId: 't-a',
         createdAt: new Date(),
         email: 'jane@example.com',
         fullName: 'Jane Doe',
@@ -95,10 +234,94 @@ describe('CustomersService', () => {
 
       const result = await service.update('customer-1', {
         actorId: 'actor-1',
+        tenantId: 't-a',
         phone: '555-9999',
       });
 
       expect(result).not.toHaveProperty('actorId');
+    });
+
+    // `tenantId` is server-owned (multi-tenant spec invariant 1) — never a
+    // writable input field. The command's `tenantId` is used only to scope
+    // the `findOneBy` lookup above; it must not be `Object.assign`-ed onto
+    // the entity, which would make it a de facto writable field.
+    it('does not overwrite the entity tenantId from the command', async () => {
+      manager.findOneBy.mockResolvedValue({
+        id: 'customer-1',
+        tenantId: 't-a',
+        createdAt: new Date(),
+        email: 'jane@example.com',
+        fullName: 'Jane Doe',
+        notes: null,
+        phone: '555-0100',
+        updatedAt: new Date(),
+      });
+
+      const result = await service.update('customer-1', {
+        actorId: 'actor-1',
+        tenantId: 't-a',
+        phone: '555-9999',
+      });
+
+      expect(result.tenantId).toBe('t-a');
+      expect(manager.save).toHaveBeenCalledWith(
+        expect.objectContaining({ tenantId: 't-a' }),
+      );
+    });
+
+    it('audits customer.update with tenant scope and tenantId', async () => {
+      manager.findOneBy.mockResolvedValue({
+        id: 'customer-1',
+        tenantId: 't-a',
+        createdAt: new Date(),
+        email: 'jane@example.com',
+        fullName: 'Jane Doe',
+        notes: null,
+        phone: '555-0100',
+        updatedAt: new Date(),
+      });
+
+      await service.update('customer-1', {
+        actorId: 'actor-1',
+        tenantId: 't-a',
+        phone: '555-9999',
+      });
+
+      expect(auditLogger.log).toHaveBeenCalledWith({
+        actorId: 'actor-1',
+        entityId: 'customer-1',
+        tenantId: 't-a',
+        action: 'customer.update',
+        entityType: 'customer',
+        scope: AdminScope.TENANT,
+      });
+    });
+
+    it('translates a uq_customer_tenant_email violation into ConflictException', async () => {
+      manager.findOneBy.mockResolvedValue({
+        id: 'customer-1',
+        tenantId: 't-a',
+        createdAt: new Date(),
+        email: 'jane@example.com',
+        fullName: 'Jane Doe',
+        notes: null,
+        phone: '555-0100',
+        updatedAt: new Date(),
+      });
+      manager.save.mockRejectedValue(
+        Object.assign(new Error('duplicate key'), {
+          code: '23505',
+          constraint: 'uq_customer_tenant_email',
+        }),
+      );
+
+      await expect(
+        service.update('customer-1', {
+          actorId: 'actor-1',
+          tenantId: 't-a',
+          email: 'jane@example.com',
+        }),
+      ).rejects.toThrow(ConflictException);
     });
   });
 
@@ -113,6 +336,7 @@ describe('CustomersService', () => {
         await expect(
           service.create({
             actorId: 'actor-1',
+            tenantId: 't-a',
             email: 'jane@example.com',
             fullName: 'Jane Doe',
             phone: '555-0100',
@@ -136,6 +360,7 @@ describe('CustomersService', () => {
       async (_field, override) => {
         manager.findOneBy.mockResolvedValue({
           id: 'customer-1',
+          tenantId: 't-a',
           createdAt: new Date(),
           email: 'jane@example.com',
           fullName: 'Jane Doe',
@@ -145,7 +370,11 @@ describe('CustomersService', () => {
         });
 
         await expect(
-          service.update('customer-1', { actorId: 'actor-1', ...override }),
+          service.update('customer-1', {
+            actorId: 'actor-1',
+            tenantId: 't-a',
+            ...override,
+          }),
         ).rejects.toThrow(BadRequestException);
 
         expect(manager.save).not.toHaveBeenCalled();
@@ -155,9 +384,10 @@ describe('CustomersService', () => {
   });
 
   describe('getCustomer', () => {
-    it('returns the customer for an existing id', async () => {
+    it('calls findOneBy scoped to id and tenantId for an existing id', async () => {
       const customer = {
         id: 'customer-1',
+        tenantId: 't-a',
         createdAt: new Date(),
         email: 'jane@example.com',
         fullName: 'Jane Doe',
@@ -167,26 +397,35 @@ describe('CustomersService', () => {
       };
       customerRepository.findOneBy.mockResolvedValue(customer);
 
-      await expect(service.getCustomer('customer-1')).resolves.toEqual(
+      await expect(service.getCustomer('customer-1', 't-a')).resolves.toEqual(
         customer,
       );
       expect(customerRepository.findOneBy).toHaveBeenCalledWith({
         id: 'customer-1',
+        tenantId: 't-a',
       });
     });
 
     it('returns null for a nonexistent id', async () => {
       customerRepository.findOneBy.mockResolvedValue(null);
 
-      await expect(service.getCustomer('missing-id')).resolves.toBeNull();
+      await expect(
+        service.getCustomer('missing-id', 't-a'),
+      ).resolves.toBeNull();
+    });
+
+    it('returns null without querying the repository when tenantId is null', async () => {
+      await expect(service.getCustomer('customer-1', null)).resolves.toBeNull();
+      expect(customerRepository.findOneBy).not.toHaveBeenCalled();
     });
   });
 
   describe('listCustomers', () => {
-    it('returns all customers', async () => {
+    it('calls find scoped to tenantId and returns all customers', async () => {
       const customers = [
         {
           id: 'customer-1',
+          tenantId: 't-a',
           createdAt: new Date(),
           email: 'jane@example.com',
           fullName: 'Jane Doe',
@@ -197,21 +436,30 @@ describe('CustomersService', () => {
       ];
       customerRepository.find.mockResolvedValue(customers);
 
-      await expect(service.listCustomers()).resolves.toEqual(customers);
+      await expect(service.listCustomers('t-a')).resolves.toEqual(customers);
+      expect(customerRepository.find).toHaveBeenCalledWith({
+        where: { tenantId: 't-a' },
+      });
     });
 
     it('returns an empty array when none exist', async () => {
       customerRepository.find.mockResolvedValue([]);
 
-      await expect(service.listCustomers()).resolves.toEqual([]);
+      await expect(service.listCustomers('t-a')).resolves.toEqual([]);
+    });
+
+    it('returns an empty array without querying the repository when tenantId is null', async () => {
+      await expect(service.listCustomers(null)).resolves.toEqual([]);
+      expect(customerRepository.find).not.toHaveBeenCalled();
     });
   });
 
   describe('getCustomersByIds', () => {
-    it('returns exactly the rows found, with no synthetic entries for missing ids', async () => {
+    it('puts tenantId in the same where clause as id: In(ids)', async () => {
       const customers = [
         {
           id: 'customer-1',
+          tenantId: 't-b',
           createdAt: new Date(),
           email: 'jane@example.com',
           fullName: 'Jane Doe',
@@ -223,12 +471,22 @@ describe('CustomersService', () => {
       customerRepository.findBy.mockResolvedValue(customers);
 
       await expect(
-        service.getCustomersByIds(['customer-1', 'customer-2']),
+        service.getCustomersByIds(['customer-1', 'customer-2'], 't-b'),
       ).resolves.toEqual(customers);
+      expect(customerRepository.findBy).toHaveBeenCalledWith(
+        expect.objectContaining({ tenantId: 't-b' }),
+      );
     });
 
     it('returns an empty array without querying when ids is empty', async () => {
-      await expect(service.getCustomersByIds([])).resolves.toEqual([]);
+      await expect(service.getCustomersByIds([], 't-a')).resolves.toEqual([]);
+      expect(customerRepository.findBy).not.toHaveBeenCalled();
+    });
+
+    it('returns an empty array without querying the repository when tenantId is null', async () => {
+      await expect(
+        service.getCustomersByIds(['customer-1'], null),
+      ).resolves.toEqual([]);
       expect(customerRepository.findBy).not.toHaveBeenCalled();
     });
   });
