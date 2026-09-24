@@ -22,7 +22,7 @@ import { ChecklistType } from './checklist.type';
 registerEnumType(JobStatus, { name: 'JobStatus' });
 
 export const VIEW_ROLES = [
-  Role.OWNER,
+  Role.TENANT_OWNER,
   Role.OPS_MANAGER,
   Role.SCHEDULER,
   Role.CUSTOMER_SUPPORT,

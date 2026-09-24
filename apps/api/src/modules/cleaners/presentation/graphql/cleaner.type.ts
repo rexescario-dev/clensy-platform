@@ -14,7 +14,7 @@ import { Role } from '../../../../platform/auth/domain/role';
 import { TeamType } from './team.type';
 
 export const VIEW_ROLES = [
-  Role.OWNER,
+  Role.TENANT_OWNER,
   Role.OPS_MANAGER,
   Role.SCHEDULER,
   Role.ANALYST,

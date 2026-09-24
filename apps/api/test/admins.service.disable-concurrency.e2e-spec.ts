@@ -1,14 +1,20 @@
-import * as bcrypt from 'bcrypt';
 import { DataSource } from 'typeorm';
 import { AuditLogger } from '../src/platform/audit/application/audit-logger.port';
 import { AuditEventEntity } from '../src/platform/audit/infrastructure/persistence/audit-event.entity';
 import { Role } from '../src/platform/auth/domain/role';
 import { AdminsService } from '../src/modules/admins/application/services/admins.service';
 import { AdminUserEntity } from '../src/modules/admins/infrastructure/persistence/admin-user.entity';
+import { TenantEntity } from '../src/modules/admins/infrastructure/persistence/tenant.entity';
+import { BOOTSTRAP_TENANT_ID } from '../src/platform/database/bootstrap-tenant';
 import {
   acquireAdminDbTestLock,
   AdminDbTestLock,
 } from './helpers/admin-db-test-lock';
+import {
+  createTestTenant,
+  removeTestTenants,
+  seedTenantAdmin,
+} from './helpers/seed-tenant-admin';
 
 // Separate file, on purpose: this test proves actual Postgres row-locking
 // behavior, which no mock can do. It opens TWO independent `DataSource`
@@ -26,17 +32,18 @@ import {
 // (see `./helpers/admin-db-test-lock.ts`) for the whole file's run, so the
 // two real-DB spec files can never overlap regardless of Jest's worker
 // scheduling — without serializing the rest of the suite.
-describe('AdminsService.disable — last-active-Owner race (real Postgres, two connections)', () => {
+describe('AdminsService.disable — last-active-Tenant-Owner race (real Postgres, two connections)', () => {
   let dataSourceA: DataSource;
   let dataSourceB: DataSource;
   let dbLock: AdminDbTestLock;
   let serviceA: AdminsService;
   let serviceB: AdminsService;
+  let otherTenantId: string;
 
   const makeDataSource = () =>
     new DataSource({
       database: process.env.DB_NAME ?? 'clensy',
-      entities: [AdminUserEntity, AuditEventEntity],
+      entities: [AdminUserEntity, AuditEventEntity, TenantEntity],
       host: process.env.DB_HOST ?? 'localhost',
       password: process.env.DB_PASSWORD ?? 'clensy_dev',
       port: Number(process.env.DB_PORT ?? 5432),
@@ -50,9 +57,11 @@ describe('AdminsService.disable — last-active-Owner race (real Postgres, two c
     await dataSourceA.initialize();
     await dataSourceB.initialize();
     dbLock = await acquireAdminDbTestLock(dataSourceA);
+    otherTenantId = await createTestTenant(dataSourceA);
   });
 
   afterAll(async () => {
+    await removeTestTenants(dataSourceA, [otherTenantId]);
     await dbLock.release();
     await dataSourceA.destroy();
     await dataSourceB.destroy();
@@ -69,28 +78,16 @@ describe('AdminsService.disable — last-active-Owner race (real Postgres, two c
     serviceB = new AdminsService(dataSourceB, noopAuditLogger);
   });
 
-  it('allows at most one of two concurrent disable-each-other calls to succeed, leaving exactly one active Owner', async () => {
-    const repo = dataSourceA.getRepository(AdminUserEntity);
-    const ownerA = await repo.save(
-      repo.create({
-        email: 'race-owner-a@example.com',
-        isActive: true,
-        passwordHash: await bcrypt.hash('irrelevant', 4),
-        role: Role.OWNER,
-      }),
-    );
-    const ownerB = await repo.save(
-      repo.create({
-        email: 'race-owner-b@example.com',
-        isActive: true,
-        passwordHash: await bcrypt.hash('irrelevant', 4),
-        role: Role.OWNER,
-      }),
-    );
+  it('allows at most one of two concurrent disable-each-other calls to succeed, leaving exactly one active Tenant Owner in that tenant', async () => {
+    const ownerA = await seedTenantAdmin(dataSourceA);
+    const ownerB = await seedTenantAdmin(dataSourceA);
+    // An active owner of ANOTHER tenant must not count toward this
+    // tenant's "more than one active Tenant Owner" check.
+    await seedTenantAdmin(dataSourceA, Role.TENANT_OWNER, otherTenantId);
 
     const [resultA, resultB] = await Promise.allSettled([
-      serviceA.disable({ actorId: ownerB.id, targetId: ownerA.id }),
-      serviceB.disable({ actorId: ownerA.id, targetId: ownerB.id }),
+      serviceA.disable({ actor: ownerB.principal, targetId: ownerA.id }),
+      serviceB.disable({ actor: ownerA.principal, targetId: ownerB.id }),
     ]);
 
     const outcomes = [resultA, resultB];
@@ -100,11 +97,17 @@ describe('AdminsService.disable — last-active-Owner race (real Postgres, two c
     expect(fulfilled).toHaveLength(1);
     expect(rejected).toHaveLength(1);
     const rejectionReason = rejected[0].reason as Error;
-    expect(rejectionReason.message).toMatch(/last active owner/i);
+    expect(rejectionReason.message).toMatch(/last active tenant owner/i);
 
-    const remainingActiveOwners = await repo.count({
-      where: { isActive: true, role: Role.OWNER },
-    });
+    const remainingActiveOwners = await dataSourceA
+      .getRepository(AdminUserEntity)
+      .count({
+        where: {
+          tenantId: BOOTSTRAP_TENANT_ID,
+          isActive: true,
+          role: Role.TENANT_OWNER,
+        },
+      });
     expect(remainingActiveOwners).toBe(1);
   });
 });

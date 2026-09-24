@@ -1,13 +1,12 @@
-import * as bcrypt from 'bcrypt';
-import { randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { AdminUserEntity } from '../../src/modules/admins/infrastructure/persistence/admin-user.entity';
 import { Role } from '../../src/platform/auth/domain/role';
-
-const BCRYPT_SALT_ROUNDS = 4; // low cost — this is a test fixture, not production hashing
+import { BOOTSTRAP_TENANT_ID } from '../../src/platform/database/bootstrap-tenant';
+import { seedTenantAdmin } from './seed-tenant-admin';
 
 export interface SeededOwner {
   id: string;
+  tenantId: string;
   email: string;
   password: string;
 }
@@ -20,24 +19,22 @@ export interface SeededOwner {
 // data" precedent, rather than depending on any prior seed step or
 // environment configuration.
 //
-// A random email per call keeps repeated test runs against the same
-// (non-truncated, real) Postgres database collision-free with each other
-// and with any pre-existing dev data.
+// Seeds a `TENANT_OWNER` of the bootstrap tenant — the privileged tenant
+// user every module e2e suite logs in as. The bootstrap tenant row is created
+// by the `AddTenantAndAdminScope` migration and only referenced here, never
+// inserted (plan Task 8). Business data stays unscoped in this slice, so
+// these suites exercise exactly what they did under the retired OWNER role.
+//
+// Kept as a repository-taking entry point for the module suites; the
+// seeding itself is `seedTenantAdmin`'s (random email per call, so repeated
+// runs against the same real database never collide).
 export async function seedOwner(
   repository: Repository<AdminUserEntity>,
 ): Promise<SeededOwner> {
-  const password = `owner-pw-${randomUUID()}`;
-  const email = `owner-${randomUUID()}@example.com`;
-  const passwordHash = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
-
-  const entity = await repository.save(
-    repository.create({
-      email,
-      isActive: true,
-      passwordHash,
-      role: Role.OWNER,
-    }),
+  const { id, email, password } = await seedTenantAdmin(
+    repository.manager.connection,
+    Role.TENANT_OWNER,
+    BOOTSTRAP_TENANT_ID,
   );
-
-  return { email, id: entity.id, password };
+  return { id, tenantId: BOOTSTRAP_TENANT_ID, email, password };
 }

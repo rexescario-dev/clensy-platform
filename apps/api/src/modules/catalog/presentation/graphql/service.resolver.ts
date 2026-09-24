@@ -46,7 +46,7 @@ export class ServiceResolver {
 
   @Mutation(() => ServiceType)
   @UseGuards(AuthGuard)
-  @Roles(Role.OWNER, Role.OPS_MANAGER)
+  @Roles(Role.TENANT_OWNER, Role.OPS_MANAGER)
   async createService(
     @Args('input') input: CreateServiceInput,
     @CurrentUser() currentUser: AuthenticatedPrincipal,
@@ -62,7 +62,7 @@ export class ServiceResolver {
 
   @Mutation(() => ServiceType)
   @UseGuards(AuthGuard)
-  @Roles(Role.OWNER, Role.OPS_MANAGER)
+  @Roles(Role.TENANT_OWNER, Role.OPS_MANAGER)
   async updateService(
     @Args('id', { type: () => ID }) id: string,
     @Args('input') input: UpdateServiceInput,

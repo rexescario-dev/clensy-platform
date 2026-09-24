@@ -27,12 +27,12 @@ import { JobRelationLoaders } from './job-relation.loaders';
 import { toChecklistType, toCleaningJobType } from './mappers';
 
 const CREATE_ROLES = [
-  Role.OWNER,
+  Role.TENANT_OWNER,
   Role.OPS_MANAGER,
   Role.SCHEDULER,
   Role.CUSTOMER_SUPPORT,
 ];
-const EXECUTE_ROLES = [Role.OWNER, Role.OPS_MANAGER, Role.SCHEDULER];
+const EXECUTE_ROLES = [Role.TENANT_OWNER, Role.OPS_MANAGER, Role.SCHEDULER];
 
 @Resolver(() => CleaningJobType)
 export class JobResolver {

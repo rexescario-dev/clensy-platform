@@ -18,17 +18,17 @@ import { toLaundryOrderType } from './mappers';
 import { LaundryOrderType, VIEW_ROLES } from './laundry-order.type';
 
 // Per-verb RBAC — spec §4.4 table (Accepted as proposed).
-const OPERATIONAL = [Role.OWNER, Role.OPS_MANAGER, Role.SCHEDULER];
+const OPERATIONAL = [Role.TENANT_OWNER, Role.OPS_MANAGER, Role.SCHEDULER];
 const INTAKE = [...OPERATIONAL, Role.CUSTOMER_SUPPORT];
 const PAYMENT = [
-  Role.OWNER,
+  Role.TENANT_OWNER,
   Role.OPS_MANAGER,
   Role.FINANCE,
   Role.CUSTOMER_SUPPORT,
 ];
-const CANCEL = [Role.OWNER, Role.OPS_MANAGER, Role.CUSTOMER_SUPPORT];
-const EXCEPTION = [Role.OWNER, Role.OPS_MANAGER];
-const REFUND = [Role.OWNER, Role.OPS_MANAGER, Role.FINANCE];
+const CANCEL = [Role.TENANT_OWNER, Role.OPS_MANAGER, Role.CUSTOMER_SUPPORT];
+const EXCEPTION = [Role.TENANT_OWNER, Role.OPS_MANAGER];
+const REFUND = [Role.TENANT_OWNER, Role.OPS_MANAGER, Role.FINANCE];
 
 @Resolver(() => LaundryOrderType)
 export class LaundryOrderResolver {

@@ -26,7 +26,7 @@ registerEnumType(InvoicePaymentTerms, { name: 'InvoicePaymentTerms' });
 
 // All six roles read invoices, matching every other module.
 export const VIEW_ROLES = [
-  Role.OWNER,
+  Role.TENANT_OWNER,
   Role.OPS_MANAGER,
   Role.SCHEDULER,
   Role.CUSTOMER_SUPPORT,

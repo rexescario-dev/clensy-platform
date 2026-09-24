@@ -22,7 +22,7 @@ export class CustomerResolver {
   @Query(() => CustomerType, { name: 'customer', nullable: true })
   @UseGuards(AuthGuard)
   @Roles(
-    Role.OWNER,
+    Role.TENANT_OWNER,
     Role.OPS_MANAGER,
     Role.SCHEDULER,
     Role.CUSTOMER_SUPPORT,
@@ -37,7 +37,7 @@ export class CustomerResolver {
 
   @Mutation(() => CustomerType)
   @UseGuards(AuthGuard)
-  @Roles(Role.OWNER, Role.OPS_MANAGER, Role.CUSTOMER_SUPPORT)
+  @Roles(Role.TENANT_OWNER, Role.OPS_MANAGER, Role.CUSTOMER_SUPPORT)
   async createCustomer(
     @Args('input') input: CreateCustomerInput,
     @CurrentUser() currentUser: AuthenticatedPrincipal,
@@ -52,7 +52,7 @@ export class CustomerResolver {
 
   @Mutation(() => CustomerType)
   @UseGuards(AuthGuard)
-  @Roles(Role.OWNER, Role.OPS_MANAGER, Role.CUSTOMER_SUPPORT)
+  @Roles(Role.TENANT_OWNER, Role.OPS_MANAGER, Role.CUSTOMER_SUPPORT)
   async updateCustomer(
     @Args('id', { type: () => ID }) id: string,
     @Args('input') input: UpdateCustomerInput,

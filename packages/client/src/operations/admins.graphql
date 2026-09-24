@@ -4,5 +4,7 @@ query Admins {
     email
     role
     isActive
+    scope
+    tenantId
   }
 }

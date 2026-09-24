@@ -2,5 +2,7 @@ query CurrentAdmin {
   currentAdmin {
     id
     role
+    scope
+    tenantId
   }
 }

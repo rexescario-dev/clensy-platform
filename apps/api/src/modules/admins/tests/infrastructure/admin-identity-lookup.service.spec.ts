@@ -1,5 +1,6 @@
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
+import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { Role } from '../../../../platform/auth/domain/role';
 import { AdminIdentityLookupService } from '../../infrastructure/admin-identity-lookup.service';
 import { AdminUserEntity } from '../../infrastructure/persistence/admin-user.entity';
@@ -49,18 +50,47 @@ describe('AdminIdentityLookupService', () => {
     );
   });
 
-  it('returns the principal (id + role) for an active admin id', async () => {
+  it('returns the full tenant principal for an active tenant admin', async () => {
     repository.findOneBy.mockResolvedValue({
       id: 'active-id',
+      tenantId: 'tenant-1',
       createdAt: new Date(),
       email: 'active@example.com',
       isActive: true,
       passwordHash: 'hash',
       role: Role.FINANCE,
+      scope: AdminScope.TENANT,
     });
 
     const result = await service.findActiveAdminById('active-id');
 
-    expect(result).toEqual({ id: 'active-id', role: Role.FINANCE });
+    expect(result).toEqual({
+      id: 'active-id',
+      tenantId: 'tenant-1',
+      role: Role.FINANCE,
+      scope: AdminScope.TENANT,
+    });
+  });
+
+  it('returns a platform principal with a null tenant for a Super Admin', async () => {
+    repository.findOneBy.mockResolvedValue({
+      id: 'super-id',
+      tenantId: null,
+      createdAt: new Date(),
+      email: 'super@example.com',
+      isActive: true,
+      passwordHash: 'hash',
+      role: Role.SUPER_ADMIN,
+      scope: AdminScope.PLATFORM,
+    });
+
+    const result = await service.findActiveAdminById('super-id');
+
+    expect(result).toEqual({
+      id: 'super-id',
+      tenantId: null,
+      role: Role.SUPER_ADMIN,
+      scope: AdminScope.PLATFORM,
+    });
   });
 });

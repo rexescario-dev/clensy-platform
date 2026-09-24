@@ -8,14 +8,18 @@ import { CustomerResolver } from '../../presentation/graphql/customer.resolver';
 type ResolverMethod = 'createCustomer' | 'customer' | 'updateCustomer';
 
 const VIEW_ROLES = [
-  Role.OWNER,
+  Role.TENANT_OWNER,
   Role.OPS_MANAGER,
   Role.SCHEDULER,
   Role.CUSTOMER_SUPPORT,
   Role.ANALYST,
 ];
 
-const WRITE_ROLES = [Role.OWNER, Role.OPS_MANAGER, Role.CUSTOMER_SUPPORT];
+const WRITE_ROLES = [
+  Role.TENANT_OWNER,
+  Role.OPS_MANAGER,
+  Role.CUSTOMER_SUPPORT,
+];
 
 function methodRef(method: ResolverMethod): (...args: unknown[]) => unknown {
   const descriptor = Object.getOwnPropertyDescriptor(

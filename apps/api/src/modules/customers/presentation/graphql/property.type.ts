@@ -18,7 +18,7 @@ import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
 import type { BookingDTO as BookingDTOClass } from '../../../bookings/presentation/graphql/booking.dto';
 
 const BOOKING_VIEW_ROLES = [
-  Role.OWNER,
+  Role.TENANT_OWNER,
   Role.OPS_MANAGER,
   Role.SCHEDULER,
   Role.CUSTOMER_SUPPORT,

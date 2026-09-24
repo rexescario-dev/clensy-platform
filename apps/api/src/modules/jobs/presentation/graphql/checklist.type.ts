@@ -16,7 +16,7 @@ import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
 import { ChecklistItemType } from './checklist-item.type';
 
 const VIEW_ROLES = [
-  Role.OWNER,
+  Role.TENANT_OWNER,
   Role.OPS_MANAGER,
   Role.SCHEDULER,
   Role.CUSTOMER_SUPPORT,

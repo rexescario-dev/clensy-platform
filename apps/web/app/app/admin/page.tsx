@@ -20,7 +20,9 @@ import type { DataTableColumn } from '@clensy/ui';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-const ROLE_OPTIONS: Role[] = ['OWNER', 'OPS_MANAGER', 'FINANCE', 'CUSTOMER_SUPPORT', 'SCHEDULER', 'ANALYST'];
+// A Tenant Owner can create staff and other Tenant Owners in their own
+// tenant, never a Super Admin (multi-tenant spec §4.3).
+const ROLE_OPTIONS: Role[] = ['TENANT_OWNER', 'OPS_MANAGER', 'FINANCE', 'CUSTOMER_SUPPORT', 'SCHEDULER', 'ANALYST'];
 
 // `DataTable<T>` (packages/ui) constrains `T extends Record<string, unknown>`
 // — the index signature below satisfies that constraint while keeping the
@@ -40,9 +42,9 @@ type AdminRow = {
 // side (`AuthGuard`), so an invalid session surfaces as a GraphQL error (or,
 // defensively, a missing `currentAdmin` in the response) rather than a
 // success. Either case sends the user back to `/login`. The `role !==
-// OWNER` branch below is a UX nicety only — the API independently enforces
-// Owner-only access on `admins`/`createAdmin`/`disableAdmin` regardless of
-// what this page renders.
+// TENANT_OWNER` branch below is a UX nicety only — the API independently
+// enforces Tenant-Owner-only, same-tenant access on
+// `admins`/`createAdmin`/`disableAdmin` regardless of what this page renders.
 export default function AdminPage() {
   const router = useRouter();
   const { data: meData, loading: meLoading, error: meError } = useCurrentAdminQuery({
@@ -50,7 +52,7 @@ export default function AdminPage() {
   });
 
   const isAuthenticated = !meLoading && !meError && Boolean(meData?.currentAdmin);
-  const isOwner = isAuthenticated && meData?.currentAdmin?.role === 'OWNER';
+  const isOwner = isAuthenticated && meData?.currentAdmin?.role === 'TENANT_OWNER';
 
   useEffect(() => {
     if (!meLoading && (meError || !meData?.currentAdmin)) {

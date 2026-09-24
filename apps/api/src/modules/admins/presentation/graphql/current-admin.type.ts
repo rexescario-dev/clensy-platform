@@ -1,4 +1,5 @@
 import { Field, ID, ObjectType } from '@nestjs/graphql';
+import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { Role } from '../../../../platform/auth/domain/role';
 
 // Presentation type for `Query.currentAdmin`. Happens to have the same
@@ -14,4 +15,13 @@ export class CurrentAdminType {
 
   @Field(() => Role)
   role!: Role;
+
+  // Multi-tenant spec §4.1: `scope` is the platform/tenant discriminator;
+  // `tenantId` is null only when `scope` is PLATFORM. Clients MUST NOT infer
+  // Super Admin from a null `tenantId`.
+  @Field(() => AdminScope)
+  scope!: AdminScope;
+
+  @Field(() => ID, { nullable: true })
+  tenantId!: string | null;
 }

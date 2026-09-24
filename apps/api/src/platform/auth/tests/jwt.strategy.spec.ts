@@ -2,6 +2,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ADMIN_IDENTITY_LOOKUP } from '../application/admin-identity-lookup.port';
+import { AdminScope } from '../domain/admin-scope';
 import { Role } from '../domain/role';
 import { JwtStrategy } from '../infrastructure/jwt.strategy';
 
@@ -31,7 +32,9 @@ describe('JwtStrategy', () => {
   it('invokes the lookup port on every validate() call — proves no caching (spec §4.1)', async () => {
     lookup.findActiveAdminById.mockResolvedValue({
       id: 'admin-1',
-      role: Role.OWNER,
+      tenantId: 'tenant-1',
+      role: Role.TENANT_OWNER,
+      scope: AdminScope.TENANT,
     });
 
     await strategy.validate({ sub: 'admin-1' });
@@ -49,15 +52,17 @@ describe('JwtStrategy', () => {
     ).rejects.toThrow(UnauthorizedException);
   });
 
-  it('returns the AuthenticatedPrincipal (id + role) when the lookup succeeds', async () => {
-    lookup.findActiveAdminById.mockResolvedValue({
+  it('returns the full AuthenticatedPrincipal (id, role, scope, tenantId) when the lookup succeeds', async () => {
+    const principal = {
       id: 'admin-1',
+      tenantId: 'tenant-1',
       role: Role.FINANCE,
-    });
+      scope: AdminScope.TENANT,
+    };
+    lookup.findActiveAdminById.mockResolvedValue(principal);
 
-    await expect(strategy.validate({ sub: 'admin-1' })).resolves.toEqual({
-      id: 'admin-1',
-      role: Role.FINANCE,
-    });
+    await expect(strategy.validate({ sub: 'admin-1' })).resolves.toEqual(
+      principal,
+    );
   });
 });

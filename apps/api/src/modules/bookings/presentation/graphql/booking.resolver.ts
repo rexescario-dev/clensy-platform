@@ -14,7 +14,7 @@ import { toBookingDto } from './mappers';
 import { UpdateBookingInput } from './update-booking.input';
 
 const WRITE_ROLES = [
-  Role.OWNER,
+  Role.TENANT_OWNER,
   Role.OPS_MANAGER,
   Role.SCHEDULER,
   Role.CUSTOMER_SUPPORT,

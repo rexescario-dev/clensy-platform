@@ -16,7 +16,12 @@ import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
 import type { CleanerType as CleanerTypeClass } from './cleaner.type';
 
-const VIEW_ROLES = [Role.OWNER, Role.OPS_MANAGER, Role.SCHEDULER, Role.ANALYST];
+const VIEW_ROLES = [
+  Role.TENANT_OWNER,
+  Role.OPS_MANAGER,
+  Role.SCHEDULER,
+  Role.ANALYST,
+];
 
 /* eslint-disable @typescript-eslint/no-require-imports -- Lazy thunk below:
    CleanerType imports TeamType, so this must stay a runtime require() (not

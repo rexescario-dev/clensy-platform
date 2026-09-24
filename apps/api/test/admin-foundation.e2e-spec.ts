@@ -2,15 +2,24 @@ import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import cookieParser from 'cookie-parser';
+import { randomUUID } from 'crypto';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { AppModule } from '../src/app/app.module';
 import { AuditEventEntity } from '../src/platform/audit/infrastructure/persistence/audit-event.entity';
 import { AdminUserEntity } from '../src/modules/admins/infrastructure/persistence/admin-user.entity';
+import { AdminScope } from '../src/platform/auth/domain/admin-scope';
 import { Role } from '../src/platform/auth/domain/role';
+import { BOOTSTRAP_TENANT_ID } from '../src/platform/database/bootstrap-tenant';
 import { applyPlatformPipes } from '../src/platform/graphql/apply-platform-pipes';
 import { seedOwner } from './helpers/seed-owner';
+import {
+  createTestTenant,
+  removeTestTenants,
+  seedSuperAdmin,
+  seedTenantAdmin,
+} from './helpers/seed-tenant-admin';
 
 // Proves spec §4.10's full 5-step Admin Foundation acceptance scenario
 // end-to-end: real HTTP (supertest) against the real `AppModule` (full
@@ -21,6 +30,11 @@ import { seedOwner } from './helpers/seed-owner';
 // script) or any prior `pnpm db:seed` run — matching `app.e2e-spec.ts`'s
 // "creates its own data" precedent.
 //
+// Multi-tenant identity slice (plan Task 10): the privileged user is a
+// TENANT_OWNER of the migration-created bootstrap tenant, and a second,
+// test-only tenant proves staff isolation. Business data is still unscoped
+// in this slice; only staff rows are tenant-isolated here.
+//
 // No GraphQL query exposes audit events (per spec §3) — every audit
 // assertion below reads `AuditEventEntity` directly via a repository
 // pulled off the same `TestingModule`, never through a query this suite
@@ -29,6 +43,8 @@ describe('Admin Foundation (e2e)', () => {
   let app: INestApplication<App>;
   let adminUserRepository: Repository<AdminUserEntity>;
   let auditEventRepository: Repository<AuditEventEntity>;
+  let dataSource: DataSource;
+  const testTenantIds: string[] = [];
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -50,9 +66,11 @@ describe('Admin Foundation (e2e)', () => {
     auditEventRepository = moduleFixture.get(
       getRepositoryToken(AuditEventEntity),
     );
+    dataSource = moduleFixture.get(DataSource);
   });
 
   afterAll(async () => {
+    await removeTestTenants(dataSource, testTenantIds);
     await app.close();
   });
 
@@ -60,7 +78,7 @@ describe('Admin Foundation (e2e)', () => {
     mutation Login($input: LoginInput!) {
       login(loginInput: $input) {
         success
-        admin { id role }
+        admin { id role scope tenantId }
       }
     }
   `;
@@ -87,7 +105,13 @@ describe('Admin Foundation (e2e)', () => {
 
   const CURRENT_ADMIN_QUERY = `
     query {
-      currentAdmin { id role }
+      currentAdmin { id role scope tenantId }
+    }
+  `;
+
+  const ADMINS_QUERY = `
+    query {
+      admins { id email role scope tenantId }
     }
   `;
 
@@ -150,7 +174,12 @@ describe('Admin Foundation (e2e)', () => {
     const ownerLoginResponse = await login(owner.email, owner.password);
     expect(ownerLoginResponse.body.errors).toBeUndefined();
     expect(ownerLoginResponse.body.data.login).toEqual({
-      admin: { id: owner.id, role: Role.OWNER },
+      admin: {
+        id: owner.id,
+        tenantId: BOOTSTRAP_TENANT_ID,
+        role: Role.TENANT_OWNER,
+        scope: AdminScope.TENANT,
+      },
       success: true,
     });
     // The session cookie must actually have been issued — everything from
@@ -200,6 +229,8 @@ describe('Admin Foundation (e2e)', () => {
     });
     expect(createdAuditEvent).not.toBeNull();
     expect(createdAuditEvent?.actorId).toBe(owner.id);
+    expect(createdAuditEvent?.tenantId).toBe(BOOTSTRAP_TENANT_ID);
+    expect(createdAuditEvent?.scope).toBe(AdminScope.TENANT);
 
     // --- Step 2: Scheduler logs in (separate session); createAdmin/disableAdmin are denied ---
     const schedulerLoginResponse = await login(
@@ -255,6 +286,8 @@ describe('Admin Foundation (e2e)', () => {
     });
     expect(disabledAuditEvent).not.toBeNull();
     expect(disabledAuditEvent?.actorId).toBe(owner.id);
+    expect(disabledAuditEvent?.tenantId).toBe(BOOTSTRAP_TENANT_ID);
+    expect(disabledAuditEvent?.scope).toBe(AdminScope.TENANT);
 
     // --- Step 4: Bad-password login attempt is generic, and audited with no actor ---
     const badPasswordResponse = await login(
@@ -277,6 +310,9 @@ describe('Admin Foundation (e2e)', () => {
     });
     expect(failedLoginAuditEvent).not.toBeNull();
     expect(failedLoginAuditEvent?.actorId).toBeNull();
+    // No principal: no tenant, and NOT platform scope (spec §4.6).
+    expect(failedLoginAuditEvent?.tenantId).toBeNull();
+    expect(failedLoginAuditEvent?.scope).toBeNull();
     expect(failedLoginAuditEvent?.metadata).toMatchObject({
       email: owner.email.toLowerCase(),
     });
@@ -327,5 +363,151 @@ describe('Admin Foundation (e2e)', () => {
       .post('/graphql')
       .send({ query: 'mutation { logout }' });
     expect(noCookieResponse.body.data.logout).toBe(true);
+  });
+
+  it("isolates staff by tenant: Tenant Owner B cannot list or disable Tenant A's staff", async () => {
+    const tenantB = await createTestTenant(dataSource);
+    testTenantIds.push(tenantB);
+    const ownerA = await seedOwner(adminUserRepository);
+    const staffA = await seedTenantAdmin(dataSource, Role.SCHEDULER);
+    const ownerB = await seedTenantAdmin(
+      dataSource,
+      Role.TENANT_OWNER,
+      tenantB,
+    );
+    const staffB = await seedTenantAdmin(dataSource, Role.FINANCE, tenantB);
+    await seedSuperAdmin(dataSource);
+
+    const ownerBLogin = await login(ownerB.email, ownerB.password);
+    expect(ownerBLogin.body.errors).toBeUndefined();
+    const ownerBCookie = extractSessionCookie(ownerBLogin);
+
+    // `admins` returns exactly tenant B — no tenant A staff, no Super Admin.
+    const listResponse = await authedRequest(ownerBCookie).send({
+      query: ADMINS_QUERY,
+    });
+    expect(listResponse.body.errors).toBeUndefined();
+    const listed = listResponse.body.data.admins as {
+      id: string;
+      tenantId: string;
+      scope: AdminScope;
+    }[];
+    expect(listed.map((admin) => admin.id).sort()).toEqual(
+      [ownerB.id, staffB.id].sort(),
+    );
+    expect(
+      listed.every(
+        (admin) =>
+          admin.tenantId === tenantB && admin.scope === AdminScope.TENANT,
+      ),
+    ).toBe(true);
+
+    // Disabling a tenant A user looks exactly like disabling an id that
+    // does not exist at all (missing-row semantics, spec §4.5).
+    const crossTenantDisable = await authedRequest(ownerBCookie).send({
+      query: DISABLE_ADMIN_MUTATION,
+      variables: { id: staffA.id },
+    });
+    const missingId = randomUUID();
+    const nonexistentDisable = await authedRequest(ownerBCookie).send({
+      query: DISABLE_ADMIN_MUTATION,
+      variables: { id: missingId },
+    });
+    expect(crossTenantDisable.body.data?.disableAdmin).toBeUndefined();
+    const crossTenantError = crossTenantDisable.body.errors?.[0];
+    const nonexistentError = nonexistentDisable.body.errors?.[0];
+    expect(crossTenantError?.extensions?.status).toBe(404);
+    expect(crossTenantError?.extensions?.code).toBe(
+      nonexistentError?.extensions?.code,
+    );
+    expect(crossTenantError?.message).toBe(
+      String(nonexistentError?.message).replace(missingId, staffA.id),
+    );
+
+    expect(
+      (await adminUserRepository.findOneBy({ id: staffA.id }))?.isActive,
+    ).toBe(true);
+    expect(
+      (await adminUserRepository.findOneBy({ id: ownerA.id }))?.isActive,
+    ).toBe(true);
+
+    // A staff member created by Tenant Owner B lands in tenant B.
+    const createResponse = await authedRequest(ownerBCookie).send({
+      query: CREATE_ADMIN_MUTATION,
+      variables: {
+        input: {
+          email: `tenant-b-staff-${randomUUID()}@example.com`,
+          password: 'tenant-b-staff-pw',
+          role: Role.ANALYST,
+        },
+      },
+    });
+    expect(createResponse.body.errors).toBeUndefined();
+    expect(
+      (
+        await adminUserRepository.findOneBy({
+          id: createResponse.body.data.createAdmin.id as string,
+        })
+      )?.tenantId,
+    ).toBe(tenantB);
+  });
+
+  it('denies a Tenant Owner creating a Super Admin', async () => {
+    const owner = await seedOwner(adminUserRepository);
+    const ownerCookie = extractSessionCookie(
+      await login(owner.email, owner.password),
+    );
+    const email = `would-be-super-${randomUUID()}@example.com`;
+
+    const response = await authedRequest(ownerCookie).send({
+      query: CREATE_ADMIN_MUTATION,
+      variables: {
+        input: { email, password: 'irrelevant-pw', role: Role.SUPER_ADMIN },
+      },
+    });
+
+    expect(response.body.data?.createAdmin).toBeUndefined();
+    expect(response.body.errors?.[0]?.extensions?.code).toBe('FORBIDDEN');
+    expect(await adminUserRepository.findOneBy({ email })).toBeNull();
+  });
+
+  // Regression guard for spec §4.2: SUPER_ADMIN was NOT added to tenant
+  // business resolvers, so a Super Admin is refused like any other role not
+  // on `@Roles()` — it never receives tenant business rows.
+  it('gives a Super Admin a PLATFORM principal but Forbidden on customers', async () => {
+    const superAdmin = await seedSuperAdmin(dataSource);
+    const loginResponse = await login(superAdmin.email, superAdmin.password);
+    expect(loginResponse.body.errors).toBeUndefined();
+    const superAdminCookie = extractSessionCookie(loginResponse);
+
+    const meResponse = await authedRequest(superAdminCookie).send({
+      query: CURRENT_ADMIN_QUERY,
+    });
+    expect(meResponse.body.data.currentAdmin).toEqual({
+      id: superAdmin.id,
+      tenantId: null,
+      role: Role.SUPER_ADMIN,
+      scope: AdminScope.PLATFORM,
+    });
+
+    const loginAudit = await auditEventRepository.findOne({
+      order: { occurredAt: 'DESC' },
+      where: { action: 'admin.login.succeeded', actorId: superAdmin.id },
+    });
+    expect(loginAudit?.scope).toBe(AdminScope.PLATFORM);
+    expect(loginAudit?.tenantId).toBeNull();
+
+    const customersResponse = await authedRequest(superAdminCookie).send({
+      query: 'query { customers { nodes { id } } }',
+    });
+    expect(customersResponse.body.data?.customers ?? null).toBeNull();
+    expect(customersResponse.body.errors?.[0]?.extensions?.code).toBe(
+      'FORBIDDEN',
+    );
+
+    const adminsResponse = await authedRequest(superAdminCookie).send({
+      query: ADMINS_QUERY,
+    });
+    expect(adminsResponse.body.errors?.[0]?.extensions?.code).toBe('FORBIDDEN');
   });
 });

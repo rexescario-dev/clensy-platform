@@ -16,7 +16,7 @@ import { seedOwner } from './helpers/seed-owner';
 // Black-box proof of the resolver -> AuthGuard -> InvoicesService ->
 // transaction -> Postgres wiring over real HTTP: generation, the ticket's
 // historical-immutability acceptance criterion (GraphQL AND direct DB
-// rows), FINANCE/OWNER authorization, and the excluded-status guard.
+// rows), FINANCE/TENANT_OWNER authorization, and the excluded-status guard.
 // Self-contained + id-scoped, like `laundry.e2e-spec.ts` — no truncation.
 describe('Billing (e2e)', () => {
   let app: INestApplication<App>;
@@ -333,7 +333,7 @@ describe('Billing (e2e)', () => {
     ).toEqual(storedInvoiceBefore);
   });
 
-  it('gates generation to FINANCE and OWNER', async () => {
+  it('gates generation to FINANCE and TENANT_OWNER', async () => {
     const ctx = await context();
 
     const o1 = await pricedOrder(ctx);

@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import type { AuditLogger } from '../../../../platform/audit/application/audit-logger.port';
 import { AuthenticatedPrincipal } from '../../../../platform/auth/domain/authenticated-principal';
+import { toAuthenticatedPrincipal } from '../../domain/to-authenticated-principal';
 import { AdminUserEntity } from '../../infrastructure/persistence/admin-user.entity';
 
 // Fixed bcrypt hash with no corresponding password, compared against on an
@@ -60,13 +61,18 @@ export class LoginService {
       return null;
     }
 
+    // Failed logins above carry no scope/tenant (no principal, spec §4.6);
+    // a success records the principal's explicit scope, so a Super Admin
+    // login is PLATFORM + null tenant rather than an ambiguous null.
     await this.auditLogger.log({
       actorId: admin.id,
       entityId: admin.id,
+      tenantId: admin.tenantId,
       action: 'admin.login.succeeded',
       entityType: 'AdminUser',
+      scope: admin.scope,
     });
 
-    return { id: admin.id, role: admin.role };
+    return toAuthenticatedPrincipal(admin);
   }
 }

@@ -5,6 +5,7 @@ import { AdminsService } from './application/services/admins.service';
 import { LoginService } from './application/services/login.service';
 import { AdminIdentityLookupService } from './infrastructure/admin-identity-lookup.service';
 import { AdminUserEntity } from './infrastructure/persistence/admin-user.entity';
+import { TenantEntity } from './infrastructure/persistence/tenant.entity';
 
 // Imports `AuditModule` (for the `AUDIT_LOGGER` token `AdminsService`/
 // `LoginService` inject) but deliberately does NOT import `AuthModule`
@@ -33,7 +34,10 @@ import { AdminUserEntity } from './infrastructure/persistence/admin-user.entity'
 // second time). See `app/app.module.ts`.
 @Module({
   exports: [AdminsService, LoginService, AdminIdentityLookupService],
-  imports: [TypeOrmModule.forFeature([AdminUserEntity]), AuditModule],
+  imports: [
+    TypeOrmModule.forFeature([AdminUserEntity, TenantEntity]),
+    AuditModule,
+  ],
   providers: [AdminsService, LoginService, AdminIdentityLookupService],
 })
 export class AdminsModule {}

@@ -5,6 +5,7 @@ import { CleaningJobEntity } from '../../modules/jobs/infrastructure/persistence
 import { ChecklistEntity } from '../../modules/jobs/infrastructure/persistence/checklist.entity';
 import { ChecklistItemEntity } from '../../modules/jobs/infrastructure/persistence/checklist-item.entity';
 import { AdminUserEntity } from '../../modules/admins/infrastructure/persistence/admin-user.entity';
+import { TenantEntity } from '../../modules/admins/infrastructure/persistence/tenant.entity';
 import { CustomerEntity } from '../../modules/customers/infrastructure/persistence/customer.entity';
 import { PropertyEntity } from '../../modules/customers/infrastructure/persistence/property.entity';
 import { TeamEntity } from '../../modules/cleaners/infrastructure/persistence/team.entity';
@@ -26,6 +27,7 @@ export default new DataSource({
   entities: [
     BookingEntity,
     AuditEventEntity,
+    TenantEntity,
     AdminUserEntity,
     CustomerEntity,
     PropertyEntity,

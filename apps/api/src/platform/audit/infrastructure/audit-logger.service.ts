@@ -48,9 +48,11 @@ export class AuditLoggerService implements AuditLogger {
     const entity = this.auditEventRepository.create({
       actorId: event.actorId,
       entityId: event.entityId,
+      tenantId: event.tenantId ?? null,
       action: event.action,
       entityType: event.entityType,
       metadata: event.metadata ?? null,
+      scope: event.scope ?? null,
     });
 
     const ambientManager = auditTransactionStorage.getStore();

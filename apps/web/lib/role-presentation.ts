@@ -5,8 +5,9 @@ const ROLE_PRESENTATION: Record<Role, { label: string; initials: string }> = {
   CUSTOMER_SUPPORT: { initials: 'CS', label: 'Customer Support' },
   FINANCE: { initials: 'FI', label: 'Finance' },
   OPS_MANAGER: { initials: 'OM', label: 'Ops Manager' },
-  OWNER: { initials: 'OW', label: 'Owner' },
   SCHEDULER: { initials: 'SC', label: 'Scheduler' },
+  SUPER_ADMIN: { initials: 'SA', label: 'Super Admin' },
+  TENANT_OWNER: { initials: 'TO', label: 'Tenant Owner' },
 };
 
 function isPresentedRole(role: string): role is Role {

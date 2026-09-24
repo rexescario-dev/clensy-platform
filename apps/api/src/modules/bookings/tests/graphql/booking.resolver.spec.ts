@@ -10,6 +10,7 @@ import { Test } from '@nestjs/testing';
 import { GraphQLEnumType, GraphQLObjectType } from 'graphql';
 import { PLATFORM_PAGE_DEFAULT } from '../../../../platform/graphql/paging';
 import { ROLES_KEY } from '../../../../platform/auth/decorators/roles.decorator';
+import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
 import { CustomerResolver } from '../../../customers/presentation/graphql/customer.resolver';
@@ -23,7 +24,7 @@ type MutationMethod = 'createBooking' | 'removeBooking' | 'updateBooking';
 type ReadMethod = 'findById' | 'queryMany';
 
 const VIEW_ROLES = [
-  Role.OWNER,
+  Role.TENANT_OWNER,
   Role.OPS_MANAGER,
   Role.SCHEDULER,
   Role.CUSTOMER_SUPPORT,
@@ -31,7 +32,7 @@ const VIEW_ROLES = [
   Role.ANALYST,
 ];
 const WRITE_ROLES = [
-  Role.OWNER,
+  Role.TENANT_OWNER,
   Role.OPS_MANAGER,
   Role.SCHEDULER,
   Role.CUSTOMER_SUPPORT,
@@ -228,7 +229,12 @@ describe('Booking GraphQL reads and mutations', () => {
         }),
       };
       const resolver = new BookingMutationResolver(bookingsService as never);
-      const currentUser = { id: 'admin-1', role: Role.OWNER };
+      const currentUser = {
+        id: 'admin-1',
+        tenantId: 'tenant-1',
+        role: Role.TENANT_OWNER,
+        scope: AdminScope.TENANT,
+      };
 
       await resolver.createBooking(
         {

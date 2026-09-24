@@ -1,13 +1,24 @@
 import * as bcrypt from 'bcrypt';
+import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import { AuditEventEntity } from '../src/platform/audit/infrastructure/persistence/audit-event.entity';
+import { AdminScope } from '../src/platform/auth/domain/admin-scope';
+import { AuthenticatedPrincipal } from '../src/platform/auth/domain/authenticated-principal';
 import { Role } from '../src/platform/auth/domain/role';
+import { BOOTSTRAP_TENANT_ID } from '../src/platform/database/bootstrap-tenant';
 import { AdminsService } from '../src/modules/admins/application/services/admins.service';
 import { AdminUserEntity } from '../src/modules/admins/infrastructure/persistence/admin-user.entity';
+import { TenantEntity } from '../src/modules/admins/infrastructure/persistence/tenant.entity';
 import {
   acquireAdminDbTestLock,
   AdminDbTestLock,
 } from './helpers/admin-db-test-lock';
+import {
+  createTestTenant,
+  removeTestTenants,
+  seedSuperAdmin,
+  seedTenantAdmin,
+} from './helpers/seed-tenant-admin';
 
 // Real Postgres, single connection — NOT mocked repositories. The brief's
 // forced-audit-failure assertions ("the AdminUser row does not exist
@@ -32,11 +43,21 @@ describe('AdminsService (real Postgres)', () => {
   let dbLock: AdminDbTestLock;
   let auditLogger: { log: jest.Mock };
   let service: AdminsService;
+  let otherTenantId: string;
+
+  // A Tenant Owner principal whose row does not exist — lets a test reach
+  // the last-owner lock without the actor itself being a second owner.
+  const phantomOwner = (tenantId: string): AuthenticatedPrincipal => ({
+    id: randomUUID(),
+    tenantId,
+    role: Role.TENANT_OWNER,
+    scope: AdminScope.TENANT,
+  });
 
   beforeAll(async () => {
     dataSource = new DataSource({
       database: process.env.DB_NAME ?? 'clensy',
-      entities: [AdminUserEntity, AuditEventEntity],
+      entities: [AdminUserEntity, AuditEventEntity, TenantEntity],
       host: process.env.DB_HOST ?? 'localhost',
       password: process.env.DB_PASSWORD ?? 'clensy_dev',
       port: Number(process.env.DB_PORT ?? 5432),
@@ -45,9 +66,11 @@ describe('AdminsService (real Postgres)', () => {
     });
     await dataSource.initialize();
     dbLock = await acquireAdminDbTestLock(dataSource);
+    otherTenantId = await createTestTenant(dataSource);
   });
 
   afterAll(async () => {
+    await removeTestTenants(dataSource, [otherTenantId]);
     await dbLock.release();
     await dataSource.destroy();
   });
@@ -59,22 +82,15 @@ describe('AdminsService (real Postgres)', () => {
     service = new AdminsService(dataSource, auditLogger);
   });
 
-  const seedOwner = async (email?: string) => {
-    const repo = dataSource.getRepository(AdminUserEntity);
-    return repo.save(
-      repo.create({
-        email: email ?? `owner-${Math.random()}@example.com`,
-        isActive: true,
-        passwordHash: await bcrypt.hash('irrelevant', 4),
-        role: Role.OWNER,
-      }),
-    );
-  };
+  const findRow = (id: string) =>
+    dataSource.getRepository(AdminUserEntity).findOneBy({ id });
 
   describe('create', () => {
-    it('persists an AdminUser with a bcrypt hash (never the plaintext) and records admin.created', async () => {
+    it("persists a TENANT admin in the actor's tenant with a bcrypt hash and records admin.created with the tenant", async () => {
+      const owner = await seedTenantAdmin(dataSource);
+
       const created = await service.create({
-        actorId: 'owner-1',
+        actor: owner.principal,
         email: 'New.Admin@Example.com',
         password: 'super-secret',
         role: Role.SCHEDULER,
@@ -85,29 +101,80 @@ describe('AdminsService (real Postgres)', () => {
       expect(await bcrypt.compare('super-secret', created.passwordHash)).toBe(
         true,
       );
-
-      const row = await dataSource
-        .getRepository(AdminUserEntity)
-        .findOneBy({ id: created.id });
-      expect(row).not.toBeNull();
+      expect(await findRow(created.id)).toMatchObject({
+        tenantId: BOOTSTRAP_TENANT_ID,
+        role: Role.SCHEDULER,
+        scope: AdminScope.TENANT,
+      });
 
       expect(auditLogger.log).toHaveBeenCalledWith(
         expect.objectContaining({
-          actorId: 'owner-1',
+          actorId: owner.id,
           entityId: created.id,
+          tenantId: BOOTSTRAP_TENANT_ID,
           action: 'admin.created',
           entityType: 'AdminUser',
           metadata: { role: Role.SCHEDULER },
+          scope: AdminScope.TENANT,
         }),
       );
     });
 
+    it("creates into the actor's own tenant, not the bootstrap tenant", async () => {
+      const owner = await seedTenantAdmin(
+        dataSource,
+        Role.TENANT_OWNER,
+        otherTenantId,
+      );
+
+      const created = await service.create({
+        actor: owner.principal,
+        email: 'other-tenant-staff@example.com',
+        password: 'super-secret',
+        role: Role.FINANCE,
+      });
+
+      expect((await findRow(created.id))?.tenantId).toBe(otherTenantId);
+    });
+
+    it('rejects creating a SUPER_ADMIN and writes nothing', async () => {
+      const owner = await seedTenantAdmin(dataSource);
+
+      await expect(
+        service.create({
+          actor: owner.principal,
+          email: 'would-be-super@example.com',
+          password: 'super-secret',
+          role: Role.SUPER_ADMIN,
+        }),
+      ).rejects.toThrow(/super admin/i);
+
+      const row = await dataSource
+        .getRepository(AdminUserEntity)
+        .findOneBy({ email: 'would-be-super@example.com' });
+      expect(row).toBeNull();
+    });
+
+    it('rejects an actor that is not a Tenant Owner (e.g. a platform Super Admin)', async () => {
+      const superAdmin = await seedSuperAdmin(dataSource);
+
+      await expect(
+        service.create({
+          actor: superAdmin.principal,
+          email: 'from-platform@example.com',
+          password: 'super-secret',
+          role: Role.SCHEDULER,
+        }),
+      ).rejects.toThrow(/tenant owner/i);
+    });
+
     it('rolls back the AdminUser row when the audit write fails inside the transaction', async () => {
+      const owner = await seedTenantAdmin(dataSource);
       auditLogger.log.mockRejectedValueOnce(new Error('audit down'));
 
       await expect(
         service.create({
-          actorId: 'owner-1',
+          actor: owner.principal,
           email: 'rollback@example.com',
           password: 'super-secret',
           role: Role.SCHEDULER,
@@ -120,9 +187,15 @@ describe('AdminsService (real Postgres)', () => {
       expect(row).toBeNull();
     });
 
-    it('rejects a second create with an email already in use, differing only in case', async () => {
+    it('keeps email globally unique: rejects a case-variant duplicate even from another tenant', async () => {
+      const ownerA = await seedTenantAdmin(dataSource);
+      const ownerB = await seedTenantAdmin(
+        dataSource,
+        Role.TENANT_OWNER,
+        otherTenantId,
+      );
       await service.create({
-        actorId: 'owner-1',
+        actor: ownerA.principal,
         email: 'dup@example.com',
         password: 'password-one',
         role: Role.SCHEDULER,
@@ -130,12 +203,12 @@ describe('AdminsService (real Postgres)', () => {
 
       await expect(
         service.create({
-          actorId: 'owner-1',
+          actor: ownerB.principal,
           email: 'DUP@Example.com',
           password: 'password-two',
           role: Role.FINANCE,
         }),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/already in use/i);
 
       const count = await dataSource
         .getRepository(AdminUserEntity)
@@ -144,67 +217,118 @@ describe('AdminsService (real Postgres)', () => {
     });
   });
 
+  describe('list', () => {
+    it("returns only the actor's tenant — never another tenant's staff or Super Admins", async () => {
+      const ownerA = await seedTenantAdmin(dataSource);
+      const staffA = await seedTenantAdmin(dataSource, Role.SCHEDULER);
+      await seedTenantAdmin(dataSource, Role.TENANT_OWNER, otherTenantId);
+      await seedTenantAdmin(dataSource, Role.FINANCE, otherTenantId);
+      await seedSuperAdmin(dataSource);
+
+      const listed = await service.list(ownerA.principal);
+
+      expect(listed.map((admin) => admin.id).sort()).toEqual(
+        [ownerA.id, staffA.id].sort(),
+      );
+    });
+  });
+
   describe('disable', () => {
     it('rejects self-disable', async () => {
-      const owner = await seedOwner();
+      const owner = await seedTenantAdmin(dataSource);
 
       await expect(
-        service.disable({ actorId: owner.id, targetId: owner.id }),
+        service.disable({ actor: owner.principal, targetId: owner.id }),
       ).rejects.toThrow(/own account/i);
     });
 
-    it('rejects disabling the last active Owner', async () => {
-      const owner = await seedOwner();
+    it('rejects disabling the last active Tenant Owner of that tenant', async () => {
+      const owner = await seedTenantAdmin(dataSource);
 
       await expect(
-        service.disable({ actorId: 'some-other-actor', targetId: owner.id }),
-      ).rejects.toThrow(/last active owner/i);
+        service.disable({
+          actor: phantomOwner(BOOTSTRAP_TENANT_ID),
+          targetId: owner.id,
+        }),
+      ).rejects.toThrow(/last active tenant owner/i);
 
-      const row = await dataSource
-        .getRepository(AdminUserEntity)
-        .findOneBy({ id: owner.id });
-      expect(row?.isActive).toBe(true);
+      expect((await findRow(owner.id))?.isActive).toBe(true);
     });
 
-    it('allows disabling a non-last Owner and records admin.disabled', async () => {
-      const ownerA = await seedOwner();
-      const ownerB = await seedOwner();
+    it("counts only the target's tenant: other tenants' owners do not make it non-last", async () => {
+      await seedTenantAdmin(dataSource);
+      await seedTenantAdmin(dataSource);
+      const onlyOwnerB = await seedTenantAdmin(
+        dataSource,
+        Role.TENANT_OWNER,
+        otherTenantId,
+      );
+
+      await expect(
+        service.disable({
+          actor: phantomOwner(otherTenantId),
+          targetId: onlyOwnerB.id,
+        }),
+      ).rejects.toThrow(/last active tenant owner/i);
+    });
+
+    it("treats another tenant's admin as not found and leaves it active", async () => {
+      const ownerA = await seedTenantAdmin(dataSource);
+      const staffB = await seedTenantAdmin(
+        dataSource,
+        Role.SCHEDULER,
+        otherTenantId,
+      );
+
+      await expect(
+        service.disable({ actor: ownerA.principal, targetId: staffB.id }),
+      ).rejects.toThrow(/not found/i);
+
+      expect((await findRow(staffB.id))?.isActive).toBe(true);
+    });
+
+    it('treats a platform Super Admin as not found', async () => {
+      const ownerA = await seedTenantAdmin(dataSource);
+      const superAdmin = await seedSuperAdmin(dataSource);
+
+      await expect(
+        service.disable({ actor: ownerA.principal, targetId: superAdmin.id }),
+      ).rejects.toThrow(/not found/i);
+    });
+
+    it('allows disabling a non-last Tenant Owner and records admin.disabled with the tenant', async () => {
+      const ownerA = await seedTenantAdmin(dataSource);
+      const ownerB = await seedTenantAdmin(dataSource);
 
       const disabled = await service.disable({
-        actorId: ownerA.id,
+        actor: ownerA.principal,
         targetId: ownerB.id,
       });
 
       expect(disabled.isActive).toBe(false);
-
-      const row = await dataSource
-        .getRepository(AdminUserEntity)
-        .findOneBy({ id: ownerB.id });
-      expect(row?.isActive).toBe(false);
-
+      expect((await findRow(ownerB.id))?.isActive).toBe(false);
       expect(auditLogger.log).toHaveBeenCalledWith(
         expect.objectContaining({
           actorId: ownerA.id,
           entityId: ownerB.id,
+          tenantId: BOOTSTRAP_TENANT_ID,
           action: 'admin.disabled',
           entityType: 'AdminUser',
+          scope: AdminScope.TENANT,
         }),
       );
     });
 
     it('rolls back the disable when the audit write fails inside the transaction', async () => {
-      const ownerA = await seedOwner();
-      const ownerB = await seedOwner();
+      const ownerA = await seedTenantAdmin(dataSource);
+      const ownerB = await seedTenantAdmin(dataSource);
       auditLogger.log.mockRejectedValueOnce(new Error('audit down'));
 
       await expect(
-        service.disable({ actorId: ownerA.id, targetId: ownerB.id }),
+        service.disable({ actor: ownerA.principal, targetId: ownerB.id }),
       ).rejects.toThrow('audit down');
 
-      const row = await dataSource
-        .getRepository(AdminUserEntity)
-        .findOneBy({ id: ownerB.id });
-      expect(row?.isActive).toBe(true);
+      expect((await findRow(ownerB.id))?.isActive).toBe(true);
     });
   });
 });

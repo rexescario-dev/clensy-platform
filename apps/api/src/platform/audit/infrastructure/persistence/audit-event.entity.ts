@@ -4,6 +4,7 @@ import {
   Entity,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { AdminScope } from '../../../auth/domain/admin-scope';
 import { AuditEvent } from '../../domain/audit-event';
 import { JsonValue } from '../../domain/json-value';
 
@@ -21,6 +22,23 @@ export class AuditEventEntity implements AuditEvent {
   // never has to change shape as new modules start logging to it.
   @Column({ type: 'varchar', nullable: true })
   actorId!: string | null;
+
+  // Multi-tenant spec §4.6. Same `admin_scope_enum` type as
+  // `AdminUserEntity.scope` (one vocabulary), and `tenantId` is varchar like
+  // `actorId` rather than a uuid FK. `null` scope means "no principal" (e.g.
+  // a failed login), distinct from `PLATFORM`. Consistency is enforced by
+  // the hand-written `ck_audit_event_scope_tenant` CHECK in
+  // `AddTenantAndAdminScope` — do not apply a generated drop of it.
+  @Column({
+    enum: AdminScope,
+    enumName: 'admin_scope_enum',
+    nullable: true,
+    type: 'enum',
+  })
+  scope!: AdminScope | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  tenantId!: string | null;
 
   @Column()
   action!: string;

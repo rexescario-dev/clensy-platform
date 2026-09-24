@@ -13,7 +13,9 @@ import { CustomerEntity } from '../../modules/customers/infrastructure/persisten
 import { PropertyEntity } from '../../modules/customers/infrastructure/persistence/property.entity';
 import { ServiceEntity } from '../../modules/catalog/infrastructure/persistence/service.entity';
 import { TeamEntity } from '../../modules/cleaners/infrastructure/persistence/team.entity';
+import { AdminScope } from '../auth/domain/admin-scope';
 import { Role } from '../auth/domain/role';
+import { BOOTSTRAP_TENANT_ID } from './bootstrap-tenant';
 import dataSource from './data-source';
 
 const BCRYPT_SALT_ROUNDS = 10;
@@ -50,15 +52,17 @@ async function seedDevOwner(): Promise<void> {
     await dataSource.getRepository(AdminUserEntity).upsert(
       [
         {
+          tenantId: BOOTSTRAP_TENANT_ID,
           email: normalizedEmail,
           isActive: true,
           passwordHash,
-          role: Role.OWNER,
+          role: Role.TENANT_OWNER,
+          scope: AdminScope.TENANT,
         },
       ],
       ['email'],
     );
-    console.log(`Seeded dev Owner admin: ${normalizedEmail}`);
+    console.log(`Seeded dev Tenant Owner admin: ${normalizedEmail}`);
   } finally {
     await dataSource.destroy();
   }

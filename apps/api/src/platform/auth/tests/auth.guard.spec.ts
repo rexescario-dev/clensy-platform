@@ -1,10 +1,11 @@
-import { ExecutionContext } from '@nestjs/common';
+import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ADMIN_IDENTITY_LOOKUP } from '../application/admin-identity-lookup.port';
 import { Roles } from '../decorators/roles.decorator';
+import { AdminScope } from '../domain/admin-scope';
 import { Role } from '../domain/role';
 import { AuthGuard } from '../guards/auth.guard';
 import { JwtStrategy } from '../infrastructure/jwt.strategy';
@@ -19,11 +20,11 @@ import { SESSION_COOKIE_NAME } from '../auth.constants';
 class DummyResolver {
   noRolesDeclared(this: void) {}
 
-  @Roles(Role.OWNER)
-  ownerOnly(this: void) {}
+  @Roles(Role.TENANT_OWNER)
+  tenantOwnerOnly(this: void) {}
 
-  @Roles(Role.OWNER, Role.FINANCE)
-  ownerOrFinance(this: void) {}
+  @Roles(Role.TENANT_OWNER, Role.FINANCE)
+  tenantOwnerOrFinance(this: void) {}
 }
 
 describe('AuthGuard', () => {
@@ -106,7 +107,9 @@ describe('AuthGuard', () => {
     const token = tokenService.issue('admin-1');
     lookup.findActiveAdminById.mockResolvedValue({
       id: 'admin-1',
+      tenantId: 'tenant-1',
       role: Role.SCHEDULER,
+      scope: AdminScope.TENANT,
     });
     const dummy = new DummyResolver();
     const context = buildContext(
@@ -121,12 +124,14 @@ describe('AuthGuard', () => {
     const token = tokenService.issue('admin-1');
     lookup.findActiveAdminById.mockResolvedValue({
       id: 'admin-1',
+      tenantId: 'tenant-1',
       role: Role.SCHEDULER,
+      scope: AdminScope.TENANT,
     });
     const dummy = new DummyResolver();
     const context = buildContext(
       { cookies: { [SESSION_COOKIE_NAME]: token } },
-      dummy.ownerOnly,
+      dummy.tenantOwnerOnly,
     );
 
     await expect(guard.canActivate(context)).rejects.toThrow();
@@ -136,14 +141,38 @@ describe('AuthGuard', () => {
     const token = tokenService.issue('admin-1');
     lookup.findActiveAdminById.mockResolvedValue({
       id: 'admin-1',
+      tenantId: 'tenant-1',
       role: Role.FINANCE,
+      scope: AdminScope.TENANT,
     });
     const dummy = new DummyResolver();
     const context = buildContext(
       { cookies: { [SESSION_COOKIE_NAME]: token } },
-      dummy.ownerOrFinance,
+      dummy.tenantOwnerOrFinance,
     );
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
+  });
+
+  // Multi-tenant spec §4.2: Super Admin is NOT implicitly added to any
+  // tenant role list — a platform principal is denied like any other role
+  // not on `@Roles()`.
+  it('denies a Super Admin on a TENANT_OWNER-only operation', async () => {
+    const token = tokenService.issue('admin-1');
+    lookup.findActiveAdminById.mockResolvedValue({
+      id: 'admin-1',
+      tenantId: null,
+      role: Role.SUPER_ADMIN,
+      scope: AdminScope.PLATFORM,
+    });
+    const dummy = new DummyResolver();
+    const context = buildContext(
+      { cookies: { [SESSION_COOKIE_NAME]: token } },
+      dummy.tenantOwnerOnly,
+    );
+
+    await expect(guard.canActivate(context)).rejects.toThrow(
+      ForbiddenException,
+    );
   });
 });

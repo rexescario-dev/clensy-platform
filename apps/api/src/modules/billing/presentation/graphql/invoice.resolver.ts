@@ -21,7 +21,7 @@ import { InvoiceType, VIEW_ROLES } from './invoice.type';
 
 // The custom nullable `invoice(id)` query + the single billing mutation
 // `generateInvoiceFromOrder` (spec §4.7). `generateInvoiceFromOrder` is
-// gated to FINANCE or OWNER — no other writer role. `amountDueMinorUnits`
+// gated to FINANCE or TENANT_OWNER — no other writer role. `amountDueMinorUnits`
 // is a computed resolve-field here (never a stored column).
 @Resolver(() => InvoiceType)
 export class InvoiceResolver {
@@ -39,7 +39,7 @@ export class InvoiceResolver {
 
   @Mutation(() => InvoiceType)
   @UseGuards(AuthGuard)
-  @Roles(Role.FINANCE, Role.OWNER)
+  @Roles(Role.FINANCE, Role.TENANT_OWNER)
   async generateInvoiceFromOrder(
     @Args('input') input: GenerateInvoiceFromOrderInput,
     @CurrentUser() user: AuthenticatedPrincipal,
