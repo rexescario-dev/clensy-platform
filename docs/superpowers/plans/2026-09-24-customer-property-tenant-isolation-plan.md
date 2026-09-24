@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| **Status** | Draft |
+| **Status** | Accepted |
 | **Kind** | Implementation plan (M4) for **one** delivery slice |
 | **Date** | 2026-09-24 |
 | **Tracking** | GitHub [#82](https://github.com/rexescario-dev/clensy-platform/issues/82) (program [#81](https://github.com/rexescario-dev/clensy-platform/issues/81)). One PR for this plan (Accepted at M5) + implementation (process §2.8). Branch `feat/82-customer-property-tenant-isolation`. |
@@ -10,7 +10,7 @@
 | **Revision note** | Pre-M5 review (2026-09-24): relation `auth`-override inventory and regression guard (Task 5); behavioral spike acceptance instead of SQL text; service vs nestjs-query `null`-tenant contracts split; generated-mutation inventory (none exist, so `@Authorize` is read-only); `customerProperties` discards client `tenantId`; migration asserts the bootstrap tenant and is explicitly single-transaction; fixture emails randomized only where uniqueness is incidental; batch-lookup and relation-through-unscoped-parent e2e; interim-risk wording. |
 | **Depends on (Accepted)** | [Multi-Tenant Architecture](../specs/2026-09-23-multi-tenant-architecture-design.md) (Accepted, M3 2026-09-23). **Where this plan and that specification disagree, the specification wins** — stop and return to M2/M3. Relies on the shipped [Tenant Identity Foundation plan](2026-09-23-tenant-identity-foundation-plan.md) (#68: `Tenant`, `BOOTSTRAP_TENANT_ID`, principal `{ id, role, scope, tenantId }`, `AuditLogEvent.scope`/`tenantId`, two-tenant fixtures in `test/helpers/seed-tenant-admin.ts`). Also relies on [Customers & Properties](../specs/2026-08-15-customers-properties-design.md), [nestjs-query GraphQL Reads](../specs/2026-08-28-nestjs-query-graphql-reads-design.md) and [Paginated GraphQL Collections](../specs/2026-08-28-paginated-graphql-collections-design.md) as **extended/constrained by the RFC** (§8). |
 
-> **For agentic workers:** Draft — **do not implement until M5 Accepts this plan.** After Accept, use superpowers:subagent-driven-development or superpowers:executing-plans task-by-task. Steps use checkbox (`- [ ]`) syntax. Do **not** invent product semantics; the Accepted specification wins.
+> **For agentic workers:** **M5 Accepted 2026-09-24.** Tracking [#82](https://github.com/rexescario-dev/clensy-platform/issues/82). Execution method: superpowers:subagent-driven-development (chosen at M5); otherwise superpowers:subagent-driven-development or superpowers:executing-plans task-by-task. Steps use checkbox (`- [ ]`) syntax. Do **not** invent product semantics; the Accepted specification wins.
 
 **Goal:** Make Customer and Property tenant-owned — required `tenantId`, per-tenant email uniqueness, database-enforced same-tenant Property → Customer reference, and a principal-derived tenant predicate on every Customer/Property read and write path (services, nestjs-query list/count/relations, loaders, mutations).
 
@@ -441,3 +441,19 @@ On `PropertyEntity.customer`, keep the relation (Relatable needs it) but stop Ty
 ## Out of this plan
 
 Booking / CleaningJob / LaundryOrder / Invoice / catalog / teams `tenantId` and their composite FKs; REST `/bookings` removal or rebuild; nestjs-query authorizers on non-customer types; audit tagging outside customers/properties; web UI; Super Admin anything; RLS.
+
+## M5 Plan Review
+
+**Decision: Accepted** (2026-09-24)
+
+```text
+Decision: Accepted
+Subject (plan): docs/superpowers/plans/2026-09-24-customer-property-tenant-isolation-plan.md
+Accepted specification: docs/superpowers/specs/2026-09-23-multi-tenant-architecture-design.md
+Delivery goal: Customer/Property tenant ownership, DB-enforced same-tenant Property→Customer, principal-derived tenant predicate on every Customer/Property read and write path
+Review summary: Pre-M5 amendments (a32e1e0) resolved: principal-only tenant source that client filters cannot override; @Authorize limited to reads (mutations are custom); relation-auth regression guard; customerProperties scopes data and count; null-tenant contracts split (service no-query vs GraphQL no-match); transactional fail-closed migration validating bootstrap tenant and duplicates before constraints; batch lookups scoped; REST /bookings transitional fail-closed; loose booking-relation assertion appropriate until #85. Within RFC and #82 boundary.
+Findings: None (no plan blockers)
+Traceability: adequate
+Gate: Proceed to M6 (subagent-driven, task-by-task, commits at task boundaries). Branch stays local; no push/PR as a side effect of starting M6.
+Authority: Plan governs sequencing/execution; specification governs product semantics.
+```
