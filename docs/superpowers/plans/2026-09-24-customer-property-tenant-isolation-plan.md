@@ -7,6 +7,7 @@
 | **Date** | 2026-09-24 |
 | **Tracking** | GitHub [#82](https://github.com/rexescario-dev/clensy-platform/issues/82) (program [#81](https://github.com/rexescario-dev/clensy-platform/issues/81)). One PR for this plan (Accepted at M5) + implementation (process §2.8). Branch `feat/82-customer-property-tenant-isolation`. |
 | **Package / repo** | `clensy-platform` — `apps/api` only |
+| **Revision note** | Pre-M5 review (2026-09-24): relation `auth`-override inventory and regression guard (Task 5); behavioral spike acceptance instead of SQL text; service vs nestjs-query `null`-tenant contracts split; generated-mutation inventory (none exist, so `@Authorize` is read-only); `customerProperties` discards client `tenantId`; migration asserts the bootstrap tenant and is explicitly single-transaction; fixture emails randomized only where uniqueness is incidental; batch-lookup and relation-through-unscoped-parent e2e; interim-risk wording. |
 | **Depends on (Accepted)** | [Multi-Tenant Architecture](../specs/2026-09-23-multi-tenant-architecture-design.md) (Accepted, M3 2026-09-23). **Where this plan and that specification disagree, the specification wins** — stop and return to M2/M3. Relies on the shipped [Tenant Identity Foundation plan](2026-09-23-tenant-identity-foundation-plan.md) (#68: `Tenant`, `BOOTSTRAP_TENANT_ID`, principal `{ id, role, scope, tenantId }`, `AuditLogEvent.scope`/`tenantId`, two-tenant fixtures in `test/helpers/seed-tenant-admin.ts`). Also relies on [Customers & Properties](../specs/2026-08-15-customers-properties-design.md), [nestjs-query GraphQL Reads](../specs/2026-08-28-nestjs-query-graphql-reads-design.md) and [Paginated GraphQL Collections](../specs/2026-08-28-paginated-graphql-collections-design.md) as **extended/constrained by the RFC** (§8). |
 
 > **For agentic workers:** Draft — **do not implement until M5 Accepts this plan.** After Accept, use superpowers:subagent-driven-development or superpowers:executing-plans task-by-task. Steps use checkbox (`- [ ]`) syntax. Do **not** invent product semantics; the Accepted specification wins.
@@ -37,11 +38,16 @@ These resolve planning-level choices the RFC leaves to M4. None adds product sem
 
 - SHALL derive the tenant for authorization **only** from `AuthenticatedPrincipal.tenantId` (RFC §4.5, invariant 1). SHALL NOT accept `tenantId` from GraphQL args, inputs, filters, headers, or REST bodies. SHALL NOT expose `tenantId` as a writable input field.
 - SHALL NOT hardcode `BOOTSTRAP_TENANT_ID` in any request path. It MAY appear only in the migration backfill, dev seed fixtures, and tests.
-- SHALL treat `tenantId: null` passed to a customer/property service read as "no tenant scope": return `null` / `[]` / `NotFoundException` **without** querying for rows.
+- SHALL treat a missing tenant as "no tenant scope", with two distinct mechanisms:
+  - **Services:** `tenantId === null` passed to a customer/property service operation returns `null` / `[]` / `NotFoundException` **without** issuing a repository query.
+  - **nestjs-query:** a request with no principal or no principal tenant gets an authorization filter that **matches no rows**. This MAY still issue a (deliberately empty) query; the guarantee is "no rows", not "no query".
+- SHALL NOT let `tenantId` originate from a GraphQL filter. Any client-supplied `tenantId` predicate is discarded before the server-owned tenant predicate is merged — including if Task 5's fallback exposes `tenantId` as filter-only.
+- SHALL treat the `@Authorize` tenant filter as a **security invariant**. No relation declaration targeting `CustomerType` / `PropertyType` may carry a relation-level `auth` override that replaces it (nestjs-query gives a relation's `auth` precedence over the related DTO's `@Authorize`).
 - SHALL make cross-tenant get/update/create-reference look exactly like a missing row: `null` for nullable queries (`customer`, `property`), `NotFoundException` where that operation already throws it (RFC §4.5). SHALL NOT return `403` for another tenant's row.
 - SHALL keep `@Roles()` lists unchanged. SHALL NOT add `SUPER_ADMIN` to any customer/property resolver (RFC §4.2).
 - SHALL enforce, in the database: `customer.tenantId` / `property.tenantId` NOT NULL with FK to `tenant_entity`; `UNIQUE (id, tenantId)` on both tables; `UNIQUE (tenantId, lower(email))` on customer; composite FK `property(customerId, tenantId) → customer(id, tenantId)`; id-only `fk_property_customer` removed (RFC §4.4–§4.5).
-- SHALL order the migration **Tenant (exists) → backfill Customer/Property → validate → constraints/FKs/indexes**. Property → Customer SHALL NOT pass through a state where a tenant-mismatched pair is allowed once `tenantId` is NOT NULL: the composite FK replaces the id-only FK in the same constraint step.
+- SHALL order the migration **assert bootstrap tenant exists → backfill Customer/Property → validate → constraints/FKs/indexes**, all in **one** migration transaction. If `tenant_entity` has no row with `BOOTSTRAP_TENANT_ID`, the migration SHALL fail with an explicit error before backfill. Duplicate-email validation SHALL run after backfill and before any constraint or index is created; a validation failure rolls back the entire migration transaction, so no row is modified. The migration SHALL NOT be split across transactions. Property → Customer SHALL NOT pass through a state where a tenant-mismatched pair is allowed once `tenantId` is NOT NULL: the composite FK replaces the id-only FK in the same constraint step.
+- SHALL keep all four Customer/Property mutations (`createCustomer`, `updateCustomer`, `createProperty`, `updateProperty` — there are no others) as **custom resolvers calling the services**. Verified at planning time: `CustomerReadResolver` / `PropertyReadResolver` are `ReadResolver`-only, and every relation to or from these types has `update` / `remove` disabled, so nestjs-query generates no Customer/Property mutation. `@Authorize` is therefore relied on for **reads only**; write isolation comes from the services' `{ id, tenantId }` lookups. Enabling any generated mutation or relation mutation is out of scope.
 - SHALL NOT add `tenantId` to Booking, LaundryOrder, Invoice, or any other table; SHALL NOT change their FKs to customer/property (#85, #87).
 - SHALL NOT use PostgreSQL RLS (invariant 12).
 - SHALL NOT change `apps/web`, `@clensy/web`, `@clensy/ui`, or GraphQL operation documents. If the M6 verification in Task 5 forces a schema-visible field, regenerate `@clensy/client` only; no UI edits.
@@ -63,7 +69,8 @@ These resolve planning-level choices the RFC leaves to M4. None adds product sem
 | `PropertiesService` | same shape: commands carry `tenantId`; `getProperty(id, tenantId)`, `getPropertiesByIds(ids, tenantId)`, `listCustomerProperties(customerId, tenantId)` |
 | GraphQL `CustomerType`, `PropertyType` | `@Authorize(tenantReadAuthorizer())`. No new public fields (see Task 5 verification) |
 | GraphQL `customer`, `property`, `createCustomer`, `updateCustomer`, `createProperty`, `updateProperty`, `customerProperties` | pass `currentUser.tenantId`; `customerProperties` ANDs `tenantId` into query **and** count filters |
-| Relations `Booking.customer`, `Booking.property`, `Invoice.customer`, `LaundryOrder.customer`, `Customer.properties` | constrained automatically by the related DTO's authorizer (nestjs-query `authorizeRelation`) — verified by tests, no code on those types |
+| Relations `Booking.customer`, `Booking.property`, `Invoice.customer`, `LaundryOrder.customer`, `Customer.properties` | constrained by the related DTO's authorizer, because nestjs-query's default `authorizeRelation` falls back to the target DTO's `@Authorize` when the relation has no `auth` option. Planning-time inventory: none of these declarations has an `auth` override (Booking / Invoice / LaundryOrder spread a local `relationReadOpts` = guards, roles, `update`/`remove` disabled; `Customer.properties` sets the same). Task 5 re-verifies this and adds a regression test. No code changes on those types. |
+| `getCustomersByIds`, `getPropertiesByIds` | tenant-scoped like every other read. Planning-time inventory: **no production callers** (only their own unit tests; a comment in `bookings.service.ts` mentions the name). They stay, scoped, and are covered by a two-tenant test (Task 8) so a future loader cannot inherit an unscoped method |
 | `CreateBookingCommand` | + `tenantId: string \| null` |
 | `ReceiveLaundryOrderCommand` | + `tenantId: string \| null` (resolver always passes principal's value) |
 | `AuditEvent` for customer/property actions | `scope = TENANT`, `tenantId` = principal's tenant |
@@ -74,7 +81,8 @@ These resolve planning-level choices the RFC leaves to M4. None adds product sem
 
 - **Unit (Jest, mocked repositories/manager):** authorizer helper; duplicate-email validator; `CustomersService` / `PropertiesService` tenant predicates, fail-closed `null`, Conflict mapping, audit tags; resolvers pass `currentUser.tenantId`; `@Authorize` metadata present on both types; `BookingsService` / `LaundryOrdersService` pass tenant through.
 - **Migration e2e (throwaway database, `add-tenant-and-admin-scope.migration.e2e-spec.ts` precedent):** backfill, duplicate abort leaves data untouched and re-run succeeds after remediation, composite FK rejects a tenant-mismatched property.
-- **Two-tenant API e2e (real Postgres, `AppModule`):** every RFC §4.9-style cross-tenant case for customers/properties, including nestjs-query filter narrowing, relation reads, booking create and laundry receive with a foreign customer, and audit rows.
+- **Two-tenant API e2e (real Postgres, `AppModule`):** every RFC §4.9-style cross-tenant case for customers/properties, including nestjs-query filter narrowing, `totalCount`, relation reads, batch lookups, booking create and laundry receive with a foreign customer, and audit rows.
+- **Acceptance is behavioral.** Isolation is proven by cross-tenant outcomes (rows absent, counts scoped, relations scoped). Captured SQL (`test/helpers/capture-sql.ts`) is supporting evidence only, never the sole assertion.
 - **Suite health:** Tasks 2–7 are coupled — after Task 2 the NOT NULL columns break e2e fixtures until Task 7. Unit tests MUST be green at the end of every task; the full e2e suite MUST be green from Task 7 onward.
 - Final gate: `pnpm --filter api lint`, `pnpm --filter api test`, `pnpm --filter api test:e2e`, `pnpm --filter api build`, and a `migration:run` against a fresh database.
 
@@ -84,9 +92,10 @@ Failure modes the RFC implies that are easy to miss; each is pinned by a test in
 
 1. **Client filter tries to widen or assert another tenant** (`customers(filter: { id: { eq: <A's id> } })` as tenant B) — expect empty result, not A's row (Task 8; ANDing asserted in Task 5 unit test).
 2. **`customerProperties` bypasses the authorizer** because it calls the QueryService directly, not through `ReadResolver` — its query **and** count must carry the tenant predicate (Task 5, Task 8).
-3. **Relation read through an unscoped parent** (`bookings { customer }`, `invoices { customer }`) must use Customer's authorizer — a relation resolving another tenant's customer is a leak (Task 5 relation-authorizer test; Task 8 via `Customer.properties`).
+3. **Relation read through an unscoped parent** (`bookings { customer }`, `invoices { customer }`) must use Customer's authorizer, and a relation-level `auth` override would silently replace it — a relation resolving another tenant's customer is a leak (Task 5 relation inventory + authorizer test; Task 8 via `Customer.properties` and `bookings { customer }`).
 4. **Same email, different case, same tenant** (`Jane@Example.com` vs `jane@example.com`) ⇒ Conflict; same email in two tenants ⇒ both succeed (Task 3, Task 8).
 5. **`tenantId: null` reaching a service** (REST POST, or a platform principal if a role list were ever widened) must return nothing without querying (Task 3, Task 4, Task 6).
+6. **Batch lookups with a mixed id list** (`getCustomersByIds([cA, cB], B)`) must return only B's row — no current caller exercises them, so a regression would be invisible through GraphQL (Task 3, Task 4, Task 8).
 
 ---
 
@@ -100,6 +109,7 @@ Failure modes the RFC implies that are easy to miss; each is pinned by a test in
 
 **Interfaces:**
 - Produces: `tenantReadAuthorizer<DTO extends { id: string }>(): AuthorizerOptions<DTO>` and `tenantFilterFor(tenantId: string | null): Filter<{ id: string; tenantId: string }>`. Consumed by Task 5 (types) and Task 5 (`customerProperties`), and by later slices #83–#87.
+- Contract: for a missing tenant these return a filter that **matches no rows**. nestjs-query may still execute that (empty) query. This is deliberately weaker than the service-layer "no query at all" rule (Global constraints). Task 5 Step 1 proves on real Postgres that `{ id: { is: null } }` yields zero rows through the TypeORM query service.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -229,14 +239,16 @@ tenant!: TenantEntity;
 
 On `PropertyEntity.customer`, keep the relation (Relatable needs it) but stop TypeORM owning the id-only FK: `@JoinColumn({ name: 'customerId', foreignKeyConstraintName: 'fk_property_customer' })` becomes a join column with `createForeignKeyConstraints: false` on the `@ManyToOne` options. Add a comment in the style of `AddTenantAndAdminScope` listing the hand-written objects (`uq_customer_id_tenant`, `uq_property_id_tenant`, `uq_customer_tenant_email`, `fk_property_customer_tenant`) that `migration:generate` may propose to drop — do not apply that. **Planning:** if M6 finds TypeORM 1.1.x can express the composite FK and expression unique cleanly in metadata, that is acceptable provided the DB objects and names are identical.
 
-- [ ] **Step 6: Migration e2e (failing first).** Precedent: throwaway database; run all migrations up to (not including) this one; insert a customer + property pair (no `tenantId` columns exist yet) and two customers `Jane@Example.com` / `jane@example.com`. Tests:
-  1. `up` throws `CustomerEmailDuplicateError` naming both ids; afterwards `customer_entity` has **no** `tenantId` column and both customer rows are unchanged (TypeORM migration transaction rolled back).
+- [ ] **Step 6: Migration e2e (failing first).** Precedent: throwaway database; run all migrations up to (not including) this one; insert a customer + property pair (no `tenantId` columns exist yet) and two customers `Jane@Example.com` / `jane@example.com`. Every `up` below runs inside a transaction exactly as TypeORM runs it (`queryRunner.startTransaction()` → `up` → commit, or rollback on throw — mirror whatever the #68 migration e2e does), so the tests prove the rollback rather than assume it. Tests:
+  0. With the bootstrap tenant row temporarily deleted (in a throwaway database), `up` fails with the explicit "bootstrap tenant missing" error, and no `tenantId` column exists afterwards.
+  1. `up` throws `CustomerEmailDuplicateError` naming both ids and both emails; afterwards `customer_entity` has **no** `tenantId` column, no new constraint or index exists, and both customer rows are byte-for-byte unchanged (the backfill was rolled back too).
   2. Change one email by hand (remediation), re-run `up` → succeeds; every customer/property row has `tenantId = BOOTSTRAP_TENANT_ID`.
   3. Insert a second tenant and a customer in it; inserting a property with `customerId` = that customer and `tenantId` = bootstrap fails with FK violation on `fk_property_customer_tenant`.
   4. Inserting a second customer with the same `lower(email)` in the bootstrap tenant fails on `uq_customer_tenant_email`; the same email in the second tenant succeeds.
   5. `down` then `up` round-trips.
 
-- [ ] **Step 7: Implement migration `up`** (single transaction; order is load-bearing and is Global constraint "Tenant → backfill → validate → constraints"):
+- [ ] **Step 7: Implement migration `up`** (one transaction, never split; order is load-bearing and is the Global constraint "assert bootstrap tenant → backfill → validate → constraints"). The header comment MUST say that the duplicate check depends on running after backfill and before any constraint, inside the same transaction as the backfill:
+  0. `SELECT 1 FROM tenant_entity WHERE id = $1` with `BOOTSTRAP_TENANT_ID`; no row ⇒ throw `Error('AddCustomerPropertyTenant: bootstrap tenant <id> not found — run AddTenantAndAdminScope first')`.
   1. `ALTER TABLE customer_entity ADD "tenantId" uuid` and same for `property_entity` (nullable).
   2. `UPDATE customer_entity SET "tenantId" = $1` and `UPDATE property_entity SET "tenantId" = $1` with `BOOTSTRAP_TENANT_ID`.
   3. Validate: `SELECT "tenantId", lower(email) AS email, array_agg(id ORDER BY id) AS "customerIds" FROM customer_entity GROUP BY 1, 2 HAVING count(*) > 1` → `assertNoDuplicateCustomerEmails(rows)` (throws → whole migration rolls back, data untouched). Also assert `SELECT count(*) FROM property_entity p JOIN customer_entity c ON c.id = p."customerId" WHERE p."tenantId" <> c."tenantId"` is 0.
@@ -266,7 +278,7 @@ On `PropertyEntity.customer`, keep the relation (Relatable needs it) but stop Ty
 
 - [ ] **Step 1: Failing tests** (extend the existing spec's mocked repository / manager):
   - `create` persists `tenantId: command.tenantId` and audits `{ action: 'customer.create', scope: AdminScope.TENANT, tenantId: command.tenantId, … }`.
-  - `getCustomer('c1', 't-a')` calls `findOneBy({ id: 'c1', tenantId: 't-a' })`; `getCustomer('c1', null)` returns `null` and does **not** call the repository. Same pattern for `getCustomersByIds` (`findBy({ id: In(ids), tenantId })`, `[]` for `null`) and `listCustomers` (`find({ where: { tenantId } })`, `[]` for `null`).
+  - `getCustomer('c1', 't-a')` calls `findOneBy({ id: 'c1', tenantId: 't-a' })`; `getCustomer('c1', null)` returns `null` and does **not** call the repository. Same pattern for `getCustomersByIds` (`findBy({ id: In(ids), tenantId })`, `[]` for `null`) and `listCustomers` (`find({ where: { tenantId } })`, `[]` for `null`). `getCustomersByIds(['c1', 'c2'], 't-b')` MUST put `tenantId: 't-b'` in the same `where` as `id: In(...)` — never fetch by ids then filter in memory.
   - `update` looks up `findOneBy(CustomerEntity, { id, tenantId })`; missing ⇒ `NotFoundException` (another tenant's id is indistinguishable). Audit tagged `customer.update` + tenant. `tenantId` is not copied onto the entity from the command (destructure it out like `actorId`).
   - `create` / `update` when `manager.save` rejects with `{ code: '23505', constraint: 'uq_customer_tenant_email' }` ⇒ `ConflictException('Email is already in use')`; any other error is rethrown unchanged.
 - [ ] **Step 2: Run** → FAIL.
@@ -290,7 +302,7 @@ On `PropertyEntity.customer`, keep the relation (Relatable needs it) but stop Ty
 
 - [ ] **Step 1: Failing tests:**
   - `create` checks the customer with `findOneBy(CustomerEntity, { id: command.customerId, tenantId: command.tenantId })`; a customer of another tenant ⇒ `NotFoundException('Customer … not found')` and nothing saved. Saved entity has `tenantId: command.tenantId`. Audit `property.create` tagged TENANT + tenant.
-  - `getProperty` / `getPropertiesByIds` filter by `tenantId`; `null` ⇒ `null` / `[]` without querying.
+  - `getProperty` / `getPropertiesByIds` filter by `tenantId` in the same `where` as the id predicate; `null` ⇒ `null` / `[]` without querying.
   - `listCustomerProperties('c1', 't-a')` looks up the customer by `{ id, tenantId }` (missing ⇒ `NotFoundException`) then `findBy({ customerId, tenantId })`; `null` tenant ⇒ `NotFoundException` without querying.
   - `update` finds by `{ id, tenantId }`; missing ⇒ `NotFoundException`; `tenantId` not assigned from command; audit tagged.
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** → PASS.
@@ -309,15 +321,27 @@ On `PropertyEntity.customer`, keep the relation (Relatable needs it) but stop Ty
 **Interfaces:**
 - Consumes: `tenantReadAuthorizer`, `tenantFilterFor` (Task 1); Task 3/4 service signatures.
 
-- [ ] **Step 1: M6 verification spike (first, before other changes).** In `customer-read.resolver.spec.ts` (or a composition-level test with the real `NestjsQueryGraphQLModule` + TypeORM against Postgres, whichever the existing spec already boots), apply `@Authorize(tenantReadAuthorizer())` to `CustomerType` **without** exposing `tenantId` and assert that `customers` issues SQL containing `"tenantId" = $n` (use `test/helpers/capture-sql.ts`). **If it works:** keep `tenantId` off the GraphQL type. **If nestjs-query 9.5.0 rejects or drops the unexposed field:** add `@FilterableField(() => ID, { filterOnly: true })` `tenantId` to `CustomerType` / `PropertyType` (hidden from output; a client filter on it is still ANDed with the authorizer, so asserting another tenant returns no rows — RFC §4.5), regenerate `@clensy/client`, and record the outcome in the PR.
+- [ ] **Step 0: Inventory (before any code).** Re-run and record in the PR:
+  - `grep -rn "@FilterableRelation\|@Relation\|@UnPagedRelation\|@OffsetConnection\|@CursorConnection\|@FilterableOffsetConnection" apps/api/src/modules` and list every declaration whose target is `CustomerType` or `PropertyType`. Expected from planning: `Booking.customer`, `Booking.property`, `Invoice.customer`, `LaundryOrder.customer`, `Customer.properties`.
+  - For each one, confirm there is no `auth` option. If a relation-level `auth` exists, it takes precedence over the target DTO's `@Authorize` and MUST be removed or proven to include the tenant predicate before continuing.
+  - Confirm no `CRUDResolver` / `CreateResolver` / `UpdateResolver` / `DeleteResolver` exists for `CustomerType` / `PropertyType`, and that relation `update` / `remove` stay disabled. Expected from planning: none, so `@Authorize` covers reads only and all four mutations are the custom service-backed resolvers.
+- [ ] **Step 1: M6 verification spike: does the authorizer work on the unexposed `tenantId` column?** Write a real-Postgres e2e (`AppModule`, two tenants, the first cases of Task 8's file are fine) with `@Authorize(tenantReadAuthorizer())` on `CustomerType` and `tenantId` **not** on the GraphQL type. Primary acceptance criteria are **behavioral**:
+  - Tenant A has customer A, tenant B has customer B. B's `customers` result excludes A and includes B.
+  - B can still narrow with an ordinary client filter (`fullName: { eq: <B's name> }` ⇒ B only; `fullName: { eq: <A's name> }` ⇒ empty).
+  - B's `totalCount` counts only B's rows.
+  - A relation read is scoped: B's `bookings { nodes { customer { id } } }` over a booking that references A's customer never returns A's id.
+  - `CustomerEntity` query service with `tenantFilterFor(null)` returns zero rows on real Postgres (proves the no-match filter behaves as intended).
+  SQL captured with `test/helpers/capture-sql.ts` MAY be attached as supporting evidence, but it is not the pass criterion. **If all pass:** keep `tenantId` off the GraphQL type. **If nestjs-query 9.5.0 rejects or drops the unexposed field:** add `@FilterableField(() => ID, { filterOnly: true })` `tenantId` to `CustomerType` / `PropertyType` (not in output). A client `tenantId` predicate is still stripped or ANDed and can only narrow (RFC §4.5; Global constraints). Regenerate `@clensy/client`, and record the outcome in the PR.
 - [ ] **Step 2: Failing tests:**
   - `getAuthorizer(CustomerType)` and `getAuthorizer(PropertyType)` are defined (metadata), and the authorizer returns `{ tenantId: { eq: 't-a' } }` for a tenant principal context.
+  - **Relation regression guard:** for every relation found in Step 0, read nestjs-query relation metadata (`getRelations(BookingDTO)`, `getRelations(InvoiceType)`, `getRelations(LaundryOrderType)`, `getRelations(CustomerType)`) and assert the Customer/Property-targeting entries have `auth === undefined`. A future `auth` override then fails this test instead of silently bypassing the tenant predicate.
+  - **Mutation regression guard:** in the generated GraphQL schema (the composition-root or an e2e schema introspection), no nestjs-query-generated Customer/Property mutation exists (no `createOneCustomer`, `updateOneCustomer`, `deleteOneCustomer`, `*Property*` equivalents, `addPropertiesToCustomer`, `setPropertiesOnCustomer`, `removePropertiesFromCustomer`, `setCustomerOnBooking`, etc.). Match mutation names by pattern, not a hard-coded list only.
   - `customer(id)` / `property(id)` call the service with `(id, currentUser.tenantId)`.
   - `createCustomer` / `updateCustomer` / `createProperty` / `updateProperty` build commands with `tenantId: currentUser.tenantId` and never from input.
-  - `customerProperties` passes `mergeFilter(…, { customerId: { eq }, tenantId: { eq: currentUser.tenantId } })` to **both** `propertyQueryService.query` and `.count`, and a client filter is ANDed, not replaced (assert the merged filter contains the client predicate and the tenant predicate).
+  - `customerProperties` passes a filter containing the server-owned `{ customerId: { eq }, tenantId: { eq: currentUser.tenantId } }` to **both** `propertyQueryService.query` and `.count`. A client filter is ANDed, not replaced (assert the merged filter contains the client predicate and the tenant predicate). A client filter containing `tenantId: { eq: '<other tenant>' }` is **discarded** before the merge: the resulting filter contains only the principal's tenant predicate.
   - `@Roles()` metadata on every resolver method is unchanged (existing assertions keep passing).
 - [ ] **Step 3: Run** → FAIL.
-- [ ] **Step 4: Implement.** `@Authorize(tenantReadAuthorizer())` on both types (nestjs-query then applies it to `customers`, `Customer.properties`, and to every `@FilterableRelation('customer' | 'property')` on Booking / Invoice / LaundryOrder via `authorizeRelation`). Resolvers take `@CurrentUser()` where they don't already and pass `currentUser.tenantId`. In `customerProperties`, add `@CurrentUser()` and merge `tenantFilterFor(currentUser.tenantId)` alongside the existing `customerId` scope (strip any client `tenantId` with `getFilterOmitting` the same way `customerId` is stripped).
+- [ ] **Step 4: Implement.** Put `@Authorize(tenantReadAuthorizer())` on both types. nestjs-query applies it to the `customers` list and count. For relation reads, the parent's default `authorizeRelation` uses the relation's own `auth` if present and **otherwise** the target DTO's `@Authorize`, so given Step 0's inventory it applies to `Customer.properties`, `Booking.customer`, `Booking.property`, `Invoice.customer` and `LaundryOrder.customer`. Resolvers take `@CurrentUser()` where they don't already and pass `currentUser.tenantId`. **`customerProperties` (normative):** `tenantId` MUST never come from the GraphQL filter. Strip any client `tenantId` with `getFilterOmitting` (as `customerId` is already stripped) **before** merging the server-owned `customerId` predicate and `tenantFilterFor(currentUser.tenantId)`, in both the page query and the count. This holds even if Step 1's fallback exposes `tenantId` as filter-only.
 - [ ] **Step 5: Run** unit suite → PASS.
 - [ ] **Step 6: Commit** — `feat(82): enforce tenant predicate on customer and property GraphQL`
 
@@ -333,7 +357,7 @@ On `PropertyEntity.customer`, keep the relation (Relatable needs it) but stop Ty
 - Modify: `apps/api/src/modules/bookings/presentation/graphql/booking.resolver.ts` (`tenantId: currentUser.tenantId`)
 - Modify: `apps/api/src/modules/bookings/presentation/rest/booking.controller.ts` (`tenantId: null` with a comment citing Slice decision 4 and #85/#91)
 - Modify: `apps/api/src/modules/laundry/application/commands/receive-laundry-order.command.ts`, `laundry-orders.service.ts` (`receive` passes `command.tenantId`), `laundry-order.resolver.ts` (`tenantId: user.tenantId`)
-- Modify: `apps/api/src/modules/bookings/**` loaders if any still call `getCustomersByIds` / `getPropertiesByIds` (grep at M6 start; pass the principal tenant from the request context the loader already has, or remove the dead call — do not introduce AsyncLocalStorage)
+- No loader changes: planning-time grep found **no production caller** of `getCustomersByIds` / `getPropertiesByIds` (only a comment in `bookings.service.ts`). Re-grep at M6 start. If a caller has appeared, it MUST pass the principal's tenant explicitly (no AsyncLocalStorage) and get a unit test here.
 - Test: bookings / laundry service + resolver unit specs; `apps/api/test/bookings-rest.e2e-spec.ts`
 
 - [ ] **Step 1: Failing tests:**
@@ -356,7 +380,7 @@ On `PropertyEntity.customer`, keep the relation (Relatable needs it) but stop Ty
 - Modify: `customers-properties.e2e-spec.ts`, `customers-properties.service.e2e-spec.ts`, `bookings(.service).e2e-spec.ts`, `jobs(.service).e2e-spec.ts`, `laundry(.service).e2e-spec.ts`, `billing(.service).e2e-spec.ts`, and any unit spec constructing customer/property commands
 
 - [ ] **Step 1:** Run `pnpm --filter api test:e2e` and record failures (expected: NOT NULL `tenantId`, missing command `tenantId`, duplicate `jane@example.com` in the bootstrap tenant).
-- [ ] **Step 2:** Service-level specs pass `tenantId` from the seeded owner's principal (`seedOwner` already attaches to the bootstrap tenant) or from `createTestTenant`. Direct repository inserts set `tenantId`. Every customer email in a spec that does not truncate `customer_entity` uses `uniqueEmail()`; specs asserting on a specific email keep a literal only where the table is truncated under `acquireCustomerDbTestLock`.
+- [ ] **Step 2:** Service-level specs pass `tenantId` from the seeded owner's principal (`seedOwner` already attaches to the bootstrap tenant) or from `createTestTenant`. Direct repository inserts set `tenantId`. Replace a fixture email with `uniqueEmail()` **only where uniqueness is incidental** to the test (e.g. a customer created just so a booking can reference it). Tests whose purpose is email identity or uniqueness MUST keep deterministic addresses: duplicate email, update-to-existing email, case-insensitive uniqueness, exact-value assertions. Isolate those by truncating under `acquireCustomerDbTestLock` or by using a fresh `createTestTenant` tenant, not by randomizing the address. Do not mechanically find-and-replace `jane@example.com`.
 - [ ] **Step 3:** `pnpm --filter api test` and `pnpm --filter api test:e2e` → all PASS. Run `pnpm db:seed` twice against a migrated dev DB → idempotent.
 - [ ] **Step 4: Commit** — `test(82): attach customer fixtures to a tenant and use unique emails`
 
@@ -380,6 +404,8 @@ On `PropertyEntity.customer`, keep the relation (Relatable needs it) but stop Ty
   8. Tenant B creates a customer with A's exact email ⇒ succeeds; B creates a second one with the same email in different case ⇒ `Conflict`.
   9. Tenant A reading `customer(id: cA) { properties { nodes { id } } }` sees `pA`; the audit rows for A's `customer.create` / `property.create` have `scope = 'TENANT'` and `tenantId = A`.
   10. Super Admin calling `customers` ⇒ `Forbidden` (regression guard; existing #68 test may already cover it — do not duplicate if so).
+  11. **Batch lookups** (service-level, via `moduleFixture.get(CustomersService)` / `PropertiesService`): `getCustomersByIds([cA, cB], tenantB)` ⇒ exactly `[cB]`; `getPropertiesByIds([pA, pB], tenantB)` ⇒ exactly `[pB]`; both with `null` ⇒ `[]`.
+  12. **Relation read through an unscoped parent:** insert a booking referencing `cA` / `pA` directly via repository (bookings are not tenant-owned yet, so B can list it). B's `bookings { nodes { id customer { id } property { id } } }` MUST NOT contain `cA` or `pA` anywhere in the response body. Because `customer` / `property` are non-null on `Booking`, the interim shape is expected to be a GraphQL error on those fields or a nulled parent. Assert the absence of A's ids, not a specific error shape; #85 makes this booking invisible to B.
 - [ ] **Step 2: Run** `pnpm --filter api test:e2e -- tenant-isolation` → PASS.
 - [ ] **Step 3: Commit** — `test(82): two-tenant customer and property isolation e2e`
 
@@ -410,7 +436,7 @@ On `PropertyEntity.customer`, keep the relation (Relatable needs it) but stop Ty
 - nestjs-query authorizer on an unexposed column is unverified until Task 5 Step 1; the fallback is defined there.
 - Between Task 2 and Task 7 the e2e suite is red by construction; do not push a partial branch expecting green CI.
 - `generate` will keep proposing to drop the hand-written constraints/indexes; never apply that.
-- Booking/Laundry/Invoice rows keep id-only FKs to customer/property until #85/#87, so the DB does not yet prevent a cross-tenant booking → customer reference; the application check (Task 6) is the only guard for those tables in the interim. In production only the bootstrap tenant has data until tenants are provisioned.
+- Booking, LaundryOrder and Invoice remain intentionally **outside database tenant isolation** until their own slices. Their customer/property lookups are application-scoped by the principal in this slice (Task 6). Their tenant columns and composite FKs to customer/property are #85/#87 work.
 
 ## Out of this plan
 
