@@ -73,6 +73,57 @@ export class AdminResolver {
     private readonly configService: ConfigService,
   ) {}
 
+  @Query(() => [AdminType], { name: 'admins' })
+  @UseGuards(AuthGuard)
+  @Roles(Role.TENANT_OWNER)
+  async admins(
+    @CurrentUser() currentUser: AuthenticatedPrincipal,
+  ): Promise<AdminType[]> {
+    const list = await this.adminsService.list(currentUser);
+    return list.map(toAdminType);
+  }
+
+  @Mutation(() => AdminType)
+  @UseGuards(AuthGuard)
+  @Roles(Role.TENANT_OWNER)
+  async createAdmin(
+    @Args('createAdminInput') input: CreateAdminInput,
+    @CurrentUser() currentUser: AuthenticatedPrincipal,
+  ): Promise<AdminType> {
+    const command: CreateAdminCommand = {
+      actor: currentUser,
+      email: input.email,
+      password: input.password,
+      role: input.role,
+    };
+    const admin = await this.adminsService.create(command);
+    return toAdminType(admin);
+  }
+
+  // Any authenticated role — no `@Roles()`.
+  @Query(() => CurrentAdminType, { name: 'currentAdmin' })
+  @UseGuards(AuthGuard)
+  currentAdmin(
+    @CurrentUser() currentUser: AuthenticatedPrincipal,
+  ): CurrentAdminType {
+    return toCurrentAdminType(currentUser);
+  }
+
+  @Mutation(() => AdminType)
+  @UseGuards(AuthGuard)
+  @Roles(Role.TENANT_OWNER)
+  async disableAdmin(
+    @Args('id', { type: () => ID }) id: string,
+    @CurrentUser() currentUser: AuthenticatedPrincipal,
+  ): Promise<AdminType> {
+    const command: DisableAdminCommand = {
+      actor: currentUser,
+      targetId: id,
+    };
+    const admin = await this.adminsService.disable(command);
+    return toAdminType(admin);
+  }
+
   // Public: no `AuthGuard`, no `@Roles()`. Orchestration order (brief,
   // spec §4.8): verify credentials via `LoginService` -> on a non-null
   // result, issue the JWT via `TokenService` -> set the HttpOnly session
@@ -111,55 +162,8 @@ export class AdminResolver {
     return true;
   }
 
-  @Mutation(() => AdminType)
-  @UseGuards(AuthGuard)
-  @Roles(Role.TENANT_OWNER)
-  async createAdmin(
-    @Args('createAdminInput') input: CreateAdminInput,
-    @CurrentUser() currentUser: AuthenticatedPrincipal,
-  ): Promise<AdminType> {
-    const command: CreateAdminCommand = {
-      actor: currentUser,
-      email: input.email,
-      password: input.password,
-      role: input.role,
-    };
-    const admin = await this.adminsService.create(command);
-    return toAdminType(admin);
-  }
-
-  @Mutation(() => AdminType)
-  @UseGuards(AuthGuard)
-  @Roles(Role.TENANT_OWNER)
-  async disableAdmin(
-    @Args('id', { type: () => ID }) id: string,
-    @CurrentUser() currentUser: AuthenticatedPrincipal,
-  ): Promise<AdminType> {
-    const command: DisableAdminCommand = {
-      actor: currentUser,
-      targetId: id,
-    };
-    const admin = await this.adminsService.disable(command);
-    return toAdminType(admin);
-  }
-
-  @Query(() => [AdminType], { name: 'admins' })
-  @UseGuards(AuthGuard)
-  @Roles(Role.TENANT_OWNER)
-  async admins(
-    @CurrentUser() currentUser: AuthenticatedPrincipal,
-  ): Promise<AdminType[]> {
-    const list = await this.adminsService.list(currentUser);
-    return list.map(toAdminType);
-  }
-
-  // Any authenticated role — no `@Roles()`.
-  @Query(() => CurrentAdminType, { name: 'currentAdmin' })
-  @UseGuards(AuthGuard)
-  currentAdmin(
-    @CurrentUser() currentUser: AuthenticatedPrincipal,
-  ): CurrentAdminType {
-    return toCurrentAdminType(currentUser);
+  private clearSessionCookie(res: Response): void {
+    res.clearCookie(SESSION_COOKIE_NAME, SESSION_COOKIE_OPTIONS);
   }
 
   // `Max-Age` is derived from the exact same `JWT_EXPIRES_IN` config value
@@ -178,9 +182,5 @@ export class AdminResolver {
       // security posture to reason about.
       maxAge: ms(expiresIn as Parameters<typeof ms>[0]),
     });
-  }
-
-  private clearSessionCookie(res: Response): void {
-    res.clearCookie(SESSION_COOKIE_NAME, SESSION_COOKIE_OPTIONS);
   }
 }

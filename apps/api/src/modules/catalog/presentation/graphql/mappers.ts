@@ -9,29 +9,6 @@ import { ServiceType } from './service.type';
 // their TypeORM entities as GraphQL values — every service result is mapped
 // through one of these before leaving a resolver.
 
-// Returns `Omit<ServiceType, 'activePricing'>` cast to `ServiceType` —
-// `activePricing` is presentation-layer-only computed data, populated
-// exclusively by `ServiceResolver.activePricing()`'s `@ResolveField`; Apollo
-// calls that field resolver for the `activePricing` key independently of
-// whatever this mapper's return value carries for it.
-export function toServiceType(service: Service): ServiceType {
-  return {
-    id: service.id,
-    active: service.active,
-    // `activePricing: null` is a type-level placeholder only, satisfying
-    // `ServiceType`'s required field — it is never read: Apollo always calls
-    // `ServiceResolver.activePricing()`'s `@ResolveField()` for the
-    // `activePricing` key independently of whatever this object carries for
-    // it. Same pattern `toCleanerType()`'s `team: null` established.
-    activePricing: null,
-    createdAt: service.createdAt,
-    description: service.description,
-    durationMinutes: service.durationMinutes,
-    name: service.name,
-    updatedAt: service.updatedAt,
-  };
-}
-
 export function toAddOnType(addOn: AddOn): AddOnType {
   return {
     id: addOn.id,
@@ -57,5 +34,28 @@ export function toPricingRuleType(rule: PricingRule): PricingRuleType {
     serviceId: rule.serviceId,
     createdAt: rule.createdAt,
     priceMinorUnits: rule.priceMinorUnits,
+  };
+}
+
+// Returns `Omit<ServiceType, 'activePricing'>` cast to `ServiceType` —
+// `activePricing` is presentation-layer-only computed data, populated
+// exclusively by `ServiceResolver.activePricing()`'s `@ResolveField`; Apollo
+// calls that field resolver for the `activePricing` key independently of
+// whatever this mapper's return value carries for it.
+export function toServiceType(service: Service): ServiceType {
+  return {
+    id: service.id,
+    active: service.active,
+    // `activePricing: null` is a type-level placeholder only, satisfying
+    // `ServiceType`'s required field — it is never read: Apollo always calls
+    // `ServiceResolver.activePricing()`'s `@ResolveField()` for the
+    // `activePricing` key independently of whatever this object carries for
+    // it. Same pattern `toCleanerType()`'s `team: null` established.
+    activePricing: null,
+    createdAt: service.createdAt,
+    description: service.description,
+    durationMinutes: service.durationMinutes,
+    name: service.name,
+    updatedAt: service.updatedAt,
   };
 }

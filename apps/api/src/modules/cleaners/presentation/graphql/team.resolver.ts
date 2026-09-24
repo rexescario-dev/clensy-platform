@@ -18,16 +18,6 @@ import { TeamType } from './team.type';
 export class TeamResolver {
   constructor(private readonly teamsService: TeamsService) {}
 
-  @Query(() => TeamType, { name: 'team', nullable: true })
-  @UseGuards(AuthGuard)
-  @Roles(...VIEW_ROLES)
-  async team(
-    @Args('id', { type: () => ID }) id: string,
-  ): Promise<TeamType | null> {
-    const team = await this.teamsService.getTeam(id);
-    return team ? toTeamType(team) : null;
-  }
-
   @Mutation(() => TeamType)
   @UseGuards(AuthGuard)
   @Roles(Role.TENANT_OWNER, Role.OPS_MANAGER)
@@ -41,5 +31,15 @@ export class TeamResolver {
     };
     const team = await this.teamsService.createTeam(command);
     return toTeamType(team);
+  }
+
+  @Query(() => TeamType, { name: 'team', nullable: true })
+  @UseGuards(AuthGuard)
+  @Roles(...VIEW_ROLES)
+  async team(
+    @Args('id', { type: () => ID }) id: string,
+  ): Promise<TeamType | null> {
+    const team = await this.teamsService.getTeam(id);
+    return team ? toTeamType(team) : null;
   }
 }

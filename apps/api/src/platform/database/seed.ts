@@ -20,6 +20,54 @@ import dataSource from './data-source';
 
 const BCRYPT_SALT_ROUNDS = 10;
 
+// Entrypoint for `pnpm db:seed`. Calls each module's seeder directly — add a
+// line here per module as more seeders exist, rather than pre-building an
+// orchestrator class for a single seeder.
+async function run(): Promise<void> {
+  await seedBookingFixtures();
+
+  const app = await NestFactory.createApplicationContext(AppModule);
+  try {
+    await app.get(BookingSeeder).seed();
+  } finally {
+    await app.close();
+  }
+  await seedDevOwner();
+}
+
+// Upserts the Customer/Property/Service/Team fixtures `bookingSeedData`
+// (booking.seed-data.ts) references, via the plain CLI `DataSource` — the
+// same technique `seedDevOwner` already uses, not a new one (Bookings plan
+// §3). No other module has a seeder to depend on, and going through
+// `CustomersService.create`/etc. wouldn't be idempotent (plain inserts,
+// not upserts) — only a raw repository `.upsert([...], ['id'])` against a
+// fixed id is safe to run repeatedly. Must run BEFORE `BookingSeeder.seed()`:
+// `BookingEntity`'s FK constraints are enforced at insert time, so the
+// booking rows referencing these fixtures would fail without them.
+async function seedBookingFixtures(): Promise<void> {
+  await dataSource.initialize();
+  try {
+    await dataSource
+      .getRepository(CustomerEntity)
+      .upsert([bookingFixtureCustomer], ['id']);
+    await dataSource
+      .getRepository(ServiceEntity)
+      .upsert([bookingFixtureService], ['id']);
+    await dataSource
+      .getRepository(TeamEntity)
+      .upsert([bookingFixtureTeam], ['id']);
+    // Property last — its FK references the customer row above.
+    await dataSource
+      .getRepository(PropertyEntity)
+      .upsert([bookingFixtureProperty], ['id']);
+    console.log(
+      'Seeded booking fixtures: 1 customer, 1 property, 1 service, 1 team',
+    );
+  } finally {
+    await dataSource.destroy();
+  }
+}
+
 // Dev-only convenience — separate from Task 9's e2e fixture (which seeds its
 // own Owner deterministically for the acceptance flow). Reads credentials
 // from the environment (mirroring `.env.example`'s `DB_*` pattern) rather
@@ -66,54 +114,6 @@ async function seedDevOwner(): Promise<void> {
   } finally {
     await dataSource.destroy();
   }
-}
-
-// Upserts the Customer/Property/Service/Team fixtures `bookingSeedData`
-// (booking.seed-data.ts) references, via the plain CLI `DataSource` — the
-// same technique `seedDevOwner` already uses, not a new one (Bookings plan
-// §3). No other module has a seeder to depend on, and going through
-// `CustomersService.create`/etc. wouldn't be idempotent (plain inserts,
-// not upserts) — only a raw repository `.upsert([...], ['id'])` against a
-// fixed id is safe to run repeatedly. Must run BEFORE `BookingSeeder.seed()`:
-// `BookingEntity`'s FK constraints are enforced at insert time, so the
-// booking rows referencing these fixtures would fail without them.
-async function seedBookingFixtures(): Promise<void> {
-  await dataSource.initialize();
-  try {
-    await dataSource
-      .getRepository(CustomerEntity)
-      .upsert([bookingFixtureCustomer], ['id']);
-    await dataSource
-      .getRepository(ServiceEntity)
-      .upsert([bookingFixtureService], ['id']);
-    await dataSource
-      .getRepository(TeamEntity)
-      .upsert([bookingFixtureTeam], ['id']);
-    // Property last — its FK references the customer row above.
-    await dataSource
-      .getRepository(PropertyEntity)
-      .upsert([bookingFixtureProperty], ['id']);
-    console.log(
-      'Seeded booking fixtures: 1 customer, 1 property, 1 service, 1 team',
-    );
-  } finally {
-    await dataSource.destroy();
-  }
-}
-
-// Entrypoint for `pnpm db:seed`. Calls each module's seeder directly — add a
-// line here per module as more seeders exist, rather than pre-building an
-// orchestrator class for a single seeder.
-async function run(): Promise<void> {
-  await seedBookingFixtures();
-
-  const app = await NestFactory.createApplicationContext(AppModule);
-  try {
-    await app.get(BookingSeeder).seed();
-  } finally {
-    await app.close();
-  }
-  await seedDevOwner();
 }
 
 run()

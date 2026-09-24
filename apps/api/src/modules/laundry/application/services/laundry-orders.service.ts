@@ -46,9 +46,21 @@ export class LaundryOrdersService {
 
   // ---- reads --------------------------------------------------------------
 
+  cancel(c: LaundryOrderTransitionCommand): Promise<LaundryOrder> {
+    return this.transitionVerb(c, S.CANCELLED, 'laundry_order.cancelled');
+  }
+
+  complete(c: LaundryOrderTransitionCommand): Promise<LaundryOrder> {
+    return this.transitionVerb(c, S.COMPLETED, 'laundry_order.completed');
+  }
+
+  // ---- intake ------------------------------------------------------------
+
   getOrder(id: string): Promise<LaundryOrder | null> {
     return this.orderRepository.findOneBy({ id });
   }
+
+  // ---- weigh -----------------------------------------------------------
 
   // Read-only projection for the Billing module (#38 spec §4.1). Returns
   // the order plus its lines' `serviceId`/`addOnId` and the four snapshot
@@ -81,80 +93,54 @@ export class LaundryOrdersService {
     };
   }
 
-  // ---- intake ------------------------------------------------------------
-
-  // `getCustomer` runs before the transaction for a clean `NotFoundException`;
-  // `fk_laundry_order_customer` is the actual check/write-race guard (spec
-  // §4.1). The order is created with zero lines — lines are created only by
-  // `price` (spec §4.5).
-  async receive(command: ReceiveLaundryOrderCommand): Promise<LaundryOrder> {
-    const customer = await this.customersService.getCustomer(
-      command.customerId,
-    );
-    if (!customer) {
-      throw new NotFoundException(`Customer ${command.customerId} not found`);
-    }
-
-    return this.dataSource.transaction((manager) =>
-      runAuditInTransaction(manager, async () => {
-        const entity = manager.create(LaundryOrderEntity, {
-          customerId: command.customerId,
-          fulfillmentType: command.fulfillmentType,
-          status: S.RECEIVED,
-          totalMinorUnits: null,
-          weightGrams: null,
-        });
-        await manager.save(entity);
-        await this.audit(command.actorId, 'laundry_order.received', entity.id);
-        return manager.findOneByOrFail(LaundryOrderEntity, { id: entity.id });
-      }),
-    );
-  }
-
-  // ---- weigh -----------------------------------------------------------
-
-  async weigh(command: WeighLaundryOrderCommand): Promise<LaundryOrder> {
-    if (!Number.isInteger(command.weightGrams) || command.weightGrams < 0) {
-      throw new BadRequestException(
-        'weightGrams must be a non-negative integer',
-      );
-    }
-
-    return this.dataSource.transaction((manager) =>
-      runAuditInTransaction(manager, async () => {
-        const order = await this.lock(manager, command.orderId);
-
-        if (order.status === S.RECEIVED) {
-          this.policy.assertTransition(order.status, S.WEIGHED);
-          await manager.update(
-            LaundryOrderEntity,
-            { id: order.id },
-            {
-              status: S.WEIGHED,
-              updatedAt: new Date(),
-              weightGrams: command.weightGrams,
-            },
-          );
-        } else if (order.status === S.WEIGHED) {
-          // State-preserving re-weigh (spec §3, §4.4) — no transition.
-          await manager.update(
-            LaundryOrderEntity,
-            { id: order.id },
-            { updatedAt: new Date(), weightGrams: command.weightGrams },
-          );
-        } else {
-          throw new BadRequestException(
-            `Cannot weigh a laundry order in status ${order.status}`,
-          );
-        }
-
-        await this.audit(command.actorId, 'laundry_order.weighed', order.id);
-        return manager.findOneByOrFail(LaundryOrderEntity, { id: order.id });
-      }),
-    );
-  }
-
   // ---- price -----------------------------------------------------------
+
+  markAwaitingDelivery(
+    c: LaundryOrderTransitionCommand,
+  ): Promise<LaundryOrder> {
+    return this.transitionVerb(
+      c,
+      S.AWAITING_DELIVERY,
+      'laundry_order.awaiting_delivery',
+      (order) =>
+        this.requireFulfillment(order, LaundryFulfillmentType.DELIVERY),
+    );
+  }
+
+  // ---- status-transition verbs ---------------------------------------------
+
+  markAwaitingPayment(c: LaundryOrderTransitionCommand): Promise<LaundryOrder> {
+    return this.transitionVerb(
+      c,
+      S.AWAITING_PAYMENT,
+      'laundry_order.awaiting_payment',
+    );
+  }
+
+  markAwaitingPickup(c: LaundryOrderTransitionCommand): Promise<LaundryOrder> {
+    return this.transitionVerb(
+      c,
+      S.AWAITING_PICKUP,
+      'laundry_order.awaiting_pickup',
+      (order) => this.requireFulfillment(order, LaundryFulfillmentType.PICKUP),
+    );
+  }
+
+  markDamaged(c: LaundryOrderTransitionCommand): Promise<LaundryOrder> {
+    return this.transitionVerb(c, S.DAMAGED, 'laundry_order.damaged');
+  }
+
+  markLost(c: LaundryOrderTransitionCommand): Promise<LaundryOrder> {
+    return this.transitionVerb(c, S.LOST, 'laundry_order.lost');
+  }
+
+  markPaid(c: LaundryOrderTransitionCommand): Promise<LaundryOrder> {
+    return this.transitionVerb(c, S.PAID, 'laundry_order.paid');
+  }
+
+  markReady(c: LaundryOrderTransitionCommand): Promise<LaundryOrder> {
+    return this.transitionVerb(c, S.READY, 'laundry_order.ready');
+  }
 
   // The immutable-snapshot operation, exactly once per order (spec §4.5).
   async price(command: PriceLaundryOrderCommand): Promise<LaundryOrder> {
@@ -268,18 +254,40 @@ export class LaundryOrdersService {
     );
   }
 
-  // ---- status-transition verbs ---------------------------------------------
+  // `getCustomer` runs before the transaction for a clean `NotFoundException`;
+  // `fk_laundry_order_customer` is the actual check/write-race guard (spec
+  // §4.1). The order is created with zero lines — lines are created only by
+  // `price` (spec §4.5).
+  async receive(command: ReceiveLaundryOrderCommand): Promise<LaundryOrder> {
+    const customer = await this.customersService.getCustomer(
+      command.customerId,
+    );
+    if (!customer) {
+      throw new NotFoundException(`Customer ${command.customerId} not found`);
+    }
 
-  markAwaitingPayment(c: LaundryOrderTransitionCommand): Promise<LaundryOrder> {
-    return this.transitionVerb(
-      c,
-      S.AWAITING_PAYMENT,
-      'laundry_order.awaiting_payment',
+    return this.dataSource.transaction((manager) =>
+      runAuditInTransaction(manager, async () => {
+        const entity = manager.create(LaundryOrderEntity, {
+          customerId: command.customerId,
+          fulfillmentType: command.fulfillmentType,
+          status: S.RECEIVED,
+          totalMinorUnits: null,
+          weightGrams: null,
+        });
+        await manager.save(entity);
+        await this.audit(command.actorId, 'laundry_order.received', entity.id);
+        return manager.findOneByOrFail(LaundryOrderEntity, { id: entity.id });
+      }),
     );
   }
 
-  markPaid(c: LaundryOrderTransitionCommand): Promise<LaundryOrder> {
-    return this.transitionVerb(c, S.PAID, 'laundry_order.paid');
+  refund(c: LaundryOrderTransitionCommand): Promise<LaundryOrder> {
+    return this.transitionVerb(c, S.REFUNDED, 'laundry_order.refunded');
+  }
+
+  reject(c: LaundryOrderTransitionCommand): Promise<LaundryOrder> {
+    return this.transitionVerb(c, S.REJECTED, 'laundry_order.rejected');
   }
 
   startProcessing(c: LaundryOrderTransitionCommand): Promise<LaundryOrder> {
@@ -290,91 +298,60 @@ export class LaundryOrdersService {
     );
   }
 
-  markReady(c: LaundryOrderTransitionCommand): Promise<LaundryOrder> {
-    return this.transitionVerb(c, S.READY, 'laundry_order.ready');
-  }
+  async weigh(command: WeighLaundryOrderCommand): Promise<LaundryOrder> {
+    if (!Number.isInteger(command.weightGrams) || command.weightGrams < 0) {
+      throw new BadRequestException(
+        'weightGrams must be a non-negative integer',
+      );
+    }
 
-  markAwaitingPickup(c: LaundryOrderTransitionCommand): Promise<LaundryOrder> {
-    return this.transitionVerb(
-      c,
-      S.AWAITING_PICKUP,
-      'laundry_order.awaiting_pickup',
-      (order) => this.requireFulfillment(order, LaundryFulfillmentType.PICKUP),
-    );
-  }
-
-  markAwaitingDelivery(
-    c: LaundryOrderTransitionCommand,
-  ): Promise<LaundryOrder> {
-    return this.transitionVerb(
-      c,
-      S.AWAITING_DELIVERY,
-      'laundry_order.awaiting_delivery',
-      (order) =>
-        this.requireFulfillment(order, LaundryFulfillmentType.DELIVERY),
-    );
-  }
-
-  complete(c: LaundryOrderTransitionCommand): Promise<LaundryOrder> {
-    return this.transitionVerb(c, S.COMPLETED, 'laundry_order.completed');
-  }
-
-  cancel(c: LaundryOrderTransitionCommand): Promise<LaundryOrder> {
-    return this.transitionVerb(c, S.CANCELLED, 'laundry_order.cancelled');
-  }
-
-  reject(c: LaundryOrderTransitionCommand): Promise<LaundryOrder> {
-    return this.transitionVerb(c, S.REJECTED, 'laundry_order.rejected');
-  }
-
-  markLost(c: LaundryOrderTransitionCommand): Promise<LaundryOrder> {
-    return this.transitionVerb(c, S.LOST, 'laundry_order.lost');
-  }
-
-  markDamaged(c: LaundryOrderTransitionCommand): Promise<LaundryOrder> {
-    return this.transitionVerb(c, S.DAMAGED, 'laundry_order.damaged');
-  }
-
-  refund(c: LaundryOrderTransitionCommand): Promise<LaundryOrder> {
-    return this.transitionVerb(c, S.REFUNDED, 'laundry_order.refunded');
-  }
-
-  // ---- internals ---------------------------------------------------------
-
-  private async transitionVerb(
-    command: LaundryOrderTransitionCommand,
-    target: LaundryOrderStatus,
-    action: string,
-    precondition?: (order: LaundryOrderEntity) => void,
-  ): Promise<LaundryOrder> {
     return this.dataSource.transaction((manager) =>
       runAuditInTransaction(manager, async () => {
         const order = await this.lock(manager, command.orderId);
-        precondition?.(order);
-        await this.transition(manager, order, target, action, command.actorId);
+
+        if (order.status === S.RECEIVED) {
+          this.policy.assertTransition(order.status, S.WEIGHED);
+          await manager.update(
+            LaundryOrderEntity,
+            { id: order.id },
+            {
+              status: S.WEIGHED,
+              updatedAt: new Date(),
+              weightGrams: command.weightGrams,
+            },
+          );
+        } else if (order.status === S.WEIGHED) {
+          // State-preserving re-weigh (spec §3, §4.4) — no transition.
+          await manager.update(
+            LaundryOrderEntity,
+            { id: order.id },
+            { updatedAt: new Date(), weightGrams: command.weightGrams },
+          );
+        } else {
+          throw new BadRequestException(
+            `Cannot weigh a laundry order in status ${order.status}`,
+          );
+        }
+
+        await this.audit(command.actorId, 'laundry_order.weighed', order.id);
         return manager.findOneByOrFail(LaundryOrderEntity, { id: order.id });
       }),
     );
   }
 
-  // The only place `LaundryOrder.status` is written by a transition. Asserts
-  // against the status of the pessimistically-locked row (`lockedOrder`),
-  // never a re-read or a caller-supplied value (spec §4.3 load-bearing
-  // invariant, plan §2).
-  private async transition(
-    manager: EntityManager,
-    lockedOrder: LaundryOrderEntity,
-    target: LaundryOrderStatus,
-    action: string,
+  // ---- internals ---------------------------------------------------------
+
+  private async audit(
     actorId: string,
+    action: string,
+    entityId: string,
   ): Promise<void> {
-    this.policy.assertTransition(lockedOrder.status, target);
-    await manager.update(
-      LaundryOrderEntity,
-      { id: lockedOrder.id },
-      { status: target, updatedAt: new Date() },
-    );
-    await this.audit(actorId, action, lockedOrder.id);
+    await this.auditLogger.log({
+      actorId,
+      entityId,
+      action,
+      entityType: ENTITY_TYPE,
+    });
   }
 
   private async lock(
@@ -402,15 +379,6 @@ export class LaundryOrdersService {
     }
   }
 
-  private validateQuantity(quantity: number | undefined): void {
-    if (
-      quantity !== undefined &&
-      (!Number.isInteger(quantity) || quantity < 1)
-    ) {
-      throw new BadRequestException('quantity must be an integer >= 1');
-    }
-  }
-
   private resolveQuantity(
     unit: PricingUnit,
     weightGrams: number,
@@ -427,16 +395,48 @@ export class LaundryOrdersService {
     }
   }
 
-  private async audit(
-    actorId: string,
+  // The only place `LaundryOrder.status` is written by a transition. Asserts
+  // against the status of the pessimistically-locked row (`lockedOrder`),
+  // never a re-read or a caller-supplied value (spec §4.3 load-bearing
+  // invariant, plan §2).
+  private async transition(
+    manager: EntityManager,
+    lockedOrder: LaundryOrderEntity,
+    target: LaundryOrderStatus,
     action: string,
-    entityId: string,
+    actorId: string,
   ): Promise<void> {
-    await this.auditLogger.log({
-      actorId,
-      entityId,
-      action,
-      entityType: ENTITY_TYPE,
-    });
+    this.policy.assertTransition(lockedOrder.status, target);
+    await manager.update(
+      LaundryOrderEntity,
+      { id: lockedOrder.id },
+      { status: target, updatedAt: new Date() },
+    );
+    await this.audit(actorId, action, lockedOrder.id);
+  }
+
+  private async transitionVerb(
+    command: LaundryOrderTransitionCommand,
+    target: LaundryOrderStatus,
+    action: string,
+    precondition?: (order: LaundryOrderEntity) => void,
+  ): Promise<LaundryOrder> {
+    return this.dataSource.transaction((manager) =>
+      runAuditInTransaction(manager, async () => {
+        const order = await this.lock(manager, command.orderId);
+        precondition?.(order);
+        await this.transition(manager, order, target, action, command.actorId);
+        return manager.findOneByOrFail(LaundryOrderEntity, { id: order.id });
+      }),
+    );
+  }
+
+  private validateQuantity(quantity: number | undefined): void {
+    if (
+      quantity !== undefined &&
+      (!Number.isInteger(quantity) || quantity < 1)
+    ) {
+      throw new BadRequestException('quantity must be an integer >= 1');
+    }
   }
 }

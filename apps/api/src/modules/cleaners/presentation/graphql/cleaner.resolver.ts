@@ -34,6 +34,23 @@ export class CleanerResolver {
     private readonly loaders: CleanerTeamLoaders,
   ) {}
 
+  @Mutation(() => CleanerType)
+  @UseGuards(AuthGuard)
+  @Roles(Role.TENANT_OWNER, Role.OPS_MANAGER)
+  async assignCleanerToTeam(
+    @Args('cleanerId', { type: () => ID }) cleanerId: string,
+    @Args('teamId', { type: () => ID }) teamId: string,
+    @CurrentUser() currentUser: AuthenticatedPrincipal,
+  ): Promise<CleanerType> {
+    const command: AssignCleanerToTeamCommand = {
+      actorId: currentUser.id,
+      cleanerId,
+      teamId,
+    };
+    const cleaner = await this.cleanersService.assignCleanerToTeam(command);
+    return toCleanerType(cleaner);
+  }
+
   @Query(() => CleanerType, { name: 'cleaner', nullable: true })
   @UseGuards(AuthGuard)
   @Roles(...VIEW_ROLES)
@@ -59,6 +76,17 @@ export class CleanerResolver {
     return toCleanerType(cleaner);
   }
 
+  @ResolveField(() => TeamType, { nullable: true })
+  async team(
+    @Parent() cleaner: Pick<Cleaner, 'id' | 'teamId'>,
+  ): Promise<TeamType | null> {
+    if (cleaner.teamId === null) {
+      return null;
+    }
+    const team = await this.loaders.teamLoader.load(cleaner.teamId);
+    return team ? toTeamType(team) : null;
+  }
+
   @Mutation(() => CleanerType)
   @UseGuards(AuthGuard)
   @Roles(Role.TENANT_OWNER, Role.OPS_MANAGER)
@@ -73,33 +101,5 @@ export class CleanerResolver {
     };
     const cleaner = await this.cleanersService.updateCleaner(id, command);
     return toCleanerType(cleaner);
-  }
-
-  @Mutation(() => CleanerType)
-  @UseGuards(AuthGuard)
-  @Roles(Role.TENANT_OWNER, Role.OPS_MANAGER)
-  async assignCleanerToTeam(
-    @Args('cleanerId', { type: () => ID }) cleanerId: string,
-    @Args('teamId', { type: () => ID }) teamId: string,
-    @CurrentUser() currentUser: AuthenticatedPrincipal,
-  ): Promise<CleanerType> {
-    const command: AssignCleanerToTeamCommand = {
-      actorId: currentUser.id,
-      cleanerId,
-      teamId,
-    };
-    const cleaner = await this.cleanersService.assignCleanerToTeam(command);
-    return toCleanerType(cleaner);
-  }
-
-  @ResolveField(() => TeamType, { nullable: true })
-  async team(
-    @Parent() cleaner: Pick<Cleaner, 'id' | 'teamId'>,
-  ): Promise<TeamType | null> {
-    if (cleaner.teamId === null) {
-      return null;
-    }
-    const team = await this.loaders.teamLoader.load(cleaner.teamId);
-    return team ? toTeamType(team) : null;
   }
 }

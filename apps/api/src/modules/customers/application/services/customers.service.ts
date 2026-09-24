@@ -55,6 +55,25 @@ export class CustomersService {
     );
   }
 
+  getCustomer(id: string): Promise<Customer | null> {
+    return this.customerRepository.findOneBy({ id });
+  }
+
+  // Bulk lookup for Bookings' GraphQL relation-batching loader (Bookings
+  // spec §4.5); deliberately not exposed over GraphQL directly. Returns
+  // exactly the rows that exist for the given ids — no synthetic entries
+  // for missing ones, the caller's loader handles gaps.
+  getCustomersByIds(ids: string[]): Promise<Customer[]> {
+    if (ids.length === 0) {
+      return Promise.resolve([]);
+    }
+    return this.customerRepository.findBy({ id: In(ids) });
+  }
+
+  listCustomers(): Promise<Customer[]> {
+    return this.customerRepository.find();
+  }
+
   update(id: string, command: UpdateCustomerCommand): Promise<Customer> {
     return this.dataSource.transaction((manager) =>
       runAuditInTransaction(manager, async () => {
@@ -88,25 +107,6 @@ export class CustomersService {
         return entity;
       }),
     );
-  }
-
-  getCustomer(id: string): Promise<Customer | null> {
-    return this.customerRepository.findOneBy({ id });
-  }
-
-  listCustomers(): Promise<Customer[]> {
-    return this.customerRepository.find();
-  }
-
-  // Bulk lookup for Bookings' GraphQL relation-batching loader (Bookings
-  // spec §4.5); deliberately not exposed over GraphQL directly. Returns
-  // exactly the rows that exist for the given ids — no synthetic entries
-  // for missing ones, the caller's loader handles gaps.
-  getCustomersByIds(ids: string[]): Promise<Customer[]> {
-    if (ids.length === 0) {
-      return Promise.resolve([]);
-    }
-    return this.customerRepository.findBy({ id: In(ids) });
   }
 
   // Application-layer validation (spec §4.7): the domain invariant for

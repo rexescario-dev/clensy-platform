@@ -32,16 +32,18 @@ export class ServiceResolver {
     private readonly loader: ActivePricingLoader,
   ) {}
 
-  // View matrix (spec §4.3) — deliberately broader than the Cleaners
-  // module's: all six roles, not just Owner/Ops Manager/Scheduler/Analyst.
-  @Query(() => ServiceType, { name: 'service', nullable: true })
-  @UseGuards(AuthGuard)
-  @Roles(...VIEW_ROLES)
-  async service(
-    @Args('id', { type: () => ID }) id: string,
-  ): Promise<ServiceType | null> {
-    const service = await this.servicesService.getService(id);
-    return service ? toServiceType(service) : null;
+  // Presentation-layer-only computed field (spec §4.5), batched via
+  // `ActivePricingLoader` (request-scoped, constructor-injected — not
+  // `@Context()`) to avoid one query per parent row. No separate
+  // `@UseGuards`/`@Roles()`: reachable only after the guarded parent query
+  // already succeeded, the same precedent `Cleaner.team`/`Team.cleaners`
+  // established.
+  @ResolveField(() => PricingRuleType, { nullable: true })
+  async activePricing(
+    @Parent() service: Pick<Service, 'id'>,
+  ): Promise<PricingRuleType | null> {
+    const rule = await this.loader.loader.load(service.id);
+    return rule ? toPricingRuleType(rule) : null;
   }
 
   @Mutation(() => ServiceType)
@@ -60,6 +62,18 @@ export class ServiceResolver {
     return toServiceType(service);
   }
 
+  // View matrix (spec §4.3) — deliberately broader than the Cleaners
+  // module's: all six roles, not just Owner/Ops Manager/Scheduler/Analyst.
+  @Query(() => ServiceType, { name: 'service', nullable: true })
+  @UseGuards(AuthGuard)
+  @Roles(...VIEW_ROLES)
+  async service(
+    @Args('id', { type: () => ID }) id: string,
+  ): Promise<ServiceType | null> {
+    const service = await this.servicesService.getService(id);
+    return service ? toServiceType(service) : null;
+  }
+
   @Mutation(() => ServiceType)
   @UseGuards(AuthGuard)
   @Roles(Role.TENANT_OWNER, Role.OPS_MANAGER)
@@ -76,19 +90,5 @@ export class ServiceResolver {
     };
     const service = await this.servicesService.updateService(id, command);
     return toServiceType(service);
-  }
-
-  // Presentation-layer-only computed field (spec §4.5), batched via
-  // `ActivePricingLoader` (request-scoped, constructor-injected — not
-  // `@Context()`) to avoid one query per parent row. No separate
-  // `@UseGuards`/`@Roles()`: reachable only after the guarded parent query
-  // already succeeded, the same precedent `Cleaner.team`/`Team.cleaners`
-  // established.
-  @ResolveField(() => PricingRuleType, { nullable: true })
-  async activePricing(
-    @Parent() service: Pick<Service, 'id'>,
-  ): Promise<PricingRuleType | null> {
-    const rule = await this.loader.loader.load(service.id);
-    return rule ? toPricingRuleType(rule) : null;
   }
 }

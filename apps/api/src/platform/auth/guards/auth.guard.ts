@@ -38,14 +38,6 @@ export class AuthGuard extends PassportAuthGuard('jwt') {
     super();
   }
 
-  getRequest(context: ExecutionContext): RequestWithPrincipal {
-    return GqlExecutionContext.create(context).getContext<GqlContext>().req;
-  }
-
-  getResponse(context: ExecutionContext): unknown {
-    return GqlExecutionContext.create(context).getContext<GqlContext>().res;
-  }
-
   async canActivate(context: ExecutionContext): Promise<boolean> {
     // Delegates to Passport's mixin, which runs `JwtStrategy` against
     // `getRequest(context)`'s cookie. No cookie, an invalid/expired
@@ -72,5 +64,13 @@ export class AuthGuard extends PassportAuthGuard('jwt') {
       throw new ForbiddenException();
     }
     return true;
+  }
+
+  getRequest(context: ExecutionContext): RequestWithPrincipal {
+    return GqlExecutionContext.create(context).getContext<GqlContext>().req;
+  }
+
+  getResponse(context: ExecutionContext): unknown {
+    return GqlExecutionContext.create(context).getContext<GqlContext>().res;
   }
 }

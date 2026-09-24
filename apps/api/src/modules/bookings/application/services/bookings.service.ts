@@ -82,55 +82,12 @@ export class BookingsService {
     );
   }
 
-  private async resolveAndValidate(
-    command: CreateBookingCommand,
-  ): Promise<{ pricingSnapshot: BookingPricingSnapshot }> {
-    const customer = await this.customersService.getCustomer(
-      command.customerId,
-    );
-    if (!customer) {
-      throw new NotFoundException(`Customer ${command.customerId} not found`);
-    }
-
-    const property = await this.propertiesService.getProperty(
-      command.propertyId,
-    );
-    if (!property) {
-      throw new NotFoundException(`Property ${command.propertyId} not found`);
-    }
-    if (property.customerId !== command.customerId) {
-      throw new BadRequestException(
-        'Property does not belong to the given customer',
-      );
-    }
-
-    const service = await this.servicesService.getService(command.serviceId);
-    if (!service) {
-      throw new NotFoundException(`Service ${command.serviceId} not found`);
-    }
-    if (!service.active) {
-      throw new BadRequestException('Service is not active');
-    }
-
-    const pricing = await this.pricingRulesService.getActivePricing(
-      command.serviceId,
-    );
-    if (!pricing) {
-      throw new BadRequestException('Service has no active price');
-    }
-
-    if (command.teamId != null) {
-      const team = await this.teamsService.getTeam(command.teamId);
-      if (!team) {
-        throw new NotFoundException(`Team ${command.teamId} not found`);
-      }
-    }
-
-    return { pricingSnapshot: { priceMinorUnits: pricing.priceMinorUnits } };
-  }
-
   findAll(): Promise<Booking[]> {
     return this.bookingRepository.find();
+  }
+
+  async findOne(id: string): Promise<Booking> {
+    return this.findEntity(id);
   }
 
   // Bulk lookup for Jobs' GraphQL relation-batching loader (Jobs spec §2 /
@@ -143,16 +100,34 @@ export class BookingsService {
     return this.bookingRepository.findBy({ id: In(ids) });
   }
 
-  private async findEntity(id: string): Promise<BookingEntity> {
-    const booking = await this.bookingRepository.findOneBy({ id });
-    if (!booking) {
-      throw new NotFoundException(`Booking ${id} not found`);
-    }
-    return booking;
-  }
+  async remove(id: string, actorId: string | null): Promise<Booking> {
+    return this.dataSource.transaction((manager) =>
+      runAuditInTransaction(manager, async () => {
+        const existing = await manager.findOneBy(BookingEntity, { id });
+        if (!existing) {
+          throw new NotFoundException(`Booking ${id} not found`);
+        }
 
-  async findOne(id: string): Promise<Booking> {
-    return this.findEntity(id);
+        // `manager.remove()` strips the id (and other fields) from the
+        // passed entity after deletion — snapshot it first so the caller
+        // still gets back what was deleted. The exact same rule the
+        // pre-migration `BookingsService.remove()` already documented;
+        // reconfirmed the hard way (a mocked `manager.remove()` doesn't
+        // replicate this side effect, so it only surfaced against real
+        // Postgres/GraphQL, not the level-1 unit tests).
+        const removed: Booking = { ...existing };
+        try {
+          await manager.remove(BookingEntity, existing);
+        } catch (error) {
+          this.conflictIfForeignKeyRestricted(error);
+          throw error;
+        }
+
+        await this.logAuditIfAuthenticated(actorId, 'booking.remove', id);
+
+        return removed;
+      }),
+    );
   }
 
   async update(id: string, command: UpdateBookingCommand): Promise<Booking> {
@@ -216,36 +191,6 @@ export class BookingsService {
     );
   }
 
-  async remove(id: string, actorId: string | null): Promise<Booking> {
-    return this.dataSource.transaction((manager) =>
-      runAuditInTransaction(manager, async () => {
-        const existing = await manager.findOneBy(BookingEntity, { id });
-        if (!existing) {
-          throw new NotFoundException(`Booking ${id} not found`);
-        }
-
-        // `manager.remove()` strips the id (and other fields) from the
-        // passed entity after deletion — snapshot it first so the caller
-        // still gets back what was deleted. The exact same rule the
-        // pre-migration `BookingsService.remove()` already documented;
-        // reconfirmed the hard way (a mocked `manager.remove()` doesn't
-        // replicate this side effect, so it only surfaced against real
-        // Postgres/GraphQL, not the level-1 unit tests).
-        const removed: Booking = { ...existing };
-        try {
-          await manager.remove(BookingEntity, existing);
-        } catch (error) {
-          this.conflictIfForeignKeyRestricted(error);
-          throw error;
-        }
-
-        await this.logAuditIfAuthenticated(actorId, 'booking.remove', id);
-
-        return removed;
-      }),
-    );
-  }
-
   // Additive error-contract (Jobs spec §2 / §4.1): any Postgres FK
   // restriction (`23503`), regardless of constraint name, becomes this
   // generic ConflictException. Inspects `QueryFailedError.driverError.code`
@@ -262,6 +207,14 @@ export class BookingsService {
         'Booking cannot be deleted because other records reference it',
       );
     }
+  }
+
+  private async findEntity(id: string): Promise<BookingEntity> {
+    const booking = await this.bookingRepository.findOneBy({ id });
+    if (!booking) {
+      throw new NotFoundException(`Booking ${id} not found`);
+    }
+    return booking;
   }
 
   // `actorId === null` means "emit no audit event for this call" — not
@@ -282,5 +235,52 @@ export class BookingsService {
       action,
       entityType: 'booking',
     });
+  }
+
+  private async resolveAndValidate(
+    command: CreateBookingCommand,
+  ): Promise<{ pricingSnapshot: BookingPricingSnapshot }> {
+    const customer = await this.customersService.getCustomer(
+      command.customerId,
+    );
+    if (!customer) {
+      throw new NotFoundException(`Customer ${command.customerId} not found`);
+    }
+
+    const property = await this.propertiesService.getProperty(
+      command.propertyId,
+    );
+    if (!property) {
+      throw new NotFoundException(`Property ${command.propertyId} not found`);
+    }
+    if (property.customerId !== command.customerId) {
+      throw new BadRequestException(
+        'Property does not belong to the given customer',
+      );
+    }
+
+    const service = await this.servicesService.getService(command.serviceId);
+    if (!service) {
+      throw new NotFoundException(`Service ${command.serviceId} not found`);
+    }
+    if (!service.active) {
+      throw new BadRequestException('Service is not active');
+    }
+
+    const pricing = await this.pricingRulesService.getActivePricing(
+      command.serviceId,
+    );
+    if (!pricing) {
+      throw new BadRequestException('Service has no active price');
+    }
+
+    if (command.teamId != null) {
+      const team = await this.teamsService.getTeam(command.teamId);
+      if (!team) {
+        throw new NotFoundException(`Team ${command.teamId} not found`);
+      }
+    }
+
+    return { pricingSnapshot: { priceMinorUnits: pricing.priceMinorUnits } };
   }
 }

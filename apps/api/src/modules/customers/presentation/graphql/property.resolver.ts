@@ -42,14 +42,21 @@ export class PropertyResolver {
     private readonly propertyQueryService: QueryService<PropertyType>,
   ) {}
 
-  @Query(() => PropertyType, { name: 'property', nullable: true })
+  @Mutation(() => PropertyType)
   @UseGuards(AuthGuard)
-  @Roles(...VIEW_ROLES)
-  async property(
-    @Args('id', { type: () => ID }) id: string,
-  ): Promise<PropertyType | null> {
-    const property = await this.propertiesService.getProperty(id);
-    return property ? toPropertyType(property) : null;
+  @Roles(Role.TENANT_OWNER, Role.OPS_MANAGER, Role.CUSTOMER_SUPPORT)
+  async createProperty(
+    @Args('customerId', { type: () => ID }) customerId: string,
+    @Args('input') input: CreatePropertyInput,
+    @CurrentUser() currentUser: AuthenticatedPrincipal,
+  ): Promise<PropertyType> {
+    const command: CreatePropertyCommand = {
+      ...input,
+      actorId: currentUser.id,
+      customerId,
+    };
+    const property = await this.propertiesService.create(command);
+    return toPropertyType(property);
   }
 
   @Query(() => CustomerPropertiesQueryArgs.ConnectionType, {
@@ -99,21 +106,14 @@ export class PropertyResolver {
     );
   }
 
-  @Mutation(() => PropertyType)
+  @Query(() => PropertyType, { name: 'property', nullable: true })
   @UseGuards(AuthGuard)
-  @Roles(Role.TENANT_OWNER, Role.OPS_MANAGER, Role.CUSTOMER_SUPPORT)
-  async createProperty(
-    @Args('customerId', { type: () => ID }) customerId: string,
-    @Args('input') input: CreatePropertyInput,
-    @CurrentUser() currentUser: AuthenticatedPrincipal,
-  ): Promise<PropertyType> {
-    const command: CreatePropertyCommand = {
-      ...input,
-      actorId: currentUser.id,
-      customerId,
-    };
-    const property = await this.propertiesService.create(command);
-    return toPropertyType(property);
+  @Roles(...VIEW_ROLES)
+  async property(
+    @Args('id', { type: () => ID }) id: string,
+  ): Promise<PropertyType | null> {
+    const property = await this.propertiesService.getProperty(id);
+    return property ? toPropertyType(property) : null;
   }
 
   @Mutation(() => PropertyType)

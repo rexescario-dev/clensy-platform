@@ -64,6 +64,27 @@ export class AddOnsService {
     );
   }
 
+  // Bulk lookup, mirroring `ServicesService.getServicesByIds` verbatim.
+  // Added for the Billing module (#38): `generateInvoiceFromOrder` resolves
+  // each invoice line's frozen `description` from the catalog `AddOn` /
+  // `Service` name at generation time (#38 spec §4.1, §4.4). Not exposed
+  // over GraphQL directly. Returns exactly the rows that exist for the
+  // given ids — no synthetic entries for missing ones.
+  getAddOnsByIds(ids: string[]): Promise<AddOn[]> {
+    if (ids.length === 0) {
+      return Promise.resolve([]);
+    }
+    return this.addOnRepository.findBy({ id: In(ids) });
+  }
+
+  // Catalog reads are unfiltered (spec §4.1) — no `active` filter, no
+  // arguments; the full set, active and inactive alike. No `getAddOn(id)`
+  // single-read exists — `updateAddOn`'s existence check goes directly
+  // through the transaction manager instead.
+  listAddOns(): Promise<AddOn[]> {
+    return this.addOnRepository.find();
+  }
+
   // Uses `manager.update()`, not `Object.assign(entity, changes)` +
   // `manager.save(entity)` — same rationale as `ServicesService#updateService`
   // (spec §3): `save()` diffs the in-memory entity against the currently-
@@ -116,27 +137,6 @@ export class AddOnsService {
     );
   }
 
-  // Catalog reads are unfiltered (spec §4.1) — no `active` filter, no
-  // arguments; the full set, active and inactive alike. No `getAddOn(id)`
-  // single-read exists — `updateAddOn`'s existence check goes directly
-  // through the transaction manager instead.
-  listAddOns(): Promise<AddOn[]> {
-    return this.addOnRepository.find();
-  }
-
-  // Bulk lookup, mirroring `ServicesService.getServicesByIds` verbatim.
-  // Added for the Billing module (#38): `generateInvoiceFromOrder` resolves
-  // each invoice line's frozen `description` from the catalog `AddOn` /
-  // `Service` name at generation time (#38 spec §4.1, §4.4). Not exposed
-  // over GraphQL directly. Returns exactly the rows that exist for the
-  // given ids — no synthetic entries for missing ones.
-  getAddOnsByIds(ids: string[]): Promise<AddOn[]> {
-    if (ids.length === 0) {
-      return Promise.resolve([]);
-    }
-    return this.addOnRepository.findBy({ id: In(ids) });
-  }
-
   // Case-insensitive name uniqueness pre-check (spec §3) — the application-
   // layer half of the enforcement; the Postgres expression index
   // (`uq_add_on_name_lower`, added by hand in this module's migration) is
@@ -160,19 +160,6 @@ export class AddOnsService {
     }
   }
 
-  // Shared by `createAddOn`/`updateAddOn` — the race-window fallback behind
-  // `assertNameAvailable`'s pre-check.
-  private async translateUniqueViolation<T>(fn: () => Promise<T>): Promise<T> {
-    try {
-      return await fn();
-    } catch (error) {
-      if ((error as { code?: string }).code === POSTGRES_UNIQUE_VIOLATION) {
-        throw new ConflictException('Add-on name is already in use');
-      }
-      throw error;
-    }
-  }
-
   private assertValid(addOn: Pick<AddOn, 'name' | 'priceMinorUnits'>): void {
     if (!addOn.name?.trim()) {
       throw new BadRequestException('name must not be empty');
@@ -184,6 +171,19 @@ export class AddOnsService {
       throw new BadRequestException(
         'priceMinorUnits must be a positive integer',
       );
+    }
+  }
+
+  // Shared by `createAddOn`/`updateAddOn` — the race-window fallback behind
+  // `assertNameAvailable`'s pre-check.
+  private async translateUniqueViolation<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (error) {
+      if ((error as { code?: string }).code === POSTGRES_UNIQUE_VIOLATION) {
+        throw new ConflictException('Add-on name is already in use');
+      }
+      throw error;
     }
   }
 }

@@ -39,6 +39,17 @@ export class BookingMutationResolver {
   @Mutation(() => BookingDTO)
   @UseGuards(AuthGuard)
   @Roles(...WRITE_ROLES)
+  async removeBooking(
+    @Args('id', { type: () => ID }) id: string,
+    @CurrentUser() currentUser: AuthenticatedPrincipal,
+  ): Promise<BookingDTO> {
+    const booking = await this.bookingsService.remove(id, currentUser.id);
+    return toBookingDto(booking);
+  }
+
+  @Mutation(() => BookingDTO)
+  @UseGuards(AuthGuard)
+  @Roles(...WRITE_ROLES)
   async updateBooking(
     @Args('updateBookingInput') input: UpdateBookingInput,
     @CurrentUser() currentUser: AuthenticatedPrincipal,
@@ -49,17 +60,6 @@ export class BookingMutationResolver {
       actorId: currentUser.id,
     };
     const booking = await this.bookingsService.update(id, command);
-    return toBookingDto(booking);
-  }
-
-  @Mutation(() => BookingDTO)
-  @UseGuards(AuthGuard)
-  @Roles(...WRITE_ROLES)
-  async removeBooking(
-    @Args('id', { type: () => ID }) id: string,
-    @CurrentUser() currentUser: AuthenticatedPrincipal,
-  ): Promise<BookingDTO> {
-    const booking = await this.bookingsService.remove(id, currentUser.id);
     return toBookingDto(booking);
   }
 }

@@ -39,15 +39,15 @@ const MATRIX: Readonly<
 };
 
 export class LaundryOrderStatusTransitionPolicy {
-  canTransition(from: LaundryOrderStatus, to: LaundryOrderStatus): boolean {
-    return MATRIX[from].includes(to);
-  }
-
   assertTransition(from: LaundryOrderStatus, to: LaundryOrderStatus): void {
     if (!this.canTransition(from, to)) {
       throw new BadRequestException(
         `Laundry order cannot transition from ${from} to ${to}`,
       );
     }
+  }
+
+  canTransition(from: LaundryOrderStatus, to: LaundryOrderStatus): boolean {
+    return MATRIX[from].includes(to);
   }
 }

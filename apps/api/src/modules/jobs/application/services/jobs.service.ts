@@ -62,98 +62,6 @@ export class JobsService {
     @Inject(AUDIT_LOGGER) private readonly auditLogger: AuditLogger,
   ) {}
 
-  // `BookingsService.findOne` + cancelled check + existing-job pre-check
-  // run BEFORE `dataSource.transaction` (spec §4.2). Snapshot of
-  // `scheduledAt`/`teamId` is the booking observed by that `findOne`.
-  // Create does not call `TeamsService.getTeam`.
-  async createFromBooking(
-    command: CreateJobFromBookingCommand,
-  ): Promise<CleaningJob> {
-    const booking = await this.bookingsService.findOne(command.bookingId);
-
-    if (booking.status === BookingStatus.CANCELLED) {
-      throw new BadRequestException(
-        'Cannot create a job from a cancelled booking',
-      );
-    }
-
-    const existing = await this.jobRepository.findOneBy({
-      bookingId: command.bookingId,
-    });
-    if (existing) {
-      throw new ConflictException('A job already exists for this booking');
-    }
-
-    try {
-      return await this.dataSource.transaction((manager) =>
-        runAuditInTransaction(manager, async () => {
-          const now = new Date();
-          const job = manager.create(CleaningJobEntity, {
-            bookingId: booking.id,
-            teamId: booking.teamId,
-            createdAt: now,
-            scheduledAt: booking.scheduledAt,
-            status: JobStatus.PENDING,
-            updatedAt: now,
-          });
-          await manager.save(job);
-
-          const checklist = manager.create(ChecklistEntity, {
-            jobId: job.id,
-          });
-          await manager.save(checklist);
-
-          for (const item of DEFAULT_CHECKLIST_ITEMS) {
-            const row = manager.create(ChecklistItemEntity, {
-              checklistId: checklist.id,
-              completed: false,
-              completedAt: null,
-              label: item.label,
-              position: item.position,
-            });
-            await manager.save(row);
-          }
-
-          await this.auditLogger.log({
-            actorId: command.actorId,
-            entityId: job.id,
-            action: 'job.create',
-            entityType: 'job',
-          });
-
-          return job;
-        }),
-      );
-    } catch (error) {
-      if (isPostgresUniqueViolation(error, JOB_BOOKING_UNIQUE_CONSTRAINT)) {
-        throw new ConflictException('A job already exists for this booking');
-      }
-      throw error;
-    }
-  }
-
-  async getJob(id: string): Promise<CleaningJob | null> {
-    return this.jobRepository.findOneBy({ id });
-  }
-
-  listJobs(): Promise<CleaningJob[]> {
-    return this.jobRepository.find();
-  }
-
-  getChecklistsByJobIds(ids: string[]): Promise<Checklist[]> {
-    if (ids.length === 0) {
-      return Promise.resolve([]);
-    }
-    return this.checklistRepository.findBy({ jobId: In(ids) });
-  }
-
-  getChecklistItemsByChecklistIds(ids: string[]): Promise<ChecklistItem[]> {
-    if (ids.length === 0) {
-      return Promise.resolve([]);
-    }
-    return this.checklistItemRepository.findBy({ checklistId: In(ids) });
-  }
-
   // `TeamsService.getTeam` runs BEFORE the Jobs transaction (spec §4.2 /
   // plan Task 3). Same-state assignment still `manager.update()`s so
   // `updatedAt` bumps and `job.assign_team` fires.
@@ -297,5 +205,97 @@ export class JobsService {
         return manager.findOneByOrFail(CleaningJobEntity, { id: job.id });
       }),
     );
+  }
+
+  // `BookingsService.findOne` + cancelled check + existing-job pre-check
+  // run BEFORE `dataSource.transaction` (spec §4.2). Snapshot of
+  // `scheduledAt`/`teamId` is the booking observed by that `findOne`.
+  // Create does not call `TeamsService.getTeam`.
+  async createFromBooking(
+    command: CreateJobFromBookingCommand,
+  ): Promise<CleaningJob> {
+    const booking = await this.bookingsService.findOne(command.bookingId);
+
+    if (booking.status === BookingStatus.CANCELLED) {
+      throw new BadRequestException(
+        'Cannot create a job from a cancelled booking',
+      );
+    }
+
+    const existing = await this.jobRepository.findOneBy({
+      bookingId: command.bookingId,
+    });
+    if (existing) {
+      throw new ConflictException('A job already exists for this booking');
+    }
+
+    try {
+      return await this.dataSource.transaction((manager) =>
+        runAuditInTransaction(manager, async () => {
+          const now = new Date();
+          const job = manager.create(CleaningJobEntity, {
+            bookingId: booking.id,
+            teamId: booking.teamId,
+            createdAt: now,
+            scheduledAt: booking.scheduledAt,
+            status: JobStatus.PENDING,
+            updatedAt: now,
+          });
+          await manager.save(job);
+
+          const checklist = manager.create(ChecklistEntity, {
+            jobId: job.id,
+          });
+          await manager.save(checklist);
+
+          for (const item of DEFAULT_CHECKLIST_ITEMS) {
+            const row = manager.create(ChecklistItemEntity, {
+              checklistId: checklist.id,
+              completed: false,
+              completedAt: null,
+              label: item.label,
+              position: item.position,
+            });
+            await manager.save(row);
+          }
+
+          await this.auditLogger.log({
+            actorId: command.actorId,
+            entityId: job.id,
+            action: 'job.create',
+            entityType: 'job',
+          });
+
+          return job;
+        }),
+      );
+    } catch (error) {
+      if (isPostgresUniqueViolation(error, JOB_BOOKING_UNIQUE_CONSTRAINT)) {
+        throw new ConflictException('A job already exists for this booking');
+      }
+      throw error;
+    }
+  }
+
+  getChecklistItemsByChecklistIds(ids: string[]): Promise<ChecklistItem[]> {
+    if (ids.length === 0) {
+      return Promise.resolve([]);
+    }
+    return this.checklistItemRepository.findBy({ checklistId: In(ids) });
+  }
+
+  getChecklistsByJobIds(ids: string[]): Promise<Checklist[]> {
+    if (ids.length === 0) {
+      return Promise.resolve([]);
+    }
+    return this.checklistRepository.findBy({ jobId: In(ids) });
+  }
+
+  async getJob(id: string): Promise<CleaningJob | null> {
+    return this.jobRepository.findOneBy({ id });
+  }
+
+  listJobs(): Promise<CleaningJob[]> {
+    return this.jobRepository.find();
   }
 }

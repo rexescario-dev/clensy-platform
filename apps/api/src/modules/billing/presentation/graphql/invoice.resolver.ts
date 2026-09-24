@@ -27,14 +27,12 @@ import { InvoiceType, VIEW_ROLES } from './invoice.type';
 export class InvoiceResolver {
   constructor(private readonly service: InvoicesService) {}
 
-  @Query(() => InvoiceType, { name: 'invoice', nullable: true })
-  @UseGuards(AuthGuard)
-  @Roles(...VIEW_ROLES)
-  async invoice(
-    @Args('id', { type: () => ID }) id: string,
-  ): Promise<InvoiceType | null> {
-    const invoice = await this.service.getInvoice(id);
-    return invoice ? toInvoiceType(invoice) : null;
+  @ResolveField(() => Int)
+  amountDueMinorUnits(
+    @Parent()
+    invoice: Pick<InvoiceType, 'amountPaidMinorUnits' | 'totalMinorUnits'>,
+  ): number {
+    return invoice.totalMinorUnits - invoice.amountPaidMinorUnits;
   }
 
   @Mutation(() => InvoiceType)
@@ -49,11 +47,13 @@ export class InvoiceResolver {
     );
   }
 
-  @ResolveField(() => Int)
-  amountDueMinorUnits(
-    @Parent()
-    invoice: Pick<InvoiceType, 'amountPaidMinorUnits' | 'totalMinorUnits'>,
-  ): number {
-    return invoice.totalMinorUnits - invoice.amountPaidMinorUnits;
+  @Query(() => InvoiceType, { name: 'invoice', nullable: true })
+  @UseGuards(AuthGuard)
+  @Roles(...VIEW_ROLES)
+  async invoice(
+    @Args('id', { type: () => ID }) id: string,
+  ): Promise<InvoiceType | null> {
+    const invoice = await this.service.getInvoice(id);
+    return invoice ? toInvoiceType(invoice) : null;
   }
 }
