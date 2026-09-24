@@ -4,7 +4,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { DataSource } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { AppModule } from '../src/app/app.module';
 import { AuditEventEntity } from '../src/platform/audit/infrastructure/persistence/audit-event.entity';
 import { AdminUserEntity } from '../src/modules/admins/infrastructure/persistence/admin-user.entity';
