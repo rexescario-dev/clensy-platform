@@ -5,6 +5,9 @@
 // `UpdatePropertyCommand` at all (spec §4.2).
 export interface Property {
   id: string;
+  // Owning tenant (#82; RFC §4.5); always equals its customer's tenant
+  // (enforced by `fk_property_customer_tenant`).
+  tenantId: string;
   customerId: string;
   label: string;
   addressLine1: string;

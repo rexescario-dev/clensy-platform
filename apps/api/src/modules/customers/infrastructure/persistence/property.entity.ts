@@ -9,6 +9,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { TenantEntity } from '../../../admins/infrastructure/persistence/tenant.entity';
 import { BookingEntity } from '../../../bookings/infrastructure/persistence/booking.entity';
 import { CustomerEntity } from './customer.entity';
 import { Property } from '../../domain/property';
@@ -16,10 +17,34 @@ import { Property } from '../../domain/property';
 // Dual UUID `customerId` + `@ManyToOne` (Booking pattern). Application
 // writes keep using the scalar. `bookings` / `customer` are persistence-only
 // inverse metadata for Relatable. Non-eager, no cascade, no lazy: true.
+//
+// Tenant ownership (#82): `tenantId` + `fk_property_tenant` are expressed
+// here. `customer` keeps the relation for Relatable but sets
+// `createForeignKeyConstraints: false`: the id-only `fk_property_customer`
+// was replaced by the hand-written composite `fk_property_customer_tenant`
+// (`("customerId", "tenantId")` → customer `(id, "tenantId")`) in
+// `AddCustomerPropertyTenant`. That migration also hand-writes
+// `uq_property_id_tenant` and `idx_property_tenant_customer`.
+// `migration:generate` may propose dropping these or re-adding an id-only
+// FK — do not apply that.
 @Entity()
 export class PropertyEntity implements Property {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
+
+  @Column({ type: 'uuid' })
+  tenantId!: string;
+
+  @ManyToOne(() => TenantEntity, {
+    nullable: false,
+    eager: false,
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({
+    name: 'tenantId',
+    foreignKeyConstraintName: 'fk_property_tenant',
+  })
+  tenant!: TenantEntity;
 
   @Column({ type: 'uuid' })
   @Index()
@@ -28,12 +53,9 @@ export class PropertyEntity implements Property {
   @ManyToOne(() => CustomerEntity, (customer) => customer.properties, {
     nullable: false,
     eager: false,
-    onDelete: 'RESTRICT',
+    createForeignKeyConstraints: false,
   })
-  @JoinColumn({
-    name: 'customerId',
-    foreignKeyConstraintName: 'fk_property_customer',
-  })
+  @JoinColumn({ name: 'customerId' })
   customer!: CustomerEntity;
 
   @Column()

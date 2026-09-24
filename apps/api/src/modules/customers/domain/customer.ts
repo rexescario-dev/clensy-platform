@@ -4,6 +4,9 @@
 // domain- or ORM-level relation (spec §4.1, §4.5).
 export interface Customer {
   id: string;
+  // Owning tenant (#82; RFC §4.5). Server-derived from the principal, never
+  // client input.
+  tenantId: string;
   fullName: string;
   email: string;
   phone: string;
