@@ -743,7 +743,7 @@ describe('Jobs (e2e)', () => {
         variables: { input: { bookingId: source.bookingId } },
       });
       expect(jobResponse.body.errors).toBeUndefined();
-      jobIds.push(jobResponse.body.data.createJobFromBooking.id);
+      jobIds.push(jobResponse.body.data.createJobFromBooking.id as string);
     }
 
     const listParentQuery = `query ListJobs($ids: [ID!]!) {
@@ -783,7 +783,7 @@ describe('Jobs (e2e)', () => {
         variables: { input: { bookingId: source.bookingId } },
       });
       expect(jobResponse.body.errors).toBeUndefined();
-      jobIds.push(jobResponse.body.data.createJobFromBooking.id);
+      jobIds.push(jobResponse.body.data.createJobFromBooking.id as string);
     }
     const atTwelve = await captureAtN(12, jobIds);
     const delta = Math.abs(atTwelve - atSix);

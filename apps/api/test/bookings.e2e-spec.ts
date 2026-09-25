@@ -773,7 +773,7 @@ describe('Bookings (e2e)', () => {
     });
     expect(clampResponse.body.errors).toBeUndefined();
     expect(clampResponse.body.data.bookings.nodes.length).toBe(
-      Math.min(100, clampResponse.body.data.bookings.totalCount),
+      Math.min(100, clampResponse.body.data.bookings.totalCount as number),
     );
     expect(clampResponse.body.data.bookings.nodes.length).toBeLessThanOrEqual(
       100,
