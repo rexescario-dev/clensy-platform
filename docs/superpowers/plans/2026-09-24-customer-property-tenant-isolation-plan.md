@@ -75,7 +75,7 @@ These resolve planning-level choices the RFC leaves to M4. None adds product sem
 | `ReceiveLaundryOrderCommand` | + `tenantId: string \| null` (resolver always passes principal's value) |
 | `AuditEvent` for customer/property actions | `scope = TENANT`, `tenantId` = principal's tenant |
 
-**Deferred:** Booking/Laundry/Invoice `tenantId` + composite FKs to customer/property (#85, #87); REST `/bookings` removal (#85/#91); other modules' audit tagging (#90); two-tenant release gate (#92); any UI surfacing of the Conflict error.
+**Deferred:** Booking/Laundry/Invoice `tenantId` + composite FKs to customer/property (#85, #87); REST `/bookings` removal (#85/#91); other modules' audit tagging (#90); two-tenant release gate (#92); any UI surfacing of the Conflict error; the relation-filter gap on `BookingDTO`/`InvoiceType`/`LaundryOrderType` (`@FilterableRelation('customer'|'property', …)` lets a client filter those roots by fields of another tenant's customer/property, since `@Authorize` on `CustomerType`/`PropertyType` covers root reads and relation *resolvers* but not relation *filters* on other roots) — the Booking/Invoice/LaundryOrder root authorizers must also prevent relation filters from matching another tenant's customer/property; fixing it is #85/#87 work.
 
 ## TDD / verification strategy
 
@@ -437,6 +437,7 @@ On `PropertyEntity.customer`, keep the relation (Relatable needs it) but stop Ty
 - Between Task 2 and Task 7 the e2e suite is red by construction; do not push a partial branch expecting green CI.
 - `generate` will keep proposing to drop the hand-written constraints/indexes; never apply that.
 - Booking, LaundryOrder and Invoice remain intentionally **outside database tenant isolation** until their own slices. Their customer/property lookups are application-scoped by the principal in this slice (Task 6). Their tenant columns and composite FKs to customer/property are #85/#87 work.
+- **Interim relation-filter oracle.** `@FilterableRelation('customer'|'property', …)` on `BookingDTO`, `InvoiceType` and `LaundryOrderType` lets a tenant principal filter those (currently unscoped) roots by fields of a customer/property owned by another tenant — e.g. `bookings(filter: { customer: { fullName: { like: "A%" } } }) { totalCount }` — because `@Authorize` on `CustomerType`/`PropertyType` covers those types' own root reads and relation *resolvers* but not relation *filters* applied from Booking/Invoice/LaundryOrder. This creates an existence/prefix oracle over other tenants' customers/properties referenced by some booking/invoice/laundry order. Accepted in #82 because it is within this plan's ownership boundary (Booking/Invoice/LaundryOrder root authorization is #85/#87), those roots are already cross-tenant readable until #85/#87 close, production currently has only the bootstrap tenant, and there is no tenant-creation API. No second tenant should be provisioned in production before #85/#87 close this gap.
 
 ## Out of this plan
 
@@ -457,3 +458,8 @@ Traceability: adequate
 Gate: Proceed to M6 (subagent-driven, task-by-task, commits at task boundaries). Branch stays local; no push/PR as a side effect of starting M6.
 Authority: Plan governs sequencing/execution; specification governs product semantics.
 ```
+
+## M6 findings
+
+- **2026-09-25 — Final whole-branch review I1 — relation-filter gap** (see "Deferred" under Contract inventory and the "Interim relation-filter oracle" risk above). **Ruling:** documented, deferred to #85/#87; no code change in #82 (ownership boundary).
+- **2026-09-25 — Ruling 5:** `customerProperties` for another tenant's (or unknown) customer returns an empty connection — the resolver never had a `NotFound` path; plan Task 8 item 3's "NotFound" wording was inaccurate and the "keep existing contracts" constraint (Global constraints) governs.
