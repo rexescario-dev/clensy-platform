@@ -90,6 +90,7 @@ describe('property.bookings nested connection (e2e)', () => {
 
     const customer = await customersService.create({
       actorId: owner.id,
+      tenantId: owner.tenantId,
       email: `nest-${runId}@example.com`,
       fullName: `Nest Customer ${runId}`,
       phone: '555-0200',
@@ -115,6 +116,7 @@ describe('property.bookings nested connection (e2e)', () => {
         await propertiesService.create({
           actorId: owner.id,
           customerId: customer.id,
+          tenantId: owner.tenantId,
           addressLine1: `${runId}-${index} Nest St`,
           city: 'City',
           label: `P${index}`,
@@ -130,6 +132,7 @@ describe('property.bookings nested connection (e2e)', () => {
         customerId: customer.id,
         propertyId: properties[0].id,
         serviceId: service.id,
+        tenantId: owner.tenantId,
         scheduledAt: new Date(
           `2026-09-${String(index + 1).padStart(2, '0')}T09:00:00.000Z`,
         ),
@@ -141,6 +144,7 @@ describe('property.bookings nested connection (e2e)', () => {
         customerId: customer.id,
         propertyId: properties[index].id,
         serviceId: service.id,
+        tenantId: owner.tenantId,
         scheduledAt: new Date(`2026-08-0${index}T09:00:00.000Z`),
       });
     }
@@ -226,6 +230,7 @@ describe('property.bookings nested connection (e2e)', () => {
       const property = await propertiesService.create({
         actorId: owner.id,
         customerId: customer.id,
+        tenantId: owner.tenantId,
         addressLine1: `${runId}-${index} Nest St`,
         city: 'City',
         label: `P${index}`,
@@ -237,6 +242,7 @@ describe('property.bookings nested connection (e2e)', () => {
         customerId: customer.id,
         propertyId: property.id,
         serviceId: service.id,
+        tenantId: owner.tenantId,
         scheduledAt: new Date(
           `2026-07-${String(index).padStart(2, '0')}T09:00:00.000Z`,
         ),

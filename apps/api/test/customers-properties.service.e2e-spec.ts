@@ -9,10 +9,19 @@ import { CleanerEntity } from '../src/modules/cleaners/infrastructure/persistenc
 import { TeamEntity } from '../src/modules/cleaners/infrastructure/persistence/team.entity';
 import { CustomerEntity } from '../src/modules/customers/infrastructure/persistence/customer.entity';
 import { PropertyEntity } from '../src/modules/customers/infrastructure/persistence/property.entity';
+import { TenantEntity } from '../src/modules/admins/infrastructure/persistence/tenant.entity';
+import { BOOTSTRAP_TENANT_ID } from '../src/platform/database/bootstrap-tenant';
 import {
   acquireCustomerDbTestLock,
   CustomerDbTestLock,
 } from './helpers/customer-db-test-lock';
+
+// This whole file runs under `acquireCustomerDbTestLock` and truncates
+// `customer_entity`/`property_entity` in its own `beforeEach` — no other
+// spec file's rows can be present, so every fixture here is safely attached
+// to the bootstrap tenant (the one tenant row every migrated database is
+// guaranteed to have) without colliding across runs or files.
+const TENANT_ID = BOOTSTRAP_TENANT_ID;
 
 // Shared by both `describe` blocks below. Each block still creates and
 // destroys its own `DataSource`/lock independently (deliberate — Jest scopes
@@ -27,11 +36,14 @@ function createTestDataSource(): DataSource {
       PropertyEntity,
       // PropertyEntity#bookings inverse requires BookingEntity and its
       // ManyToOne targets; TeamEntity#cleaners requires CleanerEntity.
+      // CustomerEntity#tenant / PropertyEntity#tenant (#82) requires
+      // TenantEntity.
       BookingEntity,
       ServiceEntity,
       TeamEntity,
       CleanerEntity,
       AuditEventEntity,
+      TenantEntity,
     ],
     host: process.env.DB_HOST ?? 'localhost',
     password: process.env.DB_PASSWORD ?? 'clensy_dev',
@@ -76,6 +88,7 @@ function seedCustomer(
   const repo = dataSource.getRepository(CustomerEntity);
   return repo.save(
     repo.create({
+      tenantId: TENANT_ID,
       email: 'jane@example.com',
       fullName: 'Jane Doe',
       notes: 'Gate code 1234',
@@ -134,6 +147,7 @@ describe('CustomersService (real Postgres)', () => {
     it('persists a CustomerEntity with the given fields, notes defaulting to null when omitted, and records customer.create', async () => {
       const created = await service.create({
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         email: 'john@example.com',
         fullName: 'John Smith',
         phone: '555-0200',
@@ -154,6 +168,7 @@ describe('CustomersService (real Postgres)', () => {
         expect.objectContaining({
           actorId: 'actor-1',
           entityId: created.id,
+          tenantId: TENANT_ID,
           action: 'customer.create',
           entityType: 'customer',
         }),
@@ -166,6 +181,7 @@ describe('CustomersService (real Postgres)', () => {
       await expect(
         service.create({
           actorId: 'actor-1',
+          tenantId: TENANT_ID,
           email: 'rollback@example.com',
           fullName: 'Rollback Case',
           phone: '555-0300',
@@ -185,6 +201,7 @@ describe('CustomersService (real Postgres)', () => {
 
       await service.update(existing.id, {
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         phone: '555-9999',
       });
 
@@ -204,6 +221,7 @@ describe('CustomersService (real Postgres)', () => {
 
       await service.update(existing.id, {
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         notes: null,
       });
 
@@ -220,6 +238,7 @@ describe('CustomersService (real Postgres)', () => {
       await expect(
         service.update(existing.id, {
           actorId: 'actor-1',
+          tenantId: TENANT_ID,
           phone: '555-0000',
         }),
       ).rejects.toThrow('audit down');
@@ -268,6 +287,7 @@ describe('PropertiesService (real Postgres)', () => {
     return repo.save(
       repo.create({
         customerId,
+        tenantId: TENANT_ID,
         accessNotes: 'Gate code 1234',
         addressLine1: '123 Main St',
         addressLine2: null,
@@ -287,6 +307,7 @@ describe('PropertiesService (real Postgres)', () => {
       const created = await service.create({
         actorId: 'actor-1',
         customerId: customer.id,
+        tenantId: TENANT_ID,
         addressLine1: '456 Market St',
         city: 'Springfield',
         label: 'Downtown Office',
@@ -312,6 +333,7 @@ describe('PropertiesService (real Postgres)', () => {
         expect.objectContaining({
           actorId: 'actor-1',
           entityId: created.id,
+          tenantId: TENANT_ID,
           action: 'property.create',
           entityType: 'property',
         }),
@@ -323,6 +345,7 @@ describe('PropertiesService (real Postgres)', () => {
         service.create({
           actorId: 'actor-1',
           customerId: '00000000-0000-0000-0000-000000000000',
+          tenantId: TENANT_ID,
           addressLine1: '123 Main St',
           city: 'Springfield',
           label: 'Home',
@@ -343,6 +366,7 @@ describe('PropertiesService (real Postgres)', () => {
         service.create({
           actorId: 'actor-1',
           customerId: customer.id,
+          tenantId: TENANT_ID,
           addressLine1: '789 Rollback Ave',
           city: 'Springfield',
           label: 'Rollback Case',
@@ -365,6 +389,7 @@ describe('PropertiesService (real Postgres)', () => {
 
       await service.update(existing.id, {
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         label: 'Updated Label',
       });
 
@@ -388,6 +413,7 @@ describe('PropertiesService (real Postgres)', () => {
       await service.update(existing.id, {
         accessNotes: null,
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
       });
 
       const row = await dataSource
@@ -404,6 +430,7 @@ describe('PropertiesService (real Postgres)', () => {
       await expect(
         service.update(existing.id, {
           actorId: 'actor-1',
+          tenantId: TENANT_ID,
           label: 'Should Not Persist',
         }),
       ).rejects.toThrow('audit down');
@@ -423,7 +450,10 @@ describe('PropertiesService (real Postgres)', () => {
         label: 'Downtown Office',
       });
 
-      const result = await service.listCustomerProperties(customer.id);
+      const result = await service.listCustomerProperties(
+        customer.id,
+        TENANT_ID,
+      );
 
       expect(result).toHaveLength(2);
       expect(result.map((p) => p.id).sort()).toEqual(
@@ -435,13 +465,16 @@ describe('PropertiesService (real Postgres)', () => {
       const customer = await seedCustomer(dataSource);
 
       await expect(
-        service.listCustomerProperties(customer.id),
+        service.listCustomerProperties(customer.id, TENANT_ID),
       ).resolves.toEqual([]);
     });
 
     it('throws NotFoundException for a nonexistent customerId', async () => {
       await expect(
-        service.listCustomerProperties('00000000-0000-0000-0000-000000000000'),
+        service.listCustomerProperties(
+          '00000000-0000-0000-0000-000000000000',
+          TENANT_ID,
+        ),
       ).rejects.toThrow(NotFoundException);
     });
   });

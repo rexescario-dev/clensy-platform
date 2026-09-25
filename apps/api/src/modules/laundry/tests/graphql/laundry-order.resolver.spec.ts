@@ -67,7 +67,7 @@ describe('LaundryOrderResolver', () => {
       >
     >;
     let resolver: LaundryOrderResolver;
-    const user = { id: 'actor-9' } as never;
+    const user = { id: 'actor-9', tenantId: 'tenant-9' } as never;
     const order = {
       id: 'o1',
       customerId: 'c1',
@@ -104,6 +104,7 @@ describe('LaundryOrderResolver', () => {
       expect(service.receive).toHaveBeenCalledWith({
         actorId: 'actor-9',
         customerId: 'c1',
+        tenantId: 'tenant-9',
         fulfillmentType: LaundryFulfillmentType.DELIVERY,
       });
     });

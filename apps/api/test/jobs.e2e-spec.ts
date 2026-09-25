@@ -20,6 +20,7 @@ import { DEFAULT_CHECKLIST_ITEMS } from '../src/modules/jobs/domain/default-chec
 import { AdminUserEntity } from '../src/modules/admins/infrastructure/persistence/admin-user.entity';
 import { Role } from '../src/platform/auth/domain/role';
 import { applyPlatformPipes } from '../src/platform/graphql/apply-platform-pipes';
+import { BOOTSTRAP_TENANT_ID } from '../src/platform/database/bootstrap-tenant';
 import { seedOwner } from './helpers/seed-owner';
 
 // GraphQL e2e against AppModule (plan Task 6): golden path, RBAC, missing
@@ -202,9 +203,14 @@ describe('Jobs (e2e)', () => {
     return response.body.data.createAdmin;
   }
 
+  // `seedOwner` (the only admin fixture this file seeds) always attaches to
+  // the bootstrap tenant, so this fixture's customer/property can use that
+  // same fixed tenant directly rather than threading `owner.tenantId`
+  // through every `createFixture`/`createPricedBooking` call site.
   async function createFixture(runId: string) {
     const customer = await customersService.create({
       actorId: 'e2e',
+      tenantId: BOOTSTRAP_TENANT_ID,
       email: `jobs-fixture-${runId}@example.com`,
       fullName: `Jobs Fixture Customer ${runId}`,
       phone: '555-0100',
@@ -212,6 +218,7 @@ describe('Jobs (e2e)', () => {
     const property = await propertiesService.create({
       actorId: 'e2e',
       customerId: customer.id,
+      tenantId: BOOTSTRAP_TENANT_ID,
       addressLine1: `${runId} Jobs St`,
       city: 'City',
       label: 'Home',
@@ -736,7 +743,7 @@ describe('Jobs (e2e)', () => {
         variables: { input: { bookingId: source.bookingId } },
       });
       expect(jobResponse.body.errors).toBeUndefined();
-      jobIds.push(jobResponse.body.data.createJobFromBooking.id);
+      jobIds.push(jobResponse.body.data.createJobFromBooking.id as string);
     }
 
     const listParentQuery = `query ListJobs($ids: [ID!]!) {
@@ -776,7 +783,7 @@ describe('Jobs (e2e)', () => {
         variables: { input: { bookingId: source.bookingId } },
       });
       expect(jobResponse.body.errors).toBeUndefined();
-      jobIds.push(jobResponse.body.data.createJobFromBooking.id);
+      jobIds.push(jobResponse.body.data.createJobFromBooking.id as string);
     }
     const atTwelve = await captureAtN(12, jobIds);
     const delta = Math.abs(atTwelve - atSix);

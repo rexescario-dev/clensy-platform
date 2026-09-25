@@ -1,41 +1,9 @@
 import { randomUUID } from 'crypto';
-import { readdirSync } from 'fs';
-import { join } from 'path';
-import { DataSource, MigrationInterface, QueryRunner } from 'typeorm';
+import { DataSource, QueryRunner } from 'typeorm';
 import { BOOTSTRAP_TENANT_ID } from '../src/platform/database/bootstrap-tenant';
 import { AddTenantAndAdminScope1790180877633 } from '../src/platform/database/migrations/1790180877633-AddTenantAndAdminScope';
 import { OwnerDesignationError } from '../src/platform/database/owner-designation';
-
-const MIGRATIONS_DIR = join(__dirname, '../src/platform/database/migrations');
-
-// Every migration that precedes `AddTenantAndAdminScope`, as classes, so the
-// throwaway database can be brought to the exact pre-tenancy schema (with the
-// OWNER role still in the enum) before the migration under test runs.
-function migrationsBeforeTenantScope(): (new () => MigrationInterface)[] {
-  return readdirSync(MIGRATIONS_DIR)
-    .filter((file) => file.endsWith('.ts'))
-    .sort()
-    .filter((file) => file < '1790180877633')
-    .map((file) => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports -- dynamic load of every migration file by name
-      const exported = require(join(MIGRATIONS_DIR, file)) as Record<
-        string,
-        new () => MigrationInterface
-      >;
-      return Object.values(exported)[0];
-    });
-}
-
-function connectionOptions(database: string) {
-  return {
-    database,
-    host: process.env.DB_HOST ?? 'localhost',
-    password: process.env.DB_PASSWORD ?? 'clensy_dev',
-    port: Number(process.env.DB_PORT ?? 5432),
-    type: 'postgres' as const,
-    username: process.env.DB_USERNAME ?? 'clensy',
-  };
-}
+import { connectionOptions, migrationsBefore } from './helpers/migration-db';
 
 async function roleEnumValues(queryRunner: QueryRunner): Promise<string[]> {
   const [{ values }]: { values: string }[] = await queryRunner.query(
@@ -64,7 +32,7 @@ describe('AddTenantAndAdminScope migration (real Postgres)', () => {
 
     dataSource = new DataSource({
       ...connectionOptions(database),
-      migrations: migrationsBeforeTenantScope(),
+      migrations: migrationsBefore('1790180877633'),
     });
     await dataSource.initialize();
     await dataSource.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);

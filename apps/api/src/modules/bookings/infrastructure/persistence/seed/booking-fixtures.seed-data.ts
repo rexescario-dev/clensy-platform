@@ -6,8 +6,11 @@
 // .ts) references these same ids for its own `customerId`/`propertyId`/
 // `serviceId`/`teamId` fields.
 
+import { BOOTSTRAP_TENANT_ID } from '../../../../../platform/database/bootstrap-tenant';
+
 export const bookingFixtureCustomer = {
   id: '00000000-0000-0000-0001-000000000001',
+  tenantId: BOOTSTRAP_TENANT_ID,
   email: 'amara.chidi@example.com',
   fullName: 'Amara Chidi',
   notes: null,
@@ -17,6 +20,7 @@ export const bookingFixtureCustomer = {
 export const bookingFixtureProperty = {
   id: '00000000-0000-0000-0001-000000000002',
   customerId: bookingFixtureCustomer.id,
+  tenantId: BOOTSTRAP_TENANT_ID,
   accessNotes: null,
   addressLine1: '12 Palm Street',
   addressLine2: null,

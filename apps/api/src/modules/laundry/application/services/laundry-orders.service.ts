@@ -261,6 +261,7 @@ export class LaundryOrdersService {
   async receive(command: ReceiveLaundryOrderCommand): Promise<LaundryOrder> {
     const customer = await this.customersService.getCustomer(
       command.customerId,
+      command.tenantId,
     );
     if (!customer) {
       throw new NotFoundException(`Customer ${command.customerId} not found`);

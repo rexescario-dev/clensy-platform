@@ -14,10 +14,20 @@ import { PricingRuleEntity } from '../src/modules/catalog/infrastructure/persist
 import { TeamsService } from '../src/modules/cleaners/application/services/teams.service';
 import { CleanerEntity } from '../src/modules/cleaners/infrastructure/persistence/cleaner.entity';
 import { TeamEntity } from '../src/modules/cleaners/infrastructure/persistence/team.entity';
+import { TenantEntity } from '../src/modules/admins/infrastructure/persistence/tenant.entity';
+import { BOOTSTRAP_TENANT_ID } from '../src/platform/database/bootstrap-tenant';
 import {
   acquireBookingDbTestLock,
   BookingDbTestLock,
 } from './helpers/booking-db-test-lock';
+
+// This whole file runs under `acquireBookingDbTestLock` and truncates
+// `customer_entity`/`property_entity` (among others) in its own
+// `beforeEach` — no other spec file's rows can be present, so every
+// fixture here is safely attached to the bootstrap tenant (the one tenant
+// row every migrated database is guaranteed to have) without colliding
+// across runs or files.
+const TENANT_ID = BOOTSTRAP_TENANT_ID;
 
 function createTestDataSource(): DataSource {
   return new DataSource({
@@ -31,6 +41,7 @@ function createTestDataSource(): DataSource {
       TeamEntity,
       CleanerEntity, // TeamEntity#cleaners inverse metadata
       AuditEventEntity,
+      TenantEntity, // CustomerEntity#tenant / PropertyEntity#tenant (#82)
     ],
     host: process.env.DB_HOST ?? 'localhost',
     password: process.env.DB_PASSWORD ?? 'clensy_dev',
@@ -126,6 +137,7 @@ describe('BookingsService (real Postgres)', () => {
   async function createFixture(priceMinorUnits = 5000) {
     const customer = await customersService.create({
       actorId: 'actor-1',
+      tenantId: TENANT_ID,
       email: 'jane@example.com',
       fullName: 'Jane Doe',
       phone: '555-0100',
@@ -133,6 +145,7 @@ describe('BookingsService (real Postgres)', () => {
     const property = await propertiesService.create({
       actorId: 'actor-1',
       customerId: customer.id,
+      tenantId: TENANT_ID,
       addressLine1: '1 Main St',
       city: 'City',
       label: 'Home',
@@ -167,6 +180,7 @@ describe('BookingsService (real Postgres)', () => {
         propertyId: property.id,
         serviceId: service.id,
         teamId: team.id,
+        tenantId: TENANT_ID,
         scheduledAt: new Date('2026-09-01T09:00:00Z'),
       });
 
@@ -190,6 +204,7 @@ describe('BookingsService (real Postgres)', () => {
       const { property, service } = await createFixture();
       const otherCustomer = await customersService.create({
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         email: 'other@example.com',
         fullName: 'Other Customer',
         phone: '555-0101',
@@ -201,6 +216,7 @@ describe('BookingsService (real Postgres)', () => {
           customerId: otherCustomer.id,
           propertyId: property.id,
           serviceId: service.id,
+          tenantId: TENANT_ID,
           scheduledAt: new Date(),
         }),
       ).rejects.toThrow(BadRequestException);
@@ -223,6 +239,7 @@ describe('BookingsService (real Postgres)', () => {
           customerId: customer.id,
           propertyId: property.id,
           serviceId: service.id,
+          tenantId: TENANT_ID,
           scheduledAt: new Date(),
         }),
       ).rejects.toThrow(BadRequestException);
@@ -235,6 +252,7 @@ describe('BookingsService (real Postgres)', () => {
     it('throws BadRequestException when the service has no active price, persisting no row', async () => {
       const customer = await customersService.create({
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         email: 'jane@example.com',
         fullName: 'Jane Doe',
         phone: '555-0100',
@@ -242,6 +260,7 @@ describe('BookingsService (real Postgres)', () => {
       const property = await propertiesService.create({
         actorId: 'actor-1',
         customerId: customer.id,
+        tenantId: TENANT_ID,
         addressLine1: '1 Main St',
         city: 'City',
         label: 'Home',
@@ -260,6 +279,7 @@ describe('BookingsService (real Postgres)', () => {
           customerId: customer.id,
           propertyId: property.id,
           serviceId: service.id,
+          tenantId: TENANT_ID,
           scheduledAt: new Date(),
         }),
       ).rejects.toThrow(BadRequestException);
@@ -277,6 +297,7 @@ describe('BookingsService (real Postgres)', () => {
         propertyId: property.id,
         serviceId: service.id,
         teamId: team.id,
+        tenantId: TENANT_ID,
         scheduledAt: new Date('2026-09-01T09:00:00Z'),
       });
 
@@ -298,6 +319,7 @@ describe('BookingsService (real Postgres)', () => {
         customerId: customer.id,
         propertyId: property.id,
         serviceId: service.id,
+        tenantId: TENANT_ID,
         scheduledAt: new Date('2027-01-01T09:00:00Z'),
       });
 
@@ -312,6 +334,7 @@ describe('BookingsService (real Postgres)', () => {
         customerId: customer.id,
         propertyId: property.id,
         serviceId: service.id,
+        tenantId: TENANT_ID,
         scheduledAt: new Date(),
       });
 
@@ -331,6 +354,7 @@ describe('BookingsService (real Postgres)', () => {
           customerId: customer.id,
           propertyId: property.id,
           serviceId: service.id,
+          tenantId: TENANT_ID,
           scheduledAt: new Date(),
         }),
       ).rejects.toThrow('audit down');
@@ -357,6 +381,7 @@ describe('BookingsService (real Postgres)', () => {
         customerId: customer.id,
         propertyId: property.id,
         serviceId: service.id,
+        tenantId: TENANT_ID,
         scheduledAt: new Date('2026-09-01T09:00:00Z'),
       });
 
@@ -384,6 +409,7 @@ describe('BookingsService (real Postgres)', () => {
         customerId: customer.id,
         propertyId: property.id,
         serviceId: service.id,
+        tenantId: TENANT_ID,
         scheduledAt: new Date('2026-09-01T09:00:00Z'),
       });
 
@@ -422,6 +448,7 @@ describe('BookingsService (real Postgres)', () => {
         customerId: customer.id,
         propertyId: property.id,
         serviceId: service.id,
+        tenantId: TENANT_ID,
         scheduledAt: new Date('2026-09-01T09:00:00Z'),
       });
       auditLogger.log.mockClear();
@@ -446,6 +473,7 @@ describe('BookingsService (real Postgres)', () => {
         customerId: customer.id,
         propertyId: property.id,
         serviceId: service.id,
+        tenantId: TENANT_ID,
         scheduledAt: new Date('2026-09-01T09:00:00Z'),
       });
       auditLogger.log.mockRejectedValueOnce(new Error('audit down'));
@@ -470,6 +498,7 @@ describe('BookingsService (real Postgres)', () => {
         customerId: customer.id,
         propertyId: property.id,
         serviceId: service.id,
+        tenantId: TENANT_ID,
         scheduledAt: new Date('2026-09-01T09:00:00Z'),
       });
 
@@ -493,6 +522,7 @@ describe('BookingsService (real Postgres)', () => {
         customerId: customer.id,
         propertyId: property.id,
         serviceId: service.id,
+        tenantId: TENANT_ID,
         scheduledAt: new Date('2026-09-01T09:00:00Z'),
       });
 
@@ -530,6 +560,7 @@ describe('BookingsService (real Postgres)', () => {
       customerId: customer.id,
       propertyId: property.id,
       serviceId: service.id,
+      tenantId: TENANT_ID,
       scheduledAt: new Date('2026-09-01T09:00:00Z'),
     });
     await bookingsService.update(booking.id, {

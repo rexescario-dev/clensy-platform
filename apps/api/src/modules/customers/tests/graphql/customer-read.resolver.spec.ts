@@ -8,6 +8,9 @@ import {
 } from '@nestjs/graphql';
 import { Test } from '@nestjs/testing';
 import { GraphQLObjectType } from 'graphql';
+// @ptc-org/nestjs-query-graphql 9.5.0 does not re-export getAuthorizer from
+// the package root, so this deep import is required.
+import { getAuthorizer } from '@ptc-org/nestjs-query-graphql/src/decorators';
 import { PLATFORM_PAGE_DEFAULT } from '../../../../platform/graphql/paging';
 import { ROLES_KEY } from '../../../../platform/auth/decorators/roles.decorator';
 import { Role } from '../../../../platform/auth/domain/role';
@@ -19,6 +22,8 @@ import { PropertyReadResolver } from '../../presentation/graphql/property-read.r
 import { ServiceResolver } from '../../../catalog/presentation/graphql/service.resolver';
 import { TeamResolver } from '../../../cleaners/presentation/graphql/team.resolver';
 import { BookingReadResolver } from '../../../bookings/presentation/graphql/booking-read.resolver';
+import { CustomerType } from '../../presentation/graphql/customer.type';
+import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 
 type MutationMethod = 'createCustomer' | 'updateCustomer';
 type ReadMethod = 'queryMany';
@@ -178,5 +183,42 @@ describe('Customer GraphQL collections', () => {
     expect(customerSrc).toMatch(/enableTotalCount:\s*true/);
     expect(customerSrc).not.toMatch(/maxResultsSize:\s*-1/);
     expect(customerSrc).not.toMatch(/PagingStrategies\.CURSOR/);
+  });
+});
+
+// Tenant isolation (#82, multi-tenant spec §4.5). The `@Authorize` filter on
+// `CustomerType` is a security invariant: nestjs-query ANDs it into the root
+// `customers` list/count and into every relation read that targets the type.
+describe('CustomerType tenant authorizer', () => {
+  const authorizationContext = {
+    many: true,
+    operationGroup: 'read',
+    operationName: 'queryMany',
+    readonly: true,
+  } as never;
+
+  function tenantPrincipal(tenantId: string | null) {
+    return {
+      req: {
+        user: {
+          id: 'admin-1',
+          tenantId,
+          role: Role.SCHEDULER,
+          scope: tenantId === null ? AdminScope.PLATFORM : AdminScope.TENANT,
+        },
+      },
+    };
+  }
+
+  it('is registered on CustomerType and constrains reads to the principal tenant', async () => {
+    const Authorizer = getAuthorizer(CustomerType);
+    expect(Authorizer).toBeDefined();
+    const authorizer = new Authorizer!({}, undefined);
+    await expect(
+      authorizer.authorize(tenantPrincipal('t-a'), authorizationContext),
+    ).resolves.toEqual({ tenantId: { eq: 't-a' } });
+    await expect(
+      authorizer.authorize(tenantPrincipal(null), authorizationContext),
+    ).resolves.toEqual({ id: { is: null } });
   });
 });

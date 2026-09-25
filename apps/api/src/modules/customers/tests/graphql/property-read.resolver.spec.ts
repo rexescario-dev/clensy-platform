@@ -6,6 +6,12 @@ import {
 } from '@nestjs/graphql';
 import { Test } from '@nestjs/testing';
 import { GraphQLObjectType } from 'graphql';
+// @ptc-org/nestjs-query-graphql 9.5.0 does not re-export getAuthorizer from
+// the package root, so this deep import is required.
+import { getAuthorizer } from '@ptc-org/nestjs-query-graphql/src/decorators';
+import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
+import { Role } from '../../../../platform/auth/domain/role';
+import { PropertyType } from '../../presentation/graphql/property.type';
 import { PLATFORM_PAGE_DEFAULT } from '../../../../platform/graphql/paging';
 import { CustomerResolver } from '../../presentation/graphql/customer.resolver';
 import { PropertyResolver } from '../../presentation/graphql/property.resolver';
@@ -138,5 +144,35 @@ describe('Property.bookings nested connection (Task 3 hard gate)', () => {
         .join('\n');
       expect(src).not.toMatch(relationProp);
     }
+  });
+});
+
+// Tenant isolation (#82, multi-tenant spec §4.5): relation reads of Property
+// (`Customer.properties`, `Booking.property`) are ANDed with this filter.
+describe('PropertyType tenant authorizer', () => {
+  it('is registered on PropertyType and constrains reads to the principal tenant', async () => {
+    const Authorizer = getAuthorizer(PropertyType);
+    expect(Authorizer).toBeDefined();
+    const authorizer = new Authorizer!({}, undefined);
+    await expect(
+      authorizer.authorize(
+        {
+          req: {
+            user: {
+              id: 'admin-1',
+              tenantId: 't-a',
+              role: Role.SCHEDULER,
+              scope: AdminScope.TENANT,
+            },
+          },
+        },
+        {
+          many: true,
+          operationGroup: 'read',
+          operationName: 'queryRelations',
+          readonly: true,
+        } as never,
+      ),
+    ).resolves.toEqual({ tenantId: { eq: 't-a' } });
   });
 });

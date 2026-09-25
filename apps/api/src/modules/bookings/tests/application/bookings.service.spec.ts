@@ -140,6 +140,7 @@ describe('BookingsService', () => {
       propertyId: 'property-1',
       serviceId: 'service-1',
       teamId: 'team-1',
+      tenantId: 't-a',
       scheduledAt: new Date('2026-09-01T09:00:00Z'),
     };
 
@@ -148,6 +149,33 @@ describe('BookingsService', () => {
 
       await expect(service.create(command)).rejects.toThrow(NotFoundException);
       expect(propertiesService.getProperty).not.toHaveBeenCalled();
+    });
+
+    it('passes the command tenantId to getCustomer and getProperty', async () => {
+      await service.create(command);
+
+      expect(customersService.getCustomer).toHaveBeenCalledWith(
+        'customer-1',
+        't-a',
+      );
+      expect(propertiesService.getProperty).toHaveBeenCalledWith(
+        'property-1',
+        't-a',
+      );
+    });
+
+    it('throws NotFoundException and opens no transaction when tenantId is null (no principal tenant scope)', async () => {
+      // Mirrors CustomersService.getCustomer's real fail-closed contract:
+      // `tenantId: null` never resolves a row.
+      customersService.getCustomer.mockImplementation(
+        (_id: string, tenantId: string | null) =>
+          Promise.resolve(tenantId === null ? null : customer),
+      );
+
+      await expect(
+        service.create({ ...command, tenantId: null }),
+      ).rejects.toThrow(new NotFoundException('Customer customer-1 not found'));
+      expect(dataSource.transaction).not.toHaveBeenCalled();
     });
 
     it('throws NotFoundException when propertyId does not exist', async () => {

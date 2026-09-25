@@ -102,12 +102,41 @@ describe('LaundryOrdersService', () => {
     const command = {
       actorId: 'actor-1',
       customerId: 'cust-1',
+      tenantId: 't-a',
       fulfillmentType: LaundryFulfillmentType.DELIVERY,
     };
 
     it('validates the customer before opening a transaction', async () => {
       customersService.getCustomer.mockResolvedValue(null);
       await expect(service.receive(command)).rejects.toThrow(NotFoundException);
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+    });
+
+    it('passes the command tenantId to getCustomer', async () => {
+      manager.findOneByOrFail.mockImplementation(
+        (_e: unknown, where: WhereById) =>
+          Promise.resolve(anOrder({ id: where.id })),
+      );
+
+      await service.receive(command);
+
+      expect(customersService.getCustomer).toHaveBeenCalledWith(
+        'cust-1',
+        't-a',
+      );
+    });
+
+    it('throws NotFoundException and opens no transaction when tenantId is null (no principal tenant scope)', async () => {
+      // Mirrors CustomersService.getCustomer's real fail-closed contract:
+      // `tenantId: null` never resolves a row.
+      customersService.getCustomer.mockImplementation(
+        (_id: string, tenantId: string | null) =>
+          Promise.resolve(tenantId === null ? null : { id: 'cust-1' }),
+      );
+
+      await expect(
+        service.receive({ ...command, tenantId: null }),
+      ).rejects.toThrow(new NotFoundException('Customer cust-1 not found'));
       expect(dataSource.transaction).not.toHaveBeenCalled();
     });
 

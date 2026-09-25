@@ -13,7 +13,11 @@ import { CustomersService } from '../src/modules/customers/application/services/
 import { PropertiesService } from '../src/modules/customers/application/services/properties.service';
 import { ServicesService } from '../src/modules/catalog/application/services/services.service';
 import { PricingRulesService } from '../src/modules/catalog/application/services/pricing-rules.service';
+import { BookingEntity } from '../src/modules/bookings/infrastructure/persistence/booking.entity';
+import { BookingPricingSnapshotEmbeddable } from '../src/modules/bookings/infrastructure/persistence/booking-pricing-snapshot.embeddable';
+import { BookingStatus } from '../src/modules/bookings/domain/booking-status';
 import { applyPlatformPipes } from '../src/platform/graphql/apply-platform-pipes';
+import { BOOTSTRAP_TENANT_ID } from '../src/platform/database/bootstrap-tenant';
 import { seedOwner } from './helpers/seed-owner';
 
 describe('Bookings (e2e)', () => {
@@ -36,16 +40,26 @@ describe('Bookings (e2e)', () => {
   // customerId/propertyId/serviceId references, resolved via each owning
   // module's own application service — this smoke test's fixture chain
   // mirrors bookings.e2e-spec.ts's own createFixture() for the same reason.
-  it('creates a booking and finds it via GET /bookings', async () => {
+  //
+  // The booking itself is inserted directly via repository, not through
+  // `POST /bookings`: as of #82 Slice decision 4, that unauthenticated REST
+  // route always builds its command with `tenantId: null`, which never
+  // resolves a row and fails closed with 404 even given a real
+  // customer/property — `bookings-rest.e2e-spec.ts` is the dedicated proof
+  // of that fail-closed contract. This smoke test only needs a real booking
+  // to exist so it can prove GET/DELETE /bookings still work end-to-end.
+  it('finds and deletes a booking via GET/DELETE /bookings', async () => {
     const server = app.getHttpServer();
 
     const customersService = app.get(CustomersService);
     const propertiesService = app.get(PropertiesService);
     const servicesService = app.get(ServicesService);
     const pricingRulesService = app.get(PricingRulesService);
+    const bookingRepository = app.get(getRepositoryToken(BookingEntity));
 
     const customer = await customersService.create({
       actorId: 'e2e',
+      tenantId: BOOTSTRAP_TENANT_ID,
       email: `e2e-${Date.now()}@example.com`,
       fullName: 'E2E Test Customer',
       phone: '555-0100',
@@ -53,6 +67,7 @@ describe('Bookings (e2e)', () => {
     const property = await propertiesService.create({
       actorId: 'e2e',
       customerId: customer.id,
+      tenantId: BOOTSTRAP_TENANT_ID,
       addressLine1: '1 Test St',
       city: 'City',
       label: 'Home',
@@ -70,18 +85,23 @@ describe('Bookings (e2e)', () => {
       serviceId: service.id,
     });
 
-    const createResponse = await request(server)
-      .post('/bookings')
-      .send({
-        customerId: customer.id,
-        propertyId: property.id,
-        serviceId: service.id,
-        scheduledAt: '2026-10-01T10:00:00.000Z',
-      })
-      .expect(201);
-
-    const bookingId = createResponse.body.id as string;
-    expect(bookingId).toBeDefined();
+    const seedEntity = bookingRepository.create({
+      customerId: customer.id,
+      propertyId: property.id,
+      serviceId: service.id,
+      teamId: null,
+      scheduledAt: new Date('2026-10-01T10:00:00.000Z'),
+      status: BookingStatus.PENDING,
+    });
+    // `repository.create()` does not populate an embedded-column property
+    // from a plain object passed under its key — matching
+    // `BookingsService.create`'s own documented workaround.
+    seedEntity.pricingSnapshot = Object.assign(
+      new BookingPricingSnapshotEmbeddable(),
+      { priceMinorUnits: 5000 },
+    );
+    const booking = await bookingRepository.save(seedEntity);
+    const bookingId: string = booking.id;
 
     await request(server)
       .get('/bookings')

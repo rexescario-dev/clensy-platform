@@ -32,8 +32,13 @@ export async function createTestTenant(
   return tenant.id;
 }
 
-// Deletes test-only tenants and their admins. Never touches the bootstrap
-// tenant.
+// Deletes test-only tenants, their admins, and their Customer/Property rows
+// (#82) — properties before customers, both before the tenant itself (FK
+// order). Never touches the bootstrap tenant. Callers whose tests insert a
+// Booking/LaundryOrder referencing one of these tenants' customers/
+// properties MUST delete those rows first: `fk_booking_customer`,
+// `fk_booking_property`, and `fk_laundry_order_customer` are all `ON DELETE
+// RESTRICT`, so this call fails loudly (not silently) if a caller forgot.
 export async function removeTestTenants(
   dataSource: DataSource,
   tenantIds: readonly string[],
@@ -42,6 +47,14 @@ export async function removeTestTenants(
   if (ids.length === 0) {
     return;
   }
+  await dataSource.query(
+    `DELETE FROM "property_entity" WHERE "tenantId" = ANY($1)`,
+    [ids],
+  );
+  await dataSource.query(
+    `DELETE FROM "customer_entity" WHERE "tenantId" = ANY($1)`,
+    [ids],
+  );
   await dataSource.query(
     `DELETE FROM "admin_user_entity" WHERE "tenantId" = ANY($1)`,
     [ids],
