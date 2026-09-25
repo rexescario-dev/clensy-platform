@@ -297,5 +297,23 @@ describe('PropertyResolver tenant scoping', () => {
         expect(JSON.stringify(filter)).toContain('"id":{"is":null}');
       }
     });
+
+    // Task 5 review hardening item (b): `getFilterOmitting` recurses into
+    // `and`/`or` (verified against the installed nestjs-query-core source),
+    // so a client can't smuggle `tenantId` past the top-level omit by
+    // nesting it inside a boolean group either.
+    it('discards a client tenantId predicate nested inside and/or before merging', async () => {
+      const { countFilter, pageFilter } = await runPage({
+        and: [{ tenantId: { eq: 't-evil' } }],
+        or: [{ tenantId: { eq: 't-evil' } }, { label: { eq: 'x' } }],
+      } as never);
+      for (const filter of [pageFilter, countFilter]) {
+        const serialized = JSON.stringify(filter);
+        expect(serialized).not.toContain('t-evil');
+        expect(serialized.match(/"tenantId"/g)).toHaveLength(1);
+        expect(serialized).toContain('"tenantId":{"eq":"t-a"}');
+        expect(serialized).toContain('"label":{"eq":"x"}');
+      }
+    });
   });
 });
