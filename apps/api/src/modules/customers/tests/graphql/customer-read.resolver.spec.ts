@@ -8,6 +8,8 @@ import {
 } from '@nestjs/graphql';
 import { Test } from '@nestjs/testing';
 import { GraphQLObjectType } from 'graphql';
+// @ptc-org/nestjs-query-graphql 9.5.0 does not re-export getAuthorizer from
+// the package root, so this deep import is required.
 import { getAuthorizer } from '@ptc-org/nestjs-query-graphql/src/decorators';
 import { PLATFORM_PAGE_DEFAULT } from '../../../../platform/graphql/paging';
 import { ROLES_KEY } from '../../../../platform/auth/decorators/roles.decorator';

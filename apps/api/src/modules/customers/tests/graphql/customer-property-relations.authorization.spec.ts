@@ -1,3 +1,5 @@
+// @ptc-org/nestjs-query-graphql 9.5.0 does not re-export getRelations from
+// the package root, so this deep import is required.
 import { getRelations } from '@ptc-org/nestjs-query-graphql/src/decorators';
 import { BookingDTO } from '../../../bookings/presentation/graphql/booking.dto';
 import { InvoiceType } from '../../../billing/presentation/graphql/invoice.type';

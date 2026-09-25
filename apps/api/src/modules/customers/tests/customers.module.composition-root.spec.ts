@@ -1,5 +1,7 @@
 import { getQueryServiceToken } from '@ptc-org/nestjs-query-core';
 import { Authorizer } from '@ptc-org/nestjs-query-graphql';
+// @ptc-org/nestjs-query-graphql 9.5.0 does not re-export getAuthorizerToken
+// from the package root, so this deep import is required.
 import { getAuthorizerToken } from '@ptc-org/nestjs-query-graphql/src/auth';
 import { Global, Module } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
