@@ -1,41 +1,9 @@
 import { randomUUID } from 'crypto';
-import { readdirSync } from 'fs';
-import { join } from 'path';
-import { DataSource, MigrationInterface, QueryRunner } from 'typeorm';
+import { DataSource, QueryRunner } from 'typeorm';
 import { BOOTSTRAP_TENANT_ID } from '../src/platform/database/bootstrap-tenant';
 import { CustomerEmailDuplicateError } from '../src/platform/database/customer-email-duplicates';
 import { AddCustomerPropertyTenant1790265191400 } from '../src/platform/database/migrations/1790265191400-AddCustomerPropertyTenant';
-
-const MIGRATIONS_DIR = join(__dirname, '../src/platform/database/migrations');
-
-// Every migration that precedes `AddCustomerPropertyTenant`, as classes, so
-// the throwaway database is at the exact pre-#82 schema (no customer or
-// property `tenantId`) before the migration under test runs.
-function migrationsBeforeCustomerTenant(): (new () => MigrationInterface)[] {
-  return readdirSync(MIGRATIONS_DIR)
-    .filter((file) => file.endsWith('.ts'))
-    .sort()
-    .filter((file) => file < '1790265191400')
-    .map((file) => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports -- dynamic load of every migration file by name
-      const exported = require(join(MIGRATIONS_DIR, file)) as Record<
-        string,
-        new () => MigrationInterface
-      >;
-      return Object.values(exported)[0];
-    });
-}
-
-function connectionOptions(database: string) {
-  return {
-    database,
-    host: process.env.DB_HOST ?? 'localhost',
-    password: process.env.DB_PASSWORD ?? 'clensy_dev',
-    port: Number(process.env.DB_PORT ?? 5432),
-    type: 'postgres' as const,
-    username: process.env.DB_USERNAME ?? 'clensy',
-  };
-}
+import { connectionOptions, migrationsBefore } from './helpers/migration-db';
 
 const NEW_CONSTRAINTS = [
   'fk_customer_tenant',
@@ -55,6 +23,8 @@ const NEW_INDEXES = [
 // transaction. Every `up`/`down` here runs inside a transaction exactly as
 // TypeORM runs it (commit on success, rollback on throw), so the tests prove
 // the rollback rather than assume it. Runs in its own throwaway database.
+// The cases below are intentionally sequential: later cases depend on state
+// (schema objects, rows) left behind by earlier ones.
 describe('AddCustomerPropertyTenant migration (real Postgres)', () => {
   const database = `clensy_migration_${randomUUID().replace(/-/g, '')}`;
   let admin: DataSource;
@@ -132,7 +102,7 @@ describe('AddCustomerPropertyTenant migration (real Postgres)', () => {
 
     dataSource = new DataSource({
       ...connectionOptions(database),
-      migrations: migrationsBeforeCustomerTenant(),
+      migrations: migrationsBefore('1790265191400'),
     });
     await dataSource.initialize();
     await dataSource.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
