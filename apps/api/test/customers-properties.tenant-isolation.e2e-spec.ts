@@ -215,36 +215,39 @@ describe('Customers & Properties tenant isolation (e2e)', () => {
   });
 
   afterAll(async () => {
-    const tenantIds = [tenantA, tenantB].filter(Boolean);
-    if (dataSource) {
-      if (crossTenantBooking) {
-        await dataSource
-          .getRepository(BookingEntity)
-          .delete({ id: crossTenantBooking.id });
+    try {
+      const tenantIds = [tenantA, tenantB].filter(Boolean);
+      if (dataSource) {
+        if (crossTenantBooking) {
+          await dataSource
+            .getRepository(BookingEntity)
+            .delete({ id: crossTenantBooking.id });
+        }
+        if (service) {
+          await dataSource
+            .getRepository(ServiceEntity)
+            .delete({ id: service.id });
+        }
+        if (bookableService) {
+          await dataSource.query(
+            `DELETE FROM "pricing_rule_entity" WHERE "serviceId" = $1`,
+            [bookableService.id],
+          );
+          await dataSource
+            .getRepository(ServiceEntity)
+            .delete({ id: bookableService.id });
+        }
+        if (tenantIds.length > 0) {
+          // Deletes every Customer/Property row under these tenants,
+          // including ones individual tests below create via GraphQL
+          // (item 8's duplicate-email customers, item 9's audit-probe
+          // customer/property) — not just the two inserted above.
+          await removeTestTenants(dataSource, tenantIds);
+        }
       }
-      if (service) {
-        await dataSource
-          .getRepository(ServiceEntity)
-          .delete({ id: service.id });
-      }
-      if (bookableService) {
-        await dataSource.query(
-          `DELETE FROM "pricing_rule_entity" WHERE "serviceId" = $1`,
-          [bookableService.id],
-        );
-        await dataSource
-          .getRepository(ServiceEntity)
-          .delete({ id: bookableService.id });
-      }
-      if (tenantIds.length > 0) {
-        // Deletes every Customer/Property row under these tenants, including
-        // ones individual tests below create via GraphQL (item 8's
-        // duplicate-email customers, item 9's audit-probe customer/
-        // property) — not just the two inserted above.
-        await removeTestTenants(dataSource, tenantIds);
-      }
+    } finally {
+      await app?.close();
     }
-    await app?.close();
   });
 
   const CUSTOMERS_QUERY = `
@@ -405,7 +408,7 @@ describe('Customers & Properties tenant isolation (e2e)', () => {
     }
   `;
 
-  const CUSTOMER_PROPERTIES_MUTATION_QUERY = `
+  const CUSTOMER_PROPERTIES_QUERY = `
     query CustomerProperties($customerId: ID!) {
       customerProperties(customerId: $customerId) {
         totalCount
@@ -426,7 +429,7 @@ describe('Customers & Properties tenant isolation (e2e)', () => {
     }
   `;
 
-  function notFoundStatus(response: request.Response): number | undefined {
+  function errorStatus(response: request.Response): number | undefined {
     return (
       response.body as { errors?: { extensions?: { status?: number } }[] }
     ).errors?.[0]?.extensions?.status;
@@ -474,7 +477,7 @@ describe('Customers & Properties tenant isolation (e2e)', () => {
   // rows for that customer," not "found nothing to filter."
   describe('customerProperties across tenants', () => {
     it("returns an empty, zero-count connection for another tenant's customerId", async () => {
-      const response = await gql(cookieB, CUSTOMER_PROPERTIES_MUTATION_QUERY, {
+      const response = await gql(cookieB, CUSTOMER_PROPERTIES_QUERY, {
         customerId: customerA.id,
       });
       expect(response.body.errors).toBeUndefined();
@@ -494,7 +497,7 @@ describe('Customers & Properties tenant isolation (e2e)', () => {
         input: { phone: '555-9999' },
       });
       expect(response.body.data?.updateCustomer).toBeUndefined();
-      expect(notFoundStatus(response)).toBe(404);
+      expect(errorStatus(response)).toBe(404);
 
       const stillA = await dataSource
         .getRepository(CustomerEntity)
@@ -508,7 +511,7 @@ describe('Customers & Properties tenant isolation (e2e)', () => {
         input: { label: 'Hijacked by tenant B' },
       });
       expect(response.body.data?.updateProperty).toBeUndefined();
-      expect(notFoundStatus(response)).toBe(404);
+      expect(errorStatus(response)).toBe(404);
 
       const stillA = await dataSource
         .getRepository(PropertyEntity)
@@ -532,7 +535,7 @@ describe('Customers & Properties tenant isolation (e2e)', () => {
         },
       });
       expect(response.body.data?.createProperty).toBeUndefined();
-      expect(notFoundStatus(response)).toBe(404);
+      expect(errorStatus(response)).toBe(404);
 
       const persisted = await dataSource
         .getRepository(PropertyEntity)
@@ -554,7 +557,7 @@ describe('Customers & Properties tenant isolation (e2e)', () => {
         },
       });
       expect(response.body.data?.createBooking).toBeUndefined();
-      expect(notFoundStatus(response)).toBe(404);
+      expect(errorStatus(response)).toBe(404);
       expect(response.body.errors?.[0]?.message).toContain(
         `Customer ${customerA.id} not found`,
       );
@@ -568,7 +571,7 @@ describe('Customers & Properties tenant isolation (e2e)', () => {
         input: { customerId: customerA.id, fulfillmentType: 'DELIVERY' },
       });
       expect(response.body.data?.receiveLaundryOrder).toBeUndefined();
-      expect(notFoundStatus(response)).toBe(404);
+      expect(errorStatus(response)).toBe(404);
       expect(response.body.errors?.[0]?.message).toContain(
         `Customer ${customerA.id} not found`,
       );
@@ -599,13 +602,7 @@ describe('Customers & Properties tenant isolation (e2e)', () => {
         },
       });
       expect(duplicateResponse.body.data?.createCustomer).toBeUndefined();
-      expect(
-        (
-          duplicateResponse.body as {
-            errors?: { extensions?: { status?: number } }[];
-          }
-        ).errors?.[0]?.extensions?.status,
-      ).toBe(409);
+      expect(errorStatus(duplicateResponse)).toBe(409);
     });
   });
 
