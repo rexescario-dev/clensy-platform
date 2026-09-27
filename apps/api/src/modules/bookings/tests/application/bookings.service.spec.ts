@@ -238,6 +238,15 @@ describe('BookingsService', () => {
       expect(manager.save).not.toHaveBeenCalled();
     });
 
+    it('create validates teamId within the command tenant', async () => {
+      teamsService.getTeam.mockResolvedValue(null);
+
+      await expect(
+        service.create({ ...command, tenantId: 't-b', teamId: 'team-a' }),
+      ).rejects.toThrow(NotFoundException);
+      expect(teamsService.getTeam).toHaveBeenCalledWith('team-a', 't-b');
+    });
+
     it('does not call getTeam when teamId is omitted', async () => {
       const { teamId, ...withoutTeam } = command;
       void teamId;
@@ -275,6 +284,7 @@ describe('BookingsService', () => {
       await expect(
         service.update('missing-id', {
           actorId: 'actor-1',
+          tenantId: 't-a',
           scheduledAt: new Date(),
         }),
       ).rejects.toThrow(NotFoundException);
@@ -286,19 +296,66 @@ describe('BookingsService', () => {
 
       await service.update('booking-1', {
         actorId: 'actor-1',
+        tenantId: 't-a',
         teamId: 'team-1',
       });
 
-      // Temporary `null` tenant argument (#83 Task 6 wires the real
-      // principal tenant through `UpdateBookingCommand`).
-      expect(teamsService.getTeam).toHaveBeenCalledWith('team-1', null);
+      expect(teamsService.getTeam).toHaveBeenCalledWith('team-1', 't-a');
+    });
+
+    it('update validates teamId within the command tenant', async () => {
+      teamsService.getTeam.mockResolvedValue(null);
+
+      await expect(
+        service.update('b-1', {
+          actorId: 'u',
+          tenantId: 't-b',
+          teamId: 'team-a',
+        }),
+      ).rejects.toThrow(NotFoundException);
+      expect(teamsService.getTeam).toHaveBeenCalledWith('team-a', 't-b');
+    });
+
+    it('update with a null tenant and a teamId fails closed (REST)', async () => {
+      teamsService.getTeam.mockResolvedValue(null);
+
+      await expect(
+        service.update('b-1', {
+          actorId: null,
+          tenantId: null,
+          teamId: 'team-a',
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('update never passes tenantId to manager.update', async () => {
+      teamsService.getTeam.mockResolvedValue({ id: 'team-a', tenantId: 't-a' });
+      manager.findOneBy.mockResolvedValue({ id: 'b-1' });
+      manager.findOneByOrFail.mockResolvedValue({ id: 'b-1' });
+
+      await service.update('b-1', {
+        actorId: 'u',
+        tenantId: 't-a',
+        teamId: 'team-a',
+      });
+
+      const [, , set] = manager.update.mock.calls[0] as [
+        unknown,
+        unknown,
+        Record<string, unknown>,
+      ];
+      expect(set).not.toHaveProperty('tenantId');
     });
 
     it('does not call getTeam when teamId is explicitly null', async () => {
       manager.findOneBy.mockResolvedValue({ id: 'booking-1' });
       manager.findOneByOrFail.mockResolvedValue({ id: 'booking-1' });
 
-      await service.update('booking-1', { actorId: 'actor-1', teamId: null });
+      await service.update('booking-1', {
+        actorId: 'actor-1',
+        tenantId: 't-a',
+        teamId: null,
+      });
 
       expect(teamsService.getTeam).not.toHaveBeenCalled();
     });
@@ -309,7 +366,21 @@ describe('BookingsService', () => {
 
       await service.update('booking-1', {
         actorId: 'actor-1',
+        tenantId: 't-a',
         scheduledAt: new Date(),
+      });
+
+      expect(teamsService.getTeam).not.toHaveBeenCalled();
+    });
+
+    it('update without teamId does not look up a team, even with a null tenant', async () => {
+      manager.findOneBy.mockResolvedValue({ id: 'b-1' });
+      manager.findOneByOrFail.mockResolvedValue({ id: 'b-1' });
+
+      await service.update('b-1', {
+        actorId: null,
+        tenantId: null,
+        status: BookingStatus.CONFIRMED,
       });
 
       expect(teamsService.getTeam).not.toHaveBeenCalled();
@@ -321,6 +392,7 @@ describe('BookingsService', () => {
 
       await service.update('booking-1', {
         actorId: null,
+        tenantId: null,
         scheduledAt: new Date(),
       });
 
@@ -347,6 +419,7 @@ describe('BookingsService', () => {
         service.update('booking-1', {
           actorId: 'actor-1',
           teamId: undefined,
+          tenantId: 't-a',
           scheduledAt: undefined,
           status: undefined,
         }),

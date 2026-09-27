@@ -272,6 +272,7 @@ describe('JobsService', () => {
       actorId: 'actor-1',
       jobId: 'job-1',
       teamId: 'team-2',
+      tenantId: 't-a',
     };
 
     it('throws NotFoundException when TeamsService.getTeam returns null, before opening a transaction', async () => {
@@ -280,6 +281,21 @@ describe('JobsService', () => {
       await expect(service.assignTeam(command)).rejects.toThrow(
         new NotFoundException('Team team-2 not found'),
       );
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+    });
+
+    it('assignTeam looks the team up within the command tenant', async () => {
+      teamsService.getTeam.mockResolvedValue(null);
+
+      await expect(
+        service.assignTeam({
+          actorId: 'u',
+          jobId: 'j-1',
+          teamId: 'team-a',
+          tenantId: 't-b',
+        }),
+      ).rejects.toThrow(NotFoundException);
+      expect(teamsService.getTeam).toHaveBeenCalledWith('team-a', 't-b');
       expect(dataSource.transaction).not.toHaveBeenCalled();
     });
 
@@ -329,9 +345,7 @@ describe('JobsService', () => {
         action: 'job.assign_team',
         entityType: 'job',
       });
-      // Temporary `null` tenant argument (#83 Task 6 wires the real
-      // principal tenant through `AssignTeamToJobCommand`).
-      expect(teamsService.getTeam).toHaveBeenCalledWith('team-2', null);
+      expect(teamsService.getTeam).toHaveBeenCalledWith('team-2', 't-a');
     });
   });
 

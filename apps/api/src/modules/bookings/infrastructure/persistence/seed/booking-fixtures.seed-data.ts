@@ -40,5 +40,6 @@ export const bookingFixtureService = {
 
 export const bookingFixtureTeam = {
   id: '00000000-0000-0000-0001-000000000004',
+  tenantId: BOOTSTRAP_TENANT_ID,
   name: 'Seed Team A',
 };

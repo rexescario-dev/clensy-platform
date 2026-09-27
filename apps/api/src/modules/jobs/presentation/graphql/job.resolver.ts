@@ -8,6 +8,7 @@ import {
   ResolveField,
   Resolver,
 } from '@nestjs/graphql';
+import { requireTenantId } from '../../../../platform/auth/authorization/require-tenant-id';
 import { CurrentUser } from '../../../../platform/auth/decorators/current-user.decorator';
 import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
 import type { AuthenticatedPrincipal } from '../../../../platform/auth/domain/authenticated-principal';
@@ -52,6 +53,7 @@ export class JobResolver {
       actorId: currentUser.id,
       jobId: input.jobId,
       teamId: input.teamId,
+      tenantId: requireTenantId(currentUser),
     });
     return toCleaningJobType(job);
   }
@@ -117,17 +119,18 @@ export class JobResolver {
     return found ? toCleaningJobType(found) : null;
   }
 
+  // Tenant from the principal, never from the parent row (#83 Slice
+  // decision 4). No principal ⇒ null-tenant loader ⇒ null.
   @ResolveField(() => TeamType, { nullable: true })
   async team(
     @Parent() job: Pick<CleaningJob, 'teamId'>,
+    @CurrentUser() currentUser: AuthenticatedPrincipal | undefined,
   ): Promise<TeamType | null> {
     if (job.teamId === null) {
       return null;
     }
-    // `null` fails closed (never leaks a cross-tenant team) until Task 6
-    // wires the caller's principal tenant through this query.
     const team = await this.loaders
-      .teamLoaderFor(null) // #83 Task 6
+      .teamLoaderFor(currentUser?.tenantId ?? null)
       .load(job.teamId);
     return team ? toTeamType(team) : null;
   }
