@@ -15,6 +15,7 @@ import { CreateCleanerCommand } from '../../application/commands/create-cleaner.
 import { UpdateCleanerCommand } from '../../application/commands/update-cleaner.command';
 import { CurrentUser } from '../../../../platform/auth/decorators/current-user.decorator';
 import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
+import { requireTenantId } from '../../../../platform/auth/authorization/require-tenant-id';
 import type { AuthenticatedPrincipal } from '../../../../platform/auth/domain/authenticated-principal';
 import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
@@ -43,9 +44,10 @@ export class CleanerResolver {
     @CurrentUser() currentUser: AuthenticatedPrincipal,
   ): Promise<CleanerType> {
     const command: AssignCleanerToTeamCommand = {
-      actorId: currentUser.id,
       cleanerId,
       teamId,
+      actorId: currentUser.id,
+      tenantId: requireTenantId(currentUser),
     };
     const cleaner = await this.cleanersService.assignCleanerToTeam(command);
     return toCleanerType(cleaner);
@@ -57,7 +59,9 @@ export class CleanerResolver {
   async cleaner(
     @Args('id', { type: () => ID }) id: string,
   ): Promise<CleanerType | null> {
-    const cleaner = await this.cleanersService.getCleaner(id);
+    // `null` fails closed (never leaks a cross-tenant cleaner) until Task 5
+    // wires the caller's principal tenant through this query.
+    const cleaner = await this.cleanersService.getCleaner(id, null); // #83 Task 5
     return cleaner ? toCleanerType(cleaner) : null;
   }
 
@@ -71,6 +75,7 @@ export class CleanerResolver {
     const command: CreateCleanerCommand = {
       ...input,
       actorId: currentUser.id,
+      tenantId: requireTenantId(currentUser),
     };
     const cleaner = await this.cleanersService.createCleaner(command);
     return toCleanerType(cleaner);
@@ -98,6 +103,7 @@ export class CleanerResolver {
     const command: UpdateCleanerCommand = {
       ...input,
       actorId: currentUser.id,
+      tenantId: requireTenantId(currentUser),
     };
     const cleaner = await this.cleanersService.updateCleaner(id, command);
     return toCleanerType(cleaner);
