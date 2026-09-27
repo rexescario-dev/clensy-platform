@@ -27,7 +27,11 @@ import { TeamType } from './team.type';
 import { UpdateCleanerInput } from './update-cleaner.input';
 
 // Clensy nullable get-by-id, writes, and `team` object field. Root
-// `cleaners` is ReadResolver-owned.
+// `cleaners` is ReadResolver-owned (tenant-scoped by `CleanerType`'s
+// `@Authorize`). The tenant comes only from the principal (#83): reads pass
+// it through and the service/loader fail closed on `null`; writes require
+// it. A command's `tenantId` is set after `...input` so no input key can
+// override it.
 @Resolver(() => CleanerType)
 export class CleanerResolver {
   constructor(
@@ -58,10 +62,12 @@ export class CleanerResolver {
   @Roles(...VIEW_ROLES)
   async cleaner(
     @Args('id', { type: () => ID }) id: string,
+    @CurrentUser() currentUser: AuthenticatedPrincipal,
   ): Promise<CleanerType | null> {
-    // `null` fails closed (never leaks a cross-tenant cleaner) until Task 5
-    // wires the caller's principal tenant through this query.
-    const cleaner = await this.cleanersService.getCleaner(id, null); // #83 Task 5
+    const cleaner = await this.cleanersService.getCleaner(
+      id,
+      currentUser.tenantId,
+    );
     return cleaner ? toCleanerType(cleaner) : null;
   }
 
@@ -81,17 +87,18 @@ export class CleanerResolver {
     return toCleanerType(cleaner);
   }
 
+  // Tenant from the principal, never from the parent row (#83 slice decision
+  // 4). No principal ⇒ null-tenant loader ⇒ null.
   @ResolveField(() => TeamType, { nullable: true })
   async team(
     @Parent() cleaner: Pick<Cleaner, 'id' | 'teamId'>,
+    @CurrentUser() currentUser: AuthenticatedPrincipal | undefined,
   ): Promise<TeamType | null> {
     if (cleaner.teamId === null) {
       return null;
     }
-    // `null` fails closed (never leaks a cross-tenant team) until Task 5
-    // wires the caller's principal tenant through this query.
     const team = await this.loaders
-      .teamLoaderFor(null) // #83 Task 5
+      .teamLoaderFor(currentUser?.tenantId ?? null)
       .load(cleaner.teamId);
     return team ? toTeamType(team) : null;
   }

@@ -14,7 +14,11 @@ import { toTeamType } from './mappers';
 import { TeamType } from './team.type';
 
 // Clensy nullable get-by-id plus create. Root `teams` and nested `cleaners`
-// are Relatable / ReadResolver owned.
+// are Relatable / ReadResolver owned (tenant-scoped by `TeamType`'s
+// `@Authorize`). The tenant comes only from the principal (#83): reads pass
+// it through and the service fails closed on `null`; writes require it. A
+// command's `tenantId` is set after `...input` so no input key can override
+// it.
 @Resolver(() => TeamType)
 export class TeamResolver {
   constructor(private readonly teamsService: TeamsService) {}
@@ -40,10 +44,9 @@ export class TeamResolver {
   @Roles(...VIEW_ROLES)
   async team(
     @Args('id', { type: () => ID }) id: string,
+    @CurrentUser() currentUser: AuthenticatedPrincipal,
   ): Promise<TeamType | null> {
-    // `null` fails closed (never leaks a cross-tenant team) until Task 5
-    // wires the caller's principal tenant through this query.
-    const team = await this.teamsService.getTeam(id, null); // #83 Task 5
+    const team = await this.teamsService.getTeam(id, currentUser.tenantId);
     return team ? toTeamType(team) : null;
   }
 }
