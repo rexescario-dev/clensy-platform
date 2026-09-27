@@ -829,11 +829,13 @@ describe('Cleaners & Teams (e2e)', () => {
     for (let index = 0; index < 6; index += 1) {
       const team = await teamsService.createTeam({
         actorId: owner.id,
+        tenantId: owner.tenantId,
         name: `Nest ${runId}-${index}`,
       });
       teamIds.push(team.id);
       const cleaner = await cleanersService.createCleaner({
         actorId: owner.id,
+        tenantId: owner.tenantId,
         email: `nested-${runId}-${index}@example.com`,
         fullName: `Nested ${runId}-${index}`,
         phone: '555-0400',
@@ -842,6 +844,7 @@ describe('Cleaners & Teams (e2e)', () => {
         actorId: owner.id,
         cleanerId: cleaner.id,
         teamId: team.id,
+        tenantId: owner.tenantId,
       });
     }
 
@@ -872,11 +875,13 @@ describe('Cleaners & Teams (e2e)', () => {
     for (let index = 6; index < 12; index += 1) {
       const team = await teamsService.createTeam({
         actorId: owner.id,
+        tenantId: owner.tenantId,
         name: `Nest ${runId}-${index}`,
       });
       teamIds.push(team.id);
       const cleaner = await cleanersService.createCleaner({
         actorId: owner.id,
+        tenantId: owner.tenantId,
         email: `nested-${runId}-${index}@example.com`,
         fullName: `Nested ${runId}-${index}`,
         phone: '555-0400',
@@ -885,6 +890,7 @@ describe('Cleaners & Teams (e2e)', () => {
         actorId: owner.id,
         cleanerId: cleaner.id,
         teamId: team.id,
+        tenantId: owner.tenantId,
       });
     }
 

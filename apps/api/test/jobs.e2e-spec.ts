@@ -232,6 +232,7 @@ describe('Jobs (e2e)', () => {
     });
     const team = await teamsService.createTeam({
       actorId: 'e2e',
+      tenantId: BOOTSTRAP_TENANT_ID,
       name: `Jobs Fixture Team ${runId}`,
     });
     return { customer, property, service, team };
