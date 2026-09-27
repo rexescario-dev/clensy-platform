@@ -468,16 +468,15 @@ describe('Cleaners & Teams (e2e)', () => {
     ).toEqual(new Set([teamBCleaner1Id]));
     expect(teamsById.get(teamCId)?.cleaners.nodes).toEqual([]);
 
-    // --- Step 5: Batching/query-count proof, distinct from step 4. Spies
-    // wrap the REAL implementation (no `.mockImplementation`) so the actual
+    // --- Step 5: Batching/query-count proof, distinct from step 4. Spy
+    // wraps the REAL implementation (no `.mockImplementation`) so the actual
     // batched DB calls happen; only the call count/arguments are inspected.
-    // These spies are intentionally left active (not restored) for the rest
-    // of the suite — no later step calls `getTeamsByIds`/
-    // `listCleanersByTeamIds` in a way the spies would affect, since step 6
-    // exercises `TEAMS_QUERY`, which resolves through
-    // `teamCleanersLoader`/`listCleanersByTeamIds` too, but each request
-    // gets its own fresh loader/spy-call regardless of the wrapping — the
-    // spy only counts calls, it does not share state across requests. ---
+    // This spy is intentionally left active (not restored) for the rest of
+    // the suite — no later step calls `getTeamsByIds` in a way it would
+    // affect. Step 6 below re-queries `TEAMS_QUERY`, but that resolves
+    // `Team.cleaners` through nestjs-query's `@OffsetConnection` (scoped by
+    // `CleanerType`'s `@Authorize`), which never calls `getTeamsByIds` — so
+    // the spy's call count stays unaffected. ---
     const getTeamsByIdsSpy = jest.spyOn(teamsService, 'getTeamsByIds');
 
     const cleanersBatchResponse = await authedRequest(ownerSessionCookie).send({
@@ -505,24 +504,19 @@ describe('Cleaners & Teams (e2e)', () => {
     ).map((row) => row.id);
     expect(expectedTeamIdsForTeamsQuery).toContain(teamCId);
 
-    // --- Step 6: Request-isolation proof. Two genuinely separate Supertest
-    // requests (two HTTP round-trips) issue the SAME `TEAMS_QUERY`, and both
-    // requests resolve `teamCleanersLoader` against the SAME cache keys
-    // (`teamAId`, `teamBId`) — reusing the fixture teams/cleaners already
-    // created in step 4. This is deliberate: a `DataLoader`'s cache is keyed
-    // per-value, so querying a brand-new key is always a cache miss and
-    // always hits the database, regardless of whether the loader instance
-    // is request-scoped or a stale singleton — that would prove nothing.
-    // Only re-querying the SAME key across two requests can distinguish the
-    // two, which is why `teamACleaner1Id` is reassigned from Team A to Team
-    // B in between: if the request-scoped `CleanerTeamLoaders` is
-    // constructed fresh per request, the second request's loader has never
-    // seen `teamAId`/`teamBId` before and must reflect the reassignment. If
-    // `CleanerTeamLoaders` were accidentally changed to a default-scoped
-    // (singleton) provider, its `teamCleanersLoader` would still have
-    // `teamAId`/`teamBId` cached from the first request in this same test
-    // run and would return the stale, pre-reassignment membership instead —
-    // that's the regression this test needs to catch. ---
+    // --- Step 6: Request-freshness proof. Two genuinely separate Supertest
+    // requests (two HTTP round-trips) issue the SAME `TEAMS_QUERY` against
+    // the SAME teams (`teamAId`, `teamBId`) — reusing the fixture teams/
+    // cleaners already created in step 4. `Team.cleaners` is served by
+    // nestjs-query's `@OffsetConnection` (scoped by `CleanerType`'s
+    // `@Authorize`), which queries `cleaner_entity` fresh on every resolve —
+    // it is not backed by any cross-request cache. `teamACleaner1Id` is
+    // reassigned from Team A to Team B in between the two requests
+    // specifically so the second request's membership can be checked
+    // against the reassignment: if the relation read were ever memoized or
+    // served from stale state across requests, the second response would
+    // still show the pre-reassignment membership instead — that's the
+    // regression this test needs to catch. ---
     const beforeReassignResponse = await authedRequest(ownerSessionCookie).send(
       { query: TEAMS_QUERY },
     );

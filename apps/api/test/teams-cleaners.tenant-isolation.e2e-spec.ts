@@ -650,15 +650,19 @@ describe('Teams & Cleaners tenant isolation (e2e)', () => {
   // any non-null `teamId` fails closed.
   describe('REST fail-closed', () => {
     it('PATCH /bookings/:id with a teamId is 404 and leaves the team unchanged', async () => {
+      // Uses `unassignedBooking` (teamId: null), not `booking` (teamId:
+      // teamA already), so the re-read below can actually detect a leak: if
+      // the PATCH wrongly applied `teamId: teamA.id`, `stillBooking.teamId`
+      // would flip from null to teamA.id instead of staying null.
       const response = await request(app.getHttpServer())
-        .patch(`/bookings/${booking.id}`)
+        .patch(`/bookings/${unassignedBooking.id}`)
         .send({ teamId: teamA.id });
       expect(response.status).toBe(404);
 
       const stillBooking = await dataSource
         .getRepository(BookingEntity)
-        .findOneByOrFail({ id: booking.id });
-      expect(stillBooking.teamId).toBe(teamA.id);
+        .findOneByOrFail({ id: unassignedBooking.id });
+      expect(stillBooking.teamId).toBeNull();
     });
 
     it('PATCH /bookings/:id without a teamId still succeeds', async () => {
