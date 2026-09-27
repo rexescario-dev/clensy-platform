@@ -1,4 +1,7 @@
-import { createTeamBatchFn } from '../../presentation/graphql/cleaner-team.loaders';
+import {
+  createTeamBatchFn,
+  CleanerTeamLoaders,
+} from '../../presentation/graphql/cleaner-team.loaders';
 import { Team } from '../../domain/team';
 
 // Unit tests for the loader batch function in isolation (task brief).
@@ -22,26 +25,40 @@ function makeTeam(id: string): Team {
   };
 }
 
-describe('CleanerTeamLoaders', () => {
-  describe('teamLoader batch function', () => {
-    it('returns [team_a, null, team_c] in input-key order when the bulk result covers only a and c', async () => {
-      const teamA = makeTeam('a');
-      const teamC = makeTeam('c');
-      const teamsService = {
-        getTeamsByIds: jest.fn().mockResolvedValue([teamA, teamC]),
-      };
+describe('teamLoader batch function (#83 tenant scope)', () => {
+  it('asks the service for the ids within the given tenant and maps misses to null', async () => {
+    const teamA = makeTeam('a');
+    const teamsService = { getTeamsByIds: jest.fn().mockResolvedValue([teamA]) };
+    const batchFn = createTeamBatchFn(teamsService, 't-a');
+    await expect(batchFn(['a', 'foreign'])).resolves.toEqual([teamA, null]);
+    expect(teamsService.getTeamsByIds).toHaveBeenCalledWith(
+      ['a', 'foreign'],
+      't-a',
+    );
+  });
 
-      const batchFn = createTeamBatchFn(teamsService);
+  it('null tenant resolves every key to null without calling the service', async () => {
+    const teamsService = { getTeamsByIds: jest.fn() };
+    const batchFn = createTeamBatchFn(teamsService, null);
+    await expect(batchFn(['a', 'b'])).resolves.toEqual([null, null]);
+    expect(teamsService.getTeamsByIds).not.toHaveBeenCalled();
+  });
+});
 
-      const result = await batchFn(['a', 'b', 'c']);
+describe('CleanerTeamLoaders.teamLoaderFor', () => {
+  it('returns one DataLoader per tenant id, memoized for the request', () => {
+    const loaders = new CleanerTeamLoaders({ getTeamsByIds: jest.fn() } as never);
+    expect(loaders.teamLoaderFor('t-a')).toBe(loaders.teamLoaderFor('t-a'));
+    expect(loaders.teamLoaderFor('t-a')).not.toBe(loaders.teamLoaderFor('t-b'));
+    expect(loaders.teamLoaderFor(null)).toBe(loaders.teamLoaderFor(null));
+  });
 
-      // Temporary `null` tenant argument (#83 Task 4 wires the real
-      // principal tenant through this loader).
-      expect(teamsService.getTeamsByIds).toHaveBeenCalledWith(
-        ['a', 'b', 'c'],
-        null,
-      );
-      expect(result).toEqual([teamA, null, teamC]);
-    });
+  it('batches loads within one tenant into one tenant-scoped call', async () => {
+    const getTeamsByIds = jest.fn().mockResolvedValue([makeTeam('a')]);
+    const loaders = new CleanerTeamLoaders({ getTeamsByIds } as never);
+    const loader = loaders.teamLoaderFor('t-a');
+    await Promise.all([loader.load('a'), loader.load('b')]);
+    expect(getTeamsByIds).toHaveBeenCalledTimes(1);
+    expect(getTeamsByIds).toHaveBeenCalledWith(['a', 'b'], 't-a');
   });
 });

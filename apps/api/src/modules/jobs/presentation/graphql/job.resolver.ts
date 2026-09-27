@@ -124,7 +124,11 @@ export class JobResolver {
     if (job.teamId === null) {
       return null;
     }
-    const team = await this.loaders.teamLoader.load(job.teamId);
+    // `null` fails closed (never leaks a cross-tenant team) until Task 6
+    // wires the caller's principal tenant through this query.
+    const team = await this.loaders
+      .teamLoaderFor(null) // #83 Task 6
+      .load(job.teamId);
     return team ? toTeamType(team) : null;
   }
 }

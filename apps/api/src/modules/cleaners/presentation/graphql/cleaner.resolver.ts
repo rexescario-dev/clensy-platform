@@ -88,7 +88,11 @@ export class CleanerResolver {
     if (cleaner.teamId === null) {
       return null;
     }
-    const team = await this.loaders.teamLoader.load(cleaner.teamId);
+    // `null` fails closed (never leaks a cross-tenant team) until Task 5
+    // wires the caller's principal tenant through this query.
+    const team = await this.loaders
+      .teamLoaderFor(null) // #83 Task 5
+      .load(cleaner.teamId);
     return team ? toTeamType(team) : null;
   }
 

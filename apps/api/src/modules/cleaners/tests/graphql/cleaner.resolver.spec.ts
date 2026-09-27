@@ -118,29 +118,28 @@ describe('CleanerResolver', () => {
   // Proves the short-circuit exists in code, not just happens to work
   // because DataLoader tolerates a null key (task brief).
   describe('team', () => {
-    it('returns null synchronously and never calls loaders.teamLoader.load when cleaner.teamId is null', async () => {
+    it('returns null synchronously and never calls loaders.teamLoaderFor when cleaner.teamId is null', async () => {
       const loaders = {
-        teamCleanersLoader: { load: jest.fn() },
-        teamLoader: { load: jest.fn() },
+        teamLoaderFor: jest.fn(),
       };
       const resolver = new CleanerResolver({} as never, loaders as never);
 
       const result = resolver.team({ id: 'cleaner-1', teamId: null });
 
       await expect(result).resolves.toBeNull();
-      expect(loaders.teamLoader.load).not.toHaveBeenCalled();
+      expect(loaders.teamLoaderFor).not.toHaveBeenCalled();
     });
 
-    it('loads the team via loaders.teamLoader when cleaner.teamId is set', async () => {
+    it('loads the team via loaders.teamLoaderFor(null) when cleaner.teamId is set', async () => {
       const team = {
         id: 'team-1',
         createdAt: new Date(),
         name: 'Team A',
         updatedAt: new Date(),
       };
+      const load = jest.fn().mockResolvedValue(team);
       const loaders = {
-        teamCleanersLoader: { load: jest.fn() },
-        teamLoader: { load: jest.fn().mockResolvedValue(team) },
+        teamLoaderFor: jest.fn().mockReturnValue({ load }),
       };
       const resolver = new CleanerResolver({} as never, loaders as never);
 
@@ -149,7 +148,8 @@ describe('CleanerResolver', () => {
         teamId: 'team-1',
       });
 
-      expect(loaders.teamLoader.load).toHaveBeenCalledWith('team-1');
+      expect(loaders.teamLoaderFor).toHaveBeenCalledWith(null);
+      expect(load).toHaveBeenCalledWith('team-1');
       expect(result).toMatchObject({ id: 'team-1', name: 'Team A' });
     });
   });
