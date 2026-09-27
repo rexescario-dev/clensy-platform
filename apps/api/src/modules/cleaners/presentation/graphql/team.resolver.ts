@@ -4,6 +4,7 @@ import { TeamsService } from '../../application/services/teams.service';
 import { CreateTeamCommand } from '../../application/commands/create-team.command';
 import { CurrentUser } from '../../../../platform/auth/decorators/current-user.decorator';
 import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
+import { requireTenantId } from '../../../../platform/auth/authorization/require-tenant-id';
 import type { AuthenticatedPrincipal } from '../../../../platform/auth/domain/authenticated-principal';
 import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
@@ -28,6 +29,7 @@ export class TeamResolver {
     const command: CreateTeamCommand = {
       ...input,
       actorId: currentUser.id,
+      tenantId: requireTenantId(currentUser),
     };
     const team = await this.teamsService.createTeam(command);
     return toTeamType(team);
@@ -39,7 +41,9 @@ export class TeamResolver {
   async team(
     @Args('id', { type: () => ID }) id: string,
   ): Promise<TeamType | null> {
-    const team = await this.teamsService.getTeam(id);
+    // `null` fails closed (never leaks a cross-tenant team) until Task 5
+    // wires the caller's principal tenant through this query.
+    const team = await this.teamsService.getTeam(id, null); // #83 Task 5
     return team ? toTeamType(team) : null;
   }
 }

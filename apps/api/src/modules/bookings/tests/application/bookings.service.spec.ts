@@ -164,6 +164,12 @@ describe('BookingsService', () => {
       );
     });
 
+    it('passes the command tenantId to getTeam when a teamId is provided', async () => {
+      await service.create(command);
+
+      expect(teamsService.getTeam).toHaveBeenCalledWith('team-1', 't-a');
+    });
+
     it('throws NotFoundException and opens no transaction when tenantId is null (no principal tenant scope)', async () => {
       // Mirrors CustomersService.getCustomer's real fail-closed contract:
       // `tenantId: null` never resolves a row.
@@ -283,7 +289,9 @@ describe('BookingsService', () => {
         teamId: 'team-1',
       });
 
-      expect(teamsService.getTeam).toHaveBeenCalledWith('team-1');
+      // Temporary `null` tenant argument (#83 Task 6 wires the real
+      // principal tenant through `UpdateBookingCommand`).
+      expect(teamsService.getTeam).toHaveBeenCalledWith('team-1', null);
     });
 
     it('does not call getTeam when teamId is explicitly null', async () => {

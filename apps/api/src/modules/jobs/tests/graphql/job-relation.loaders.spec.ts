@@ -13,7 +13,12 @@ describe('JobRelationLoaders batch functions', () => {
 
     const result = await createJobTeamBatchFn(teamsService)(['a', 'b', 'c']);
 
-    expect(teamsService.getTeamsByIds).toHaveBeenCalledWith(['a', 'b', 'c']);
+    // Temporary `null` tenant argument (#83 Task 4 wires the real
+    // principal tenant through this loader).
+    expect(teamsService.getTeamsByIds).toHaveBeenCalledWith(
+      ['a', 'b', 'c'],
+      null,
+    );
     expect(result).toEqual([teamA, null, teamC]);
   });
 

@@ -329,7 +329,9 @@ describe('JobsService', () => {
         action: 'job.assign_team',
         entityType: 'job',
       });
-      expect(teamsService.getTeam).toHaveBeenCalledWith('team-2');
+      // Temporary `null` tenant argument (#83 Task 6 wires the real
+      // principal tenant through `AssignTeamToJobCommand`).
+      expect(teamsService.getTeam).toHaveBeenCalledWith('team-2', null);
     });
   });
 

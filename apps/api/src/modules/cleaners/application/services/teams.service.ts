@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
+import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import type { AuditLogger } from '../../../../platform/audit/application/audit-logger.port';
 import { runAuditInTransaction } from '../../../../platform/audit/infrastructure/audit-logger.service';
@@ -18,6 +19,8 @@ import { CreateTeamCommand } from '../commands/create-team.command';
 // Matches `AdminsService`'s exact local constant (spec §3) rather than a
 // shared one.
 const POSTGRES_UNIQUE_VIOLATION = '23505';
+
+const TEAM_TENANT_NAME_CONSTRAINT = 'uq_team_tenant_name';
 
 @Injectable()
 export class TeamsService {
@@ -38,23 +41,21 @@ export class TeamsService {
   createTeam(command: CreateTeamCommand): Promise<Team> {
     return this.dataSource.transaction((manager) =>
       runAuditInTransaction(manager, async () => {
-        const entity = manager.create(TeamEntity, { name: command.name });
+        const entity = manager.create(TeamEntity, {
+          tenantId: command.tenantId,
+          name: command.name,
+        });
         this.assertValid(entity);
 
-        try {
-          await manager.save(entity);
-        } catch (error) {
-          if ((error as { code?: string }).code === POSTGRES_UNIQUE_VIOLATION) {
-            throw new ConflictException('Team name is already in use');
-          }
-          throw error;
-        }
+        await this.translateUniqueViolation(() => manager.save(entity));
 
         await this.auditLogger.log({
           actorId: command.actorId,
           entityId: entity.id,
+          tenantId: command.tenantId,
           action: 'team.create',
           entityType: 'team',
+          scope: AdminScope.TENANT,
         });
 
         return entity;
@@ -62,24 +63,60 @@ export class TeamsService {
     );
   }
 
-  getTeam(id: string): Promise<Team | null> {
-    return this.teamRepository.findOneBy({ id });
+  // `tenantId: null` (no principal tenant scope, RFC §4.5) fails closed
+  // WITHOUT issuing a repository query.
+  getTeam(id: string, tenantId: string | null): Promise<Team | null> {
+    if (tenantId === null) {
+      return Promise.resolve(null);
+    }
+    return this.teamRepository.findOneBy({ id, tenantId });
   }
 
-  // Bulk lookup for Task 3's DataLoader; deliberately not exposed over
-  // GraphQL directly. Returns exactly the rows that exist for the given
-  // ids — no synthetic entries for missing ones, the loader handles gaps.
-  getTeamsByIds(ids: string[]): Promise<Team[]> {
-    return this.teamRepository.findBy({ id: In(ids) });
+  // Bulk lookup for the `Cleaner.team` / `CleaningJob.team` loaders. `tenantId`
+  // MUST be in the same `where` as `id: In(ids)` — never fetch by ids then
+  // filter in memory. A foreign id is simply absent; the loader maps it to null.
+  getTeamsByIds(ids: string[], tenantId: string | null): Promise<Team[]> {
+    if (ids.length === 0 || tenantId === null) {
+      return Promise.resolve([]);
+    }
+    return this.teamRepository.findBy({ id: In(ids), tenantId });
   }
 
-  listTeams(): Promise<Team[]> {
-    return this.teamRepository.find();
+  listTeams(tenantId: string | null): Promise<Team[]> {
+    if (tenantId === null) {
+      return Promise.resolve([]);
+    }
+    return this.teamRepository.find({ where: { tenantId } });
   }
 
   private assertValid(team: Pick<Team, 'name'>): void {
     if (!team.name?.trim()) {
       throw new BadRequestException('name must not be empty');
+    }
+  }
+
+  // Same constraint-name match as `CustomersService.translateUniqueViolation`
+  // (#82): an unrelated 23505 is never mislabelled as a name conflict; with no
+  // constraint name available, fall back to the code alone.
+  private async translateUniqueViolation<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (error) {
+      const err = error as {
+        code?: string;
+        constraint?: string;
+        driverError?: { constraint?: string };
+      };
+      if (err.code === POSTGRES_UNIQUE_VIOLATION) {
+        const constraint = err.driverError?.constraint ?? err.constraint;
+        if (
+          constraint === undefined ||
+          constraint === TEAM_TENANT_NAME_CONSTRAINT
+        ) {
+          throw new ConflictException('Team name is already in use');
+        }
+      }
+      throw error;
     }
   }
 }

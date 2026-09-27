@@ -12,7 +12,9 @@ export function createTeamBatchFn(
   teamsService: Pick<TeamsService, 'getTeamsByIds'>,
 ): DataLoader.BatchLoadFn<string, Team | null> {
   return async (ids) => {
-    const teams = await teamsService.getTeamsByIds([...ids]);
+    // `null` fails closed (never leaks a cross-tenant team) until Task 4
+    // wires the caller's principal tenant through this loader.
+    const teams = await teamsService.getTeamsByIds([...ids], null); // #83 Task 4
     const byId = new Map(teams.map((team) => [team.id, team]));
     return ids.map((id) => byId.get(id) ?? null);
   };

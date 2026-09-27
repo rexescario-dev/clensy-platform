@@ -137,7 +137,12 @@ export class BookingsService {
     // booking's existence check, mutation, and audit event. Sound on the
     // same no-Phase-1-team-deletion invariant `create` relies on.
     if (command.teamId !== undefined && command.teamId !== null) {
-      const team = await this.teamsService.getTeam(command.teamId);
+      // `null` fails closed (never leaks a cross-tenant team) until Task 6
+      // wires the real principal tenant through `UpdateBookingCommand`.
+      const team = await this.teamsService.getTeam(
+        command.teamId,
+        null, // #83 Task 6
+      );
       if (!team) {
         throw new NotFoundException(`Team ${command.teamId} not found`);
       }
@@ -277,7 +282,10 @@ export class BookingsService {
     }
 
     if (command.teamId != null) {
-      const team = await this.teamsService.getTeam(command.teamId);
+      const team = await this.teamsService.getTeam(
+        command.teamId,
+        command.tenantId,
+      );
       if (!team) {
         throw new NotFoundException(`Team ${command.teamId} not found`);
       }

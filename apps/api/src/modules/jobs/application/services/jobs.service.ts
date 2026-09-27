@@ -66,7 +66,12 @@ export class JobsService {
   // plan Task 3). Same-state assignment still `manager.update()`s so
   // `updatedAt` bumps and `job.assign_team` fires.
   async assignTeam(command: AssignTeamToJobCommand): Promise<CleaningJob> {
-    const team = await this.teamsService.getTeam(command.teamId);
+    // `null` fails closed (never leaks a cross-tenant team) until Task 6
+    // wires the real principal tenant through `AssignTeamToJobCommand`.
+    const team = await this.teamsService.getTeam(
+      command.teamId,
+      null, // #83 Task 6
+    );
     if (!team) {
       throw new NotFoundException(`Team ${command.teamId} not found`);
     }
