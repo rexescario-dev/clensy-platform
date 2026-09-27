@@ -64,6 +64,7 @@ describe('Teams & Cleaners tenant isolation (e2e)', () => {
   let propertyB: PropertyEntity;
   let bookableService: { id: string };
   let booking: BookingEntity;
+  let unassignedBooking: BookingEntity;
   let job: CleaningJobEntity;
 
   const LOGIN_MUTATION = `
@@ -240,6 +241,18 @@ describe('Teams & Cleaners tenant isolation (e2e)', () => {
         scheduledAt: new Date('2030-01-01T09:00:00Z'),
       }),
     );
+    // Dedicated, team-less booking for the cross-tenant `updateBooking`
+    // write: its `teamId: null` makes the post-rejection re-read non-vacuous.
+    unassignedBooking = await bookingRepository.save(
+      bookingRepository.create({
+        customerId: customerA.id,
+        propertyId: propertyA.id,
+        serviceId: bookableService.id,
+        teamId: null,
+        pricingSnapshot: { priceMinorUnits: 2500 },
+        scheduledAt: new Date('2030-01-02T09:00:00Z'),
+      }),
+    );
     const jobRepository = dataSource.getRepository(CleaningJobEntity);
     job = await jobRepository.save(
       jobRepository.create({
@@ -263,6 +276,11 @@ describe('Teams & Cleaners tenant isolation (e2e)', () => {
           await dataSource
             .getRepository(BookingEntity)
             .delete({ id: booking.id });
+        }
+        if (unassignedBooking) {
+          await dataSource
+            .getRepository(BookingEntity)
+            .delete({ id: unassignedBooking.id });
         }
         if (bookableService) {
           await dataSource.query(
@@ -522,7 +540,7 @@ describe('Teams & Cleaners tenant isolation (e2e)', () => {
         `mutation UpdateBooking($input: UpdateBookingInput!) {
           updateBooking(updateBookingInput: $input) { id }
         }`,
-        { input: { id: booking.id, teamId: teamA.id } },
+        { input: { id: unassignedBooking.id, teamId: teamA.id } },
       );
       expect(response.body.errors).toBeDefined();
       expect(errorStatus(response)).toBe(404);
@@ -530,10 +548,10 @@ describe('Teams & Cleaners tenant isolation (e2e)', () => {
         `Team ${teamA.id} not found`,
       );
 
-      const stillBooking = await dataSource
+      const stillUnassigned = await dataSource
         .getRepository(BookingEntity)
-        .findOneByOrFail({ id: booking.id });
-      expect(stillBooking.teamId).toBe(teamA.id);
+        .findOneByOrFail({ id: unassignedBooking.id });
+      expect(stillUnassigned.teamId).toBeNull();
     });
 
     it("createBooking with own customer/property but another tenant's team is 404", async () => {
