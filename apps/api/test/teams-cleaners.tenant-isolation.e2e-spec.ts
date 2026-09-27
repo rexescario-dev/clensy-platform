@@ -529,6 +529,11 @@ describe('Teams & Cleaners tenant isolation (e2e)', () => {
       expect(response.body.errors[0].message).toContain(
         `Team ${teamA.id} not found`,
       );
+
+      const stillBooking = await dataSource
+        .getRepository(BookingEntity)
+        .findOneByOrFail({ id: booking.id });
+      expect(stillBooking.teamId).toBe(teamA.id);
     });
 
     it("createBooking with own customer/property but another tenant's team is 404", async () => {
