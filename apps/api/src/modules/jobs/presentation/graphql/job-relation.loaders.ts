@@ -58,7 +58,9 @@ export class JobRelationLoaders {
   teamLoaderFor(tenantId: string | null): DataLoader<string, Team | null> {
     let loader = this.teamLoaders.get(tenantId);
     if (!loader) {
-      loader = new DataLoader(createJobTeamBatchFn(this.teamsService, tenantId));
+      loader = new DataLoader(
+        createJobTeamBatchFn(this.teamsService, tenantId),
+      );
       this.teamLoaders.set(tenantId, loader);
     }
     return loader;

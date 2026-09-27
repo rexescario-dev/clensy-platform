@@ -32,7 +32,9 @@ describe('JobRelationLoaders batch functions', () => {
 describe('teamLoader batch function (#83 tenant scope)', () => {
   it('asks the service for the ids within the given tenant and maps misses to null', async () => {
     const teamA = makeTeam('a');
-    const teamsService = { getTeamsByIds: jest.fn().mockResolvedValue([teamA]) };
+    const teamsService = {
+      getTeamsByIds: jest.fn().mockResolvedValue([teamA]),
+    };
     const batchFn = createJobTeamBatchFn(teamsService, 't-a');
     await expect(batchFn(['a', 'foreign'])).resolves.toEqual([teamA, null]);
     expect(teamsService.getTeamsByIds).toHaveBeenCalledWith(
@@ -75,9 +77,12 @@ describe('JobRelationLoaders.teamLoaderFor', () => {
   it('checklistLoader is unchanged and still resolves via getChecklistsByJobIds', async () => {
     const checklistA = { id: 'c-a', jobId: 'a' };
     const getChecklistsByJobIds = jest.fn().mockResolvedValue([checklistA]);
-    const loaders = new JobRelationLoaders({ getTeamsByIds: jest.fn() } as never, {
-      getChecklistsByJobIds,
-    } as never);
+    const loaders = new JobRelationLoaders(
+      { getTeamsByIds: jest.fn() } as never,
+      {
+        getChecklistsByJobIds,
+      } as never,
+    );
     await expect(loaders.checklistLoader.load('a')).resolves.toEqual(
       checklistA,
     );

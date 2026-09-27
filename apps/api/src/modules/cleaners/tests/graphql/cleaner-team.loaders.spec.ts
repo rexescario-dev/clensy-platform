@@ -28,7 +28,9 @@ function makeTeam(id: string): Team {
 describe('teamLoader batch function (#83 tenant scope)', () => {
   it('asks the service for the ids within the given tenant and maps misses to null', async () => {
     const teamA = makeTeam('a');
-    const teamsService = { getTeamsByIds: jest.fn().mockResolvedValue([teamA]) };
+    const teamsService = {
+      getTeamsByIds: jest.fn().mockResolvedValue([teamA]),
+    };
     const batchFn = createTeamBatchFn(teamsService, 't-a');
     await expect(batchFn(['a', 'foreign'])).resolves.toEqual([teamA, null]);
     expect(teamsService.getTeamsByIds).toHaveBeenCalledWith(
@@ -47,7 +49,9 @@ describe('teamLoader batch function (#83 tenant scope)', () => {
 
 describe('CleanerTeamLoaders.teamLoaderFor', () => {
   it('returns one DataLoader per tenant id, memoized for the request', () => {
-    const loaders = new CleanerTeamLoaders({ getTeamsByIds: jest.fn() } as never);
+    const loaders = new CleanerTeamLoaders({
+      getTeamsByIds: jest.fn(),
+    } as never);
     expect(loaders.teamLoaderFor('t-a')).toBe(loaders.teamLoaderFor('t-a'));
     expect(loaders.teamLoaderFor('t-a')).not.toBe(loaders.teamLoaderFor('t-b'));
     expect(loaders.teamLoaderFor(null)).toBe(loaders.teamLoaderFor(null));

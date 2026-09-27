@@ -44,9 +44,9 @@ export class CleanerResolver {
     @CurrentUser() currentUser: AuthenticatedPrincipal,
   ): Promise<CleanerType> {
     const command: AssignCleanerToTeamCommand = {
+      actorId: currentUser.id,
       cleanerId,
       teamId,
-      actorId: currentUser.id,
       tenantId: requireTenantId(currentUser),
     };
     const cleaner = await this.cleanersService.assignCleanerToTeam(command);

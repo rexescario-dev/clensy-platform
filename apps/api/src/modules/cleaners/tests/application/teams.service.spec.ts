@@ -218,13 +218,24 @@ describe('TeamsService', () => {
         driverError: { constraint: 'uq_team_tenant_name' },
       });
       await expect(
-        service.createTeam({ actorId: 'actor-1', tenantId: 't-a', name: 'Alpha' }),
+        service.createTeam({
+          actorId: 'actor-1',
+          tenantId: 't-a',
+          name: 'Alpha',
+        }),
       ).rejects.toThrow(new ConflictException('Team name is already in use'));
 
-      const other = { code: '23505', driverError: { constraint: 'uq_team_id_tenant' } };
+      const other = {
+        code: '23505',
+        driverError: { constraint: 'uq_team_id_tenant' },
+      };
       manager.save.mockRejectedValueOnce(other);
       await expect(
-        service.createTeam({ actorId: 'actor-1', tenantId: 't-a', name: 'Alpha' }),
+        service.createTeam({
+          actorId: 'actor-1',
+          tenantId: 't-a',
+          name: 'Alpha',
+        }),
       ).rejects.toBe(other);
     });
   });

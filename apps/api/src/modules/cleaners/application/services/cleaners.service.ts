@@ -98,8 +98,8 @@ export class CleanersService {
     return this.dataSource.transaction((manager) =>
       runAuditInTransaction(manager, async () => {
         const entity = manager.create(CleanerEntity, {
-          tenantId: command.tenantId,
           teamId: null,
+          tenantId: command.tenantId,
           email: command.email,
           fullName: command.fullName,
           notes: command.notes ?? null,

@@ -48,8 +48,8 @@ describe('CleanersService', () => {
   function makeEntity(overrides: Partial<Cleaner> = {}): Cleaner {
     return {
       id: 'cleaner-1',
-      tenantId: 't-a',
       teamId: null,
+      tenantId: 't-a',
       createdAt: new Date(),
       email: 'jane@example.com',
       fullName: 'Jane',
@@ -192,9 +192,9 @@ describe('CleanersService', () => {
       await expect(
         service.assignCleanerToTeam({
           actorId: 'actor-1',
-          tenantId: 't-a',
           cleanerId: 'cleaner-1',
           teamId: 'missing-team',
+          tenantId: 't-a',
         }),
       ).rejects.toThrow(NotFoundException);
 
@@ -211,9 +211,9 @@ describe('CleanersService', () => {
       await expect(
         service.assignCleanerToTeam({
           actorId: 'actor-1',
-          tenantId: 't-a',
           cleanerId: 'missing-cleaner',
           teamId: 'team-1',
+          tenantId: 't-a',
         }),
       ).rejects.toThrow(NotFoundException);
 
@@ -228,9 +228,9 @@ describe('CleanersService', () => {
       const cleaner = makeEntity();
       cleanerRepository.findOneBy.mockResolvedValue(cleaner);
 
-      await expect(
-        service.getCleaner('cleaner-1', 't-a'),
-      ).resolves.toEqual(cleaner);
+      await expect(service.getCleaner('cleaner-1', 't-a')).resolves.toEqual(
+        cleaner,
+      );
       expect(cleanerRepository.findOneBy).toHaveBeenCalledWith({
         id: 'cleaner-1',
         tenantId: 't-a',
@@ -240,9 +240,7 @@ describe('CleanersService', () => {
     it('returns null for a nonexistent id', async () => {
       cleanerRepository.findOneBy.mockResolvedValue(null);
 
-      await expect(
-        service.getCleaner('missing-id', 't-a'),
-      ).resolves.toBeNull();
+      await expect(service.getCleaner('missing-id', 't-a')).resolves.toBeNull();
     });
   });
 
@@ -266,9 +264,9 @@ describe('CleanersService', () => {
       const cleaners = [makeEntity({ teamId: 'team-1' })];
       cleanerRepository.findBy.mockResolvedValue(cleaners);
 
-      await expect(
-        service.listTeamCleaners('team-1', 't-a'),
-      ).resolves.toEqual(cleaners);
+      await expect(service.listTeamCleaners('team-1', 't-a')).resolves.toEqual(
+        cleaners,
+      );
       expect(cleanerRepository.findBy).toHaveBeenCalledWith({
         teamId: 'team-1',
         tenantId: 't-a',
@@ -278,9 +276,9 @@ describe('CleanersService', () => {
     it('returns an empty array for a team with no members', async () => {
       cleanerRepository.findBy.mockResolvedValue([]);
 
-      await expect(
-        service.listTeamCleaners('team-1', 't-a'),
-      ).resolves.toEqual([]);
+      await expect(service.listTeamCleaners('team-1', 't-a')).resolves.toEqual(
+        [],
+      );
     });
   });
 
@@ -310,9 +308,9 @@ describe('CleanersService', () => {
     it('null tenant fails closed without a repository query', async () => {
       await expect(service.getCleaner('c-1', null)).resolves.toBeNull();
       await expect(service.listCleaners(null)).resolves.toEqual([]);
-      await expect(
-        service.listTeamCleaners('team-1', null),
-      ).resolves.toEqual([]);
+      await expect(service.listTeamCleaners('team-1', null)).resolves.toEqual(
+        [],
+      );
 
       expect(cleanerRepository.findOneBy).not.toHaveBeenCalled();
       expect(cleanerRepository.find).not.toHaveBeenCalled();
@@ -323,9 +321,9 @@ describe('CleanersService', () => {
       await service.createCleaner({
         actorId: 'a',
         tenantId: 't-a',
+        email: 'e@x.com',
         fullName: 'N',
         phone: '1',
-        email: 'e@x.com',
       });
 
       expect(manager.create).toHaveBeenCalledWith(
@@ -395,9 +393,9 @@ describe('CleanersService', () => {
       await expect(
         service.assignCleanerToTeam({
           actorId: 'a',
-          tenantId: 't-b',
           cleanerId: 'c-1',
           teamId: 'team-a',
+          tenantId: 't-b',
         }),
       ).rejects.toThrow(NotFoundException);
 
@@ -418,9 +416,9 @@ describe('CleanersService', () => {
 
       await service.assignCleanerToTeam({
         actorId: 'a',
-        tenantId: 't-a',
         cleanerId: 'c-1',
         teamId: 'team-a',
+        tenantId: 't-a',
       });
 
       expect(manager.findOneBy).toHaveBeenNthCalledWith(2, CleanerEntity, {
@@ -445,9 +443,9 @@ describe('CleanersService', () => {
         service.createCleaner({
           actorId: 'a',
           tenantId: 't-a',
+          email: 'e@x.com',
           fullName: 'N',
           phone: '1',
-          email: 'e@x.com',
         }),
       ).rejects.toThrow(new ConflictException('Email is already in use'));
 
@@ -460,9 +458,9 @@ describe('CleanersService', () => {
         service.createCleaner({
           actorId: 'a',
           tenantId: 't-a',
+          email: 'e@x.com',
           fullName: 'N',
           phone: '1',
-          email: 'e@x.com',
         }),
       ).rejects.toBe(other);
     });
