@@ -2,14 +2,14 @@
 
 | Field | Value |
 | --- | --- |
-| **Status** | Draft |
+| **Status** | Accepted |
 | **Kind** | Implementation plan (M4) for **one** delivery slice |
 | **Date** | 2026-09-27 |
 | **Tracking** | GitHub [#83](https://github.com/rexescario-dev/clensy-platform/issues/83) (program [#81](https://github.com/rexescario-dev/clensy-platform/issues/81)). One PR for this plan (Accepted at M5) + implementation (process §2.8). Branch `feat/83-teams-cleaners-tenant-isolation`. |
 | **Package / repo** | `clensy-platform` — `apps/api` only |
 | **Depends on (Accepted)** | [Multi-Tenant Architecture](../specs/2026-09-23-multi-tenant-architecture-design.md) (Accepted, M3 2026-09-23). **Where this plan and that specification disagree, the specification wins** — stop and return to M2/M3. Relies on the shipped [Tenant Identity Foundation plan](2026-09-23-tenant-identity-foundation-plan.md) (#68: `Tenant`, `BOOTSTRAP_TENANT_ID`, principal `{ id, role, scope, tenantId }`, `AuditLogEvent.scope`/`tenantId`, `test/helpers/seed-tenant-admin.ts`) and the shipped [Customer & Property Tenant Isolation plan](2026-09-24-customer-property-tenant-isolation-plan.md) (#82: `tenantReadAuthorizer` / `tenantFilterFor`, `requireTenantId`, service null-tenant contract, relation-override regression pattern). Also relies on [Cleaners & Teams](../specs/2026-08-16-cleaners-teams-design.md), [nestjs-query GraphQL Reads](../specs/2026-08-28-nestjs-query-graphql-reads-design.md) and [Paginated GraphQL Collections](../specs/2026-08-28-paginated-graphql-collections-design.md) as **extended/constrained by the RFC** (§8). |
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Do **not** invent product semantics; the Accepted specification wins. Do not begin until M5 has Accepted this plan.
+> **For agentic workers:** **M5 Accepted 2026-09-27.** Tracking [#83](https://github.com/rexescario-dev/clensy-platform/issues/83). Execution method: superpowers:subagent-driven-development (chosen at M5), one review per task. Steps use checkbox (`- [ ]`) syntax. Do **not** invent product semantics; the Accepted specification wins. M6 constraints (M5): no production-tenant provisioning, no unrelated refactoring, no push or PR as a side effect.
 
 **Goal:** Make Team and Cleaner tenant-owned — required `tenantId`, per-tenant (case-sensitive) name/email uniqueness, database-enforced same-tenant Cleaner → Team reference, and a principal-derived tenant predicate on every Team/Cleaner read and write path (services, nestjs-query list/count/relations, DataLoaders, mutations, cross-module lookups).
 
