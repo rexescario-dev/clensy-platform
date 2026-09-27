@@ -17,6 +17,7 @@ function makeCleaner(id: string, teamId: string | null): Cleaner {
   return {
     id,
     teamId,
+    tenantId: 't-a',
     createdAt: new Date(),
     email: `${id}@example.com`,
     fullName: `Cleaner ${id}`,
@@ -29,6 +30,7 @@ function makeCleaner(id: string, teamId: string | null): Cleaner {
 function makeTeam(id: string): Team {
   return {
     id,
+    tenantId: 't-a',
     createdAt: new Date(),
     name: `Team ${id}`,
     updatedAt: new Date(),

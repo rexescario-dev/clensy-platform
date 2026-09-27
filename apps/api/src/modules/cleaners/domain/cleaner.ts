@@ -5,6 +5,7 @@
 // mirroring `Property.customerId`'s precedent.
 export interface Cleaner {
   id: string;
+  tenantId: string;
   fullName: string;
   phone: string;
   email: string;

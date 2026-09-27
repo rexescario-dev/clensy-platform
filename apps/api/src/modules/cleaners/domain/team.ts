@@ -4,6 +4,7 @@
 // relation here, mirroring `Customer`'s deliberate omission of `properties`.
 export interface Team {
   id: string;
+  tenantId: string;
   name: string;
   createdAt: Date;
   updatedAt: Date;
