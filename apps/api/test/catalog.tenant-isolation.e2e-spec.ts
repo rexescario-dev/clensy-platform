@@ -60,6 +60,7 @@ describe('Catalog tenant isolation (e2e)', () => {
   let serviceA: { id: string; name: string };
   let addOnA: { id: string; name: string };
   let ruleA: { id: string };
+  let addOnRuleA: { id: string };
   let serviceB: { id: string; name: string };
   let addOnB: { id: string; name: string };
   let ruleB: { id: string };
@@ -68,6 +69,7 @@ describe('Catalog tenant isolation (e2e)', () => {
   let propertyA: PropertyEntity;
   let propertyB: PropertyEntity;
   let bookingA: { id: string };
+  let bookingBId: string | undefined; // created inside Case 7's positive control
   let laundryOrderAId: string; // A, priced (serviceA + addOnA) — invoice case
   let laundryOrderBId: string; // B, WEIGHED — cross-tenant price case
   let invoiceAId: string | undefined;
@@ -108,10 +110,32 @@ describe('Catalog tenant isolation (e2e)', () => {
       .send({ query, variables });
   }
 
+  // NestJS's default GraphQL exception formatting puts the HTTP status at
+  // `extensions.status` for statuses with no dedicated Apollo error code
+  // (404 NotFoundException, 409 ConflictException — confirmed against this
+  // suite's own 404/409 cases). A status WITH a dedicated Apollo code (400
+  // BadRequestException -> `code: 'BAD_REQUEST'`) omits the top-level
+  // `.status` and only carries it nested under `extensions.originalError.
+  // statusCode` — verified directly against this app's real GraphQL error
+  // responses (`{i:{orderId,baseServiceId,addOns:[]}}` against
+  // `priceLaundryOrder`, `{id,i:{name}}` against `updateService`). Reading
+  // both keeps one assertion helper correct for every status this suite
+  // checks (400/404/409) without depending on which of the two shapes a
+  // given exception type happens to produce.
   function errorStatus(response: request.Response): number | undefined {
+    const error = (
+      response.body as {
+        errors?: {
+          extensions?: {
+            status?: number;
+            originalError?: { statusCode?: number };
+          };
+        }[];
+      }
+    ).errors?.[0];
     return (
-      response.body as { errors?: { extensions?: { status?: number } }[] }
-    ).errors?.[0]?.extensions?.status;
+      error?.extensions?.status ?? error?.extensions?.originalError?.statusCode
+    );
   }
 
   async function insertCustomerAndProperty(
@@ -202,7 +226,7 @@ describe('Catalog tenant isolation (e2e)', () => {
       name: `Fridge ${run}`,
       priceMinorUnits: 700,
     });
-    await pricingRulesService.createPricingRule({
+    addOnRuleA = await pricingRulesService.createPricingRule({
       actorId: ownerAId,
       addOnId: addOnA.id,
       tenantId: tenantA,
@@ -324,6 +348,11 @@ describe('Catalog tenant isolation (e2e)', () => {
           await dataSource
             .getRepository(BookingEntity)
             .delete({ id: bookingA.id });
+        }
+        if (bookingBId) {
+          await dataSource
+            .getRepository(BookingEntity)
+            .delete({ id: bookingBId });
         }
         // Any extra service/add-on/pricing-rule rows this suite's tests
         // create (uniqueness cases, audit case) live under tenantA/tenantB
@@ -551,19 +580,30 @@ describe('Catalog tenant isolation (e2e)', () => {
         `query($id: ID!){ service(id:$id){ id name } }`,
         { id: serviceA.id },
       );
+      expect(stillServiceA.body.errors).toBeUndefined();
       expect(stillServiceA.body.data.service).toEqual({
         id: serviceA.id,
         name: serviceA.name,
       });
 
-      const stillAddOns = await addOnsAs(cookieA, { id: { eq: addOnA.id } });
-      expect(stillAddOns.nodes).toEqual([{ id: addOnA.id }]);
+      // Selects `name`, not just `id` — proving `updateAddOn` didn't apply
+      // its `name: 'X'` change, not merely that the row still exists.
+      const stillAddOnARes = await gql(
+        cookieA,
+        `query($filter: AddOnFilter){ addOns(filter:$filter, paging:{limit:50}){ nodes { id name } } }`,
+        { filter: { id: { eq: addOnA.id } } },
+      );
+      expect(stillAddOnARes.body.errors).toBeUndefined();
+      expect(stillAddOnARes.body.data.addOns.nodes).toEqual([
+        { id: addOnA.id, name: addOnA.name },
+      ]);
 
       const stillActivePricing = await gql(
         cookieA,
         `query($id: ID!){ activePricing(serviceId:$id){ id } }`,
         { id: serviceA.id },
       );
+      expect(stillActivePricing.body.errors).toBeUndefined();
       expect(stillActivePricing.body.data.activePricing).toEqual({
         id: ruleA.id,
       });
@@ -573,14 +613,20 @@ describe('Catalog tenant isolation (e2e)', () => {
         [serviceA.id],
       );
       expect(openRuleCount).toEqual([{ count: 1, id: ruleA.id }]);
+
+      const openAddOnRuleCount = await dataSource.query(
+        `SELECT count(*)::int AS count, id FROM "pricing_rule_entity" WHERE "addOnId" = $1 AND "effectiveTo" IS NULL GROUP BY id`,
+        [addOnA.id],
+      );
+      expect(openAddOnRuleCount).toEqual([{ count: 1, id: addOnRuleA.id }]);
     });
   });
 
   // Case 7: cross-module catalog lookups (Bookings, Laundry, Billing) are
   // tenant-scoped too — a foreign id is indistinguishable from a missing one.
   describe('cross-module catalog lookups', () => {
-    it("createBooking with B's own customer/property but serviceA.id is 404", async () => {
-      const response = await gql(
+    it("createBooking with B's own customer/property but serviceA.id is 404 (not vacuous — proven by a same-shape success with serviceB)", async () => {
+      const crossTenantRes = await gql(
         cookieB,
         `mutation($i: CreateBookingInput!){ createBooking(createBookingInput:$i){ id } }`,
         {
@@ -592,7 +638,31 @@ describe('Catalog tenant isolation (e2e)', () => {
           },
         },
       );
-      expect(errorStatus(response)).toBe(404);
+      expect(errorStatus(crossTenantRes)).toBe(404);
+      // Ties the 404 to the service lookup specifically — Customer/Property
+      // lookups also 404, so the status code alone would be vacuous here.
+      expect(crossTenantRes.body.errors[0].message).toBe(
+        `Service ${serviceA.id} not found`,
+      );
+
+      // Positive control: the exact same shape of request, but with B's own
+      // service, succeeds — proving the 404 above is caused by the foreign
+      // `serviceId`, not by some unrelated problem with B's customer/property.
+      const positiveRes = await gql(
+        cookieB,
+        `mutation($i: CreateBookingInput!){ createBooking(createBookingInput:$i){ id } }`,
+        {
+          i: {
+            customerId: customerB.id,
+            propertyId: propertyB.id,
+            serviceId: serviceB.id,
+            scheduledAt: '2030-02-02T09:00:00.000Z',
+          },
+        },
+      );
+      expect(positiveRes.body.errors).toBeUndefined();
+      bookingBId = positiveRes.body.data.createBooking.id;
+      expect(bookingBId).toBeTruthy();
     });
 
     it("priceLaundryOrder on B's weighed order with baseServiceId: serviceA.id is 400 (no effective price)", async () => {
@@ -608,6 +678,7 @@ describe('Catalog tenant isolation (e2e)', () => {
         },
       );
       expect(response.body.errors).toBeDefined();
+      expect(errorStatus(response)).toBe(400);
       expect(response.body.errors[0].message).toContain(
         `No effective price for serviceId ${serviceA.id}`,
       );
@@ -626,6 +697,7 @@ describe('Catalog tenant isolation (e2e)', () => {
         },
       );
       expect(response.body.errors).toBeDefined();
+      expect(errorStatus(response)).toBe(400);
       expect(response.body.errors[0].message).toContain(
         `No effective price for addOnId ${addOnA.id}`,
       );
@@ -640,7 +712,13 @@ describe('Catalog tenant isolation (e2e)', () => {
         i: { laundryOrderId: laundryOrderAId, paymentTerms: 'PAY_NOW' },
       });
       expect(asB.body.errors).toBeDefined();
-      expect(asB.body.errors[0].message).toMatch(/could not be resolved/);
+      expect(errorStatus(asB)).toBe(400);
+      // Anchored to `^Service` — the add-on variant of this same message
+      // ("Add-on ... could not be resolved") would also match a bare
+      // `/could not be resolved/`.
+      expect(asB.body.errors[0].message).toMatch(
+        /^Service .* could not be resolved/,
+      );
 
       const asA = await gql(cookieA, GENERATE, {
         i: { laundryOrderId: laundryOrderAId, paymentTerms: 'PAY_NOW' },
@@ -692,6 +770,9 @@ describe('Catalog tenant isolation (e2e)', () => {
       );
       expect(updateToShared.body.errors).toBeDefined();
       expect(errorStatus(updateToShared)).toBe(409);
+      expect(updateToShared.body.errors[0].message).toBe(
+        'Service name is already in use',
+      );
       // The extra service this test created in A (and B) beyond
       // `serviceA`/`serviceB` is removed by `removeTestTenants` in
       // `afterAll` — no separate cleanup needed here.
