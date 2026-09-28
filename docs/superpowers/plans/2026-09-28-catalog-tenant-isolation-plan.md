@@ -21,7 +21,7 @@
 
 ## Delivery intent
 
-Implement RFC §4.4–§4.6 for **Service**, **AddOn** and **PricingRule** only. After this slice a tenant principal can neither see nor write another tenant's catalog records through any API path, the database rejects a pricing rule whose target belongs to another tenant, two tenants may each own a service or add-on with the same (case-insensitive) name, and catalog audit events carry the tenant. Booking, LaundryOrderLine and Invoice tables stay unscoped (#85, #87); those modules only change how they **ask** for catalog data.
+Implement RFC §4.4–§4.6 for **Service**, **AddOn** and **PricingRule** only. After this slice, tenant-scoped catalog APIs cannot resolve or mutate another tenant's Service, AddOn, or PricingRule. Cross-module records that remain globally scoped are explicitly excluded; see **Known residual exposure**. In addition, the database rejects a pricing rule whose target belongs to another tenant, two tenants may each own a service or add-on with the same (case-insensitive) name, and catalog audit events carry the tenant. Booking, LaundryOrderLine and Invoice tables stay unscoped (#85, #87); those modules only change how they **ask** for catalog data.
 
 **What this slice does and does not guarantee.** #84 guarantees that catalog operations themselves cannot resolve another tenant's catalog records through tenant-scoped APIs. #84 does **not** claim complete tenant isolation for modules whose own records remain globally scoped (Booking, LaundryOrder/LaundryOrderLine, Invoice). See **Known residual exposure** below.
 
@@ -32,9 +32,10 @@ These resolve planning-level choices the RFC leaves to M4. None adds product sem
 1. **One migration, safe order, no duplicate pre-check.** Today `service_entity` and `add_on_entity` names are **globally** unique case-insensitively (`uq_service_name_lower`, `uq_add_on_name_lower`, expression indexes on `LOWER("name")` — migrations `1786893419092-AddService`, `1786894582095-AddAddOn`; no later migration touches them). Backfilling every row to one tenant therefore cannot create a duplicate under `("tenantId", LOWER("name"))`. The migration order is load-bearing (see Global constraints) and runs in **one** transaction.
 2. **Case-insensitive uniqueness is preserved, per tenant.** RFC §4.4: "unique per tenant on case-insensitive `name` (replaces global `LOWER(name)` uniqueness)". New unique **indexes** `uq_service_tenant_name_lower` / `uq_add_on_tenant_name_lower` on `("tenantId", LOWER("name"))`. `Alpha` in A and `alpha` in B both succeed; `Alpha` then `alpha` in one tenant ⇒ 409.
 3. **Conflict messages unchanged; mapping by constraint name.** The application pre-check (`assertNameAvailable`) gains `AND tenantId = :tenantId`. The race-window fallback (`translateUniqueViolation`) maps a `23505` to `ConflictException('Service name is already in use')` / `('Add-on name is already in use')` **only** when the violated constraint is the new tenant-name index (or no constraint name is available), #82's `CustomersService.translateUniqueViolation` idiom, so an unrelated `23505` is not mislabelled.
-4. **Read vs write null-tenant behaviour (two distinct rules).**
-   - **Reads** with `tenantId === null` fail closed **without issuing a repository query**: `null` (`getService`, `resolveEffectivePricing`), `[]` (`getServicesByIds`, `getAddOnsByIds`, `listServices`, `listAddOns`, `getActivePricingForServiceIds`), or the operation's existing `NotFoundException` (`getActivePricing`, whose existing missing-service contract is 404).
+4. **Read vs write null-tenant behaviour (two distinct rules, plus one framework exception).**
+   - **Direct catalog service reads** with `tenantId === null` fail closed **without issuing a repository query**: `null` (`getService`, `resolveEffectivePricing`), `[]` (`getServicesByIds`, `getAddOnsByIds`, `listServices`, `listAddOns`, `getActivePricingForServiceIds`), or the operation's existing `NotFoundException` (`getActivePricing`, whose existing missing-service contract is 404).
    - **Writes** (`createService`, `updateService`, `createAddOn`, `updateAddOn`, `createPricingRule`) are **rejected before any query**. Their commands carry `tenantId: string` (a `null` cannot type-check into them), and every write resolver obtains it via `requireTenantId(currentUser)`, which throws `ForbiddenException` before the service is called. Writes never "return nothing".
+   - **Exception — nestjs-query root reads** (`services`, `addOns` lists/counts, and the `Booking.service` relation) do not go through the catalog services. They are constrained by `@Authorize(tenantReadAuthorizer())`, which for a null tenant yields `tenantFilterFor(null)` (`{ id: { is: null } }`) and **may issue the resulting no-match query**. This is an intentional framework-level exception to the direct-service no-query rule (#82 / #83 precedent), not a second contract for the services.
 5. **Composite FK invariant (explicit).** The database, not only the application, guarantees:
 
    ```text
@@ -74,7 +75,7 @@ In #84 the **application** lookups on those write paths are tenant-scoped (Decis
 
 - SHALL derive the tenant for authorization **only** from `AuthenticatedPrincipal.tenantId` (RFC §4.5, invariant 1). SHALL NOT accept `tenantId` from GraphQL args, inputs, filters, headers, or REST bodies. SHALL NOT expose `tenantId` as a GraphQL field or writable input field on `Service` / `AddOn` / `PricingRule`.
 - SHALL NOT hardcode `BOOTSTRAP_TENANT_ID` in any request path. It MAY appear only in the migration backfill, dev seed fixtures, and tests.
-- SHALL apply Decision 4's two null-tenant rules exactly: reads fail closed without a repository query; writes are rejected before any query (`requireTenantId` ⇒ `ForbiddenException`; commands typed `tenantId: string`). For nestjs-query, a request with no principal tenant gets `tenantFilterFor(null)` (`{ id: { is: null } }`), which **matches no rows** (it MAY still issue a deliberately empty query).
+- SHALL apply Decision 4 exactly: direct catalog service reads with `tenantId === null` MUST return the fail-closed result without querying; writes are rejected before any query (`requireTenantId` ⇒ `ForbiddenException`; commands typed `tenantId: string`). nestjs-query root reads are constrained by `tenantFilterFor(null)` and may issue the resulting no-match query; this is an intentional framework-level exception to the direct-service no-query rule.
 - SHALL put `tenantId` in the **same** database query as every id / id-list / name lookup (Decision 6). SHALL NOT fetch-then-filter.
 - SHALL treat the `@Authorize` tenant filter as a **security invariant**. No relation declaration targeting `ServiceType` / `AddOnType` may carry a relation-level `auth` override. Planning-time inventory: exactly one such relation exists — `Booking.service` (`@FilterableRelation`, spreads `relationReadOpts`); `grep -rn "auth:" src/modules` finds none. Task 5 pins this with a regression test.
 - SHALL make cross-tenant get/update/reference look exactly like a missing row: `null` for the nullable `service` query and object fields; the operation's existing `NotFoundException` / `BadRequestException` where it already throws one (RFC §4.5). SHALL NOT return `403` for another tenant's row. (`ForbiddenException` from `requireTenantId` is a role/scope failure for a principal with **no** tenant, not a cross-tenant signal.)
@@ -369,8 +370,39 @@ describe('AddCatalogTenant migration (real Postgres)', () => {
     await queryRunner.query(`DELETE FROM "add_on_entity" WHERE "tenantId" = $1`, [secondTenant]);
     await queryRunner.query(`DELETE FROM "tenant_entity" WHERE "id" = $1`, [secondTenant]);
     await inTransaction((r) => migration.down(r));
+
+    // Column is gone from all three tables.
+    const cols: unknown[] = await queryRunner.query(
+      `SELECT 1 FROM information_schema.columns WHERE table_name IN ('service_entity','add_on_entity','pricing_rule_entity') AND column_name = 'tenantId'`,
+    );
+    expect(cols).toHaveLength(0);
+
+    // Restored objects have their original definitions, not just their names.
+    const defs: { conname: string; def: string }[] = await queryRunner.query(
+      `SELECT conname, pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname IN ('fk_pricing_rule_service', 'fk_pricing_rule_addon')`,
+    );
+    expect(Object.fromEntries(defs.map((row) => [row.conname, row.def]))).toEqual({
+      fk_pricing_rule_service: 'FOREIGN KEY ("serviceId") REFERENCES service_entity(id) ON DELETE RESTRICT',
+      fk_pricing_rule_addon: 'FOREIGN KEY ("addOnId") REFERENCES add_on_entity(id) ON DELETE RESTRICT',
+    });
+    const indexDefs: { indexname: string; indexdef: string }[] = await queryRunner.query(
+      `SELECT indexname, indexdef FROM pg_indexes WHERE indexname IN ('uq_service_name_lower', 'uq_add_on_name_lower')`,
+    );
+    for (const { indexdef } of indexDefs) {
+      expect(indexdef).toMatch(/CREATE UNIQUE INDEX .* USING btree \(lower\(\(name\)::text\)\)$/);
+    }
+    expect(indexDefs).toHaveLength(2);
+
+    // The pre-migration rows survive and global name uniqueness is back.
+    const [{ count }]: { count: string }[] = await queryRunner.query(
+      `SELECT count(*) FROM "pricing_rule_entity"`,
+    );
+    expect(Number(count)).toBe(2);
+
     const constraints = await constraintNames();
     const indexes = await indexNames();
+    // `NEW_CONSTRAINTS` includes the three tenant FKs (fk_service_tenant,
+    // fk_add_on_tenant, fk_pricing_rule_tenant); asserted absent below.
     expect(constraints).toEqual(expect.arrayContaining(OLD_CONSTRAINTS));
     expect(indexes).toEqual(expect.arrayContaining(OLD_INDEXES));
     for (const added of NEW_CONSTRAINTS) {
@@ -382,6 +414,8 @@ describe('AddCatalogTenant migration (real Postgres)', () => {
   });
 });
 ```
+
+M6 note on the `down` case: the expected `pg_get_constraintdef` / `indexdef` strings are written from PostgreSQL's documented rendering and have **not** been run at planning time. Before Step 4, capture the real definitions on `main`'s schema (`SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint WHERE conname IN (…)`; `SELECT indexdef FROM pg_indexes WHERE indexname IN (…)`) and use exactly those as the expected values — the assertion's purpose is "down restores what `main` has", so `main` is the oracle.
 
 - [ ] **Step 2: Run to verify failure** — `pnpm --filter api test:e2e -- add-catalog-tenant` → FAIL (migration module not found).
 
@@ -1452,7 +1486,7 @@ Cases (each `it` asserts `response.body.errors` explicitly):
 2. **Widening filter (Review Focus 3):** as B, `services(filter: { id: { eq: serviceA.id } }) { totalCount nodes { id } }` ⇒ `nodes: []`, `totalCount: 0`; `services(filter: { name: { eq: serviceA.name } })` ⇒ same; `addOns(filter: { name: { eq: addOnA.name } })` ⇒ same.
 3. **Get-by-id / active pricing:** as B, `service(id: serviceA.id)` ⇒ `null` (no errors, no 403); `activePricing(serviceId: serviceA.id)` ⇒ `errors[0].extensions.status === 404`; as A ⇒ A's rule.
 4. **Loader (Review Focus 4):** as A, `services(filter: { id: { in: [serviceA.id] } }) { nodes { activePricing { id priceMinorUnits } } }` ⇒ A's rule; as B the same query ⇒ `nodes: []`; as B `service(id: serviceB.id) { activePricing { id } }` ⇒ B's rule.
-5. **Booking relation (interim, residual exposure):** as B, `bookings(filter: { id: { eq: bookingA.id } }) { nodes { service { id } } }` ⇒ `errors[0].message` matches `/Cannot return null for non-nullable field Booking\.service/` and no `serviceA.id` appears anywhere in the response body (#82 precedent; #85 makes the booking invisible instead).
+5. **Interim residual-exposure guard — expected to be removed/replaced by #85.** Do not treat the exact GraphQL error text as a stable API contract; the only property this case protects is "no data from A's service reaches B". Put it in its own `describe('interim residual-exposure guard (remove/replace in #85)')` with a comment saying the same. As B, `bookings(filter: { id: { eq: bookingA.id } }) { nodes { service { id } } }` ⇒ `errors[0].message` matches `/Cannot return null for non-nullable field Booking\.service/` and no `serviceA.id` appears anywhere in the response body (#82 precedent; #85 makes the booking invisible instead).
 6. **Cross-tenant catalog writes ⇒ 404 (not 403), no side effects (Review Focus 2):** as B — `updateService(id: serviceA.id, input: { name: "X" })`; `updateAddOn(id: addOnA.id, input: { name: "X" })`; `createPricingRule(input: { serviceId: serviceA.id, priceMinorUnits: 1 })`; `createPricingRule(input: { addOnId: addOnA.id, priceMinorUnits: 1 })`. Each ⇒ `errors[0].extensions.status === 404`. Then as A: `serviceA` / `addOnA` names unchanged; `activePricing(serviceId: serviceA.id)` still returns A's original rule id; `SELECT count(*) FROM pricing_rule_entity WHERE "serviceId" = $1 AND "effectiveTo" IS NULL` for `serviceA` is `1` and it is A's original rule.
 7. **Cross-module catalog lookups:** as B — `createBooking` with B's customer/property and `serviceId: serviceA.id` ⇒ 404; `priceLaundryOrder` on a B-tenant weighed order (create one for B in setup) with `baseServiceId: serviceA.id` ⇒ 400 `No effective price for serviceId …`; with `baseServiceId: serviceB.id, addOns: [{ addOnId: addOnA.id }]` ⇒ 400 `No effective price for addOnId …`. As B, `generateInvoiceFromOrder` on A's priced laundry order ⇒ 400 `Service … could not be resolved` (the laundry order itself is unscoped until #87; the catalog name lookup is tenant-scoped). As A the same generate ⇒ succeeds (proves the positive path).
 8. **Uniqueness (Review Focus 1):** as A `createService(name: "Shared ${run}")` and as B `createService(name: "shared ${run}")` ⇒ both succeed; as A `createService(name: "SHARED ${run}")` ⇒ 409 `Service name is already in use`; as A `updateService(serviceA, name: "shared ${run}")` ⇒ 409. Same for `createAddOn` ⇒ 409 `Add-on name is already in use`.
