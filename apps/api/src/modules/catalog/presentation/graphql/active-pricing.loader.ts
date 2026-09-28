@@ -21,9 +21,11 @@ export function createActivePricingBatchFn(
   >,
 ): DataLoader.BatchLoadFn<string, PricingRule | null> {
   return async (serviceIds) => {
-    const rules = await pricingRulesService.getActivePricingForServiceIds([
-      ...serviceIds,
-    ]);
+    // #84 Task 5 wires the real tenant sourced from the loader's key.
+    const rules = await pricingRulesService.getActivePricingForServiceIds(
+      [...serviceIds],
+      null,
+    );
     const byServiceId = new Map(rules.map((rule) => [rule.serviceId, rule]));
     return serviceIds.map((id) => byServiceId.get(id) ?? null);
   };

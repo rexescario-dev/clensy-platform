@@ -287,6 +287,7 @@ export class BookingsService {
 
     const pricing = await this.pricingRulesService.getActivePricing(
       command.serviceId,
+      command.tenantId,
     );
     if (!pricing) {
       throw new BadRequestException('Service has no active price');

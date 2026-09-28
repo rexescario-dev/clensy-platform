@@ -2,6 +2,7 @@ import { UseGuards } from '@nestjs/common';
 import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { PricingRulesService } from '../../application/services/pricing-rules.service';
 import { CreatePricingRuleCommand } from '../../application/commands/create-pricing-rule.command';
+import { requireTenantId } from '../../../../platform/auth/authorization/require-tenant-id';
 import { CurrentUser } from '../../../../platform/auth/decorators/current-user.decorator';
 import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
 import type { AuthenticatedPrincipal } from '../../../../platform/auth/domain/authenticated-principal';
@@ -37,7 +38,11 @@ export class PricingRuleResolver {
   async activePricing(
     @Args('serviceId', { type: () => ID }) serviceId: string,
   ): Promise<PricingRuleType | null> {
-    const rule = await this.pricingRulesService.getActivePricing(serviceId);
+    // #84 Task 5 wires the real tenant from `@CurrentUser()`.
+    const rule = await this.pricingRulesService.getActivePricing(
+      serviceId,
+      null,
+    );
     return rule ? toPricingRuleType(rule) : null;
   }
 
@@ -51,6 +56,7 @@ export class PricingRuleResolver {
     const command: CreatePricingRuleCommand = {
       ...input,
       actorId: currentUser.id,
+      tenantId: requireTenantId(currentUser),
     };
     const rule = await this.pricingRulesService.createPricingRule(command);
     return toPricingRuleType(rule);

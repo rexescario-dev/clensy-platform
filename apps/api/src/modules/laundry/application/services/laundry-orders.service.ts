@@ -185,11 +185,13 @@ export class LaundryOrdersService {
         let total = 0;
 
         for (const target of targets) {
+          // #84 Task 6 wires the real tenant from the authenticated principal.
           const rule = await this.pricingRulesService.resolveEffectivePricing(
             target.column === 'serviceId'
               ? { serviceId: target.id }
               : { addOnId: target.id },
             asOf,
+            null,
           );
           if (!rule) {
             throw new BadRequestException(

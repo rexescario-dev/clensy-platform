@@ -36,7 +36,7 @@ describe('ActivePricingLoader', () => {
 
       expect(
         pricingRulesService.getActivePricingForServiceIds,
-      ).toHaveBeenCalledWith(['a', 'b', 'c']);
+      ).toHaveBeenCalledWith(['a', 'b', 'c'], null);
       expect(result).toEqual([ruleA, null, ruleC]);
     });
   });
