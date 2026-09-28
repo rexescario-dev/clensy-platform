@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import { BookingsService } from '../../application/services/bookings.service';
 import { BookingStatus } from '../../domain/booking-status';
@@ -36,7 +36,11 @@ describe('BookingsService', () => {
     findOneByOrFail: jest.Mock;
   };
   let dataSource: { transaction: jest.Mock };
-  let bookingRepository: { findBy: jest.Mock };
+  let bookingRepository: {
+    find: jest.Mock;
+    findBy: jest.Mock;
+    findOneBy: jest.Mock;
+  };
   let customersService: { getCustomer: jest.Mock };
   let propertiesService: { getProperty: jest.Mock };
   let servicesService: { getService: jest.Mock };
@@ -101,7 +105,11 @@ describe('BookingsService', () => {
     dataSource = {
       transaction: jest.fn((fn: (manager: unknown) => unknown) => fn(manager)),
     };
-    bookingRepository = { findBy: jest.fn() };
+    bookingRepository = {
+      find: jest.fn(),
+      findBy: jest.fn(),
+      findOneBy: jest.fn(),
+    };
     customersService = { getCustomer: jest.fn().mockResolvedValue(customer) };
     propertiesService = { getProperty: jest.fn().mockResolvedValue(property) };
     servicesService = {
@@ -168,20 +176,6 @@ describe('BookingsService', () => {
       await service.create(command);
 
       expect(teamsService.getTeam).toHaveBeenCalledWith('team-1', 't-a');
-    });
-
-    it('throws NotFoundException and opens no transaction when tenantId is null (no principal tenant scope)', async () => {
-      // Mirrors CustomersService.getCustomer's real fail-closed contract:
-      // `tenantId: null` never resolves a row.
-      customersService.getCustomer.mockImplementation(
-        (_id: string, tenantId: string | null) =>
-          Promise.resolve(tenantId === null ? null : customer),
-      );
-
-      await expect(
-        service.create({ ...command, tenantId: null }),
-      ).rejects.toThrow(new NotFoundException('Customer customer-1 not found'));
-      expect(dataSource.transaction).not.toHaveBeenCalled();
     });
 
     it('throws NotFoundException when propertyId does not exist', async () => {
@@ -297,15 +291,29 @@ describe('BookingsService', () => {
       });
     });
 
-    it('does not emit an audit event when actorId is null (REST posture)', async () => {
-      await service.create({ ...command, actorId: null });
+    it('builds the entity with tenantId: command.tenantId', async () => {
+      await service.create(command);
 
-      expect(auditLogger.log).not.toHaveBeenCalled();
+      expect(manager.create).toHaveBeenCalledWith(
+        BookingEntity,
+        expect.objectContaining({ tenantId: 't-a' }),
+      );
+    });
+
+    it('always calls auditLogger.log with no scope/tenant fields (Decision 12)', async () => {
+      const result = await service.create(command);
+
+      expect(auditLogger.log).toHaveBeenCalledWith({
+        actorId: 'actor-1',
+        entityId: result.id,
+        action: 'booking.create',
+        entityType: 'booking',
+      });
     });
   });
 
   describe('update', () => {
-    it('throws NotFoundException when the booking does not exist', async () => {
+    it('throws NotFoundException when the booking does not exist, and calls no update', async () => {
       manager.findOneBy.mockResolvedValue(undefined);
 
       await expect(
@@ -315,6 +323,39 @@ describe('BookingsService', () => {
           scheduledAt: new Date(),
         }),
       ).rejects.toThrow(NotFoundException);
+      expect(manager.update).not.toHaveBeenCalled();
+    });
+
+    it('scopes the existence check, the SET, and the re-read by id and tenantId', async () => {
+      manager.findOneBy.mockResolvedValue({ id: 'b1' });
+      manager.findOneByOrFail.mockResolvedValue({ id: 'b1' });
+
+      await service.update('b1', {
+        actorId: 'u',
+        tenantId: 't1',
+        status: BookingStatus.CONFIRMED,
+      });
+
+      expect(manager.findOneBy).toHaveBeenCalledWith(BookingEntity, {
+        id: 'b1',
+        tenantId: 't1',
+      });
+      expect(manager.update).toHaveBeenCalledWith(
+        BookingEntity,
+        { id: 'b1', tenantId: 't1' },
+        { status: BookingStatus.CONFIRMED },
+      );
+      const [, , set] = manager.update.mock.calls[0] as [
+        unknown,
+        unknown,
+        Record<string, unknown>,
+      ];
+      expect(set).not.toHaveProperty('tenantId');
+      expect(set).not.toHaveProperty('actorId');
+      expect(manager.findOneByOrFail).toHaveBeenCalledWith(BookingEntity, {
+        id: 'b1',
+        tenantId: 't1',
+      });
     });
 
     it('re-validates teamId via TeamsService.getTeam when a non-null teamId is provided', async () => {
@@ -341,18 +382,6 @@ describe('BookingsService', () => {
         }),
       ).rejects.toThrow(NotFoundException);
       expect(teamsService.getTeam).toHaveBeenCalledWith('team-a', 't-b');
-    });
-
-    it('update with a null tenant and a teamId fails closed (REST)', async () => {
-      teamsService.getTeam.mockResolvedValue(null);
-
-      await expect(
-        service.update('b-1', {
-          actorId: null,
-          tenantId: null,
-          teamId: 'team-a',
-        }),
-      ).rejects.toThrow(NotFoundException);
     });
 
     it('update never passes tenantId to manager.update', async () => {
@@ -400,32 +429,6 @@ describe('BookingsService', () => {
       expect(teamsService.getTeam).not.toHaveBeenCalled();
     });
 
-    it('update without teamId does not look up a team, even with a null tenant', async () => {
-      manager.findOneBy.mockResolvedValue({ id: 'b-1' });
-      manager.findOneByOrFail.mockResolvedValue({ id: 'b-1' });
-
-      await service.update('b-1', {
-        actorId: null,
-        tenantId: null,
-        status: BookingStatus.CONFIRMED,
-      });
-
-      expect(teamsService.getTeam).not.toHaveBeenCalled();
-    });
-
-    it('does not emit an audit event when actorId is null (REST posture)', async () => {
-      manager.findOneBy.mockResolvedValue({ id: 'booking-1' });
-      manager.findOneByOrFail.mockResolvedValue({ id: 'booking-1' });
-
-      await service.update('booking-1', {
-        actorId: null,
-        tenantId: null,
-        scheduledAt: new Date(),
-      });
-
-      expect(auditLogger.log).not.toHaveBeenCalled();
-    });
-
     // Regression guard (M7 finding, tightened after an initial fix proved
     // insufficient against the real app): a caller submitting only `id`
     // is a valid UpdateBookingInput/Dto (every other field is optional),
@@ -466,16 +469,27 @@ describe('BookingsService', () => {
     it('throws NotFoundException when the booking does not exist', async () => {
       manager.findOneBy.mockResolvedValue(undefined);
 
-      await expect(service.remove('missing-id', 'actor-1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.remove('missing-id', 'actor-1', 't1'),
+      ).rejects.toThrow(NotFoundException);
       expect(manager.remove).not.toHaveBeenCalled();
     });
 
-    it('hard-deletes and emits a booking.remove audit event when actorId is provided', async () => {
+    it('scopes the existence check by id and tenantId', async () => {
+      manager.findOneBy.mockResolvedValue({ id: 'b1' });
+
+      await service.remove('b1', 'u', 't1');
+
+      expect(manager.findOneBy).toHaveBeenCalledWith(BookingEntity, {
+        id: 'b1',
+        tenantId: 't1',
+      });
+    });
+
+    it('hard-deletes and emits a booking.remove audit event', async () => {
       manager.findOneBy.mockResolvedValue({ id: 'booking-1' });
 
-      const result = await service.remove('booking-1', 'actor-1');
+      const result = await service.remove('booking-1', 'actor-1', 't-a');
 
       expect(manager.remove).toHaveBeenCalled();
       // Regression guard: `manager.remove()` strips the id off the entity
@@ -490,14 +504,6 @@ describe('BookingsService', () => {
       });
     });
 
-    it('does not emit an audit event when actorId is null (REST posture)', async () => {
-      manager.findOneBy.mockResolvedValue({ id: 'booking-1' });
-
-      await service.remove('booking-1', null);
-
-      expect(auditLogger.log).not.toHaveBeenCalled();
-    });
-
     // Additive error-contract only (Jobs spec §2 / plan Task 1). Fake driver
     // shape `{ code }`, not a reconstructed TypeORM QueryFailedError — the
     // real 23503 path is proven against Postgres in Task 2.
@@ -505,7 +511,9 @@ describe('BookingsService', () => {
       manager.findOneBy.mockResolvedValue({ id: 'booking-1' });
       manager.remove.mockRejectedValue({ code: '23503' });
 
-      await expect(service.remove('booking-1', 'actor-1')).rejects.toThrow(
+      await expect(
+        service.remove('booking-1', 'actor-1', 't-a'),
+      ).rejects.toThrow(
         new ConflictException(
           'Booking cannot be deleted because other records reference it',
         ),
@@ -518,22 +526,62 @@ describe('BookingsService', () => {
       const other = { code: '23505' };
       manager.remove.mockRejectedValue(other);
 
-      await expect(service.remove('booking-1', 'actor-1')).rejects.toBe(other);
+      await expect(service.remove('booking-1', 'actor-1', 't-a')).rejects.toBe(
+        other,
+      );
+    });
+  });
+
+  describe('findAll', () => {
+    it("finds bookings scoped by the caller's tenantId", async () => {
+      bookingRepository.find.mockResolvedValue([]);
+
+      await service.findAll('t1');
+
+      expect(bookingRepository.find).toHaveBeenCalledWith({
+        where: { tenantId: 't1' },
+      });
+    });
+  });
+
+  describe('findOne', () => {
+    it('finds a booking scoped by id and tenantId', async () => {
+      const found = { id: 'b1', tenantId: 't1' };
+      bookingRepository.findOneBy.mockResolvedValue(found);
+
+      await expect(service.findOne('b1', 't1')).resolves.toBe(found);
+      expect(bookingRepository.findOneBy).toHaveBeenCalledWith({
+        id: 'b1',
+        tenantId: 't1',
+      });
+    });
+
+    it('throws NotFoundException when no row matches id and tenantId', async () => {
+      bookingRepository.findOneBy.mockResolvedValue(null);
+
+      await expect(service.findOne('b1', 't1')).rejects.toThrow(
+        new NotFoundException('Booking b1 not found'),
+      );
     });
   });
 
   describe('getBookingsByIds', () => {
     it('returns an empty array without querying when ids is empty', async () => {
-      await expect(service.getBookingsByIds([])).resolves.toEqual([]);
+      await expect(service.getBookingsByIds([], 't1')).resolves.toEqual([]);
       expect(bookingRepository.findBy).not.toHaveBeenCalled();
     });
 
-    it('returns exactly the rows found, with no synthetic entries for missing ids', async () => {
+    it('returns exactly the rows found, scoped by id list and tenantId', async () => {
       const found = [{ id: 'a' }];
       bookingRepository.findBy.mockResolvedValue(found);
 
-      await expect(service.getBookingsByIds(['a', 'b'])).resolves.toBe(found);
-      expect(bookingRepository.findBy).toHaveBeenCalled();
+      await expect(service.getBookingsByIds(['a', 'b'], 't1')).resolves.toBe(
+        found,
+      );
+      expect(bookingRepository.findBy).toHaveBeenCalledWith({
+        id: In(['a', 'b']),
+        tenantId: 't1',
+      });
     });
   });
 });

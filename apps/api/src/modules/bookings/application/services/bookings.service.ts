@@ -57,6 +57,7 @@ export class BookingsService {
           propertyId: command.propertyId,
           serviceId: command.serviceId,
           teamId: command.teamId ?? null,
+          tenantId: command.tenantId,
           scheduledAt: command.scheduledAt,
           status: BookingStatus.PENDING,
         });
@@ -71,39 +72,42 @@ export class BookingsService {
         );
         await manager.save(entity);
 
-        await this.logAuditIfAuthenticated(
-          command.actorId,
-          'booking.create',
-          entity.id,
-        );
+        await this.logAudit(command.actorId, 'booking.create', entity.id);
 
         return entity;
       }),
     );
   }
 
-  findAll(): Promise<Booking[]> {
-    return this.bookingRepository.find();
+  findAll(tenantId: string): Promise<Booking[]> {
+    return this.bookingRepository.find({ where: { tenantId } });
   }
 
-  async findOne(id: string): Promise<Booking> {
-    return this.findEntity(id);
+  async findOne(id: string, tenantId: string): Promise<Booking> {
+    return this.findEntity(id, tenantId);
   }
 
   // Bulk lookup for Jobs' GraphQL relation-batching loader (Jobs spec §2 /
   // §4.5). Empty-array short-circuit and "return only the rows found"
   // match `getCustomersByIds` / `getTeamsByIds`. Not exposed over GraphQL.
-  getBookingsByIds(ids: string[]): Promise<Booking[]> {
+  getBookingsByIds(ids: string[], tenantId: string): Promise<Booking[]> {
     if (ids.length === 0) {
       return Promise.resolve([]);
     }
-    return this.bookingRepository.findBy({ id: In(ids) });
+    return this.bookingRepository.findBy({ id: In(ids), tenantId });
   }
 
-  async remove(id: string, actorId: string | null): Promise<Booking> {
+  async remove(
+    id: string,
+    actorId: string,
+    tenantId: string,
+  ): Promise<Booking> {
     return this.dataSource.transaction((manager) =>
       runAuditInTransaction(manager, async () => {
-        const existing = await manager.findOneBy(BookingEntity, { id });
+        const existing = await manager.findOneBy(BookingEntity, {
+          id,
+          tenantId,
+        });
         if (!existing) {
           throw new NotFoundException(`Booking ${id} not found`);
         }
@@ -123,7 +127,7 @@ export class BookingsService {
           throw error;
         }
 
-        await this.logAuditIfAuthenticated(actorId, 'booking.remove', id);
+        await this.logAudit(actorId, 'booking.remove', id);
 
         return removed;
       }),
@@ -137,10 +141,11 @@ export class BookingsService {
     // booking's existence check, mutation, and audit event. Sound on the
     // same no-Phase-1-team-deletion invariant `create` relies on.
     if (command.teamId !== undefined && command.teamId !== null) {
-      // Tenant-scoped lookup (#83 Slice decision 6): GraphQL passes the
-      // caller's tenant; REST passes `null`, which `TeamsService.getTeam`
-      // never resolves a row for — a non-null `teamId` on REST fails
-      // closed with the `NotFoundException` below, same as `create`.
+      // Tenant-scoped lookup (#83 Slice decision 6): `command.tenantId` is
+      // always the caller's own tenant (#85 Slice decision 7 — every
+      // `BookingsService` caller has a principal). A `teamId` belonging to
+      // another tenant fails closed with the `NotFoundException` below,
+      // same as `create`.
       const team = await this.teamsService.getTeam(
         command.teamId,
         command.tenantId,
@@ -152,18 +157,20 @@ export class BookingsService {
 
     return this.dataSource.transaction((manager) =>
       runAuditInTransaction(manager, async () => {
-        const existing = await manager.findOneBy(BookingEntity, { id });
+        const existing = await manager.findOneBy(BookingEntity, {
+          id,
+          tenantId: command.tenantId,
+        });
         if (!existing) {
           throw new NotFoundException(`Booking ${id} not found`);
         }
 
-        // `tenantId` is consumed entirely by the `teamId` lookup above; it
-        // MUST NOT reach `manager.update()` below — `booking_entity` has no
-        // `tenantId` column (until #85) and TypeORM would fail the query
-        // with an unknown column. Destructured out here, alongside
-        // `actorId`, before `rawChanges` is spread into `changes`.
+        // `tenantId` is consumed by the `teamId` lookup above and by the
+        // WHERE predicates in this method; it MUST NOT reach the SET list
+        // below — `tenantId` is the row's owner, never a change.
+        // Destructured out here, alongside `actorId`, before `rawChanges`
+        // is spread into `changes`.
         const { actorId, tenantId, ...rawChanges } = command;
-        void tenantId;
         // `manager.update()` throws ("update values are not defined") when
         // every key it's given resolves to `undefined` — reachable
         // whenever a caller submits `UpdateBookingInput`/`UpdateBookingDto`
@@ -194,12 +201,12 @@ export class BookingsService {
           Object.entries(rawChanges).filter(([, value]) => value !== undefined),
         );
         if (Object.keys(changes).length > 0) {
-          await manager.update(BookingEntity, { id }, changes);
+          await manager.update(BookingEntity, { id, tenantId }, changes);
         }
 
-        await this.logAuditIfAuthenticated(actorId, 'booking.update', id);
+        await this.logAudit(actorId, 'booking.update', id);
 
-        return manager.findOneByOrFail(BookingEntity, { id });
+        return manager.findOneByOrFail(BookingEntity, { id, tenantId });
       }),
     );
   }
@@ -222,26 +229,26 @@ export class BookingsService {
     }
   }
 
-  private async findEntity(id: string): Promise<BookingEntity> {
-    const booking = await this.bookingRepository.findOneBy({ id });
+  private async findEntity(
+    id: string,
+    tenantId: string,
+  ): Promise<BookingEntity> {
+    const booking = await this.bookingRepository.findOneBy({ id, tenantId });
     if (!booking) {
       throw new NotFoundException(`Booking ${id} not found`);
     }
     return booking;
   }
 
-  // `actorId === null` means "emit no audit event for this call" — not
-  // "emit one with a null/anonymous actor." Only the unauthenticated REST
-  // surface ever passes null (spec §4.4). Single enforcement point for
-  // that rule, shared by `create`/`update`/`remove`.
-  private async logAuditIfAuthenticated(
-    actorId: string | null,
+  // Every caller has a principal after #85 Slice decision 3: `actorId` is
+  // always a real actor, and every successful call emits its audit event
+  // unconditionally. Single enforcement point for that rule, shared by
+  // `create`/`update`/`remove`.
+  private async logAudit(
+    actorId: string,
     action: string,
     entityId: string,
   ): Promise<void> {
-    if (actorId === null) {
-      return;
-    }
     await this.auditLogger.log({
       actorId,
       entityId,
@@ -250,6 +257,11 @@ export class BookingsService {
     });
   }
 
+  // Application half of I-1 (#85 Slice decision 2): every related
+  // reference is looked up within `command.tenantId` before the booking is
+  // written, so a booking can never be created against another tenant's
+  // Customer, Property, Service, or Team. The database half is the
+  // composite `fk_booking_*_tenant` constraints (Decision 5).
   private async resolveAndValidate(
     command: CreateBookingCommand,
   ): Promise<{ pricingSnapshot: BookingPricingSnapshot }> {
@@ -275,10 +287,7 @@ export class BookingsService {
     }
 
     // Application-level same-tenant check (#84 spec §4.4/§4.5, slice
-    // decision 9): `command.tenantId` is the caller's own tenant (`null`
-    // only for the unauthenticated REST `POST /bookings`, which already
-    // fails closed above on the customer lookup). `fk_booking_service`
-    // stays id-only until #85.
+    // decision 9): `command.tenantId` is the caller's own tenant.
     const service = await this.servicesService.getService(
       command.serviceId,
       command.tenantId,
