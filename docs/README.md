@@ -55,7 +55,7 @@ Every Team/Cleaner read and write uses the tenant of the logged-in user. That co
 
 ## Catalog tenant isolation (#84)
 
-Shipped in this slice (branch `feat/84-catalog-tenant-isolation`). Service, AddOn and PricingRule are now tenant-owned:
+Shipped in this slice (PR [#97](https://github.com/rexescario-dev/clensy-platform/pull/97)). Service, AddOn and PricingRule are now tenant-owned:
 - All three tables have a required `tenantId`.
 - Service and add-on names are unique per tenant, ignoring case. A duplicate returns `Conflict` (409) with the same messages as before (`Service name is already in use`, `Add-on name is already in use`).
 - Composite FKs keep a pricing rule's service/add-on target in the same tenant as the rule.
