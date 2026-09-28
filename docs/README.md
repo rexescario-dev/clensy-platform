@@ -40,7 +40,7 @@ Every Customer/Property read and write uses the tenant of the logged-in user. Th
 
 ## Teams & Cleaners tenant isolation (#83)
 
-Shipped in this slice (branch `feat/83-teams-cleaners-tenant-isolation`). Team and Cleaner are now tenant-owned:
+Shipped in this slice (PR [#96](https://github.com/rexescario-dev/clensy-platform/pull/96)). Team and Cleaner are now tenant-owned:
 - Both tables have a required `tenantId`.
 - Team names and cleaner emails are unique per tenant, case-sensitive. A duplicate returns `Conflict` (409) with the same messages as before.
 - A composite FK keeps a cleaner's team in the same tenant.
