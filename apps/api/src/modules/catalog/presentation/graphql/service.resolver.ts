@@ -12,6 +12,7 @@ import { ServicesService } from '../../application/services/services.service';
 import { CreateServiceCommand } from '../../application/commands/create-service.command';
 import { UpdateServiceCommand } from '../../application/commands/update-service.command';
 import { Service } from '../../domain/service';
+import { requireTenantId } from '../../../../platform/auth/authorization/require-tenant-id';
 import { CurrentUser } from '../../../../platform/auth/decorators/current-user.decorator';
 import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
 import type { AuthenticatedPrincipal } from '../../../../platform/auth/domain/authenticated-principal';
@@ -57,6 +58,7 @@ export class ServiceResolver {
     const command: CreateServiceCommand = {
       ...input,
       actorId: currentUser.id,
+      tenantId: requireTenantId(currentUser),
     };
     const service = await this.servicesService.createService(command);
     return toServiceType(service);
@@ -70,7 +72,8 @@ export class ServiceResolver {
   async service(
     @Args('id', { type: () => ID }) id: string,
   ): Promise<ServiceType | null> {
-    const service = await this.servicesService.getService(id);
+    // #84 Task 5: wire the authenticated principal's tenant instead of `null`.
+    const service = await this.servicesService.getService(id, null);
     return service ? toServiceType(service) : null;
   }
 
@@ -87,6 +90,7 @@ export class ServiceResolver {
     const command: UpdateServiceCommand = {
       ...input,
       actorId: currentUser.id,
+      tenantId: requireTenantId(currentUser),
     };
     const service = await this.servicesService.updateService(id, command);
     return toServiceType(service);

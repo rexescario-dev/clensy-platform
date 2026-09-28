@@ -274,7 +274,10 @@ export class BookingsService {
       );
     }
 
-    const service = await this.servicesService.getService(command.serviceId);
+    const service = await this.servicesService.getService(
+      command.serviceId,
+      command.tenantId,
+    );
     if (!service) {
       throw new NotFoundException(`Service ${command.serviceId} not found`);
     }

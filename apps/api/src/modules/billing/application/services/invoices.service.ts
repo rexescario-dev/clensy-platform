@@ -188,7 +188,8 @@ export class InvoicesService {
       .filter((id): id is string => id !== null);
 
     const [services, addOns] = await Promise.all([
-      this.servicesService.getServicesByIds(serviceIds),
+      // #84 Task 6: wire the authenticated principal's tenant instead of `null`.
+      this.servicesService.getServicesByIds(serviceIds, null),
       this.addOnsService.getAddOnsByIds(addOnIds),
     ]);
     const serviceName = new Map(services.map((s) => [s.id, s.name]));

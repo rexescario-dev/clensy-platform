@@ -1,7 +1,12 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
+import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import { ServicesService } from '../../application/services/services.service';
 import { ServiceEntity } from '../../infrastructure/persistence/service.entity';
@@ -108,7 +113,11 @@ describe('ServicesService', () => {
       'throws BadRequestException before any repository call when %s is %s',
       async (_field, _label, fields) => {
         await expect(
-          service.createService({ actorId: 'actor-1', ...fields }),
+          service.createService({
+            actorId: 'actor-1',
+            tenantId: 't-a',
+            ...fields,
+          }),
         ).rejects.toThrow(BadRequestException);
 
         expect(manager.save).not.toHaveBeenCalled();
@@ -128,6 +137,7 @@ describe('ServicesService', () => {
     it('returns the service for an existing id', async () => {
       const svc = {
         id: 'service-1',
+        tenantId: 't-a',
         active: true,
         createdAt: new Date(),
         description: null,
@@ -137,16 +147,19 @@ describe('ServicesService', () => {
       };
       serviceRepository.findOneBy.mockResolvedValue(svc);
 
-      await expect(service.getService('service-1')).resolves.toEqual(svc);
+      await expect(service.getService('service-1', 't-a')).resolves.toEqual(
+        svc,
+      );
       expect(serviceRepository.findOneBy).toHaveBeenCalledWith({
         id: 'service-1',
+        tenantId: 't-a',
       });
     });
 
     it('returns null for a nonexistent id', async () => {
       serviceRepository.findOneBy.mockResolvedValue(null);
 
-      await expect(service.getService('missing-id')).resolves.toBeNull();
+      await expect(service.getService('missing-id', 't-a')).resolves.toBeNull();
     });
   });
 
@@ -155,6 +168,7 @@ describe('ServicesService', () => {
       const services = [
         {
           id: 'service-1',
+          tenantId: 't-a',
           active: true,
           createdAt: new Date(),
           description: null,
@@ -164,6 +178,7 @@ describe('ServicesService', () => {
         },
         {
           id: 'service-2',
+          tenantId: 't-a',
           active: false,
           createdAt: new Date(),
           description: null,
@@ -174,14 +189,16 @@ describe('ServicesService', () => {
       ];
       serviceRepository.find.mockResolvedValue(services);
 
-      await expect(service.listServices()).resolves.toEqual(services);
-      expect(serviceRepository.find).toHaveBeenCalledWith();
+      await expect(service.listServices('t-a')).resolves.toEqual(services);
+      expect(serviceRepository.find).toHaveBeenCalledWith({
+        where: { tenantId: 't-a' },
+      });
     });
 
     it('returns an empty array when none exist', async () => {
       serviceRepository.find.mockResolvedValue([]);
 
-      await expect(service.listServices()).resolves.toEqual([]);
+      await expect(service.listServices('t-a')).resolves.toEqual([]);
     });
   });
 
@@ -192,6 +209,7 @@ describe('ServicesService', () => {
       await expect(
         service.updateService('missing-id', {
           actorId: 'actor-1',
+          tenantId: 't-a',
           name: 'New Name',
         }),
       ).rejects.toThrow(NotFoundException);
@@ -207,6 +225,7 @@ describe('ServicesService', () => {
     it('throws BadRequestException, not ConflictException, when durationMinutes is invalid and name collides', async () => {
       manager.findOneBy.mockResolvedValue({
         id: 'service-1',
+        tenantId: 't-a',
         active: true,
         description: null,
         durationMinutes: 60,
@@ -220,6 +239,7 @@ describe('ServicesService', () => {
       await expect(
         service.updateService('service-1', {
           actorId: 'actor-1',
+          tenantId: 't-a',
           durationMinutes: -5,
           name: 'Existing Name',
         }),
@@ -235,6 +255,7 @@ describe('ServicesService', () => {
       const services = [
         {
           id: 'service-1',
+          tenantId: 't-a',
           active: true,
           createdAt: new Date(),
           description: null,
@@ -246,13 +267,174 @@ describe('ServicesService', () => {
       serviceRepository.findBy.mockResolvedValue(services);
 
       await expect(
-        service.getServicesByIds(['service-1', 'service-2']),
+        service.getServicesByIds(['service-1', 'service-2'], 't-a'),
       ).resolves.toEqual(services);
     });
 
     it('returns an empty array without querying when ids is empty', async () => {
-      await expect(service.getServicesByIds([])).resolves.toEqual([]);
+      await expect(service.getServicesByIds([], 't-a')).resolves.toEqual([]);
       expect(serviceRepository.findBy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('tenant predicate (#84)', () => {
+    it('getService scopes by id and tenant', async () => {
+      serviceRepository.findOneBy.mockResolvedValue(null);
+      await expect(service.getService('s-1', 't-a')).resolves.toBeNull();
+      expect(serviceRepository.findOneBy).toHaveBeenCalledWith({
+        id: 's-1',
+        tenantId: 't-a',
+      });
+    });
+
+    it('getServicesByIds puts tenantId in the same where as the id list', async () => {
+      serviceRepository.findBy.mockResolvedValue([]);
+      await service.getServicesByIds(['a', 'b'], 't-a');
+      expect(serviceRepository.findBy).toHaveBeenCalledWith({
+        id: In(['a', 'b']),
+        tenantId: 't-a',
+      });
+    });
+
+    it('listServices scopes by tenant', async () => {
+      serviceRepository.find.mockResolvedValue([]);
+      await service.listServices('t-a');
+      expect(serviceRepository.find).toHaveBeenCalledWith({
+        where: { tenantId: 't-a' },
+      });
+    });
+
+    it.each([
+      ['getService', () => service.getService('s-1', null), null],
+      ['getServicesByIds', () => service.getServicesByIds(['a'], null), []],
+      [
+        'getServicesByIds (empty ids)',
+        () => service.getServicesByIds([], 't-a'),
+        [],
+      ],
+      ['listServices', () => service.listServices(null), []],
+    ])(
+      '%s fails closed without a repository query',
+      async (_label, call, expected) => {
+        await expect(call()).resolves.toEqual(expected);
+        expect(serviceRepository.findOneBy).not.toHaveBeenCalled();
+        expect(serviceRepository.findBy).not.toHaveBeenCalled();
+        expect(serviceRepository.find).not.toHaveBeenCalled();
+      },
+    );
+
+    it('createService persists the tenant, pre-checks the name within it, and tags the audit event', async () => {
+      await service.createService({
+        actorId: 'u',
+        tenantId: 't-a',
+        durationMinutes: 60,
+        name: ' Deep ',
+      });
+      expect(manager.create).toHaveBeenCalledWith(
+        ServiceEntity,
+        expect.objectContaining({ tenantId: 't-a', name: 'Deep' }),
+      );
+      expect(nameQueryBuilder.andWhere).toHaveBeenCalledWith(
+        's.tenantId = :tenantId',
+        { tenantId: 't-a' },
+      );
+      expect(auditLogger.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'service.create',
+          scope: AdminScope.TENANT,
+          tenantId: 't-a',
+        }),
+      );
+    });
+
+    it('updateService looks up and updates within the tenant and never writes tenantId', async () => {
+      manager.findOneBy.mockResolvedValueOnce({
+        id: 's-1',
+        tenantId: 't-a',
+        durationMinutes: 60,
+        name: 'Old',
+      });
+      manager.findOneByOrFail.mockResolvedValueOnce({
+        id: 's-1',
+        tenantId: 't-a',
+        durationMinutes: 60,
+        name: 'New',
+      });
+      await service.updateService('s-1', {
+        actorId: 'u',
+        tenantId: 't-a',
+        name: 'New',
+      });
+      expect(manager.findOneBy).toHaveBeenCalledWith(ServiceEntity, {
+        id: 's-1',
+        tenantId: 't-a',
+      });
+      const [, where, set] = manager.update.mock.calls[0] as [
+        unknown,
+        object,
+        Record<string, unknown>,
+      ];
+      expect(where).toEqual({ id: 's-1', tenantId: 't-a' });
+      expect(set).not.toHaveProperty('tenantId');
+      expect(set).not.toHaveProperty('actorId');
+      expect(manager.findOneByOrFail).toHaveBeenCalledWith(ServiceEntity, {
+        id: 's-1',
+        tenantId: 't-a',
+      });
+      expect(nameQueryBuilder.andWhere).toHaveBeenCalledWith(
+        's.tenantId = :tenantId',
+        { tenantId: 't-a' },
+      );
+      expect(auditLogger.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'service.update',
+          scope: AdminScope.TENANT,
+          tenantId: 't-a',
+        }),
+      );
+    });
+
+    it('updateService on another tenant’s service is NotFound with no write', async () => {
+      manager.findOneBy.mockResolvedValueOnce(null);
+      await expect(
+        service.updateService('s-foreign', {
+          actorId: 'u',
+          tenantId: 't-b',
+          name: 'X',
+        }),
+      ).rejects.toThrow(NotFoundException);
+      expect(manager.update).not.toHaveBeenCalled();
+    });
+
+    it('maps uq_service_tenant_name_lower to Conflict and rethrows other unique violations', async () => {
+      manager.save.mockRejectedValueOnce({
+        code: '23505',
+        driverError: { constraint: 'uq_service_tenant_name_lower' },
+      });
+      await expect(
+        service.createService({
+          actorId: 'u',
+          tenantId: 't-a',
+          durationMinutes: 60,
+          name: 'Deep',
+        }),
+      ).rejects.toThrow(
+        new ConflictException('Service name is already in use'),
+      );
+
+      const other = {
+        code: '23505',
+        driverError: { constraint: 'uq_service_id_tenant' },
+      };
+      manager.save.mockRejectedValueOnce(other);
+      await expect(
+        service.createService({
+          actorId: 'u',
+          tenantId: 't-a',
+          durationMinutes: 60,
+          name: 'Deep',
+        }),
+      ).rejects.toBe(other);
     });
   });
 });
