@@ -80,9 +80,19 @@ describe('BookingController', () => {
 
     expect(bookingsService.update).toHaveBeenCalledWith('booking-1', {
       actorId: null,
-      scheduledAt,
       teamId: null,
+      tenantId: null,
+      scheduledAt,
     });
+  });
+
+  it('PATCH passes a null tenant (no principal ⇒ no tenant scope)', async () => {
+    await controller.update('b-1', { teamId: 'team-a' });
+
+    expect(bookingsService.update).toHaveBeenCalledWith(
+      'b-1',
+      expect.objectContaining({ actorId: null, tenantId: null }),
+    );
   });
 
   it('remove calls BookingsService.remove(id, null)', () => {

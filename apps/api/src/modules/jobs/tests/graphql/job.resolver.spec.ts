@@ -6,6 +6,8 @@ import {
 } from '@nestjs/graphql';
 import { Test } from '@nestjs/testing';
 import { GraphQLObjectType } from 'graphql';
+import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
+import type { AuthenticatedPrincipal } from '../../../../platform/auth/domain/authenticated-principal';
 import { ROLES_KEY } from '../../../../platform/auth/decorators/roles.decorator';
 import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
@@ -202,5 +204,70 @@ describe('JobResolver', () => {
       const itemType = schema.getType('ChecklistItem') as GraphQLObjectType;
       expect(itemType.getFields().completedAt.type.toString()).toBe('DateTime');
     });
+  });
+});
+
+// Tenant isolation (#83 Slice decision 6): the tenant comes only from the
+// DB-loaded principal, never from GraphQL input or the parent row.
+describe('JobResolver tenant scoping', () => {
+  const principal: AuthenticatedPrincipal = {
+    id: 'u',
+    tenantId: 't-a',
+    role: Role.OPS_MANAGER,
+    scope: AdminScope.TENANT,
+  };
+
+  it('assignTeamToJob passes requireTenantId(principal)', async () => {
+    const jobsService = {
+      assignTeam: jest.fn().mockResolvedValue({
+        id: 'job-1',
+        bookingId: 'booking-1',
+        teamId: 'team-a',
+        createdAt: new Date(),
+        scheduledAt: new Date(),
+        status: 'PENDING',
+        updatedAt: new Date(),
+      }),
+    };
+    const loaders = { teamLoaderFor: jest.fn() };
+    const resolver = new JobResolver(jobsService as never, loaders as never);
+
+    await resolver.assignTeamToJob(
+      { jobId: 'j-1', teamId: 'team-a' },
+      principal,
+    );
+
+    expect(jobsService.assignTeam).toHaveBeenCalledWith({
+      actorId: 'u',
+      jobId: 'j-1',
+      teamId: 'team-a',
+      tenantId: 't-a',
+    });
+  });
+
+  it('CleaningJob.team uses the loader for the caller tenant', async () => {
+    const jobsService = {};
+    const load = jest.fn().mockResolvedValue(null);
+    const loaders = { teamLoaderFor: jest.fn().mockReturnValue({ load }) };
+    const resolver = new JobResolver(jobsService as never, loaders as never);
+
+    await expect(
+      resolver.team({ teamId: 'team-a' }, principal),
+    ).resolves.toBeNull();
+
+    expect(loaders.teamLoaderFor).toHaveBeenCalledWith('t-a');
+    expect(load).toHaveBeenCalledWith('team-a');
+  });
+
+  it('CleaningJob.team with no principal uses the null-tenant loader', async () => {
+    const jobsService = {};
+    const load = jest.fn().mockResolvedValue(null);
+    const loaders = { teamLoaderFor: jest.fn().mockReturnValue({ load }) };
+    const resolver = new JobResolver(jobsService as never, loaders as never);
+
+    await resolver.team({ teamId: 'team-a' }, undefined);
+
+    expect(loaders.teamLoaderFor).toHaveBeenCalledWith(null);
+    expect(load).toHaveBeenCalledWith('team-a');
   });
 });

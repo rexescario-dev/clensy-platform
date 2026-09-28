@@ -32,13 +32,16 @@ export async function createTestTenant(
   return tenant.id;
 }
 
-// Deletes test-only tenants, their admins, and their Customer/Property rows
-// (#82) — properties before customers, both before the tenant itself (FK
-// order). Never touches the bootstrap tenant. Callers whose tests insert a
-// Booking/LaundryOrder referencing one of these tenants' customers/
-// properties MUST delete those rows first: `fk_booking_customer`,
-// `fk_booking_property`, and `fk_laundry_order_customer` are all `ON DELETE
-// RESTRICT`, so this call fails loudly (not silently) if a caller forgot.
+// Deletes test-only tenants, their admins, and their Customer/Property (#82)
+// and Team/Cleaner (#83) rows — properties before customers, cleaners before
+// teams, all before the tenant itself (FK order). Never touches the
+// bootstrap tenant. Callers whose tests insert a Booking/LaundryOrder
+// referencing one of these tenants' customers/properties, or a Booking/
+// CleaningJob referencing one of these tenants' teams, MUST delete those
+// rows first: `fk_booking_customer`, `fk_booking_property`,
+// `fk_laundry_order_customer`, `fk_booking_team`, and `fk_cleaning_job_team`
+// are all `ON DELETE RESTRICT`, so this call fails loudly (not silently) if
+// a caller forgot.
 export async function removeTestTenants(
   dataSource: DataSource,
   tenantIds: readonly string[],
@@ -53,6 +56,14 @@ export async function removeTestTenants(
   );
   await dataSource.query(
     `DELETE FROM "customer_entity" WHERE "tenantId" = ANY($1)`,
+    [ids],
+  );
+  await dataSource.query(
+    `DELETE FROM "cleaner_entity" WHERE "tenantId" = ANY($1)`,
+    [ids],
+  );
+  await dataSource.query(
+    `DELETE FROM "team_entity" WHERE "tenantId" = ANY($1)`,
     [ids],
   );
   await dataSource.query(

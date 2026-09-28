@@ -6,10 +6,19 @@ import { CleanersService } from '../src/modules/cleaners/application/services/cl
 import { TeamsService } from '../src/modules/cleaners/application/services/teams.service';
 import { CleanerEntity } from '../src/modules/cleaners/infrastructure/persistence/cleaner.entity';
 import { TeamEntity } from '../src/modules/cleaners/infrastructure/persistence/team.entity';
+import { TenantEntity } from '../src/modules/admins/infrastructure/persistence/tenant.entity';
+import { BOOTSTRAP_TENANT_ID } from '../src/platform/database/bootstrap-tenant';
 import {
   acquireCleanerDbTestLock,
   CleanerDbTestLock,
 } from './helpers/cleaner-db-test-lock';
+
+// This whole file runs under `acquireCleanerDbTestLock` and truncates
+// `cleaner_entity`/`team_entity` in its own `beforeEach` — no other spec
+// file's rows can be present, so every fixture here is safely attached to
+// the bootstrap tenant (the one tenant row every migrated database is
+// guaranteed to have) without colliding across runs or files.
+const TENANT_ID = BOOTSTRAP_TENANT_ID;
 
 // Shared by this file's `describe` blocks (this task adds `TeamsService`'s;
 // Task 2 adds `CleanersService`'s alongside it). Each block still creates
@@ -20,7 +29,8 @@ import {
 function createTestDataSource(): DataSource {
   return new DataSource({
     database: process.env.DB_NAME ?? 'clensy',
-    entities: [TeamEntity, CleanerEntity, AuditEventEntity],
+    // TeamEntity#tenant / CleanerEntity#tenant (#83) requires TenantEntity.
+    entities: [TeamEntity, CleanerEntity, AuditEventEntity, TenantEntity],
     host: process.env.DB_HOST ?? 'localhost',
     password: process.env.DB_PASSWORD ?? 'clensy_dev',
     port: Number(process.env.DB_PORT ?? 5432),
@@ -93,6 +103,7 @@ describe('TeamsService (real Postgres)', () => {
     it('persists a TeamEntity with the given name and records team.create', async () => {
       const created = await service.createTeam({
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         name: 'Alpha Team',
       });
 
@@ -113,10 +124,18 @@ describe('TeamsService (real Postgres)', () => {
     });
 
     it('throws ConflictException for a duplicate name, leaving only one row persisted', async () => {
-      await service.createTeam({ actorId: 'actor-1', name: 'Alpha Team' });
+      await service.createTeam({
+        actorId: 'actor-1',
+        tenantId: TENANT_ID,
+        name: 'Alpha Team',
+      });
 
       await expect(
-        service.createTeam({ actorId: 'actor-1', name: 'Alpha Team' }),
+        service.createTeam({
+          actorId: 'actor-1',
+          tenantId: TENANT_ID,
+          name: 'Alpha Team',
+        }),
       ).rejects.toThrow(ConflictException);
 
       const rows = await dataSource
@@ -129,7 +148,11 @@ describe('TeamsService (real Postgres)', () => {
       auditLogger.log.mockRejectedValueOnce(new Error('audit down'));
 
       await expect(
-        service.createTeam({ actorId: 'actor-1', name: 'Rollback Case' }),
+        service.createTeam({
+          actorId: 'actor-1',
+          tenantId: TENANT_ID,
+          name: 'Rollback Case',
+        }),
       ).rejects.toThrow('audit down');
 
       const row = await dataSource
@@ -188,13 +211,18 @@ describe('CleanersService (real Postgres)', () => {
   async function createTeam(name: string) {
     return dataSource
       .getRepository(TeamEntity)
-      .save(dataSource.getRepository(TeamEntity).create({ name }));
+      .save(
+        dataSource
+          .getRepository(TeamEntity)
+          .create({ name, tenantId: TENANT_ID }),
+      );
   }
 
   describe('createCleaner', () => {
     it('persists a CleanerEntity with teamId: null and records cleaner.create', async () => {
       const created = await service.createCleaner({
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         email: 'jane@example.com',
         fullName: 'Jane Doe',
         notes: 'Prefers mornings',
@@ -221,6 +249,7 @@ describe('CleanersService (real Postgres)', () => {
     it('throws ConflictException for a duplicate email, leaving only one row persisted', async () => {
       await service.createCleaner({
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         email: 'jane@example.com',
         fullName: 'Jane Doe',
         phone: '555-0100',
@@ -229,6 +258,7 @@ describe('CleanersService (real Postgres)', () => {
       await expect(
         service.createCleaner({
           actorId: 'actor-1',
+          tenantId: TENANT_ID,
           email: 'jane@example.com',
           fullName: 'Jane Two',
           phone: '555-0200',
@@ -247,6 +277,7 @@ describe('CleanersService (real Postgres)', () => {
       await expect(
         service.createCleaner({
           actorId: 'actor-1',
+          tenantId: TENANT_ID,
           email: 'rollback@example.com',
           fullName: 'Rollback Case',
           phone: '555-0300',
@@ -264,6 +295,7 @@ describe('CleanersService (real Postgres)', () => {
     it('updates only the provided field, leaving the rest unchanged in the re-read row', async () => {
       const created = await service.createCleaner({
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         email: 'jane@example.com',
         fullName: 'Jane Doe',
         notes: 'Prefers mornings',
@@ -272,6 +304,7 @@ describe('CleanersService (real Postgres)', () => {
 
       await service.updateCleaner(created.id, {
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         phone: '555-9999',
       });
 
@@ -287,6 +320,7 @@ describe('CleanersService (real Postgres)', () => {
     it('explicit notes: null clears an existing value', async () => {
       const created = await service.createCleaner({
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         email: 'jane@example.com',
         fullName: 'Jane Doe',
         notes: 'Prefers mornings',
@@ -295,6 +329,7 @@ describe('CleanersService (real Postgres)', () => {
 
       await service.updateCleaner(created.id, {
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         notes: null,
       });
 
@@ -308,6 +343,7 @@ describe('CleanersService (real Postgres)', () => {
       await expect(
         service.updateCleaner('00000000-0000-0000-0000-000000000000', {
           actorId: 'actor-1',
+          tenantId: TENANT_ID,
           fullName: 'Nobody',
         }),
       ).rejects.toThrow(NotFoundException);
@@ -316,12 +352,14 @@ describe('CleanersService (real Postgres)', () => {
     it("throws ConflictException when updating email to another cleaner's email, leaving the target row unchanged", async () => {
       const cleanerA = await service.createCleaner({
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         email: 'a@example.com',
         fullName: 'Cleaner A',
         phone: '555-0001',
       });
       const cleanerB = await service.createCleaner({
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         email: 'b@example.com',
         fullName: 'Cleaner B',
         phone: '555-0002',
@@ -330,6 +368,7 @@ describe('CleanersService (real Postgres)', () => {
       await expect(
         service.updateCleaner(cleanerB.id, {
           actorId: 'actor-1',
+          tenantId: TENANT_ID,
           email: cleanerA.email,
         }),
       ).rejects.toThrow(ConflictException);
@@ -347,6 +386,7 @@ describe('CleanersService (real Postgres)', () => {
     it('a no-effective-change update (every field set to its own current value) still strictly advances updatedAt and still audits cleaner.update', async () => {
       const created = await service.createCleaner({
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         email: 'jane@example.com',
         fullName: 'Jane Doe',
         notes: 'Prefers mornings',
@@ -363,6 +403,7 @@ describe('CleanersService (real Postgres)', () => {
       auditLogger.log.mockClear();
       await service.updateCleaner(created.id, {
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         email: before.email,
         fullName: before.fullName,
         notes: before.notes,
@@ -391,6 +432,7 @@ describe('CleanersService (real Postgres)', () => {
     it('sets teamId and audits cleaner.assign_team', async () => {
       const cleaner = await service.createCleaner({
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         email: 'jane@example.com',
         fullName: 'Jane Doe',
         phone: '555-0100',
@@ -401,6 +443,7 @@ describe('CleanersService (real Postgres)', () => {
         actorId: 'actor-1',
         cleanerId: cleaner.id,
         teamId: teamA.id,
+        tenantId: TENANT_ID,
       });
 
       expect(updated.teamId).toBe(teamA.id);
@@ -427,6 +470,7 @@ describe('CleanersService (real Postgres)', () => {
     it('assigning to the same team again succeeds, strictly advances updatedAt, and emits a second cleaner.assign_team audit event', async () => {
       const cleaner = await service.createCleaner({
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         email: 'jane@example.com',
         fullName: 'Jane Doe',
         phone: '555-0100',
@@ -437,6 +481,7 @@ describe('CleanersService (real Postgres)', () => {
         actorId: 'actor-1',
         cleanerId: cleaner.id,
         teamId: teamA.id,
+        tenantId: TENANT_ID,
       });
       const before = await dataSource
         .getRepository(CleanerEntity)
@@ -448,6 +493,7 @@ describe('CleanersService (real Postgres)', () => {
         actorId: 'actor-1',
         cleanerId: cleaner.id,
         teamId: teamA.id,
+        tenantId: TENANT_ID,
       });
 
       expect(updated.teamId).toBe(teamA.id);
@@ -464,6 +510,7 @@ describe('CleanersService (real Postgres)', () => {
     it("throws NotFoundException for a nonexistent teamId, leaving the cleaner's teamId unchanged", async () => {
       const cleaner = await service.createCleaner({
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         email: 'jane@example.com',
         fullName: 'Jane Doe',
         phone: '555-0100',
@@ -474,6 +521,7 @@ describe('CleanersService (real Postgres)', () => {
           actorId: 'actor-1',
           cleanerId: cleaner.id,
           teamId: '00000000-0000-0000-0000-000000000000',
+          tenantId: TENANT_ID,
         }),
       ).rejects.toThrow(NotFoundException);
 

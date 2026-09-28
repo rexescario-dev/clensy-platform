@@ -164,6 +164,7 @@ describe('BookingsService (real Postgres)', () => {
     });
     const team = await teamsService.createTeam({
       actorId: 'actor-1',
+      tenantId: TENANT_ID,
       name: 'Team A',
     });
 
@@ -389,6 +390,7 @@ describe('BookingsService (real Postgres)', () => {
         bookingsService.update(booking.id, {
           actorId: 'actor-1',
           teamId: undefined,
+          tenantId: TENANT_ID,
           scheduledAt: undefined,
           status: undefined,
         }),
@@ -415,6 +417,7 @@ describe('BookingsService (real Postgres)', () => {
 
       await bookingsService.update(booking.id, {
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         teamId: team.id,
       });
       let row = await dataSource
@@ -424,6 +427,7 @@ describe('BookingsService (real Postgres)', () => {
 
       await bookingsService.update(booking.id, {
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         teamId: null,
       });
       row = await dataSource
@@ -433,6 +437,7 @@ describe('BookingsService (real Postgres)', () => {
 
       await bookingsService.update(booking.id, {
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         scheduledAt: new Date('2026-09-02T09:00:00Z'),
       });
       row = await dataSource
@@ -455,6 +460,7 @@ describe('BookingsService (real Postgres)', () => {
 
       await bookingsService.update(booking.id, {
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         scheduledAt: booking.scheduledAt,
       });
 
@@ -481,6 +487,7 @@ describe('BookingsService (real Postgres)', () => {
       await expect(
         bookingsService.update(booking.id, {
           actorId: 'actor-1',
+          tenantId: TENANT_ID,
           scheduledAt: new Date('2026-12-25T09:00:00Z'),
         }),
       ).rejects.toThrow('audit down');
@@ -504,6 +511,7 @@ describe('BookingsService (real Postgres)', () => {
 
       await bookingsService.update(booking.id, {
         actorId: null,
+        tenantId: null,
         scheduledAt: new Date('2026-12-25T09:00:00Z'),
       });
 
@@ -565,6 +573,7 @@ describe('BookingsService (real Postgres)', () => {
     });
     await bookingsService.update(booking.id, {
       actorId: null,
+      tenantId: null,
       scheduledAt: new Date('2026-09-02T09:00:00Z'),
     });
     await bookingsService.remove(booking.id, null);

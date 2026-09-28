@@ -15,6 +15,7 @@ import { CreateCleanerCommand } from '../../application/commands/create-cleaner.
 import { UpdateCleanerCommand } from '../../application/commands/update-cleaner.command';
 import { CurrentUser } from '../../../../platform/auth/decorators/current-user.decorator';
 import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
+import { requireTenantId } from '../../../../platform/auth/authorization/require-tenant-id';
 import type { AuthenticatedPrincipal } from '../../../../platform/auth/domain/authenticated-principal';
 import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
@@ -26,7 +27,11 @@ import { TeamType } from './team.type';
 import { UpdateCleanerInput } from './update-cleaner.input';
 
 // Clensy nullable get-by-id, writes, and `team` object field. Root
-// `cleaners` is ReadResolver-owned.
+// `cleaners` is ReadResolver-owned (tenant-scoped by `CleanerType`'s
+// `@Authorize`). The tenant comes only from the principal (#83): reads pass
+// it through and the service/loader fail closed on `null`; writes require
+// it. A command's `tenantId` is set after `...input` so no input key can
+// override it.
 @Resolver(() => CleanerType)
 export class CleanerResolver {
   constructor(
@@ -46,6 +51,7 @@ export class CleanerResolver {
       actorId: currentUser.id,
       cleanerId,
       teamId,
+      tenantId: requireTenantId(currentUser),
     };
     const cleaner = await this.cleanersService.assignCleanerToTeam(command);
     return toCleanerType(cleaner);
@@ -56,8 +62,12 @@ export class CleanerResolver {
   @Roles(...VIEW_ROLES)
   async cleaner(
     @Args('id', { type: () => ID }) id: string,
+    @CurrentUser() currentUser: AuthenticatedPrincipal,
   ): Promise<CleanerType | null> {
-    const cleaner = await this.cleanersService.getCleaner(id);
+    const cleaner = await this.cleanersService.getCleaner(
+      id,
+      currentUser.tenantId,
+    );
     return cleaner ? toCleanerType(cleaner) : null;
   }
 
@@ -71,19 +81,25 @@ export class CleanerResolver {
     const command: CreateCleanerCommand = {
       ...input,
       actorId: currentUser.id,
+      tenantId: requireTenantId(currentUser),
     };
     const cleaner = await this.cleanersService.createCleaner(command);
     return toCleanerType(cleaner);
   }
 
+  // Tenant from the principal, never from the parent row (#83 slice decision
+  // 4). No principal ⇒ null-tenant loader ⇒ null.
   @ResolveField(() => TeamType, { nullable: true })
   async team(
     @Parent() cleaner: Pick<Cleaner, 'id' | 'teamId'>,
+    @CurrentUser() currentUser: AuthenticatedPrincipal | undefined,
   ): Promise<TeamType | null> {
     if (cleaner.teamId === null) {
       return null;
     }
-    const team = await this.loaders.teamLoader.load(cleaner.teamId);
+    const team = await this.loaders
+      .teamLoaderFor(currentUser?.tenantId ?? null)
+      .load(cleaner.teamId);
     return team ? toTeamType(team) : null;
   }
 
@@ -98,6 +114,7 @@ export class CleanerResolver {
     const command: UpdateCleanerCommand = {
       ...input,
       actorId: currentUser.id,
+      tenantId: requireTenantId(currentUser),
     };
     const cleaner = await this.cleanersService.updateCleaner(id, command);
     return toCleanerType(cleaner);

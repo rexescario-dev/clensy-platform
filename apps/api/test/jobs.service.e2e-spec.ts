@@ -178,6 +178,7 @@ describe('JobsService (real Postgres)', () => {
     });
     const team = await teamsService.createTeam({
       actorId: 'actor-1',
+      tenantId: TENANT_ID,
       name: 'Team A',
     });
 
@@ -198,6 +199,7 @@ describe('JobsService (real Postgres)', () => {
     if (status !== undefined) {
       booking = await bookingsService.update(booking.id, {
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         status,
       });
     }
@@ -295,8 +297,9 @@ describe('JobsService (real Postgres)', () => {
 
     await bookingsService.update(booking.id, {
       actorId: 'actor-1',
-      scheduledAt: new Date('2026-12-25T09:00:00Z'),
       teamId: null,
+      tenantId: TENANT_ID,
+      scheduledAt: new Date('2026-12-25T09:00:00Z'),
     });
 
     const refetched = await jobsService.getJob(job.id);
@@ -449,6 +452,7 @@ describe('JobsService (real Postgres)', () => {
       const { job } = await createdJob();
       const otherTeam = await teamsService.createTeam({
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         name: 'Team B',
       });
 
@@ -457,6 +461,7 @@ describe('JobsService (real Postgres)', () => {
           actorId: 'actor-1',
           jobId: job.id,
           teamId: '00000000-0000-0000-0000-000000000000',
+          tenantId: TENANT_ID,
         }),
       ).rejects.toThrow(
         new NotFoundException(
@@ -468,6 +473,7 @@ describe('JobsService (real Postgres)', () => {
         actorId: 'actor-1',
         jobId: job.id,
         teamId: otherTeam.id,
+        tenantId: TENANT_ID,
       });
       expect(assigned.teamId).toBe(otherTeam.id);
       expect(assigned.status).toBe(JobStatus.PENDING);
@@ -488,6 +494,7 @@ describe('JobsService (real Postgres)', () => {
         actorId: 'actor-1',
         jobId: job.id,
         teamId: team.id,
+        tenantId: TENANT_ID,
       });
       auditLogger.log.mockClear();
 
@@ -495,6 +502,7 @@ describe('JobsService (real Postgres)', () => {
         actorId: 'actor-1',
         jobId: job.id,
         teamId: team.id,
+        tenantId: TENANT_ID,
       });
       expect(second.teamId).toBe(team.id);
       expect(second.updatedAt.getTime()).toBeGreaterThan(
@@ -611,6 +619,7 @@ describe('JobsService (real Postgres)', () => {
           actorId: 'actor-1',
           jobId: job.id,
           teamId: team.id,
+          tenantId: TENANT_ID,
         }),
       ).rejects.toThrow(
         new BadRequestException('Cannot assign a team to a completed job'),

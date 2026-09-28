@@ -137,7 +137,14 @@ export class BookingsService {
     // booking's existence check, mutation, and audit event. Sound on the
     // same no-Phase-1-team-deletion invariant `create` relies on.
     if (command.teamId !== undefined && command.teamId !== null) {
-      const team = await this.teamsService.getTeam(command.teamId);
+      // Tenant-scoped lookup (#83 Slice decision 6): GraphQL passes the
+      // caller's tenant; REST passes `null`, which `TeamsService.getTeam`
+      // never resolves a row for — a non-null `teamId` on REST fails
+      // closed with the `NotFoundException` below, same as `create`.
+      const team = await this.teamsService.getTeam(
+        command.teamId,
+        command.tenantId,
+      );
       if (!team) {
         throw new NotFoundException(`Team ${command.teamId} not found`);
       }
@@ -150,7 +157,13 @@ export class BookingsService {
           throw new NotFoundException(`Booking ${id} not found`);
         }
 
-        const { actorId, ...rawChanges } = command;
+        // `tenantId` is consumed entirely by the `teamId` lookup above; it
+        // MUST NOT reach `manager.update()` below — `booking_entity` has no
+        // `tenantId` column (until #85) and TypeORM would fail the query
+        // with an unknown column. Destructured out here, alongside
+        // `actorId`, before `rawChanges` is spread into `changes`.
+        const { actorId, tenantId, ...rawChanges } = command;
+        void tenantId;
         // `manager.update()` throws ("update values are not defined") when
         // every key it's given resolves to `undefined` — reachable
         // whenever a caller submits `UpdateBookingInput`/`UpdateBookingDto`
@@ -277,7 +290,10 @@ export class BookingsService {
     }
 
     if (command.teamId != null) {
-      const team = await this.teamsService.getTeam(command.teamId);
+      const team = await this.teamsService.getTeam(
+        command.teamId,
+        command.tenantId,
+      );
       if (!team) {
         throw new NotFoundException(`Team ${command.teamId} not found`);
       }

@@ -62,6 +62,7 @@ export class BookingMutationResolver {
     const command: UpdateBookingCommand = {
       ...changes,
       actorId: currentUser.id,
+      tenantId: currentUser.tenantId,
     };
     const booking = await this.bookingsService.update(id, command);
     return toBookingDto(booking);

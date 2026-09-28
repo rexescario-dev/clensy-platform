@@ -57,7 +57,17 @@ export class BookingController {
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateBookingDto) {
-    const command: UpdateBookingCommand = { ...dto, actorId: null };
+    // `actorId: null` — same REST-audit-suppression reason as `create`.
+    // `tenantId: null` — no principal means no tenant scope (#82 Slice
+    // decision 4; extended by #83 Slice decision 6; never bootstrap-tenant
+    // traffic, tracked for removal/rebuild by #85/#91): `TeamsService
+    // .getTeam` never resolves a row for a null tenant, so a non-null
+    // `teamId` fails closed with the existing `NotFoundException`.
+    const command: UpdateBookingCommand = {
+      ...dto,
+      actorId: null,
+      tenantId: null,
+    };
     return this.bookingsService.update(id, command);
   }
 }

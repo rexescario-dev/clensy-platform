@@ -255,6 +255,7 @@ describe('Bookings (e2e)', () => {
     });
     const team = await teamsService.createTeam({
       actorId: 'e2e',
+      tenantId,
       name: `Fixture Team ${runId}`,
     });
     return { customer, priceMinorUnits, property, service, team };

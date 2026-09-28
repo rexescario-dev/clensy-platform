@@ -258,13 +258,40 @@ describe('Booking GraphQL reads and mutations', () => {
       );
       expect(bookingsService.update).toHaveBeenCalledWith(
         'booking-1',
-        expect.objectContaining({ actorId: 'admin-1' }),
+        expect.objectContaining({ actorId: 'admin-1', tenantId: 'tenant-1' }),
       );
 
       await resolver.removeBooking('booking-1', currentUser);
       expect(bookingsService.remove).toHaveBeenCalledWith(
         'booking-1',
         'admin-1',
+      );
+    });
+  });
+
+  // Tenant isolation (#83 Slice decision 6): the caller's tenant comes only
+  // from the DB-loaded principal, never from GraphQL input.
+  describe('BookingMutationResolver tenant scoping', () => {
+    it('updateBooking passes the caller tenant', async () => {
+      const bookingsService = {
+        update: jest.fn().mockResolvedValue({
+          id: 'b-1',
+          pricingSnapshot: { priceMinorUnits: 1 },
+        }),
+      };
+      const resolver = new BookingMutationResolver(bookingsService as never);
+      const principal = {
+        id: 'u',
+        tenantId: 't-a',
+        role: Role.TENANT_OWNER,
+        scope: AdminScope.TENANT,
+      };
+
+      await resolver.updateBooking({ id: 'b-1', teamId: 'team-a' }, principal);
+
+      expect(bookingsService.update).toHaveBeenCalledWith(
+        'b-1',
+        expect.objectContaining({ tenantId: 't-a' }),
       );
     });
   });
