@@ -26,6 +26,15 @@ const isProduction = process.env.NODE_ENV === 'production';
         res,
       }),
       driver: ApolloDriver,
+      // nestjs-query attaches an `AuthorizerInterceptor` to every relation
+      // `@ResolveField` it generates; `@RelationAuthorizerFilter` reads the
+      // authorizer that interceptor puts on the context. `@nestjs/graphql`
+      // skips interceptors on field resolvers unless enabled here, so
+      // without this a relation reached from a plain `@Query` (e.g.
+      // `job(id) { booking }`) ran with no tenant filter at all (#85).
+      // Guards stay root-only: enabling them would re-run `AuthGuard` on
+      // every relation field of every row.
+      fieldResolverEnhancers: ['interceptors'],
       // playground: false (not a manually-passed `plugins` array) — @nestjs/apollo
       // concatenates any `plugins` we pass with its own dev-mode default (the
       // legacy Playground plugin) rather than replacing it, so passing our own
