@@ -42,15 +42,17 @@ These resolve planning-level choices the RFC leaves to M4. None adds product sem
 3. **REST `/bookings`: rebuilt as authenticated, not removed (RFC §4.5 leaves the choice open; §8 lists it as an M4 decision).** A repo-wide search (`git ls-files`, 2026-09-29) found **no runtime consumer**: no `apps/web`, `packages/`, scripts, or Postman/`.http`/OpenAPI collections. However, `README.md` states the surface is "kept for the REST/GraphQL comparison this repo exists to run". **The REST/GraphQL comparison is an explicit purpose of the repository**, so keeping REST preserves an existing product/development surface. It is not compatibility carry-over. Therefore:
    - All five routes (`POST /bookings`, `GET /bookings`, `GET /bookings/:id`, `PATCH /bookings/:id`, `DELETE /bookings/:id`) keep their paths, DTOs and response shape, and change **together**. No route is left partially scoped.
    - Every route requires the session cookie (`AuthGuard`) and a role from the **same** sets GraphQL uses: `VIEW_ROLES` for the two `GET`s, `WRITE_ROLES` for `POST`/`PATCH`/`DELETE`. Unauthenticated ⇒ 401; wrong role or Super Admin ⇒ 403.
-   - Every route obtains the tenant with `requireTenantId(currentUser)` and the actor with `currentUser.id`. REST mutations are therefore **audited**, consistent with GraphQL. The Bookings spec's "REST unaudited" rule rested on REST having no principal (`actorId: null` = "no actor"). RFC §4.5 removes that premise, so M5 should confirm this consequence explicitly.
+   - Every route obtains the tenant with `requireTenantId(currentUser)` and the actor with `currentUser.id`.
+   - REST mutations now emit the same booking audit events as GraphQL, because authenticated REST requests have an authenticated actor. This is an intentional consequence of this decision; the Bookings spec's "REST unaudited" rule depended on REST having no principal (`actorId: null`), which RFC §4.5 removes. Audit tenant tagging remains deferred to #90 (Decision 12).
    - All operations go through the same tenant-scoped `BookingsService`, which loses its `tenantId: null` / `actorId: null` special cases (Decision 7).
-   - The REST response shape is **unchanged**: the controller does not serialize the new `tenantId` field. Swagger at `/docs` keeps listing the routes.
+   - The REST response shape MUST stay unchanged. Recon (2026-09-29): every `BookingController` handler returns the service's domain `Booking` as-is, so the new `tenantId` field would otherwise appear in responses. The controller therefore adds the smallest local mapping that omits it (Task 5). Swagger at `/docs` keeps listing the routes.
    - `README.md`'s REST row is updated to say it is authenticated (Task 9). The comparison purpose is kept verbatim.
    - #91 still owns any remaining legacy-surface cleanup. #85 closes the booking REST isolation requirement.
 
 4. **Authentication becomes transport-aware at the shared platform boundary; authorization and tenant enforcement stay transport-independent.** Recon (2026-09-29) found that `AuthGuard.getRequest`/`getResponse` and `@CurrentUser()` unconditionally use `GqlExecutionContext.create(context).getContext().req`. On an HTTP route that yields `undefined`, so the guard cannot authenticate REST requests today. Cookie extraction itself is transport-neutral (`JwtStrategy` reads `req.cookies`; `cookie-parser` is global in `main.ts`). Decision:
-   - `AuthGuard` resolves the request/response by `context.getType()`. `'graphql'` uses the existing `GqlExecutionContext` path unchanged; `'http'` uses `context.switchToHttp().getRequest()` / `.getResponse()`.
-   - `@CurrentUser()` resolves `req.user` the same way.
+   - `AuthGuard` resolves the request/response by `context.getType()`, branching **explicitly** for the two transports: `'graphql'` uses the existing `GqlExecutionContext` path, and `'http'` uses `context.switchToHttp().getRequest()` / `.getResponse()`.
+   - Any other execution type (`rpc`, `ws`, …) is outside this slice and MUST NOT be silently treated as HTTP. It throws an explicit error naming the unsupported type.
+   - `@CurrentUser()` resolves `req.user` the same way, with the same two branches and the same explicit rejection.
    - `@Roles()` metadata and the role check are unchanged and shared. `requireTenantId()` remains the tenant boundary and is unchanged.
    - **No** separate `HttpAuthGuard` / `@CurrentHttpUser()`.
    - The platform change is limited to `auth.guard.ts`, `current-user.decorator.ts` and their unit tests. It is part of this slice because Decision 3 cannot be met without it; it is not an auth refactor.
@@ -80,7 +82,11 @@ These resolve planning-level choices the RFC leaves to M4. None adds product sem
 
 12. **Audit boundary.** Booking audit events (`booking.create`, `booking.update`, `booking.remove`) are **not** tenant-tagged in #85; that stays with #90. This follows the precedent of each slice tagging only its own module's events, set by the #82–#84 deferral lines. #85 only makes REST mutations emit the same events GraphQL already emits (Decision 3).
 
-13. **Migration backfill and validation (RFC §4.7).** Every existing booking is attached to the bootstrap tenant. Before any constraint is created, the migration counts bookings whose customer, property, service or (non-null) team has a `tenantId` different from the booking's. If any count is non-zero, it throws an explicit error naming the counts, and the single transaction rolls back with nothing modified. In production every parent is already bootstrap-owned (#82–#84 backfills), so this is a fail-closed guard for dev/e2e databases with leftover test-tenant rows. It is not an expected path.
+13. **Migration backfill and validation (RFC §4.7).** Every existing booking is attached to the bootstrap tenant. Before any constraint is created, the migration validates:
+   - **customer, property and service** tenant equality for **every** booking (required references);
+   - **team** tenant equality **only when `teamId IS NOT NULL`** (nullable reference; `NULL` means unassigned and is valid).
+
+   The validation checks tenant mismatch only, not missing parents: the existing id-only FKs (`fk_booking_customer`, `fk_booking_property`, `fk_booking_service`, `fk_booking_team`) are still in place during this step and already guarantee every non-null reference exists. If any count is non-zero, the migration throws an explicit error naming the counts, and the single transaction rolls back with nothing modified. In production every parent is already bootstrap-owned (#82–#84 backfills), so this is a fail-closed guard for dev/e2e databases with leftover test-tenant rows. It is not an expected path.
 
 ## Known residual exposure (until #86)
 
@@ -97,9 +103,10 @@ These resolve planning-level choices the RFC leaves to M4. None adds product sem
 - SHALL enforce, in the database: `booking_entity."tenantId" uuid NOT NULL`, `fk_booking_tenant` → `tenant_entity(id)` `ON DELETE RESTRICT`; `uq_booking_id_tenant`; the four composite FKs of Decision 5 (`ON DELETE RESTRICT`, `MATCH SIMPLE`); `idx_booking_tenant_scheduled` on `("tenantId", "scheduledAt" DESC, "id")` (matches the `bookings` default sort). The four id-only `fk_booking_*` constraints are removed. The existing single-column indexes on `customerId`/`propertyId`/`serviceId`/`teamId` are unchanged.
 - SHALL order the migration exactly: **(0)** assert the bootstrap tenant exists → **(1)** add nullable `tenantId` → **(2)** backfill → **(3)** validate (Decision 13) → **(4)** NOT NULL + `fk_booking_tenant` → **(5)** `uq_booking_id_tenant` → **(6)** drop each id-only parent FK and add its composite replacement (same step) → **(7)** `idx_booking_tenant_scheduled`. All in **one** migration. SHALL NOT split it. No committed state lacks a parent FK.
 - SHALL NOT change `cleaning_job_entity`, `fk_cleaning_job_booking`, `UQ_cleaning_job_booking_id`, or any laundry/billing table (#86, #87).
-- SHALL treat `@Authorize` on `BookingDTO` as a **security invariant**. No relation targeting `BookingDTO` may carry a relation-level `auth`, and none may enable relation `update`/`remove`. Planning-time inventory: exactly two such relations exist, `CleaningJob.booking` (`@FilterableRelation`) and `Property.bookings` (`@OffsetConnection`). Task 4 pins this.
+- SHALL treat `@Authorize` on `BookingDTO` as a **security invariant**. No relation targeting `BookingDTO` may carry a relation-level `auth`, and none may enable relation `update`/`remove`. Planning-time inventory: exactly two **cross-type** relations target `BookingDTO`: `CleaningJob.booking` (`@FilterableRelation`) and `Property.bookings` (`@OffsetConnection`). `BookingDTO` has no self-relation. Task 4 pins this.
+- SHALL NOT expose `tenantId` on `BookingDTO`. Task 4 asserts this locally, and the final gate requires an empty generated-schema diff.
 - SHALL keep `@Roles()` sets unchanged (GraphQL `VIEW_ROLES` / `WRITE_ROLES`). SHALL NOT add `SUPER_ADMIN` to any booking route or resolver (RFC §4.2).
-- SHALL keep GraphQL behaviour of `AuthGuard` / `@CurrentUser()` byte-for-byte unchanged on the `'graphql'` path (Decision 4).
+- SHALL preserve, on the `'graphql'` path, the existing request/response resolution, authentication, authorization, 401/403 behaviour and principal resolution of `AuthGuard` / `@CurrentUser()` (Decision 4).
 - SHALL NOT use PostgreSQL RLS (invariant 12).
 - SHALL NOT change `apps/web`, `packages/*`, GraphQL operation documents, or the public GraphQL schema. Adding `@Authorize` does not change the schema.
 - SHALL NOT change booking audit event payloads (Decision 12).
@@ -122,9 +129,9 @@ These resolve planning-level choices the RFC leaves to M4. None adds product sem
 | `BookingsService` | `create(command)`; `findAll(tenantId: string)`; `findOne(id, tenantId: string)`; `getBookingsByIds(ids, tenantId: string)`; `update(id, command)`; `remove(id, actorId: string, tenantId: string)`; `logAuditIfAuthenticated` → `logAudit` (always logs) |
 | GraphQL `BookingDTO` | `@Authorize(tenantReadAuthorizer<BookingDTO>())`. `WRITE_ROLES` moves here from `booking.resolver.ts` and is exported beside `VIEW_ROLES` so REST and GraphQL share one definition |
 | GraphQL `createBooking`, `updateBooking`, `removeBooking` | pass `requireTenantId(currentUser)` |
-| REST `BookingController` | class-level `@UseGuards(AuthGuard)`; per-route `@Roles(...VIEW_ROLES)` / `@Roles(...WRITE_ROLES)`; `@CurrentUser()`; `requireTenantId`; responses via `toBookingResponse` (omits `tenantId`) |
-| `AuthGuard` | `getRequest` / `getResponse` branch on `context.getType()` |
-| `@CurrentUser()` | factory extracted as exported `principalFromContext(context)`; branches on `context.getType()` |
+| REST `BookingController` | class-level `@UseGuards(AuthGuard)`; per-route `@Roles(...VIEW_ROLES)` / `@Roles(...WRITE_ROLES)`; `@CurrentUser()`; `requireTenantId`; response shape unchanged (smallest local mapping omitting `tenantId`) |
+| `AuthGuard` | `getRequest` / `getResponse` branch explicitly on `'graphql'` / `'http'`; other types throw |
+| `@CurrentUser()` | factory extracted as exported `principalFromContext(context)`; same explicit branches |
 | `CreateJobFromBookingCommand` | + `tenantId: string` |
 
 **Deferred:** job/checklist tenant ownership and `fk_cleaning_job_booking` composite (#86); booking audit tagging (#90); remaining legacy-surface cleanup (#91); two-tenant release gate (#92); any UI.
@@ -170,7 +177,7 @@ Failure modes the RFC implies that are easy to miss. Each is pinned by a test in
 **Interfaces:**
 - Produces: `AuthGuard` usable on HTTP controllers with unchanged GraphQL behaviour; `principalFromContext(context: ExecutionContext): AuthenticatedPrincipal` (exported from `current-user.decorator.ts`); `CurrentUser` unchanged in name and use.
 
-- [ ] **Step 1: Write the failing guard tests.** In `auth.guard.spec.ts`, keep `buildContext` (GraphQL) as-is. Add `buildHttpContext(req, handler)`: `getType: () => 'http'`, `switchToHttp().getRequest()` returns `req`, and `getArgByIndex`/`getArgs` return `[req, {}, () => undefined]`, the Express shape where index 2 is `next`, not a GraphQL context. Add a `describe('over HTTP', …)` that repeats the five existing cases through `buildHttpContext`: no cookie ⇒ rejects; disabled account ⇒ rejects; no `@Roles()` ⇒ `true`; role not listed ⇒ rejects with `ForbiddenException`; Super Admin on `tenantOwnerOnly` ⇒ `ForbiddenException`. Add one assertion that after an HTTP `canActivate` resolves `true`, `req.user` equals the looked-up principal.
+- [ ] **Step 1: Write the failing guard tests.** In `auth.guard.spec.ts`, keep `buildContext` (GraphQL) as-is. Add `buildHttpContext(req, handler)`: `getType: () => 'http'`, `switchToHttp().getRequest()` returns `req`, and `getArgByIndex`/`getArgs` return `[req, {}, () => undefined]`, the Express shape where index 2 is `next`, not a GraphQL context. Add a `describe('over HTTP', …)` that repeats the five existing cases through `buildHttpContext`: no cookie ⇒ rejects; disabled account ⇒ rejects; no `@Roles()` ⇒ `true`; role not listed ⇒ rejects with `ForbiddenException`; Super Admin on `tenantOwnerOnly` ⇒ `ForbiddenException`. Add one assertion that after an HTTP `canActivate` resolves `true`, `req.user` equals the looked-up principal. Add one case where `getType: () => 'rpc'`: `guard.getRequest(context)` throws `/unsupported execution context type "rpc"/`.
 
 - [ ] **Step 2: Write the failing decorator test.**
 
@@ -209,6 +216,13 @@ describe('principalFromContext', () => {
     } as unknown as ExecutionContext;
     expect(principalFromContext(context)).toBe(principal);
   });
+
+  it('rejects an unsupported execution type instead of treating it as HTTP', () => {
+    const context = { getType: () => 'rpc' } as unknown as ExecutionContext;
+    expect(() => principalFromContext(context)).toThrow(
+      /unsupported execution context type "rpc"/,
+    );
+  });
 });
 ```
 
@@ -218,31 +232,43 @@ describe('principalFromContext', () => {
 
 ```ts
   getRequest(context: ExecutionContext): RequestWithPrincipal {
-    if (context.getType<GqlContextType>() === 'graphql') {
+    const type = context.getType<GqlContextType>();
+    if (type === 'graphql') {
       return GqlExecutionContext.create(context).getContext<GqlContext>().req;
     }
-    return context.switchToHttp().getRequest<RequestWithPrincipal>();
+    if (type === 'http') {
+      return context.switchToHttp().getRequest<RequestWithPrincipal>();
+    }
+    throw new Error(`AuthGuard: unsupported execution context type "${type}"`);
   }
 
   getResponse(context: ExecutionContext): unknown {
-    if (context.getType<GqlContextType>() === 'graphql') {
+    const type = context.getType<GqlContextType>();
+    if (type === 'graphql') {
       return GqlExecutionContext.create(context).getContext<GqlContext>().res;
     }
-    return context.switchToHttp().getResponse<unknown>();
+    if (type === 'http') {
+      return context.switchToHttp().getResponse<unknown>();
+    }
+    throw new Error(`AuthGuard: unsupported execution context type "${type}"`);
   }
 ```
 
-(`GqlContextType` from `@nestjs/graphql`.) In `current-user.decorator.ts`:
+(`GqlContextType` from `@nestjs/graphql`; it is the union `'graphql' | ContextType`, so `'http'` type-checks.) In `current-user.decorator.ts`:
 
 ```ts
 export function principalFromContext(
   context: ExecutionContext,
 ): AuthenticatedPrincipal {
-  const req =
-    context.getType<GqlContextType>() === 'graphql'
-      ? GqlExecutionContext.create(context).getContext<GqlContext>().req
-      : context.switchToHttp().getRequest<RequestWithPrincipal>();
-  return req.user!;
+  const type = context.getType<GqlContextType>();
+  if (type === 'graphql') {
+    return GqlExecutionContext.create(context).getContext<GqlContext>().req
+      .user!;
+  }
+  if (type === 'http') {
+    return context.switchToHttp().getRequest<RequestWithPrincipal>().user!;
+  }
+  throw new Error(`CurrentUser: unsupported execution context type "${type}"`);
 }
 
 export const CurrentUser = createParamDecorator(
@@ -253,7 +279,7 @@ export const CurrentUser = createParamDecorator(
 
 The branch is deliberately duplicated in the two files, not extracted: Decision 4 limits the platform change to these two files.
 
-- [ ] **Step 5: Run.** `pnpm --filter api test -- auth` ⇒ PASS; then the full `pnpm --filter api test` ⇒ PASS (GraphQL behaviour unchanged).
+- [ ] **Step 5: Run.** `pnpm --filter api test -- auth` ⇒ PASS; then the full `pnpm --filter api test` ⇒ PASS. The existing GraphQL guard cases pass unmodified, which is the evidence that GraphQL request resolution, authentication, authorization and 401/403 behaviour are preserved.
 
 - [ ] **Step 6: Commit.** `git commit -m "feat(85): make AuthGuard and @CurrentUser transport-aware"`
 
@@ -295,8 +321,10 @@ const OLD_CONSTRAINTS = [
 
 Cases, in order:
 1. **Bootstrap missing ⇒ abort.** With the bootstrap tenant row temporarily absent (same technique as the catalog suite), `up` rejects with `/bootstrap tenant .* not found/`, and `booking_entity` has no `tenantId` column.
-2. **Validation abort (Decision 13).** Insert a booking whose customer/property belong to the second tenant. `up` rejects with `/AddBookingTenant: .*customer/`. Afterwards `booking_entity` has no `tenantId` column, the booking row is unchanged, and `OLD_CONSTRAINTS` all still exist. Delete that booking.
-3. **Happy path.** Insert two bootstrap bookings (one with `teamId` NULL) and run `up`. Every booking has `tenantId = BOOTSTRAP_TENANT_ID`; the column is `NOT NULL`; every `NEW_CONSTRAINTS` name exists in `pg_constraint` for `booking_entity`; no `OLD_CONSTRAINTS` name exists; `idx_booking_tenant_scheduled` exists in `pg_indexes`; `fk_cleaning_job_booking` still exists and is unchanged.
+2. **Validation abort (Decision 13).**
+   - Insert a booking whose customer/property belong to the second tenant. `up` rejects with `/AddBookingTenant: .*customer/`. Afterwards `booking_entity` has no `tenantId` column, the booking row is unchanged, and `OLD_CONSTRAINTS` all still exist. Delete that booking.
+   - Repeat with an otherwise-bootstrap booking whose **non-null** `teamId` is the second tenant's team ⇒ rejects with `/team/`. Delete it.
+3. **Happy path.** Insert two bootstrap bookings, one with the bootstrap team and one with `teamId` NULL; the NULL one proves validation does not reject an unassigned booking. Run `up`. Every booking has `tenantId = BOOTSTRAP_TENANT_ID`; the column is `NOT NULL`; every `NEW_CONSTRAINTS` name exists in `pg_constraint` for `booking_entity`; no `OLD_CONSTRAINTS` name exists; `idx_booking_tenant_scheduled` exists in `pg_indexes`; `fk_cleaning_job_booking` still exists and is unchanged.
 4. **Composite FKs reject mismatches (I-1).** For each of `customerId`, `propertyId`, `serviceId`, `teamId`: an insert with `tenantId` = bootstrap and that one reference pointing at the second tenant's row rejects with the matching `fk_booking_*_tenant` constraint name (`error.driverError.constraint`). An insert with `teamId` NULL succeeds.
 5. **`down`.** It restores `OLD_CONSTRAINTS`, drops every `NEW_CONSTRAINTS` name and the index, and drops the column. Existing rows survive.
 
@@ -345,15 +373,22 @@ export class AddBookingTenant1790611200000 implements MigrationInterface {
       BOOTSTRAP_TENANT_ID,
     ]);
 
+    // Slice decision 13. Tenant mismatch only: the id-only parent FKs are
+    // still in place here and already guarantee every non-null reference
+    // exists. customer/property/service are required and checked for every
+    // booking; team is nullable and checked only when `teamId IS NOT NULL`
+    // (stated explicitly rather than left to the inner join's NULL
+    // behaviour).
     const mismatches: string[] = [];
-    for (const [column, table, label] of [
-      ['customerId', 'customer_entity', 'customer'],
-      ['propertyId', 'property_entity', 'property'],
-      ['serviceId', 'service_entity', 'service'],
-      ['teamId', 'team_entity', 'team'],
+    for (const [column, table, label, onlyWhenPresent] of [
+      ['customerId', 'customer_entity', 'customer', false],
+      ['propertyId', 'property_entity', 'property', false],
+      ['serviceId', 'service_entity', 'service', false],
+      ['teamId', 'team_entity', 'team', true],
     ] as const) {
+      const presence = onlyWhenPresent ? ` AND b."${column}" IS NOT NULL` : '';
       const [{ count }] = (await queryRunner.query(
-        `SELECT COUNT(*)::int AS "count" FROM "booking_entity" b JOIN "${table}" p ON p."id" = b."${column}" WHERE p."tenantId" <> b."tenantId"`,
+        `SELECT COUNT(*)::int AS "count" FROM "booking_entity" b JOIN "${table}" p ON p."id" = b."${column}" WHERE p."tenantId" <> b."tenantId"${presence}`,
       )) as { count: number }[];
       if (count > 0) {
         mismatches.push(`${count} booking(s) reference a ${label} outside the bootstrap tenant`);
@@ -426,7 +461,27 @@ Confirm during M6 that the migration is picked up by the data source's migration
    - a `tenantId` column plus a `tenant` `@ManyToOne(() => TenantEntity, …)` with `@JoinColumn({ name: 'tenantId', foreignKeyConstraintName: 'fk_booking_tenant' })` (copy the `PropertyEntity` shape);
    - on each of `customer`, `property`, `service`, `team`: replace `onDelete` / `foreignKeyConstraintName` with `createForeignKeyConstraints: false`, and replace the header comment's FK sentence with the #82-style note ("the composite `fk_booking_*_tenant` FKs are hand-written in `AddBookingTenant`; `migration:generate` may propose dropping them or re-adding id-only FKs — do not apply that").
 
-- [ ] **Step 5: Seed + cleanup helper.** Add `tenantId: BOOTSTRAP_TENANT_ID` to `BookingSeedData` and to every row, updating the file's comment if it lists the fields. In `removeTestTenants`, first delete `cleaning_job_entity` rows whose booking is in the given tenants, via `checklist_item_entity` → `checklist_entity` → `cleaning_job_entity` with `WHERE "bookingId" IN (SELECT "id" FROM "booking_entity" WHERE "tenantId" = ANY($1))`. Confirm the checklist table and column names against `AddCleaningJob` during M6. Then delete `booking_entity WHERE "tenantId" = ANY($1)`, before the existing property/customer/team/service deletes. Update the helper's comment: bookings are now tenant-owned and deleted here, and callers no longer delete bookings/jobs they created for these tenants by hand.
+- [ ] **Step 5: Seed + cleanup helper.**
+   - Add `tenantId: BOOTSTRAP_TENANT_ID` to `BookingSeedData` and to every row, updating the file's comment if it lists the fields.
+   - **Requirement:** every cleaning job referencing a booking owned by one of the supplied test tenants MUST be deleted before those bookings, because `fk_cleaning_job_booking` is `ON DELETE RESTRICT`.
+   - The deletion keys on the **direct** `cleaning_job_entity."bookingId"` relationship, so a job with no checklist is never missed. Verified FK chain (`AddCleaningJob`): `fk_checklist_job` (checklist → job) and `fk_checklist_item_checklist` (item → checklist) are both `ON DELETE CASCADE`, and nothing else references `cleaning_job_entity`. Deleting the jobs therefore removes their checklists and items. Re-check this at M6 with `grep -rn 'REFERENCES "cleaning_job_entity"' apps/api/src/platform/database/migrations`; if a new RESTRICT reference has appeared, delete that table's rows first.
+
+   ```ts
+   // Jobs first: `fk_cleaning_job_booking` is ON DELETE RESTRICT; their
+   // checklists/items go with them (both FKs are ON DELETE CASCADE).
+   await dataSource.query(
+     `DELETE FROM "cleaning_job_entity" WHERE "bookingId" IN (SELECT "id" FROM "booking_entity" WHERE "tenantId" = ANY($1))`,
+     [ids],
+   );
+   await dataSource.query(
+     `DELETE FROM "booking_entity" WHERE "tenantId" = ANY($1)`,
+     [ids],
+   );
+   ```
+
+   - Place both deletes before the existing property/customer/team/service deletes.
+   - **Helper invariant (unchanged, now load-bearing):** `removeTestTenants` only deletes rows owned by the supplied test tenant ids, after the existing `BOOTSTRAP_TENANT_ID` filter, and MUST never delete bootstrap-tenant bookings or jobs. Do not generalize it to "all bookings created by a fixture".
+   - Update the helper's comment: bookings (and jobs referencing them) of test tenants are now deleted here. Callers no longer delete such bookings by hand, but still clean up their own bootstrap-tenant rows.
 
 - [ ] **Step 6: Run.** `pnpm --filter api test:e2e -- add-booking-tenant` ⇒ PASS. `pnpm --filter api test` (unit) ⇒ PASS; TypeScript may now flag `Booking` literals in unit specs without `tenantId`, so add `tenantId: 'tenant-1'` there. Other e2e suites are expected to fail until Task 7.
 
@@ -504,11 +559,14 @@ Confirm during M6 that the migration is picked up by the data source's migration
        - it is registered;
        - a principal with `tenantId: 't-a'` resolves to `{ tenantId: { eq: 't-a' } }`;
        - a context with no `req.user` resolves to `{ id: { is: null } }`.
+     - **`tenantId` is absent from `BookingDTO`** (local check of the schema invariant, easier to diagnose than the final schema diff). Build the schema exactly as `apps/api/src/modules/catalog/tests/graphql/service-read.resolver.spec.ts:66-77` does: `Test.createTestingModule({ imports: [GraphQLSchemaBuilderModule] })`, then `moduleRef.get(GraphQLSchemaFactory).create([BookingReadResolver, BookingMutationResolver])`. Assert that none of these have a `tenantId` field: `(schema.getType('Booking') as GraphQLObjectType).getFields()`, `(schema.getType('BookingFilter') as GraphQLInputObjectType).getFields()`, `CreateBookingInput`, `UpdateBookingInput`.
    - New `booking-relations.authorization.spec.ts`:
 
 ```ts
-// @ptc-org/nestjs-query-graphql 9.5.0 does not re-export getRelations from
-// the package root, so this deep import is required.
+// TEST-ONLY deep import, tied to the installed @ptc-org/nestjs-query-graphql
+// 9.5.0 package layout (it does not re-export getRelations from the package
+// root). Not an application dependency; on a nestjs-query upgrade, fix this
+// path first if the spec fails to compile. Same pattern as #82-#84.
 import { getRelations } from '@ptc-org/nestjs-query-graphql/src/decorators';
 import { PropertyType } from '../../../customers/presentation/graphql/property.type';
 import { CleaningJobType } from '../../../jobs/presentation/graphql/cleaning-job.type';
@@ -521,10 +579,12 @@ describe('Relations targeting Booking (tenant isolation, #85)', () => {
   // nestjs-query gives a relation's own `auth` precedence over the target
   // DTO's `@Authorize`, so an `auth` on any of these would silently bypass
   // the tenant predicate. Relation `update`/`remove` must stay disabled:
-  // `@Authorize` is relied on for reads only.
+  // `@Authorize` is relied on for reads only. The planning-time inventory
+  // is exactly two cross-type relations (Global constraints); `BookingDTO`
+  // itself is also scanned so a future self-relation cannot slip past.
   it('no relation targeting Booking overrides auth or enables relation mutations', () => {
     const owners = [
-      ['Booking', BookingDTO],
+      ['Booking', BookingDTO], // self-relations: none today
       ['CleaningJob', CleaningJobType],
       ['Property', PropertyType],
     ] as const;
@@ -568,12 +628,12 @@ describe('Relations targeting Booking (tenant isolation, #85)', () => {
 
 **Files:**
 - Modify: `apps/api/src/modules/bookings/presentation/rest/booking.controller.ts`
-- Create: `apps/api/src/modules/bookings/presentation/rest/mappers.ts`
+- Create (only if the chosen mapping is not inline): `apps/api/src/modules/bookings/presentation/rest/mappers.ts`
 - Test: `apps/api/src/modules/bookings/tests/rest/booking.controller.spec.ts`
 
 **Interfaces:**
 - Consumes: `AuthGuard`, `CurrentUser` (Task 1); `VIEW_ROLES`, `WRITE_ROLES` (Task 4); service signatures (Task 3).
-- Produces: `toBookingResponse(booking: Booking): Omit<Booking, 'tenantId'>`.
+- Requirement (not an abstraction mandate): the REST response shape MUST remain unchanged. Recon found every handler returns the domain `Booking` directly, which would now expose `tenantId`. So introduce the **smallest local mapping** that omits it. The sketch below is one such mapping; an equivalent inline omission in the controller is equally acceptable. Before choosing, re-confirm at M6 that no handler already builds its own response object.
 
 - [ ] **Step 1: Failing controller unit tests** (replace the existing file's cases):
    - **Route metadata:**
@@ -591,10 +651,10 @@ describe('Relations targeting Booking (tenant isolation, #85)', () => {
 
 - [ ] **Step 2: Run** `pnpm --filter api test -- booking.controller` ⇒ FAIL.
 
-- [ ] **Step 3: Implement.**
+- [ ] **Step 3: Implement.** The mapping below is a sketch of the smallest acceptable form (see Interfaces); inline omission in the controller is equally fine.
 
 ```ts
-// presentation/rest/mappers.ts
+// presentation/rest/mappers.ts (sketch)
 import { Booking } from '../../domain/booking';
 
 // REST response shape is unchanged by #85 (Slice decision 3): the owning
@@ -609,7 +669,7 @@ export function toBookingResponse(booking: Booking): Omit<Booking, 'tenantId'> {
    The controller:
    - Class decorators `@ApiTags('bookings') @Controller('bookings') @UseGuards(AuthGuard)`.
    - Each handler gets `@Roles(...VIEW_ROLES)` or `@Roles(...WRITE_ROLES)` and a `@CurrentUser() currentUser: AuthenticatedPrincipal` parameter, and computes `const tenantId = requireTenantId(currentUser);`.
-   - Each handler returns through `toBookingResponse`.
+   - Each handler returns its result without `tenantId`, through the chosen mapping.
    - Replace the header comment. The REST/GraphQL comparison surface, kept deliberately (README), now uses the same cookie session, roles, tenant source and audit as GraphQL (RFC §4.5; #85 Slice decisions 3–4). Remove every "`actorId: null` / `tenantId: null`" comment.
 
 - [ ] **Step 4: Run** `pnpm --filter api test -- booking.controller` ⇒ PASS.
@@ -655,7 +715,7 @@ export function toBookingResponse(booking: Booking): Omit<Booking, 'tenantId'> {
 
 - [ ] **Step 1: Run** `pnpm --filter api test:e2e` and list the failures. Every failure must be one of: (a) direct `BookingEntity` insert without `tenantId`; (b) unauthenticated REST call now 401; (c) interim "B sees A's booking" expectation. Any other failure is a defect in Tasks 1–6: stop and fix there.
 
-- [ ] **Step 2: (a) Fixtures.** Add `tenantId` equal to the tenant of the booking's customer to every direct `bookingRepository.create({...})`. Remove per-suite `delete({ id: booking.id })` cleanup only where `removeTestTenants` now covers it; keep it for bootstrap-tenant rows, which `removeTestTenants` never touches.
+- [ ] **Step 2: (a) Fixtures.** Add `tenantId` equal to the tenant of the booking's customer to every direct `bookingRepository.create({...})`. Remove per-suite `delete({ id: booking.id })` cleanup only for bookings owned by a test tenant that the suite passes to `removeTestTenants`. Keep it for bootstrap-tenant rows. Reason: `removeTestTenants` only deletes rows owned by the supplied test tenant ids and must never delete bootstrap-tenant bookings (Task 2 helper invariant), so bootstrap rows remain each suite's own responsibility. Do not "fix" this by widening the helper.
 
 - [ ] **Step 3: (c) Replace interim cases:**
    - **`customers-properties.tenant-isolation`**: the `it.each(['customer','property'])` "never resolves another tenant's %s through a booking relation" case becomes "does not return another tenant's booking at all". As B, `bookings(filter: { id: { eq: crossTenantBooking.id } }) { totalCount nodes { id customer { id } property { id } } }` ⇒ no errors, `nodes: []`, `totalCount: 0`, and the serialized body contains neither `customerA.id` nor `propertyA.id`. As A (positive control) ⇒ one node with `customerA.id` / `propertyA.id`.
@@ -720,9 +780,15 @@ export function toBookingResponse(booking: Booking): Omit<Booking, 'tenantId'> {
      - `removeBooking(id: bookingA.id)` ⇒ 404.
 
      As A, `bookingA` is unchanged and still present.
-  5. **Cross-tenant references on create/update (I-1 application half, RFC §4.9).** As B, `createBooking` with B's own customer/property/service and **one** of A's `customerId`, `propertyId`, `serviceId` or `teamId` (four `it.each` rows) ⇒ 404, and the `booking_entity` count for tenant B is unchanged. As B, `updateBooking({ id: bookingB.id, teamId: teamA.id })` ⇒ 404, `bookingB.teamId` unchanged.
+  5. **Cross-tenant references on create/update (I-1 application half, RFC §4.9).** As B, `createBooking` from a **baseline input with all four references set to B's own rows**: `customerB`, `propertyB`, `serviceB` and `teamB`, so `teamId` is always present. Each `it.each` row replaces exactly **one** reference with A's:
+     - `customerId` → `customerA.id` (B's team kept);
+     - `propertyId` → `propertyA.id` (B's team kept);
+     - `serviceId` → `serviceA.id` (B's team kept);
+     - `teamId` → `teamA.id` (B's team replaced by A's).
+
+     Each ⇒ 404, and the `booking_entity` count for tenant B is unchanged. Add a positive control first: the unmodified baseline input succeeds as B, which proves the 404s come from the swapped reference alone. Delete that control booking afterwards, or let `removeTestTenants` do it. As B, `updateBooking({ id: bookingB.id, teamId: teamA.id })` ⇒ 404, `bookingB.teamId` unchanged.
   6. **Spoofing (I-2, Review Focus 1).** As B:
-     - `createBooking` with `createBookingInput` containing `tenantId: tenantA` ⇒ GraphQL validation error, no new row in either tenant;
+     - `createBooking` with `createBookingInput` containing `tenantId: tenantA` ⇒ GraphQL validation error, no new row in either tenant. This proves only that `tenantId` is not an exposed input. The principal-only tenant rule itself (I-2) is proven by the scoping cases that follow (widened filter, header, REST body) and by cases 1–5 and 7;
      - `bookings(filter: { tenantId: { eq: tenantA } })` ⇒ GraphQL validation error;
      - `bookings(filter: { or: [{ id: { eq: bookingA.id } }, { id: { is: null } }] }) { totalCount nodes { id } }` ⇒ `nodes: []`, `totalCount: 0`;
      - `gql(...)` with an added `x-tenant-id: tenantA` header, `bookings { nodes { id } }` ⇒ only B's rows;
@@ -766,7 +832,7 @@ export function toBookingResponse(booking: Booking): Omit<Booking, 'tenantId'> {
   - `pnpm --filter api build`
   - `migration:run` against a fresh database (`pnpm --filter api migration:run`, per README)
   - `git diff --stat main -- apps/web packages` ⇒ empty
-  - the generated GraphQL schema diff ⇒ none
+  - the generated GraphQL schema diff against `main` ⇒ **empty** (no public schema change at all, and `Booking` exposes no `tenantId`; Task 4 pins the latter locally)
 
   Record all outputs for the M6 Slice Completion Report.
 - [ ] **Step 4: Commit.** `git commit -m "docs(85): REST bookings is authenticated; refresh stale #85 comments"`
@@ -788,5 +854,5 @@ export function toBookingResponse(booking: Booking): Omit<Booking, 'tenantId'> {
 ## Execution risks
 
 - **Coupled task window (Tasks 2–7).** e2e is red between Task 2 and Task 7. Unit tests and `tsc` gate each task. Do not merge a partial branch.
-- **`removeTestTenants` ordering.** Job/checklist rows referencing a test tenant's bookings must go first (`fk_cleaning_job_booking` is RESTRICT). Confirm the checklist table/column names from `AddCleaningJob` before writing the SQL.
+- **`removeTestTenants` ordering.** Every cleaning job whose `bookingId` references a test-tenant booking must be deleted before those bookings (`fk_cleaning_job_booking` is RESTRICT). Checklists and items cascade. Re-verify at M6 that no new RESTRICT reference to `cleaning_job_entity` exists (Task 2 Step 5).
 - **Leftover dev data.** A developer database holding interim #82–#84 cross-tenant booking fixtures makes `AddBookingTenant` abort by design (Decision 13). Remedy: delete those bookings (and their jobs) and re-run. Mention this in the PR description.
