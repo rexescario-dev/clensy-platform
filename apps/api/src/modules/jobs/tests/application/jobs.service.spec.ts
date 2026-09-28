@@ -113,9 +113,19 @@ describe('JobsService', () => {
   });
 
   describe('createFromBooking', () => {
-    const command = { actorId: 'actor-1', bookingId: 'booking-1' };
+    const command = {
+      actorId: 'actor-1',
+      bookingId: 'booking-1',
+      tenantId: 't1',
+    };
 
-    it('propagates BookingsService.findOne NotFoundException when the booking is missing', async () => {
+    it('calls BookingsService.findOne with the command bookingId and tenantId', async () => {
+      await service.createFromBooking(command);
+
+      expect(bookingsService.findOne).toHaveBeenCalledWith('booking-1', 't1');
+    });
+
+    it('propagates BookingsService.findOne NotFoundException when the booking is missing (cross-tenant or nonexistent), before opening a transaction', async () => {
       const missing = new NotFoundException('Booking booking-1 not found');
       bookingsService.findOne.mockRejectedValue(missing);
 

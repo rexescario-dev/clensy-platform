@@ -105,6 +105,7 @@ export class JobResolver {
     const job = await this.jobsService.createFromBooking({
       actorId: currentUser.id,
       bookingId: input.bookingId,
+      tenantId: requireTenantId(currentUser),
     });
     return toCleaningJobType(job);
   }

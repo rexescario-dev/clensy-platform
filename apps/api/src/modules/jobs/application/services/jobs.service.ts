@@ -216,10 +216,17 @@ export class JobsService {
   // run BEFORE `dataSource.transaction` (spec §4.2). Snapshot of
   // `scheduledAt`/`teamId` is the booking observed by that `findOne`.
   // Create does not call `TeamsService.getTeam`.
+  // `command.tenantId` (#85 Slice decision 11) is passed straight through
+  // to `BookingsService.findOne`: a cross-tenant booking is the existing
+  // `NotFoundException` (#85 Slice decision 9), same as a nonexistent
+  // booking id. `cleaning_job_entity` stays unscoped by tenant until #86.
   async createFromBooking(
     command: CreateJobFromBookingCommand,
   ): Promise<CleaningJob> {
-    const booking = await this.bookingsService.findOne(command.bookingId);
+    const booking = await this.bookingsService.findOne(
+      command.bookingId,
+      command.tenantId,
+    );
 
     if (booking.status === BookingStatus.CANCELLED) {
       throw new BadRequestException(
