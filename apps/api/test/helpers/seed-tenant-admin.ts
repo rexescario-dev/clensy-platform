@@ -32,16 +32,19 @@ export async function createTestTenant(
   return tenant.id;
 }
 
-// Deletes test-only tenants, their admins, and their Customer/Property (#82)
-// and Team/Cleaner (#83) rows — properties before customers, cleaners before
-// teams, all before the tenant itself (FK order). Never touches the
+// Deletes test-only tenants, their admins, and their Customer/Property (#82),
+// Team/Cleaner (#83), and Service/AddOn/PricingRule (#84) rows — properties
+// before customers, cleaners before teams, pricing rules before services/
+// add-ons, all before the tenant itself (FK order). Never touches the
 // bootstrap tenant. Callers whose tests insert a Booking/LaundryOrder
-// referencing one of these tenants' customers/properties, or a Booking/
-// CleaningJob referencing one of these tenants' teams, MUST delete those
-// rows first: `fk_booking_customer`, `fk_booking_property`,
-// `fk_laundry_order_customer`, `fk_booking_team`, and `fk_cleaning_job_team`
-// are all `ON DELETE RESTRICT`, so this call fails loudly (not silently) if
-// a caller forgot.
+// referencing one of these tenants' customers/properties, a Booking/
+// CleaningJob referencing one of these tenants' teams, or a Booking/
+// LaundryOrderLine referencing one of these tenants' services/add-ons, MUST
+// delete those rows first: `fk_booking_customer`, `fk_booking_property`,
+// `fk_laundry_order_customer`, `fk_booking_team`, `fk_cleaning_job_team`,
+// `fk_booking_service`, `fk_laundry_order_line_service`, and
+// `fk_laundry_order_line_add_on` are all `ON DELETE RESTRICT`, so this call
+// fails loudly (not silently) if a caller forgot.
 export async function removeTestTenants(
   dataSource: DataSource,
   tenantIds: readonly string[],
@@ -64,6 +67,20 @@ export async function removeTestTenants(
   );
   await dataSource.query(
     `DELETE FROM "team_entity" WHERE "tenantId" = ANY($1)`,
+    [ids],
+  );
+  // `fk_pricing_rule_*_tenant` is `ON DELETE RESTRICT` — pricing rules must
+  // go before the service/add-on rows they target.
+  await dataSource.query(
+    `DELETE FROM "pricing_rule_entity" WHERE "tenantId" = ANY($1)`,
+    [ids],
+  );
+  await dataSource.query(
+    `DELETE FROM "service_entity" WHERE "tenantId" = ANY($1)`,
+    [ids],
+  );
+  await dataSource.query(
+    `DELETE FROM "add_on_entity" WHERE "tenantId" = ANY($1)`,
     [ids],
   );
   await dataSource.query(

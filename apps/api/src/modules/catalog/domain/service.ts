@@ -4,6 +4,7 @@
 // presentation-layer concern, not a domain- or persistence-layer one.
 export interface Service {
   id: string;
+  tenantId: string;
   name: string;
   description: string | null;
   durationMinutes: number;

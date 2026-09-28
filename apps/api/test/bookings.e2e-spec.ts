@@ -250,6 +250,7 @@ describe('Bookings (e2e)', () => {
     });
     const service = await servicesService.createService({
       actorId: 'e2e',
+      tenantId,
       durationMinutes: 60,
       name: `Fixture Service ${runId}`,
     });

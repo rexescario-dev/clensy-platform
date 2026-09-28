@@ -274,7 +274,15 @@ export class BookingsService {
       );
     }
 
-    const service = await this.servicesService.getService(command.serviceId);
+    // Application-level same-tenant check (#84 spec §4.4/§4.5, slice
+    // decision 9): `command.tenantId` is the caller's own tenant (`null`
+    // only for the unauthenticated REST `POST /bookings`, which already
+    // fails closed above on the customer lookup). `fk_booking_service`
+    // stays id-only until #85.
+    const service = await this.servicesService.getService(
+      command.serviceId,
+      command.tenantId,
+    );
     if (!service) {
       throw new NotFoundException(`Service ${command.serviceId} not found`);
     }
@@ -284,6 +292,7 @@ export class BookingsService {
 
     const pricing = await this.pricingRulesService.getActivePricing(
       command.serviceId,
+      command.tenantId,
     );
     if (!pricing) {
       throw new BadRequestException('Service has no active price');

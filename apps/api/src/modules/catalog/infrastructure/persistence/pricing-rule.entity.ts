@@ -3,19 +3,25 @@ import {
   CreateDateColumn,
   Entity,
   Index,
+  JoinColumn,
+  ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { TenantEntity } from '../../../admins/infrastructure/persistence/tenant.entity';
 import { PricingRule } from '../../domain/pricing-rule';
 import { PricingUnit } from '../../domain/pricing-unit';
 
 // `serviceId`/`addOnId` are plain columns with no relation decorators — their
-// FK constraints (`fk_pricing_rule_service`, `fk_pricing_rule_addon`) are
-// hand-added SQL in this module's migrations, not TypeORM relation metadata.
-// Do not add a `@ManyToOne` — same established pattern as
-// `Cleaner.teamId → Team.id`. Exactly one of the two is non-null on any row
-// — a hand-added `CHECK (num_nonnulls("serviceId", "addOnId") = 1)`
-// constraint, not expressible in entity metadata (Laundry Architecture &
-// Catalog Foundation spec §4.2, §4.7).
+// FK constraints are hand-added SQL, now the tenant-aware composite
+// `fk_pricing_rule_service_tenant` (`("serviceId", "tenantId")` →
+// `service_entity ("id", "tenantId")`) and `fk_pricing_rule_add_on_tenant`
+// (same for add-ons), added by `AddCatalogTenant` (#84, RFC §4.4). Do not add
+// a `@ManyToOne` or accept a `migration:generate` proposal to re-add an
+// id-only FK. `tenantId` + `fk_pricing_rule_tenant` are expressed here.
+// Exactly one of `serviceId`/`addOnId` is non-null on any row — a hand-added
+// `CHECK (num_nonnulls("serviceId", "addOnId") = 1)` constraint, not
+// expressible in entity metadata (Laundry Architecture & Catalog Foundation
+// spec §4.2, §4.7).
 //
 // No `@UpdateDateColumn`/`updatedAt` — see `pricing-rule.ts`'s header comment.
 // This entity is append-only: `PricingRulesService#createPricingRule`
@@ -40,6 +46,20 @@ import { PricingUnit } from '../../domain/pricing-unit';
 export class PricingRuleEntity implements PricingRule {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
+
+  @Column({ type: 'uuid' })
+  tenantId!: string;
+
+  @ManyToOne(() => TenantEntity, {
+    nullable: false,
+    eager: false,
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({
+    name: 'tenantId',
+    foreignKeyConstraintName: 'fk_pricing_rule_tenant',
+  })
+  tenant!: TenantEntity;
 
   @Column({ type: 'uuid', nullable: true })
   @Index('IDX_c22f021ac1046f25883817f8f9')

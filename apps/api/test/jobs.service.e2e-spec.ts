@@ -168,13 +168,15 @@ describe('JobsService (real Postgres)', () => {
     });
     const service = await servicesService.createService({
       actorId: 'actor-1',
+      tenantId: TENANT_ID,
       durationMinutes: 60,
       name: 'Standard Clean',
     });
     await pricingRulesService.createPricingRule({
       actorId: 'actor-1',
-      priceMinorUnits: 5000,
       serviceId: service.id,
+      tenantId: TENANT_ID,
+      priceMinorUnits: 5000,
     });
     const team = await teamsService.createTeam({
       actorId: 'actor-1',

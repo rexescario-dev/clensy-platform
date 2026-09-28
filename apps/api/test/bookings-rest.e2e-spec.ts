@@ -98,13 +98,15 @@ describe('Bookings REST (e2e)', () => {
     const { customer, property } = await insertCustomerAndProperty(runId);
     const service = await servicesService.createService({
       actorId: 'e2e',
+      tenantId: BOOTSTRAP_TENANT_ID,
       durationMinutes: 60,
       name: `REST Fixture Service ${runId}`,
     });
     await pricingRulesService.createPricingRule({
       actorId: 'e2e',
-      priceMinorUnits: 5000,
       serviceId: service.id,
+      tenantId: BOOTSTRAP_TENANT_ID,
+      priceMinorUnits: 5000,
     });
 
     // POST — unauthenticated, no Cookie header set anywhere in this file.
@@ -131,13 +133,15 @@ describe('Bookings REST (e2e)', () => {
     const { customer, property } = await insertCustomerAndProperty(runId);
     const service = await servicesService.createService({
       actorId: 'e2e',
+      tenantId: BOOTSTRAP_TENANT_ID,
       durationMinutes: 60,
       name: `REST Fixture Service ${runId}`,
     });
     await pricingRulesService.createPricingRule({
       actorId: 'e2e',
-      priceMinorUnits: 5000,
       serviceId: service.id,
+      tenantId: BOOTSTRAP_TENANT_ID,
+      priceMinorUnits: 5000,
     });
 
     const seedEntity = bookingRepository.create({

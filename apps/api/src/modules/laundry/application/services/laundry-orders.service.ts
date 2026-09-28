@@ -185,11 +185,17 @@ export class LaundryOrdersService {
         let total = 0;
 
         for (const target of targets) {
+          // Application-level same-tenant check (#84 slice decision 9): a
+          // cross-tenant `baseServiceId` / `addOnId` has no pricing rule in
+          // this tenant, so it falls through to the existing "no effective
+          // price" 400 below. `fk_laundry_order_line_service` /
+          // `_add_on` stay id-only until #87.
           const rule = await this.pricingRulesService.resolveEffectivePricing(
             target.column === 'serviceId'
               ? { serviceId: target.id }
               : { addOnId: target.id },
             asOf,
+            command.tenantId,
           );
           if (!rule) {
             throw new BadRequestException(

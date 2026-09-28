@@ -20,6 +20,7 @@ import { PricingUnit } from './pricing-unit';
 // separate effective-dated mechanism these fields exist for.
 export interface PricingRule {
   id: string;
+  tenantId: string;
   serviceId: string | null;
   addOnId: string | null;
   priceMinorUnits: number;

@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
+import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import type { AuditLogger } from '../../../../platform/audit/application/audit-logger.port';
 import { runAuditInTransaction } from '../../../../platform/audit/infrastructure/audit-logger.service';
@@ -67,17 +68,24 @@ export class PricingRulesService {
       runAuditInTransaction(manager, async () => {
         // 1. Mutual-exclusivity + existence check. `resolveTarget` throws
         // BadRequestException for "both provided" or "neither provided" —
-        // the one place this decision is made (spec §4.7).
+        // the one place this decision is made (spec §4.7). The existence
+        // check is scoped by `tenantId` in the same query as `id` (#84 slice
+        // decision 6): another tenant's target is indistinguishable from a
+        // missing one (RFC §4.5, §4.9) — same NotFoundException either way.
         const target = this.resolveTarget(command);
         if (target.column === 'serviceId') {
           const service = await manager.findOneBy(ServiceEntity, {
             id: target.id,
+            tenantId: command.tenantId,
           });
           if (!service) {
             throw new NotFoundException(`Service ${target.id} not found`);
           }
         } else {
-          const addOn = await manager.findOneBy(AddOnEntity, { id: target.id });
+          const addOn = await manager.findOneBy(AddOnEntity, {
+            id: target.id,
+            tenantId: command.tenantId,
+          });
           if (!addOn) {
             throw new NotFoundException(`AddOn ${target.id} not found`);
           }
@@ -100,15 +108,20 @@ export class PricingRulesService {
         // `effectiveTo IS NULL` predicate against the now-committed data, so
         // it can never act on stale state. `target.column` is one of exactly
         // two compile-time literals decided by `resolveTarget` above, never
-        // caller-supplied text — safe to interpolate; `target.id` is always
-        // a bound parameter.
+        // caller-supplied text — safe to interpolate; `target.id` and
+        // `command.tenantId` are always bound parameters. The existence
+        // check above already proved the target is in this tenant and the
+        // composite FK binds every rule to its target's tenant, so the
+        // tenant predicate here never changes which row is closed — it
+        // makes the statement's scope self-evident (#84 slice decision 6).
         const closeResult = await manager
           .createQueryBuilder()
           .update(PricingRuleEntity)
           .set({ effectiveTo: effectiveFrom })
-          .where(`"${target.column}" = :targetId AND "effectiveTo" IS NULL`, {
-            targetId: target.id,
-          })
+          .where(
+            `"${target.column}" = :targetId AND "tenantId" = :tenantId AND "effectiveTo" IS NULL`,
+            { targetId: target.id, tenantId: command.tenantId },
+          )
           .returning(['effectiveFrom'])
           .execute();
 
@@ -135,7 +148,7 @@ export class PricingRulesService {
         if (target.column === 'serviceId' && effectiveFrom <= operationNow) {
           await manager.update(
             PricingRuleEntity,
-            { active: true, serviceId: target.id },
+            { active: true, serviceId: target.id, tenantId: command.tenantId },
             { active: false },
           );
           active = true;
@@ -145,6 +158,7 @@ export class PricingRulesService {
         const entity = manager.create(PricingRuleEntity, {
           addOnId: target.column === 'addOnId' ? target.id : null,
           serviceId: target.column === 'serviceId' ? target.id : null,
+          tenantId: command.tenantId,
           active,
           effectiveFrom,
           effectiveTo: null,
@@ -164,12 +178,15 @@ export class PricingRulesService {
           throw error;
         }
 
-        // 6. Audit — one event, unchanged shape, now also for addon targets.
+        // 6. Audit — one event, unchanged shape, now also for addon targets
+        // and tagged with the tenant (#84 slice decision 10).
         await this.auditLogger.log({
           actorId: command.actorId,
           entityId: entity.id,
+          tenantId: command.tenantId,
           action: 'pricing_rule.create',
           entityType: 'pricing_rule',
+          scope: AdminScope.TENANT,
         });
 
         return entity;
@@ -177,13 +194,31 @@ export class PricingRulesService {
     );
   }
 
-  async getActivePricing(serviceId: string): Promise<PricingRule | null> {
-    const service = await this.serviceRepository.findOneBy({ id: serviceId });
+  // Existing contract: missing service ⇒ NotFound; `null` when no active
+  // rule. `tenantId: null` fails closed with that same NotFound, without a
+  // query (#84 slice decision 4). Another tenant's service is not found —
+  // `tenantId` is in the same query as `serviceId` for both the existence
+  // check and the rule read (#84 slice decision 6).
+  async getActivePricing(
+    serviceId: string,
+    tenantId: string | null,
+  ): Promise<PricingRule | null> {
+    if (tenantId === null) {
+      throw new NotFoundException(`Service ${serviceId} not found`);
+    }
+    const service = await this.serviceRepository.findOneBy({
+      id: serviceId,
+      tenantId,
+    });
     if (!service) {
       throw new NotFoundException(`Service ${serviceId} not found`);
     }
 
-    return this.pricingRuleRepository.findOneBy({ active: true, serviceId });
+    return this.pricingRuleRepository.findOneBy({
+      active: true,
+      serviceId,
+      tenantId,
+    });
   }
 
   // Bulk read for Task 4's GraphQL DataLoader — no existence check (spec
@@ -191,11 +226,22 @@ export class PricingRulesService {
   // directly by this task, and the loader handles gap-filling for any
   // `serviceId` with no active rule). Returns exactly the rows found, no
   // synthetic `null` entries for missing ids — mirrors the Cleaners plan's
-  // `getTeamsByIds` precedent.
-  getActivePricingForServiceIds(serviceIds: string[]): Promise<PricingRule[]> {
+  // `getTeamsByIds` precedent. Fails closed without a query for an empty id
+  // list or a null tenant (#84 slice decision 4) — `In([])` is avoided; the
+  // batch function never passes `[]`, so this changes no observable
+  // behaviour. `tenantId` is in the same `where` as `serviceId: In(ids)`
+  // (#84 slice decision 6) — never fetch by ids then filter in memory.
+  getActivePricingForServiceIds(
+    serviceIds: string[],
+    tenantId: string | null,
+  ): Promise<PricingRule[]> {
+    if (serviceIds.length === 0 || tenantId === null) {
+      return Promise.resolve([]);
+    }
     return this.pricingRuleRepository.findBy({
       active: true,
       serviceId: In(serviceIds),
+      tenantId,
     });
   }
 
@@ -206,10 +252,16 @@ export class PricingRulesService {
   // forward-only chain-extension check in `createPricingRule`) — no
   // defensive `ORDER BY`/arbitration is added here; see the plan's explicit
   // rationale for declining one.
+  // `tenantId: null` fails closed without issuing a query (#84 slice
+  // decision 4) — same rationale as the other direct catalog reads.
   async resolveEffectivePricing(
     target: { addOnId: string } | { serviceId: string },
     asOf: Date,
+    tenantId: string | null,
   ): Promise<PricingRule | null> {
+    if (tenantId === null) {
+      return null;
+    }
     const qb = this.pricingRuleRepository.createQueryBuilder('rule');
     if ('serviceId' in target) {
       qb.where('rule."serviceId" = :targetId', { targetId: target.serviceId });
@@ -217,6 +269,7 @@ export class PricingRulesService {
       qb.where('rule."addOnId" = :targetId', { targetId: target.addOnId });
     }
     return qb
+      .andWhere('rule."tenantId" = :tenantId', { tenantId })
       .andWhere('rule."effectiveFrom" <= :asOf', { asOf })
       .andWhere('(rule."effectiveTo" IS NULL OR rule."effectiveTo" > :asOf)', {
         asOf,

@@ -12,6 +12,7 @@ import { ServicesService } from '../../application/services/services.service';
 import { CreateServiceCommand } from '../../application/commands/create-service.command';
 import { UpdateServiceCommand } from '../../application/commands/update-service.command';
 import { Service } from '../../domain/service';
+import { requireTenantId } from '../../../../platform/auth/authorization/require-tenant-id';
 import { CurrentUser } from '../../../../platform/auth/decorators/current-user.decorator';
 import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
 import type { AuthenticatedPrincipal } from '../../../../platform/auth/domain/authenticated-principal';
@@ -24,7 +25,10 @@ import { PricingRuleType } from './pricing-rule.type';
 import { ServiceType, VIEW_ROLES } from './service.type';
 import { UpdateServiceInput } from './update-service.input';
 
-// Exactly the `Service`-scoped operations of spec §4.5 — no others.
+// Exactly the `Service`-scoped operations of spec §4.5 — no others. The
+// tenant comes only from the principal (#84): reads pass it through and the
+// service/loader fail closed on `null`; writes require it. A command's
+// `tenantId` is set after `...input` so no input key can override it.
 @Resolver(() => ServiceType)
 export class ServiceResolver {
   constructor(
@@ -37,12 +41,16 @@ export class ServiceResolver {
   // `@Context()`) to avoid one query per parent row. No separate
   // `@UseGuards`/`@Roles()`: reachable only after the guarded parent query
   // already succeeded, the same precedent `Cleaner.team`/`Team.cleaners`
-  // established.
+  // established. Tenant from the principal, never from the parent row (#84
+  // slice decision 7). No principal ⇒ null-tenant loader ⇒ null.
   @ResolveField(() => PricingRuleType, { nullable: true })
   async activePricing(
     @Parent() service: Pick<Service, 'id'>,
+    @CurrentUser() currentUser: AuthenticatedPrincipal | undefined,
   ): Promise<PricingRuleType | null> {
-    const rule = await this.loader.loader.load(service.id);
+    const rule = await this.loader
+      .loaderFor(currentUser?.tenantId ?? null)
+      .load(service.id);
     return rule ? toPricingRuleType(rule) : null;
   }
 
@@ -57,6 +65,7 @@ export class ServiceResolver {
     const command: CreateServiceCommand = {
       ...input,
       actorId: currentUser.id,
+      tenantId: requireTenantId(currentUser),
     };
     const service = await this.servicesService.createService(command);
     return toServiceType(service);
@@ -69,8 +78,12 @@ export class ServiceResolver {
   @Roles(...VIEW_ROLES)
   async service(
     @Args('id', { type: () => ID }) id: string,
+    @CurrentUser() currentUser: AuthenticatedPrincipal,
   ): Promise<ServiceType | null> {
-    const service = await this.servicesService.getService(id);
+    const service = await this.servicesService.getService(
+      id,
+      currentUser.tenantId,
+    );
     return service ? toServiceType(service) : null;
   }
 
@@ -87,6 +100,7 @@ export class ServiceResolver {
     const command: UpdateServiceCommand = {
       ...input,
       actorId: currentUser.id,
+      tenantId: requireTenantId(currentUser),
     };
     const service = await this.servicesService.updateService(id, command);
     return toServiceType(service);

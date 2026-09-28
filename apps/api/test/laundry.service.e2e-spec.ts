@@ -157,24 +157,28 @@ describe('LaundryOrdersService (real Postgres)', () => {
     });
     const service = await svc.services.createService({
       actorId: 'actor-1',
+      tenantId: TENANT_ID,
       durationMinutes: 1,
       name: `Wash & Fold ${Date.now()}-${Math.random()}`,
     });
     await svc.pricing.createPricingRule({
       actorId: 'actor-1',
       serviceId: service.id,
+      tenantId: TENANT_ID,
       minimumChargeMinorUnits: opts?.serviceMinCharge,
       priceMinorUnits: opts?.servicePrice ?? 1500,
       unit: opts?.serviceUnit ?? PricingUnit.PER_KG,
     });
     const addOn = await svc.addOns.createAddOn({
       actorId: 'actor-1',
+      tenantId: TENANT_ID,
       name: `Same-Day ${Date.now()}-${Math.random()}`,
       priceMinorUnits: 800,
     });
     await svc.pricing.createPricingRule({
       actorId: 'actor-1',
       addOnId: addOn.id,
+      tenantId: TENANT_ID,
       priceMinorUnits: opts?.addOnPrice ?? 800,
       unit: PricingUnit.FLAT,
     });
@@ -216,6 +220,7 @@ describe('LaundryOrdersService (real Postgres)', () => {
       actorId: 'actor-1',
       baseServiceId: service.id,
       orderId: order.id,
+      tenantId: TENANT_ID,
       addOns: [{ addOnId: addOn.id }],
     });
     expect(order.status).toBe(LaundryOrderStatus.PRICED);
@@ -301,6 +306,7 @@ describe('LaundryOrdersService (real Postgres)', () => {
       actorId: 'actor-1',
       baseServiceId: service.id,
       orderId: order.id,
+      tenantId: TENANT_ID,
       addOns: [{ addOnId: addOn.id }],
     });
     const originalTotal = order.totalMinorUnits;
@@ -309,6 +315,7 @@ describe('LaundryOrdersService (real Postgres)', () => {
     await svc.pricing.createPricingRule({
       actorId: 'actor-1',
       serviceId: service.id,
+      tenantId: TENANT_ID,
       effectiveFrom: new Date(Date.now() + 1000),
       priceMinorUnits: 9999,
       unit: PricingUnit.PER_KG,
@@ -317,6 +324,7 @@ describe('LaundryOrdersService (real Postgres)', () => {
       (await svc.pricing.resolveEffectivePricing(
         { serviceId: service.id },
         new Date(Date.now() + 5000),
+        TENANT_ID,
       ))!.priceMinorUnits,
     ).toBe(9999);
 
@@ -346,6 +354,7 @@ describe('LaundryOrdersService (real Postgres)', () => {
       actorId: 'actor-1',
       baseServiceId: service.id,
       orderId: order.id,
+      tenantId: TENANT_ID,
       addOns: [{ addOnId: addOn.id }],
     });
 
@@ -359,6 +368,7 @@ describe('LaundryOrdersService (real Postgres)', () => {
         actorId: 'actor-1',
         baseServiceId: service.id,
         orderId: order.id,
+        tenantId: TENANT_ID,
         addOns: [{ addOnId: addOn.id }],
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -390,6 +400,7 @@ describe('LaundryOrdersService (real Postgres)', () => {
       actorId: 'actor-1',
       baseServiceId: service.id,
       orderId: order.id,
+      tenantId: TENANT_ID,
       addOns: [{ addOnId: addOn.id }],
     });
 
@@ -425,6 +436,7 @@ describe('LaundryOrdersService (real Postgres)', () => {
         actorId: 'actor-1',
         baseServiceId: service.id,
         orderId: order.id,
+        tenantId: TENANT_ID,
         addOns: [{ addOnId: addOn.id }],
       });
       order = await svc.laundry.markAwaitingPayment({

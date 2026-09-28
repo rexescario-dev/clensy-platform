@@ -69,6 +69,7 @@ describe('InvoicesService', () => {
   const cmd = (over = {}) => ({
     actorId: 'actor-1',
     laundryOrderId: 'order-1',
+    tenantId: 't-a',
     paymentTerms: InvoicePaymentTerms.PAY_NOW,
     ...over,
   });
@@ -292,6 +293,28 @@ describe('InvoicesService', () => {
       addOnsService.getAddOnsByIds.mockResolvedValue([]);
       await expect(service.generateFromOrder(cmd())).rejects.toThrow(
         BadRequestException,
+      );
+    });
+
+    it('generateFromOrder resolves line names within the command tenant', async () => {
+      await service.generateFromOrder(cmd({ tenantId: 't-a' }));
+
+      expect(servicesService.getServicesByIds).toHaveBeenCalledWith(
+        ['svc-1'],
+        't-a',
+      );
+      expect(addOnsService.getAddOnsByIds).toHaveBeenCalledWith(
+        ['addon-1'],
+        't-a',
+      );
+    });
+
+    it('generateFromOrder with a line whose service is in another tenant keeps the existing 400', async () => {
+      servicesService.getServicesByIds.mockResolvedValue([]);
+      await expect(
+        service.generateFromOrder(cmd({ tenantId: 't-b' })),
+      ).rejects.toThrow(
+        new BadRequestException('Service svc-1 could not be resolved'),
       );
     });
   });

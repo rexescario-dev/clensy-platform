@@ -52,3 +52,18 @@ Every Team/Cleaner read and write uses the tenant of the logged-in user. That co
 - Spec (Accepted): [2026-09-23-multi-tenant-architecture-design.md](superpowers/specs/2026-09-23-multi-tenant-architecture-design.md)
 - Plan (Accepted): [2026-09-27-teams-cleaners-tenant-isolation-plan.md](superpowers/plans/2026-09-27-teams-cleaners-tenant-isolation-plan.md)
 - Migrating an existing database: see "Database migrations" in the [root README](../README.md). The migration needs no duplicate pre-check: the global uniques it replaces already rule out duplicates within one tenant.
+
+## Catalog tenant isolation (#84)
+
+Shipped in this slice (PR [#97](https://github.com/rexescario-dev/clensy-platform/pull/97)). Service, AddOn and PricingRule are now tenant-owned:
+- All three tables have a required `tenantId`.
+- Service and add-on names are unique per tenant, ignoring case. A duplicate returns `Conflict` (409) with the same messages as before (`Service name is already in use`, `Add-on name is already in use`).
+- Composite FKs keep a pricing rule's service/add-on target in the same tenant as the rule.
+
+Every Catalog read and write uses the tenant of the logged-in user. That covers the services, the `services`/`addOns` lists and counts, the `service` and `activePricing(serviceId)` queries, `Service.activePricing`, the five mutations (`createService`, `updateService`, `createAddOn`, `updateAddOn`, `createPricingRule`), and the `Booking.service` relation. Another tenant's row behaves exactly like a missing one: null, NotFound, or empty, never 403 — laundry pricing and invoice generation keep their existing 400s for a catalog row that can't be resolved in the caller's tenant. Bookings, laundry pricing and invoice generation now look catalog rows up within the caller's tenant.
+
+**Known interim gap:** `fk_booking_service`, `fk_laundry_order_line_service` and `fk_laundry_order_line_add_on` stay id-only until #85/#87, and `Booking.service` relation *filters* are not tenant-scoped until #85. Until #87, a tenant can price another tenant's unscoped laundry order with its own catalog rows (a cross-tenant line reference); the owner's subsequent invoice generation then fails with the existing 400. Do not provision a second production tenant before those slices land.
+
+- Spec (Accepted): [2026-09-23-multi-tenant-architecture-design.md](superpowers/specs/2026-09-23-multi-tenant-architecture-design.md)
+- Plan (Accepted): [2026-09-28-catalog-tenant-isolation-plan.md](superpowers/plans/2026-09-28-catalog-tenant-isolation-plan.md)
+- Migrating an existing database: see "Database migrations" in the [root README](../README.md). The migration needs no duplicate pre-check: the global uniques it replaces already rule out duplicates within one tenant.

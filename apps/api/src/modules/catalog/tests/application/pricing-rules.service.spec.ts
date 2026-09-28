@@ -1,9 +1,11 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
+import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import { PricingRulesService } from '../../application/services/pricing-rules.service';
+import { AddOnEntity } from '../../infrastructure/persistence/add-on.entity';
 import { PricingRuleEntity } from '../../infrastructure/persistence/pricing-rule.entity';
 import { ServiceEntity } from '../../infrastructure/persistence/service.entity';
 
@@ -13,7 +15,11 @@ import { ServiceEntity } from '../../infrastructure/persistence/service.entity';
 // validation/read-path/existence-check logic only — it cannot and does not
 // attempt to prove the real deactivate-then-insert transactional behavior or
 // the partial-unique-index-backed concurrency guarantee (that's the level-2,
-// real-Postgres file's job — see `catalog.service.e2e-spec.ts`).
+// real-Postgres file's job — see `catalog.service.e2e-spec.ts`). The
+// `tenant predicate (#84)` describe block below additionally proves every
+// read/write puts `tenantId` in the same query as its id lookup (slice
+// decision 6) and that a cross-tenant `createPricingRule` has no side
+// effects (Review Focus 2).
 describe('PricingRulesService', () => {
   let service: PricingRulesService;
   let manager: {
@@ -119,8 +125,9 @@ describe('PricingRulesService', () => {
       await expect(
         service.createPricingRule({
           actorId: 'actor-1',
-          priceMinorUnits: 5000,
           serviceId: 'missing-service',
+          tenantId: 't-a',
+          priceMinorUnits: 5000,
         }),
       ).rejects.toThrow(NotFoundException);
 
@@ -142,8 +149,9 @@ describe('PricingRulesService', () => {
           await expect(
             service.createPricingRule({
               actorId: 'actor-1',
-              priceMinorUnits,
               serviceId: 'service-1',
+              tenantId: 't-a',
+              priceMinorUnits,
             }),
           ).rejects.toThrow(BadRequestException);
 
@@ -165,6 +173,7 @@ describe('PricingRulesService', () => {
             service.createPricingRule({
               actorId: 'actor-1',
               serviceId: 'service-1',
+              tenantId: 't-a',
               minimumChargeMinorUnits,
               priceMinorUnits: 5000,
             }),
@@ -182,6 +191,7 @@ describe('PricingRulesService', () => {
           service.createPricingRule({
             actorId: 'actor-1',
             serviceId: 'service-1',
+            tenantId: 't-a',
             minimumChargeMinorUnits: 0,
             priceMinorUnits: 5000,
           }),
@@ -196,6 +206,7 @@ describe('PricingRulesService', () => {
             actorId: 'actor-1',
             addOnId: 'add-on-1',
             serviceId: 'service-1',
+            tenantId: 't-a',
             priceMinorUnits: 5000,
           }),
         ).rejects.toThrow(BadRequestException);
@@ -209,6 +220,7 @@ describe('PricingRulesService', () => {
         await expect(
           service.createPricingRule({
             actorId: 'actor-1',
+            tenantId: 't-a',
             priceMinorUnits: 5000,
           }),
         ).rejects.toThrow(BadRequestException);
@@ -231,11 +243,13 @@ describe('PricingRulesService', () => {
           actorId: 'actor-1',
           addOnId: null as unknown as undefined,
           serviceId: 'service-1',
+          tenantId: 't-a',
           priceMinorUnits: 5000,
         });
 
         expect(manager.findOneBy).toHaveBeenCalledWith(expect.anything(), {
           id: 'service-1',
+          tenantId: 't-a',
         });
       });
 
@@ -246,11 +260,13 @@ describe('PricingRulesService', () => {
           actorId: 'actor-1',
           addOnId: 'add-on-1',
           serviceId: null as unknown as undefined,
+          tenantId: 't-a',
           priceMinorUnits: 5000,
         });
 
         expect(manager.findOneBy).toHaveBeenCalledWith(expect.anything(), {
           id: 'add-on-1',
+          tenantId: 't-a',
         });
       });
 
@@ -260,6 +276,7 @@ describe('PricingRulesService', () => {
             actorId: 'actor-1',
             addOnId: null as unknown as undefined,
             serviceId: null as unknown as undefined,
+            tenantId: 't-a',
             priceMinorUnits: 5000,
           }),
         ).rejects.toThrow(BadRequestException);
@@ -274,6 +291,7 @@ describe('PricingRulesService', () => {
           service.createPricingRule({
             actorId: 'actor-1',
             serviceId: 'service-1',
+            tenantId: 't-a',
             minimumChargeMinorUnits: null as unknown as undefined,
             priceMinorUnits: 5000,
           }),
@@ -286,7 +304,11 @@ describe('PricingRulesService', () => {
     it('queries by serviceId for a { serviceId } target, not addOnId', async () => {
       const asOf = new Date('2026-01-01T00:00:00Z');
 
-      await service.resolveEffectivePricing({ serviceId: 'service-1' }, asOf);
+      await service.resolveEffectivePricing(
+        { serviceId: 'service-1' },
+        asOf,
+        't-a',
+      );
 
       expect(resolveQueryBuilder.where).toHaveBeenCalledWith(
         expect.stringContaining('"serviceId"'),
@@ -301,7 +323,11 @@ describe('PricingRulesService', () => {
     it('queries by addOnId for an { addOnId } target, not serviceId', async () => {
       const asOf = new Date('2026-01-01T00:00:00Z');
 
-      await service.resolveEffectivePricing({ addOnId: 'add-on-1' }, asOf);
+      await service.resolveEffectivePricing(
+        { addOnId: 'add-on-1' },
+        asOf,
+        't-a',
+      );
 
       expect(resolveQueryBuilder.where).toHaveBeenCalledWith(
         expect.stringContaining('"addOnId"'),
@@ -318,9 +344,9 @@ describe('PricingRulesService', () => {
     it('throws NotFoundException for a nonexistent serviceId', async () => {
       serviceRepository.findOneBy.mockResolvedValue(null);
 
-      await expect(service.getActivePricing('missing-service')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.getActivePricing('missing-service', 't-a'),
+      ).rejects.toThrow(NotFoundException);
       expect(pricingRuleRepository.findOneBy).not.toHaveBeenCalled();
     });
 
@@ -328,10 +354,13 @@ describe('PricingRulesService', () => {
       serviceRepository.findOneBy.mockResolvedValue({ id: 'service-1' });
       pricingRuleRepository.findOneBy.mockResolvedValue(null);
 
-      await expect(service.getActivePricing('service-1')).resolves.toBeNull();
+      await expect(
+        service.getActivePricing('service-1', 't-a'),
+      ).resolves.toBeNull();
       expect(pricingRuleRepository.findOneBy).toHaveBeenCalledWith({
         active: true,
         serviceId: 'service-1',
+        tenantId: 't-a',
       });
     });
 
@@ -346,9 +375,9 @@ describe('PricingRulesService', () => {
       serviceRepository.findOneBy.mockResolvedValue({ id: 'service-1' });
       pricingRuleRepository.findOneBy.mockResolvedValue(rule);
 
-      await expect(service.getActivePricing('service-1')).resolves.toEqual(
-        rule,
-      );
+      await expect(
+        service.getActivePricing('service-1', 't-a'),
+      ).resolves.toEqual(rule);
     });
   });
 
@@ -366,8 +395,159 @@ describe('PricingRulesService', () => {
       pricingRuleRepository.findBy.mockResolvedValue(rules);
 
       await expect(
-        service.getActivePricingForServiceIds(['service-1', 'service-2']),
+        service.getActivePricingForServiceIds(
+          ['service-1', 'service-2'],
+          't-a',
+        ),
       ).resolves.toEqual(rules);
+    });
+  });
+
+  describe('tenant predicate (#84)', () => {
+    it('createPricingRule checks the service target within the tenant', async () => {
+      manager.findOneBy.mockResolvedValueOnce(null);
+      await expect(
+        service.createPricingRule({
+          actorId: 'u',
+          serviceId: 's-a',
+          tenantId: 't-b',
+          priceMinorUnits: 100,
+        }),
+      ).rejects.toThrow(NotFoundException);
+      expect(manager.findOneBy).toHaveBeenCalledWith(ServiceEntity, {
+        id: 's-a',
+        tenantId: 't-b',
+      });
+      // No close, no deactivate, no insert (Review Focus 2).
+      expect(manager.createQueryBuilder).not.toHaveBeenCalled();
+      expect(manager.update).not.toHaveBeenCalled();
+      expect(manager.save).not.toHaveBeenCalled();
+    });
+
+    it('createPricingRule checks the add-on target within the tenant', async () => {
+      manager.findOneBy.mockResolvedValueOnce(null);
+      await expect(
+        service.createPricingRule({
+          actorId: 'u',
+          addOnId: 'ao-a',
+          tenantId: 't-b',
+          priceMinorUnits: 100,
+        }),
+      ).rejects.toThrow(NotFoundException);
+      expect(manager.findOneBy).toHaveBeenCalledWith(AddOnEntity, {
+        id: 'ao-a',
+        tenantId: 't-b',
+      });
+      expect(manager.save).not.toHaveBeenCalled();
+    });
+
+    it('createPricingRule constrains close + deactivate by tenant, persists it, and tags the audit event', async () => {
+      manager.findOneBy.mockResolvedValueOnce({ id: 's-a', tenantId: 't-a' });
+      await service.createPricingRule({
+        actorId: 'u',
+        serviceId: 's-a',
+        tenantId: 't-a',
+        priceMinorUnits: 100,
+      });
+      expect(closeQueryBuilder.where).toHaveBeenCalledWith(
+        `"serviceId" = :targetId AND "tenantId" = :tenantId AND "effectiveTo" IS NULL`,
+        { targetId: 's-a', tenantId: 't-a' },
+      );
+      expect(manager.update).toHaveBeenCalledWith(
+        PricingRuleEntity,
+        { active: true, serviceId: 's-a', tenantId: 't-a' },
+        { active: false },
+      );
+      expect(manager.create).toHaveBeenCalledWith(
+        PricingRuleEntity,
+        expect.objectContaining({
+          tenantId: 't-a',
+          serviceId: 's-a',
+          addOnId: null,
+        }),
+      );
+      expect(auditLogger.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'pricing_rule.create',
+          scope: AdminScope.TENANT,
+          tenantId: 't-a',
+        }),
+      );
+    });
+
+    it('getActivePricing checks the service and reads the rule within the tenant', async () => {
+      serviceRepository.findOneBy.mockResolvedValue({
+        id: 's-a',
+        tenantId: 't-a',
+      });
+      pricingRuleRepository.findOneBy.mockResolvedValue(null);
+      await service.getActivePricing('s-a', 't-a');
+      expect(serviceRepository.findOneBy).toHaveBeenCalledWith({
+        id: 's-a',
+        tenantId: 't-a',
+      });
+      expect(pricingRuleRepository.findOneBy).toHaveBeenCalledWith({
+        active: true,
+        serviceId: 's-a',
+        tenantId: 't-a',
+      });
+    });
+
+    it("getActivePricing for another tenant's service is NotFound", async () => {
+      serviceRepository.findOneBy.mockResolvedValue(null);
+      await expect(service.getActivePricing('s-a', 't-b')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(pricingRuleRepository.findOneBy).not.toHaveBeenCalled();
+    });
+
+    it('getActivePricing with a null tenant is NotFound without a query', async () => {
+      await expect(service.getActivePricing('s-a', null)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(serviceRepository.findOneBy).not.toHaveBeenCalled();
+      expect(pricingRuleRepository.findOneBy).not.toHaveBeenCalled();
+    });
+
+    it('getActivePricingForServiceIds puts tenantId in the same where as the id list', async () => {
+      pricingRuleRepository.findBy.mockResolvedValue([]);
+      await service.getActivePricingForServiceIds(['a', 'b'], 't-a');
+      expect(pricingRuleRepository.findBy).toHaveBeenCalledWith({
+        active: true,
+        serviceId: In(['a', 'b']),
+        tenantId: 't-a',
+      });
+    });
+
+    it.each([
+      ['null tenant', () => service.getActivePricingForServiceIds(['a'], null)],
+      ['empty ids', () => service.getActivePricingForServiceIds([], 't-a')],
+    ])(
+      'getActivePricingForServiceIds fails closed without a query (%s)',
+      async (_label, call) => {
+        await expect(call()).resolves.toEqual([]);
+        expect(pricingRuleRepository.findBy).not.toHaveBeenCalled();
+      },
+    );
+
+    it('resolveEffectivePricing adds the tenant to the query', async () => {
+      resolveQueryBuilder.getOne.mockResolvedValue(null);
+      await service.resolveEffectivePricing(
+        { serviceId: 's-a' },
+        new Date(),
+        't-a',
+      );
+      expect(resolveQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'rule."tenantId" = :tenantId',
+        { tenantId: 't-a' },
+      );
+    });
+
+    it('resolveEffectivePricing with a null tenant returns null without a query', async () => {
+      await expect(
+        service.resolveEffectivePricing({ addOnId: 'ao-a' }, new Date(), null),
+      ).resolves.toBeNull();
+      expect(pricingRuleRepository.createQueryBuilder).not.toHaveBeenCalled();
     });
   });
 });

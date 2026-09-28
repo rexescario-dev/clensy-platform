@@ -1,5 +1,6 @@
 import { UseGuards } from '@nestjs/common';
 import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
+import { requireTenantId } from '../../../../platform/auth/authorization/require-tenant-id';
 import { CurrentUser } from '../../../../platform/auth/decorators/current-user.decorator';
 import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
 import type { AuthenticatedPrincipal } from '../../../../platform/auth/domain/authenticated-principal';
@@ -142,7 +143,11 @@ export class LaundryOrderResolver {
     @CurrentUser() user: AuthenticatedPrincipal,
   ): Promise<LaundryOrderType> {
     return toLaundryOrderType(
-      await this.service.price({ ...input, actorId: user.id }),
+      await this.service.price({
+        ...input,
+        actorId: user.id,
+        tenantId: requireTenantId(user),
+      }),
     );
   }
 

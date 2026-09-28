@@ -6,6 +6,11 @@ import { PricingUnit } from '../../domain/pricing-unit';
 // input (spec §4.2, §4.4, §4.6).
 export interface CreatePricingRuleCommand {
   actorId: string;
+  // Server-derived from the principal via `requireTenantId`, never client
+  // input (RFC §4.5, invariant 1) — a `null` cannot type-check into this
+  // field, so a caller with no tenant is rejected before this command is
+  // even constructed (#84 slice decision 4).
+  tenantId: string;
   serviceId?: string;
   addOnId?: string;
   priceMinorUnits: number;

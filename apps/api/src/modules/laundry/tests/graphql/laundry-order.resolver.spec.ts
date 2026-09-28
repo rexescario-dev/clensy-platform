@@ -1,5 +1,8 @@
+import { ForbiddenException } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
+import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
+import type { AuthenticatedPrincipal } from '../../../../platform/auth/domain/authenticated-principal';
 import { ROLES_KEY } from '../../../../platform/auth/decorators/roles.decorator';
 import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
@@ -68,6 +71,13 @@ describe('LaundryOrderResolver', () => {
     >;
     let resolver: LaundryOrderResolver;
     const user = { id: 'actor-9', tenantId: 'tenant-9' } as never;
+    const principal: AuthenticatedPrincipal = {
+      id: 'u',
+      tenantId: 't-a',
+      role: Role.OPS_MANAGER,
+      scope: AdminScope.TENANT,
+    };
+    const noTenant: AuthenticatedPrincipal = { ...principal, tenantId: null };
     const order = {
       id: 'o1',
       customerId: 'c1',
@@ -115,6 +125,27 @@ describe('LaundryOrderResolver', () => {
         actorId: 'actor-9',
         orderId: 'o1',
       });
+    });
+
+    it('priceLaundryOrder passes requireTenantId(principal)', async () => {
+      service.price.mockResolvedValue(order);
+      await resolver.priceLaundryOrder(
+        { orderId: 'o-1', baseServiceId: 's-a', addOns: [] },
+        principal,
+      );
+      expect(service.price).toHaveBeenCalledWith(
+        expect.objectContaining({ actorId: 'u', tenantId: 't-a' }),
+      );
+    });
+
+    it('priceLaundryOrder with a tenant-less principal is Forbidden before the service is called', async () => {
+      await expect(
+        resolver.priceLaundryOrder(
+          { orderId: 'o-1', baseServiceId: 's-a', addOns: [] },
+          noTenant,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(service.price).not.toHaveBeenCalled();
     });
   });
 });

@@ -944,12 +944,20 @@ describe('Catalog (e2e)', () => {
     );
 
     await expect(
-      pricingRulesService.resolveEffectivePricing({ addOnId }, future),
+      pricingRulesService.resolveEffectivePricing(
+        { addOnId },
+        future,
+        owner.tenantId,
+      ),
     ).resolves.toEqual(
       expect.objectContaining({ addOnId, priceMinorUnits: 950 }),
     );
     await expect(
-      pricingRulesService.resolveEffectivePricing({ addOnId }, new Date()),
+      pricingRulesService.resolveEffectivePricing(
+        { addOnId },
+        new Date(),
+        owner.tenantId,
+      ),
     ).resolves.toBeNull();
   });
 });

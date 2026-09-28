@@ -6,15 +6,21 @@ import {
 } from '@nestjs/graphql';
 import { Test } from '@nestjs/testing';
 import { GraphQLObjectType } from 'graphql';
+// @ptc-org/nestjs-query-graphql 9.5.0 does not re-export getAuthorizer from
+// the package root, so this deep import is required.
+import { getAuthorizer } from '@ptc-org/nestjs-query-graphql/src/decorators';
 import { PLATFORM_PAGE_DEFAULT } from '../../../../platform/graphql/paging';
+import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { ROLES_KEY } from '../../../../platform/auth/decorators/roles.decorator';
 import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
 import { AddOnReadResolver } from '../../presentation/graphql/add-on-read.resolver';
 import { AddOnResolver } from '../../presentation/graphql/add-on.resolver';
+import { AddOnType } from '../../presentation/graphql/add-on.type';
 import { PricingRuleResolver } from '../../presentation/graphql/pricing-rule.resolver';
 import { ServiceReadResolver } from '../../presentation/graphql/service-read.resolver';
 import { ServiceResolver } from '../../presentation/graphql/service.resolver';
+import { ServiceType } from '../../presentation/graphql/service.type';
 
 const VIEW_ROLES = [
   Role.TENANT_OWNER,
@@ -106,5 +112,35 @@ describe('Catalog GraphQL collections', () => {
       'Service',
     );
     expect(schema.getQueryType()!.getFields().addOn).toBeUndefined();
+  });
+});
+
+// @Authorize metadata (mirrors #83's team.resolver.spec.ts). Security
+// invariant: every nestjs-query read of `ServiceType`/`AddOnType` — the root
+// list/count and every relation that targets one — is ANDed with the
+// principal's tenant.
+describe.each([
+  ['ServiceType', ServiceType],
+  ['AddOnType', AddOnType],
+])('%s tenant authorizer', (_name, DTO) => {
+  it('is registered and constrains reads to the principal tenant', async () => {
+    const Authorizer = getAuthorizer(DTO as never);
+    expect(Authorizer).toBeDefined();
+    const authorizer = new Authorizer!({}, undefined);
+    await expect(
+      authorizer.authorize(
+        {
+          req: {
+            user: {
+              id: 'u',
+              tenantId: 't-a',
+              role: Role.OPS_MANAGER,
+              scope: AdminScope.TENANT,
+            },
+          },
+        },
+        { operationGroup: 'read' } as never,
+      ),
+    ).resolves.toEqual({ tenantId: { eq: 't-a' } });
   });
 });
