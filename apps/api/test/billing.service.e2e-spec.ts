@@ -184,12 +184,14 @@ describe('InvoicesService (real Postgres) — concurrent generation', () => {
     });
     const service = await services.createService({
       actorId: 'a',
+      tenantId: TENANT_ID,
       durationMinutes: 1,
       name: `Race Svc ${stamp}`,
     });
     await pricing.createPricingRule({
       actorId: 'a',
       serviceId: service.id,
+      tenantId: TENANT_ID,
       priceMinorUnits: 1000,
       unit: PricingUnit.PER_KG,
     });
@@ -204,6 +206,7 @@ describe('InvoicesService (real Postgres) — concurrent generation', () => {
       actorId: 'a',
       baseServiceId: service.id,
       orderId: order.id,
+      tenantId: TENANT_ID,
       addOns: [],
     });
     return order.id;
@@ -217,6 +220,7 @@ describe('InvoicesService (real Postgres) — concurrent generation', () => {
     const cmd = {
       laundryOrderId: orderId,
       paymentTerms: InvoicePaymentTerms.PAY_NOW,
+      tenantId: TENANT_ID,
     };
     const [ra, rb] = await Promise.allSettled([
       a.generateFromOrder({ ...cmd, actorId: 'actor-a' }),

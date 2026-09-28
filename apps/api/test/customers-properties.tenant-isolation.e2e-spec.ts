@@ -174,12 +174,16 @@ describe('Customers & Properties tenant isolation (e2e)', () => {
       }),
     );
 
-    // Bookings and services are not tenant-owned yet (#85) — a booking that
-    // references tenant A's customer/property is visible to tenant B, which
-    // is exactly what makes it a relation-scoping probe.
+    // Bookings are not tenant-owned yet (#85) — a booking that references
+    // tenant A's customer/property is visible to tenant B, which is exactly
+    // what makes it a relation-scoping probe. `service` itself is owned by
+    // tenant A (catalog IS tenant-owned as of #84) but is never validated
+    // against a tenant here — this booking is inserted directly, bypassing
+    // `BookingsService`, and no test below reads `Booking.service`.
     const serviceRepository = dataSource.getRepository(ServiceEntity);
     service = await serviceRepository.save(
       serviceRepository.create({
+        tenantId: tenantA,
         active: true,
         description: null,
         durationMinutes: 60,
@@ -198,19 +202,25 @@ describe('Customers & Properties tenant isolation (e2e)', () => {
       }),
     );
 
-    // A real, active-priced service (RFC §4.9's "another tenant's id"
-    // worked example needs a well-formed request — the only thing wrong
-    // with it is the customer/property ids — not a service that would fail
-    // for an unrelated reason).
+    // A real, active-priced service OWNED BY TENANT B (RFC §4.9's "another
+    // tenant's id" worked example needs a well-formed request — the only
+    // thing wrong with it is the customer/property ids — not a service that
+    // would fail for an unrelated reason). Catalog is tenant-owned as of
+    // #84, so this must belong to the tenant that actually calls
+    // `createBooking` with it below (tenant B) — a foreign-tenant service
+    // would 404 before the customer/property check this test targets ever
+    // runs.
     bookableService = await servicesService.createService({
       actorId: 'e2e',
+      tenantId: tenantB,
       durationMinutes: 45,
       name: `Tenant isolation bookable service ${run}`,
     });
     await pricingRulesService.createPricingRule({
       actorId: 'e2e',
-      priceMinorUnits: 2500,
       serviceId: bookableService.id,
+      tenantId: tenantB,
+      priceMinorUnits: 2500,
     });
   });
 

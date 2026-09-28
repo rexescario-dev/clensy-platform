@@ -62,7 +62,8 @@ describe('Teams & Cleaners tenant isolation (e2e)', () => {
   let customerB: CustomerEntity;
   let propertyA: PropertyEntity;
   let propertyB: PropertyEntity;
-  let bookableService: { id: string };
+  let bookableServiceA: { id: string };
+  let bookableServiceB: { id: string };
   let booking: BookingEntity;
   let unassignedBooking: BookingEntity;
   let job: CleaningJobEntity;
@@ -215,17 +216,36 @@ describe('Teams & Cleaners tenant isolation (e2e)', () => {
     ({ customer: customerB, property: propertyB } =
       await insertCustomerAndProperty(tenantB, 'B'));
 
-    // Catalog is not tenant-owned yet (#84): one bookable service + price
-    // serves both tenants.
-    bookableService = await servicesService.createService({
+    // Catalog is tenant-owned as of #84: each test tenant gets its own
+    // bookable service + price. Tenant A's backs the direct-insert booking
+    // fixtures below; tenant B's is passed by the "createBooking with own
+    // customer/property but another tenant's team" mutation (Case 5) — that
+    // request must be well-formed for tenant B in every respect except the
+    // foreign team, so `BookingsService`'s service/pricing checks pass and
+    // the assertion actually reaches the team check it targets.
+    bookableServiceA = await servicesService.createService({
       actorId: 'e2e',
+      tenantId: tenantA,
       durationMinutes: 45,
-      name: `Teams isolation bookable service ${run}`,
+      name: `Teams isolation bookable service A ${run}`,
     });
     await pricingRulesService.createPricingRule({
       actorId: 'e2e',
+      serviceId: bookableServiceA.id,
+      tenantId: tenantA,
       priceMinorUnits: 2500,
-      serviceId: bookableService.id,
+    });
+    bookableServiceB = await servicesService.createService({
+      actorId: 'e2e',
+      tenantId: tenantB,
+      durationMinutes: 45,
+      name: `Teams isolation bookable service B ${run}`,
+    });
+    await pricingRulesService.createPricingRule({
+      actorId: 'e2e',
+      serviceId: bookableServiceB.id,
+      tenantId: tenantB,
+      priceMinorUnits: 2500,
     });
 
     // Booking/Job are not tenant-owned yet (#85/#86): tenant B can see this
@@ -235,7 +255,7 @@ describe('Teams & Cleaners tenant isolation (e2e)', () => {
       bookingRepository.create({
         customerId: customerA.id,
         propertyId: propertyA.id,
-        serviceId: bookableService.id,
+        serviceId: bookableServiceA.id,
         teamId: teamA.id,
         pricingSnapshot: { priceMinorUnits: 2500 },
         scheduledAt: new Date('2030-01-01T09:00:00Z'),
@@ -247,7 +267,7 @@ describe('Teams & Cleaners tenant isolation (e2e)', () => {
       bookingRepository.create({
         customerId: customerA.id,
         propertyId: propertyA.id,
-        serviceId: bookableService.id,
+        serviceId: bookableServiceA.id,
         teamId: null,
         pricingSnapshot: { priceMinorUnits: 2500 },
         scheduledAt: new Date('2030-01-02T09:00:00Z'),
@@ -282,14 +302,23 @@ describe('Teams & Cleaners tenant isolation (e2e)', () => {
             .getRepository(BookingEntity)
             .delete({ id: unassignedBooking.id });
         }
-        if (bookableService) {
+        if (bookableServiceA) {
           await dataSource.query(
             `DELETE FROM "pricing_rule_entity" WHERE "serviceId" = $1`,
-            [bookableService.id],
+            [bookableServiceA.id],
           );
           await dataSource
             .getRepository(ServiceEntity)
-            .delete({ id: bookableService.id });
+            .delete({ id: bookableServiceA.id });
+        }
+        if (bookableServiceB) {
+          await dataSource.query(
+            `DELETE FROM "pricing_rule_entity" WHERE "serviceId" = $1`,
+            [bookableServiceB.id],
+          );
+          await dataSource
+            .getRepository(ServiceEntity)
+            .delete({ id: bookableServiceB.id });
         }
         if (tenantIds.length > 0) {
           // Removes every Team/Cleaner/Customer/Property row under these
@@ -564,7 +593,7 @@ describe('Teams & Cleaners tenant isolation (e2e)', () => {
           input: {
             customerId: customerB.id,
             propertyId: propertyB.id,
-            serviceId: bookableService.id,
+            serviceId: bookableServiceB.id,
             teamId: teamA.id,
             scheduledAt: '2030-02-01T09:00:00.000Z',
           },
@@ -680,7 +709,7 @@ describe('Teams & Cleaners tenant isolation (e2e)', () => {
         .send({
           customerId: customerA.id,
           propertyId: propertyA.id,
-          serviceId: bookableService.id,
+          serviceId: bookableServiceA.id,
           teamId: teamA.id,
           scheduledAt: '2030-03-01T09:00:00.000Z',
         });

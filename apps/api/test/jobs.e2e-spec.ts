@@ -227,6 +227,7 @@ describe('Jobs (e2e)', () => {
     });
     const service = await servicesService.createService({
       actorId: 'e2e',
+      tenantId: BOOTSTRAP_TENANT_ID,
       durationMinutes: 60,
       name: `Jobs Fixture Service ${runId}`,
     });

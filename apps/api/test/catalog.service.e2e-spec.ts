@@ -12,10 +12,20 @@ import { PricingUnit } from '../src/modules/catalog/domain/pricing-unit';
 import { AddOnEntity } from '../src/modules/catalog/infrastructure/persistence/add-on.entity';
 import { PricingRuleEntity } from '../src/modules/catalog/infrastructure/persistence/pricing-rule.entity';
 import { ServiceEntity } from '../src/modules/catalog/infrastructure/persistence/service.entity';
+import { TenantEntity } from '../src/modules/admins/infrastructure/persistence/tenant.entity';
+import { BOOTSTRAP_TENANT_ID } from '../src/platform/database/bootstrap-tenant';
 import {
   acquireCatalogDbTestLock,
   CatalogDbTestLock,
 } from './helpers/catalog-db-test-lock';
+
+// This file's `DataSource`s are raw, unauthenticated Postgres connections
+// (no principal, no GraphQL) exercising the catalog services directly — the
+// tenant is incidental to what these tests assert, so every fixture here
+// attaches to the bootstrap tenant (the one tenant row every migrated
+// database is guaranteed to have), mirroring
+// `customers-properties.service.e2e-spec.ts`'s established idiom.
+const TENANT_ID = BOOTSTRAP_TENANT_ID;
 
 // Shared by this file's `describe` blocks (Task 1 added `ServicesService`'s;
 // Task 2 added `AddOnsService`'s alongside it; Task 3 adds
@@ -27,7 +37,15 @@ import {
 function createTestDataSource(): DataSource {
   return new DataSource({
     database: process.env.DB_NAME ?? 'clensy',
-    entities: [ServiceEntity, AddOnEntity, PricingRuleEntity, AuditEventEntity],
+    entities: [
+      ServiceEntity,
+      AddOnEntity,
+      PricingRuleEntity,
+      AuditEventEntity,
+      // ServiceEntity#tenant / AddOnEntity#tenant / PricingRuleEntity#tenant
+      // (#84) each require TenantEntity to be registered too.
+      TenantEntity,
+    ],
     host: process.env.DB_HOST ?? 'localhost',
     password: process.env.DB_PASSWORD ?? 'clensy_dev',
     port: Number(process.env.DB_PORT ?? 5432),
@@ -108,6 +126,7 @@ describe('ServicesService (real Postgres)', () => {
     it('persists a ServiceEntity with active: true and records service.create', async () => {
       const created = await service.createService({
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         description: 'A standard clean',
         durationMinutes: 60,
         name: 'Standard Clean',
@@ -133,6 +152,7 @@ describe('ServicesService (real Postgres)', () => {
     it('throws ConflictException for a case-insensitive duplicate name, leaving only one row persisted', async () => {
       await service.createService({
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         durationMinutes: 60,
         name: 'Standard Clean',
       });
@@ -140,6 +160,7 @@ describe('ServicesService (real Postgres)', () => {
       await expect(
         service.createService({
           actorId: 'actor-1',
+          tenantId: TENANT_ID,
           durationMinutes: 45,
           name: 'standard clean',
         }),
@@ -155,6 +176,7 @@ describe('ServicesService (real Postgres)', () => {
       await expect(
         service.createService({
           actorId: 'actor-1',
+          tenantId: TENANT_ID,
           durationMinutes: 30,
           name: 'Rollback Case',
         }),
@@ -171,12 +193,14 @@ describe('ServicesService (real Postgres)', () => {
     it('updates only the provided field, leaving the rest unchanged in the re-read row', async () => {
       const created = await service.createService({
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         description: 'A standard clean',
         durationMinutes: 60,
         name: 'Standard Clean',
       });
 
       await service.updateService(created.id, {
+        tenantId: TENANT_ID,
         actorId: 'actor-1',
         durationMinutes: 90,
       });
@@ -198,6 +222,7 @@ describe('ServicesService (real Postgres)', () => {
     it('a no-effective-change update (every field set to its own current value) still strictly advances updatedAt and still audits service.update', async () => {
       const created = await service.createService({
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         description: 'A standard clean',
         durationMinutes: 60,
         name: 'Standard Clean',
@@ -213,6 +238,7 @@ describe('ServicesService (real Postgres)', () => {
       auditLogger.log.mockClear();
       await service.updateService(created.id, {
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         active: before.active,
         description: before.description,
         durationMinutes: before.durationMinutes,
@@ -239,16 +265,18 @@ describe('ServicesService (real Postgres)', () => {
     it('setting active: false is still returned by listServices — Catalog reads are unfiltered', async () => {
       const created = await service.createService({
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         durationMinutes: 60,
         name: 'Standard Clean',
       });
 
       await service.updateService(created.id, {
+        tenantId: TENANT_ID,
         active: false,
         actorId: 'actor-1',
       });
 
-      const all = await service.listServices();
+      const all = await service.listServices(TENANT_ID);
       const found = all.find((s) => s.id === created.id);
       expect(found).toBeDefined();
       expect(found?.active).toBe(false);
@@ -295,6 +323,7 @@ describe('AddOnsService (real Postgres)', () => {
     it('persists an AddOnEntity with active: true and records add_on.create', async () => {
       const created = await service.createAddOn({
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         description: 'Two additional bath towels',
         name: 'Extra Towels',
         priceMinorUnits: 500,
@@ -320,6 +349,7 @@ describe('AddOnsService (real Postgres)', () => {
     it('throws ConflictException for a case-insensitive duplicate name, leaving only one row persisted', async () => {
       await service.createAddOn({
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         name: 'Extra Towels',
         priceMinorUnits: 500,
       });
@@ -327,6 +357,7 @@ describe('AddOnsService (real Postgres)', () => {
       await expect(
         service.createAddOn({
           actorId: 'actor-1',
+          tenantId: TENANT_ID,
           name: 'extra towels',
           priceMinorUnits: 700,
         }),
@@ -342,6 +373,7 @@ describe('AddOnsService (real Postgres)', () => {
       await expect(
         service.createAddOn({
           actorId: 'actor-1',
+          tenantId: TENANT_ID,
           name: 'Rollback Case',
           priceMinorUnits: 300,
         }),
@@ -358,12 +390,14 @@ describe('AddOnsService (real Postgres)', () => {
     it('updates only the provided field, leaving the rest unchanged in the re-read row', async () => {
       const created = await service.createAddOn({
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         description: 'Two additional bath towels',
         name: 'Extra Towels',
         priceMinorUnits: 500,
       });
 
       await service.updateAddOn(created.id, {
+        tenantId: TENANT_ID,
         actorId: 'actor-1',
         priceMinorUnits: 750,
       });
@@ -385,6 +419,7 @@ describe('AddOnsService (real Postgres)', () => {
     it('a no-effective-change update (every field set to its own current value) still strictly advances updatedAt and still audits add_on.update', async () => {
       const created = await service.createAddOn({
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         description: 'Two additional bath towels',
         name: 'Extra Towels',
         priceMinorUnits: 500,
@@ -400,6 +435,7 @@ describe('AddOnsService (real Postgres)', () => {
       auditLogger.log.mockClear();
       await service.updateAddOn(created.id, {
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         active: before.active,
         description: before.description,
         name: before.name,
@@ -426,16 +462,18 @@ describe('AddOnsService (real Postgres)', () => {
     it('setting active: false is still returned by listAddOns — Catalog reads are unfiltered', async () => {
       const created = await service.createAddOn({
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         name: 'Extra Towels',
         priceMinorUnits: 500,
       });
 
       await service.updateAddOn(created.id, {
+        tenantId: TENANT_ID,
         active: false,
         actorId: 'actor-1',
       });
 
-      const all = await service.listAddOns();
+      const all = await service.listAddOns(TENANT_ID);
       const found = all.find((a) => a.id === created.id);
       expect(found).toBeDefined();
       expect(found?.active).toBe(false);
@@ -490,6 +528,7 @@ describe('PricingRulesService (real Postgres)', () => {
   async function seedService(name: string) {
     return dataSource.getRepository(ServiceEntity).save(
       dataSource.getRepository(ServiceEntity).create({
+        tenantId: TENANT_ID,
         active: true,
         description: null,
         durationMinutes: 60,
@@ -501,6 +540,7 @@ describe('PricingRulesService (real Postgres)', () => {
   async function seedAddOn(name: string) {
     return dataSource.getRepository(AddOnEntity).save(
       dataSource.getRepository(AddOnEntity).create({
+        tenantId: TENANT_ID,
         active: true,
         description: null,
         name,
@@ -515,8 +555,9 @@ describe('PricingRulesService (real Postgres)', () => {
 
       const created = await service.createPricingRule({
         actorId: 'actor-1',
-        priceMinorUnits: 5000,
         serviceId: svc.id,
+        tenantId: TENANT_ID,
+        priceMinorUnits: 5000,
       });
 
       const row = await dataSource
@@ -535,7 +576,9 @@ describe('PricingRulesService (real Postgres)', () => {
         }),
       );
 
-      await expect(service.getActivePricing(svc.id)).resolves.toEqual(
+      await expect(
+        service.getActivePricing(svc.id, TENANT_ID),
+      ).resolves.toEqual(
         expect.objectContaining({ id: created.id, priceMinorUnits: 5000 }),
       );
     });
@@ -545,8 +588,9 @@ describe('PricingRulesService (real Postgres)', () => {
 
       const first = await service.createPricingRule({
         actorId: 'actor-1',
-        priceMinorUnits: 5000,
         serviceId: svc.id,
+        tenantId: TENANT_ID,
+        priceMinorUnits: 5000,
       });
       const firstRowBefore = await dataSource
         .getRepository(PricingRuleEntity)
@@ -554,8 +598,9 @@ describe('PricingRulesService (real Postgres)', () => {
 
       const second = await service.createPricingRule({
         actorId: 'actor-1',
-        priceMinorUnits: 6000,
         serviceId: svc.id,
+        tenantId: TENANT_ID,
+        priceMinorUnits: 6000,
       });
 
       const activeRows = await dataSource
@@ -573,7 +618,9 @@ describe('PricingRulesService (real Postgres)', () => {
       );
       expect(firstRowAfter.createdAt).toEqual(firstRowBefore.createdAt);
 
-      await expect(service.getActivePricing(svc.id)).resolves.toEqual(
+      await expect(
+        service.getActivePricing(svc.id, TENANT_ID),
+      ).resolves.toEqual(
         expect.objectContaining({ id: second.id, priceMinorUnits: 6000 }),
       );
     });
@@ -583,8 +630,9 @@ describe('PricingRulesService (real Postgres)', () => {
 
       const first = await service.createPricingRule({
         actorId: 'actor-1',
-        priceMinorUnits: 5000,
         serviceId: svc.id,
+        tenantId: TENANT_ID,
+        priceMinorUnits: 5000,
       });
 
       auditLogger.log.mockRejectedValueOnce(new Error('audit down'));
@@ -592,8 +640,9 @@ describe('PricingRulesService (real Postgres)', () => {
       await expect(
         service.createPricingRule({
           actorId: 'actor-1',
-          priceMinorUnits: 6000,
           serviceId: svc.id,
+          tenantId: TENANT_ID,
+          priceMinorUnits: 6000,
         }),
       ).rejects.toThrow('audit down');
 
@@ -648,13 +697,15 @@ describe('PricingRulesService (real Postgres)', () => {
       const [resultA, resultB] = await Promise.allSettled([
         service.createPricingRule({
           actorId: 'actor-1',
-          priceMinorUnits: 5000,
           serviceId: svc.id,
+          tenantId: TENANT_ID,
+          priceMinorUnits: 5000,
         }),
         service.createPricingRule({
           actorId: 'actor-2',
-          priceMinorUnits: 6000,
           serviceId: svc.id,
+          tenantId: TENANT_ID,
+          priceMinorUnits: 6000,
         }),
       ]);
 
@@ -696,8 +747,9 @@ describe('PricingRulesService (real Postgres)', () => {
       const svc = await seedService('Standard Clean');
       const predecessor = await service.createPricingRule({
         actorId: 'actor-1',
-        priceMinorUnits: 5000,
         serviceId: svc.id,
+        tenantId: TENANT_ID,
+        priceMinorUnits: 5000,
       });
 
       const warmupA = dataSource.createQueryRunner();
@@ -712,12 +764,14 @@ describe('PricingRulesService (real Postgres)', () => {
         service.createPricingRule({
           actorId: 'actor-1',
           serviceId: svc.id,
+          tenantId: TENANT_ID,
           effectiveFrom: effFromA,
           priceMinorUnits: 6000,
         }),
         service.createPricingRule({
           actorId: 'actor-2',
           serviceId: svc.id,
+          tenantId: TENANT_ID,
           effectiveFrom: effFromB,
           priceMinorUnits: 7000,
         }),
@@ -767,6 +821,7 @@ describe('PricingRulesService (real Postgres)', () => {
           actorId: 'actor-1',
           addOnId: addOn.id,
           serviceId: svc.id,
+          tenantId: TENANT_ID,
           priceMinorUnits: 5000,
         }),
       ).rejects.toThrow(BadRequestException);
@@ -778,6 +833,7 @@ describe('PricingRulesService (real Postgres)', () => {
     it('throws BadRequestException when neither serviceId nor addOnId is provided, and creates no row', async () => {
       await expect(
         service.createPricingRule({
+          tenantId: TENANT_ID,
           actorId: 'actor-1',
           priceMinorUnits: 5000,
         }),
@@ -795,8 +851,9 @@ describe('PricingRulesService (real Postgres)', () => {
 
       const created = await service.createPricingRule({
         actorId: 'actor-1',
-        priceMinorUnits: 5000,
         serviceId: svc.id,
+        tenantId: TENANT_ID,
+        priceMinorUnits: 5000,
       });
       const after = new Date();
 
@@ -818,14 +875,16 @@ describe('PricingRulesService (real Postgres)', () => {
       const svc = await seedService('Standard Clean');
       const current = await service.createPricingRule({
         actorId: 'actor-1',
-        priceMinorUnits: 5000,
         serviceId: svc.id,
+        tenantId: TENANT_ID,
+        priceMinorUnits: 5000,
       });
 
       const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
       const scheduled = await service.createPricingRule({
         actorId: 'actor-1',
         serviceId: svc.id,
+        tenantId: TENANT_ID,
         effectiveFrom: future,
         priceMinorUnits: 7000,
       });
@@ -842,9 +901,9 @@ describe('PricingRulesService (real Postgres)', () => {
       expect(scheduledRow.active).toBe(false);
       expect(scheduledRow.effectiveTo).toBeNull();
 
-      await expect(service.getActivePricing(svc.id)).resolves.toEqual(
-        expect.objectContaining({ id: current.id }),
-      );
+      await expect(
+        service.getActivePricing(svc.id, TENANT_ID),
+      ).resolves.toEqual(expect.objectContaining({ id: current.id }));
     });
 
     it('addOnId-targeted (first-ever rule): always active:false regardless of effectiveFrom, serviceId is null', async () => {
@@ -853,6 +912,7 @@ describe('PricingRulesService (real Postgres)', () => {
       const created = await service.createPricingRule({
         actorId: 'actor-1',
         addOnId: addOn.id,
+        tenantId: TENANT_ID,
         priceMinorUnits: 1500,
         unit: PricingUnit.PER_ITEM,
       });
@@ -873,6 +933,7 @@ describe('PricingRulesService (real Postgres)', () => {
       const first = await service.createPricingRule({
         actorId: 'actor-1',
         serviceId: svc.id,
+        tenantId: TENANT_ID,
         effectiveFrom: t,
         priceMinorUnits: 5000,
       });
@@ -881,6 +942,7 @@ describe('PricingRulesService (real Postgres)', () => {
         service.createPricingRule({
           actorId: 'actor-1',
           serviceId: svc.id,
+          tenantId: TENANT_ID,
           effectiveFrom: t,
           priceMinorUnits: 6000,
         }),
@@ -890,6 +952,7 @@ describe('PricingRulesService (real Postgres)', () => {
         service.createPricingRule({
           actorId: 'actor-1',
           serviceId: svc.id,
+          tenantId: TENANT_ID,
           effectiveFrom: new Date(t.getTime() - 1000),
           priceMinorUnits: 6000,
         }),
@@ -914,12 +977,14 @@ describe('PricingRulesService (real Postgres)', () => {
       const first = await service.createPricingRule({
         actorId: 'actor-1',
         serviceId: svc.id,
+        tenantId: TENANT_ID,
         effectiveFrom: t1,
         priceMinorUnits: 5000,
       });
       await service.createPricingRule({
         actorId: 'actor-1',
         serviceId: svc.id,
+        tenantId: TENANT_ID,
         effectiveFrom: t2,
         priceMinorUnits: 6000,
       });
@@ -934,8 +999,9 @@ describe('PricingRulesService (real Postgres)', () => {
       const svc = await seedService('Standard Clean');
       const first = await service.createPricingRule({
         actorId: 'actor-1',
-        priceMinorUnits: 5000,
         serviceId: svc.id,
+        tenantId: TENANT_ID,
+        priceMinorUnits: 5000,
       });
 
       auditLogger.log.mockRejectedValueOnce(new Error('audit down'));
@@ -943,6 +1009,7 @@ describe('PricingRulesService (real Postgres)', () => {
         service.createPricingRule({
           actorId: 'actor-1',
           serviceId: svc.id,
+          tenantId: TENANT_ID,
           effectiveFrom: new Date(Date.now() + 60 * 60 * 1000),
           priceMinorUnits: 6000,
         }),
@@ -967,11 +1034,13 @@ describe('PricingRulesService (real Postgres)', () => {
         service.createPricingRule({
           actorId: 'actor-1',
           addOnId: addOn.id,
+          tenantId: TENANT_ID,
           priceMinorUnits: 1000,
         }),
         service.createPricingRule({
           actorId: 'actor-2',
           addOnId: addOn.id,
+          tenantId: TENANT_ID,
           priceMinorUnits: 1200,
         }),
       ]);
@@ -1003,34 +1072,38 @@ describe('PricingRulesService (real Postgres)', () => {
       const a = await service.createPricingRule({
         actorId: 'actor-1',
         serviceId: svc.id,
+        tenantId: TENANT_ID,
         effectiveFrom: t1,
         priceMinorUnits: 5000,
       });
       const b = await service.createPricingRule({
         actorId: 'actor-1',
         serviceId: svc.id,
+        tenantId: TENANT_ID,
         effectiveFrom: t2,
         priceMinorUnits: 6000,
       });
 
       await expect(
-        service.resolveEffectivePricing({ serviceId: svc.id }, t1),
+        service.resolveEffectivePricing({ serviceId: svc.id }, t1, TENANT_ID),
       ).resolves.toEqual(expect.objectContaining({ id: a.id }));
       await expect(
         service.resolveEffectivePricing(
           { serviceId: svc.id },
           new Date(t1.getTime() + 30 * 60 * 1000),
+          TENANT_ID,
         ),
       ).resolves.toEqual(expect.objectContaining({ id: a.id }));
       // Boundary: asOf === t2 (== a's effectiveTo == b's effectiveFrom)
       // resolves to b, per the half-open [effectiveFrom, effectiveTo) rule.
       await expect(
-        service.resolveEffectivePricing({ serviceId: svc.id }, t2),
+        service.resolveEffectivePricing({ serviceId: svc.id }, t2, TENANT_ID),
       ).resolves.toEqual(expect.objectContaining({ id: b.id }));
       await expect(
         service.resolveEffectivePricing(
           { serviceId: svc.id },
           new Date(t1.getTime() - 1000),
+          TENANT_ID,
         ),
       ).resolves.toBeNull();
     });
@@ -1041,12 +1114,13 @@ describe('PricingRulesService (real Postgres)', () => {
       const created = await service.createPricingRule({
         actorId: 'actor-1',
         addOnId: addOn.id,
+        tenantId: TENANT_ID,
         effectiveFrom: t1,
         priceMinorUnits: 1500,
       });
 
       await expect(
-        service.resolveEffectivePricing({ addOnId: addOn.id }, t1),
+        service.resolveEffectivePricing({ addOnId: addOn.id }, t1, TENANT_ID),
       ).resolves.toEqual(expect.objectContaining({ id: created.id }));
     });
 
@@ -1054,7 +1128,11 @@ describe('PricingRulesService (real Postgres)', () => {
       const svc = await seedService('Standard Clean');
 
       await expect(
-        service.resolveEffectivePricing({ serviceId: svc.id }, new Date()),
+        service.resolveEffectivePricing(
+          { serviceId: svc.id },
+          new Date(),
+          TENANT_ID,
+        ),
       ).resolves.toBeNull();
     });
 
@@ -1064,6 +1142,7 @@ describe('PricingRulesService (real Postgres)', () => {
       const created = await service.createPricingRule({
         actorId: 'actor-1',
         serviceId: svc.id,
+        tenantId: TENANT_ID,
         effectiveFrom: t1,
         priceMinorUnits: 5000,
       });
@@ -1072,7 +1151,7 @@ describe('PricingRulesService (real Postgres)', () => {
         .update({ id: svc.id }, { active: false });
 
       await expect(
-        service.resolveEffectivePricing({ serviceId: svc.id }, t1),
+        service.resolveEffectivePricing({ serviceId: svc.id }, t1, TENANT_ID),
       ).resolves.toEqual(expect.objectContaining({ id: created.id }));
     });
   });
@@ -1080,14 +1159,19 @@ describe('PricingRulesService (real Postgres)', () => {
   describe('getActivePricing', () => {
     it('throws NotFoundException for a nonexistent serviceId', async () => {
       await expect(
-        service.getActivePricing('00000000-0000-0000-0000-000000000000'),
+        service.getActivePricing(
+          '00000000-0000-0000-0000-000000000000',
+          TENANT_ID,
+        ),
       ).rejects.toThrow(NotFoundException);
     });
 
     it('returns null for an existing service that has never had a PricingRule', async () => {
       const svc = await seedService('Standard Clean');
 
-      await expect(service.getActivePricing(svc.id)).resolves.toBeNull();
+      await expect(
+        service.getActivePricing(svc.id, TENANT_ID),
+      ).resolves.toBeNull();
     });
   });
 
@@ -1101,33 +1185,44 @@ describe('PricingRulesService (real Postgres)', () => {
       const svc = await seedService('Standard Clean');
       const immediate = await service.createPricingRule({
         actorId: 'actor-1',
-        priceMinorUnits: 5000,
         serviceId: svc.id,
+        tenantId: TENANT_ID,
+        priceMinorUnits: 5000,
       });
       const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
       const scheduled = await service.createPricingRule({
         actorId: 'actor-1',
         serviceId: svc.id,
+        tenantId: TENANT_ID,
         effectiveFrom: future,
         priceMinorUnits: 7000,
       });
 
       // Legacy path — untouched by scheduling.
-      await expect(service.getActivePricing(svc.id)).resolves.toEqual(
-        expect.objectContaining({ id: immediate.id }),
-      );
+      await expect(
+        service.getActivePricing(svc.id, TENANT_ID),
+      ).resolves.toEqual(expect.objectContaining({ id: immediate.id }));
 
       // Effective-dated path — target-agnostic, correctly time-aware.
       await expect(
-        service.resolveEffectivePricing({ serviceId: svc.id }, new Date()),
+        service.resolveEffectivePricing(
+          { serviceId: svc.id },
+          new Date(),
+          TENANT_ID,
+        ),
       ).resolves.toEqual(expect.objectContaining({ id: immediate.id }));
       await expect(
-        service.resolveEffectivePricing({ serviceId: svc.id }, future),
+        service.resolveEffectivePricing(
+          { serviceId: svc.id },
+          future,
+          TENANT_ID,
+        ),
       ).resolves.toEqual(expect.objectContaining({ id: scheduled.id }));
       await expect(
         service.resolveEffectivePricing(
           { serviceId: svc.id },
           new Date(future.getTime() - 24 * 60 * 60 * 1000),
+          TENANT_ID,
         ),
       ).resolves.toEqual(expect.objectContaining({ id: immediate.id }));
     });
@@ -1138,6 +1233,7 @@ describe('PricingRulesService (real Postgres)', () => {
       const created = await service.createPricingRule({
         actorId: 'actor-1',
         addOnId: addOn.id,
+        tenantId: TENANT_ID,
         effectiveFrom: t1,
         priceMinorUnits: 1500,
         unit: PricingUnit.PER_ITEM,
@@ -1149,9 +1245,9 @@ describe('PricingRulesService (real Postgres)', () => {
       expect(row.active).toBe(false);
 
       await expect(
-        service.resolveEffectivePricing({ addOnId: addOn.id }, t1),
+        service.resolveEffectivePricing({ addOnId: addOn.id }, t1, TENANT_ID),
       ).resolves.toEqual(expect.objectContaining({ id: created.id }));
-      // `getActivePricing(serviceId: string)` has no overload accepting an
+      // `getActivePricing(serviceId: string, tenantId: string | null)` has no overload accepting an
       // `addOnId` — this boundary is enforced at compile time, not runtime;
       // there is no call to make here that would even type-check.
     });
@@ -1184,6 +1280,7 @@ describe('PricingRuleEntity schema (real Postgres)', () => {
   async function seedService(name: string) {
     return dataSource.getRepository(ServiceEntity).save(
       dataSource.getRepository(ServiceEntity).create({
+        tenantId: TENANT_ID,
         active: true,
         description: null,
         durationMinutes: 60,
@@ -1197,6 +1294,7 @@ describe('PricingRuleEntity schema (real Postgres)', () => {
       const svc = await seedService('Standard Clean');
       const addOn = await dataSource.getRepository(AddOnEntity).save(
         dataSource.getRepository(AddOnEntity).create({
+          tenantId: TENANT_ID,
           active: true,
           description: null,
           name: 'Turnaround',
@@ -1206,8 +1304,8 @@ describe('PricingRuleEntity schema (real Postgres)', () => {
 
       await expect(
         dataSource.query(
-          `INSERT INTO "pricing_rule_entity" ("serviceId", "addOnId", "priceMinorUnits", "effectiveFrom") VALUES ($1, $2, $3, now())`,
-          [svc.id, addOn.id, 5000],
+          `INSERT INTO "pricing_rule_entity" ("serviceId", "addOnId", "priceMinorUnits", "effectiveFrom", "tenantId") VALUES ($1, $2, $3, now(), $4)`,
+          [svc.id, addOn.id, 5000, TENANT_ID],
         ),
       ).rejects.toThrow(/ck_pricing_rule_target/);
     });
@@ -1215,8 +1313,8 @@ describe('PricingRuleEntity schema (real Postgres)', () => {
     it('rejects a row with neither serviceId nor addOnId set', async () => {
       await expect(
         dataSource.query(
-          `INSERT INTO "pricing_rule_entity" ("priceMinorUnits", "effectiveFrom") VALUES ($1, now())`,
-          [5000],
+          `INSERT INTO "pricing_rule_entity" ("priceMinorUnits", "effectiveFrom", "tenantId") VALUES ($1, now(), $2)`,
+          [5000, TENANT_ID],
         ),
       ).rejects.toThrow(/ck_pricing_rule_target/);
     });
@@ -1232,14 +1330,14 @@ describe('PricingRuleEntity schema (real Postgres)', () => {
       // first, since Postgres reports whichever constraint it happens to
       // check first.
       await dataSource.query(
-        `INSERT INTO "pricing_rule_entity" ("serviceId", "priceMinorUnits", "effectiveFrom", "active") VALUES ($1, $2, now(), false)`,
-        [svc.id, 5000],
+        `INSERT INTO "pricing_rule_entity" ("serviceId", "priceMinorUnits", "effectiveFrom", "active", "tenantId") VALUES ($1, $2, now(), false, $3)`,
+        [svc.id, 5000, TENANT_ID],
       );
 
       await expect(
         dataSource.query(
-          `INSERT INTO "pricing_rule_entity" ("serviceId", "priceMinorUnits", "effectiveFrom", "active") VALUES ($1, $2, now(), false)`,
-          [svc.id, 6000],
+          `INSERT INTO "pricing_rule_entity" ("serviceId", "priceMinorUnits", "effectiveFrom", "active", "tenantId") VALUES ($1, $2, now(), false, $3)`,
+          [svc.id, 6000, TENANT_ID],
         ),
       ).rejects.toThrow(/uq_pricing_rule_open_service/);
     });
@@ -1247,6 +1345,7 @@ describe('PricingRuleEntity schema (real Postgres)', () => {
     it('rejects a second open (effectiveTo IS NULL) row for the same addOnId', async () => {
       const addOn = await dataSource.getRepository(AddOnEntity).save(
         dataSource.getRepository(AddOnEntity).create({
+          tenantId: TENANT_ID,
           active: true,
           description: null,
           name: 'Turnaround',
@@ -1254,14 +1353,14 @@ describe('PricingRuleEntity schema (real Postgres)', () => {
         }),
       );
       await dataSource.query(
-        `INSERT INTO "pricing_rule_entity" ("addOnId", "priceMinorUnits", "effectiveFrom") VALUES ($1, $2, now())`,
-        [addOn.id, 1000],
+        `INSERT INTO "pricing_rule_entity" ("addOnId", "priceMinorUnits", "effectiveFrom", "tenantId") VALUES ($1, $2, now(), $3)`,
+        [addOn.id, 1000, TENANT_ID],
       );
 
       await expect(
         dataSource.query(
-          `INSERT INTO "pricing_rule_entity" ("addOnId", "priceMinorUnits", "effectiveFrom") VALUES ($1, $2, now())`,
-          [addOn.id, 1200],
+          `INSERT INTO "pricing_rule_entity" ("addOnId", "priceMinorUnits", "effectiveFrom", "tenantId") VALUES ($1, $2, now(), $3)`,
+          [addOn.id, 1200, TENANT_ID],
         ),
       ).rejects.toThrow(/uq_pricing_rule_open_addon/);
     });
@@ -1280,8 +1379,9 @@ describe('PricingRuleEntity schema (real Postgres)', () => {
 
       const created = await service.createPricingRule({
         actorId: 'actor-1',
-        priceMinorUnits: 5000,
         serviceId: svc.id,
+        tenantId: TENANT_ID,
+        priceMinorUnits: 5000,
       });
 
       const row = await dataSource

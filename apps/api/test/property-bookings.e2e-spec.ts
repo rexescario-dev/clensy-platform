@@ -97,6 +97,7 @@ describe('property.bookings nested connection (e2e)', () => {
     });
     const service = await servicesService.createService({
       actorId: owner.id,
+      tenantId: owner.tenantId,
       durationMinutes: 60,
       name: `Nest Service ${runId}`,
     });

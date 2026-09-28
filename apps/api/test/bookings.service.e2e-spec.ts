@@ -154,13 +154,15 @@ describe('BookingsService (real Postgres)', () => {
     });
     const service = await servicesService.createService({
       actorId: 'actor-1',
+      tenantId: TENANT_ID,
       durationMinutes: 60,
       name: 'Standard Clean',
     });
     await pricingRulesService.createPricingRule({
       actorId: 'actor-1',
-      priceMinorUnits,
       serviceId: service.id,
+      tenantId: TENANT_ID,
+      priceMinorUnits,
     });
     const team = await teamsService.createTeam({
       actorId: 'actor-1',
@@ -232,6 +234,7 @@ describe('BookingsService (real Postgres)', () => {
       await servicesService.updateService(service.id, {
         active: false,
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
       });
 
       await expect(
@@ -270,6 +273,7 @@ describe('BookingsService (real Postgres)', () => {
       });
       const service = await servicesService.createService({
         actorId: 'actor-1',
+        tenantId: TENANT_ID,
         durationMinutes: 30,
         name: 'Unpriced Service',
       });
@@ -304,8 +308,9 @@ describe('BookingsService (real Postgres)', () => {
 
       await pricingRulesService.createPricingRule({
         actorId: 'actor-1',
-        priceMinorUnits: 6000,
         serviceId: service.id,
+        tenantId: TENANT_ID,
+        priceMinorUnits: 6000,
       });
 
       const refetched = await bookingsService.findOne(booking.id);
