@@ -15,7 +15,7 @@ import { toAddOnType } from './mappers';
 import { UpdateAddOnInput } from './update-add-on.input';
 
 // Exactly the `AddOn`-scoped operations of spec §4.5 — no others. `AddOn` is
-// a fully independent domain object (global add-ons, not scoped to any
+// a fully independent domain object (tenant-owned add-ons, not scoped to any
 // `Service`), so there is no single-`addOn(id)` query (matching
 // `AddOnsService`'s own lack of a `getAddOn(id)` read method) and no
 // `@ResolveField` here. `AddOn` is tenant-owned (RFC §4.4): the tenant comes

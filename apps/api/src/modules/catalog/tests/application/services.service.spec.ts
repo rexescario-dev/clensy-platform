@@ -17,11 +17,11 @@ import { ServiceEntity } from '../../infrastructure/persistence/service.entity';
 // transaction's `EntityManager`; `dataSource.transaction` just invokes the
 // callback with it synchronously, same as a real transaction would from the
 // caller's perspective. This level proves validation/read-path/existence-
-// check logic only — it cannot and does not attempt to prove real
-// transactional rollback or the unique-violation-to-ConflictException
-// translation, or real case-insensitive uniqueness against a persisted row
-// (that's the level-2, real-Postgres file's job — see
-// `catalog.service.e2e-spec.ts`).
+// check logic, and — by throwing synthetic `23505` errors from the mocked
+// manager — the constraint-name mapping in `translateUniqueViolation`; it
+// cannot and does not attempt to prove real transactional rollback or real
+// case-insensitive uniqueness/race behaviour against a persisted row (that's
+// the level-2, real-Postgres file's job — see `catalog.service.e2e-spec.ts`).
 describe('ServicesService', () => {
   let service: ServicesService;
   let manager: {

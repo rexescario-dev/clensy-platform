@@ -608,17 +608,17 @@ describe('Catalog tenant isolation (e2e)', () => {
         id: ruleA.id,
       });
 
-      const openRuleCount = await dataSource.query(
-        `SELECT count(*)::int AS count, id FROM "pricing_rule_entity" WHERE "serviceId" = $1 AND "effectiveTo" IS NULL GROUP BY id`,
+      const openRule = await dataSource.query(
+        `SELECT "id" FROM "pricing_rule_entity" WHERE "serviceId" = $1 AND "effectiveTo" IS NULL`,
         [serviceA.id],
       );
-      expect(openRuleCount).toEqual([{ count: 1, id: ruleA.id }]);
+      expect(openRule).toEqual([{ id: ruleA.id }]);
 
-      const openAddOnRuleCount = await dataSource.query(
-        `SELECT count(*)::int AS count, id FROM "pricing_rule_entity" WHERE "addOnId" = $1 AND "effectiveTo" IS NULL GROUP BY id`,
+      const openAddOnRule = await dataSource.query(
+        `SELECT "id" FROM "pricing_rule_entity" WHERE "addOnId" = $1 AND "effectiveTo" IS NULL`,
         [addOnA.id],
       );
-      expect(openAddOnRuleCount).toEqual([{ count: 1, id: addOnRuleA.id }]);
+      expect(openAddOnRule).toEqual([{ id: addOnRuleA.id }]);
     });
   });
 
