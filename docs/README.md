@@ -62,8 +62,24 @@ Shipped in this slice (PR [#97](https://github.com/rexescario-dev/clensy-platfor
 
 Every Catalog read and write uses the tenant of the logged-in user. That covers the services, the `services`/`addOns` lists and counts, the `service` and `activePricing(serviceId)` queries, `Service.activePricing`, the five mutations (`createService`, `updateService`, `createAddOn`, `updateAddOn`, `createPricingRule`), and the `Booking.service` relation. Another tenant's row behaves exactly like a missing one: null, NotFound, or empty, never 403 — laundry pricing and invoice generation keep their existing 400s for a catalog row that can't be resolved in the caller's tenant. Bookings, laundry pricing and invoice generation now look catalog rows up within the caller's tenant.
 
-**Known interim gap:** `fk_booking_service`, `fk_laundry_order_line_service` and `fk_laundry_order_line_add_on` stay id-only until #85/#87, and `Booking.service` relation *filters* are not tenant-scoped until #85. Until #87, a tenant can price another tenant's unscoped laundry order with its own catalog rows (a cross-tenant line reference); the owner's subsequent invoice generation then fails with the existing 400. Do not provision a second production tenant before those slices land.
+**Known interim gap:** `fk_laundry_order_line_service` and `fk_laundry_order_line_add_on` stay id-only until #87. `fk_booking_service` and `Booking.service` relation *filters* are now tenant-scoped — see #85 below. Until #87, a tenant can price another tenant's unscoped laundry order with its own catalog rows (a cross-tenant line reference); the owner's subsequent invoice generation then fails with the existing 400. Do not provision a second production tenant before that slice lands.
 
 - Spec (Accepted): [2026-09-23-multi-tenant-architecture-design.md](superpowers/specs/2026-09-23-multi-tenant-architecture-design.md)
 - Plan (Accepted): [2026-09-28-catalog-tenant-isolation-plan.md](superpowers/plans/2026-09-28-catalog-tenant-isolation-plan.md)
 - Migrating an existing database: see "Database migrations" in the [root README](../README.md). The migration needs no duplicate pre-check: the global uniques it replaces already rule out duplicates within one tenant.
+
+## Booking tenant isolation (#85)
+
+Shipped in this slice (branch `feat/85-booking-tenant-isolation`). Booking is tenant-owned: a required `tenantId`, composite FKs keep a booking's customer, property, service and team (when set) in the booking's tenant, and `uq_booking_id_tenant` is the FK target #86 will use.
+
+Every Booking read and write uses the tenant of the logged-in user. That covers the `bookings` list/count (including relation filters on customer/property/service/team), the `booking(id)` query, the `createBooking`/`updateBooking`/`removeBooking` mutations, `Property.bookings`, `CleaningJob.booking`, and `createJobFromBooking`'s booking lookup. Another tenant's booking behaves exactly like a missing one — the existing not-found error or an empty list — never 403.
+
+REST `/bookings` (kept for the REST/GraphQL comparison) now requires the session cookie and uses the same roles as GraphQL (reads: all tenant roles; writes: Tenant Owner, Ops Manager, Scheduler, Customer Support), takes the tenant from the logged-in user, writes the same audit events as GraphQL, and returns the same response shape as before. Unauthenticated requests get 401; a wrong role, or Super Admin, gets 403; a `tenantId` in the body gets 400. `AuthGuard` and `@CurrentUser()` now support HTTP routes as well as GraphQL.
+
+GraphQL now runs interceptors on field resolvers (`fieldResolverEnhancers: ['interceptors']`) so nestjs-query relation tenant filters always apply — this fixed a cross-tenant read through `job(id) { booking }` and also tightens `Invoice.customer`, `LaundryOrder.customer` and `Property.bookings` when reached from custom queries.
+
+**Known interim gap (until #86):** cleaning jobs are not tenant-scoped yet, so a tenant can still list another tenant's job (selecting its `booking` returns an error, not the booking) and can use `jobs(filter: { booking: … })` as an oracle over another tenant's booking scalar fields; nestjs-query's shared per-request authorizer also has a theoretical fail-open window reachable only through that unscoped job root. Booking audit events are not tenant-tagged until #90. Do not provision a second production tenant before #86 and #87 land.
+
+- Spec (Accepted): [2026-09-23-multi-tenant-architecture-design.md](superpowers/specs/2026-09-23-multi-tenant-architecture-design.md)
+- Plan (Accepted): [2026-09-28-booking-tenant-isolation-plan.md](superpowers/plans/2026-09-28-booking-tenant-isolation-plan.md)
+- Migrating an existing database: see "Database migrations" in the [root README](../README.md).
