@@ -1,25 +1,23 @@
 import { UseGuards } from '@nestjs/common';
 import { Args, ID, Mutation, Resolver } from '@nestjs/graphql';
+import { requireTenantId } from '../../../../platform/auth/authorization/require-tenant-id';
 import { CurrentUser } from '../../../../platform/auth/decorators/current-user.decorator';
 import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
 import type { AuthenticatedPrincipal } from '../../../../platform/auth/domain/authenticated-principal';
-import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
 import { CreateBookingCommand } from '../../application/commands/create-booking.command';
 import { UpdateBookingCommand } from '../../application/commands/update-booking.command';
 import { BookingsService } from '../../application/services/bookings.service';
-import { BookingDTO } from './booking.dto';
+import { BookingDTO, WRITE_ROLES } from './booking.dto';
 import { CreateBookingInput } from './create-booking.input';
 import { toBookingDto } from './mappers';
 import { UpdateBookingInput } from './update-booking.input';
 
-const WRITE_ROLES = [
-  Role.TENANT_OWNER,
-  Role.OPS_MANAGER,
-  Role.SCHEDULER,
-  Role.CUSTOMER_SUPPORT,
-];
-
+// The tenant comes only from the DB-loaded principal (#85 Slice decisions 3,
+// 7), never from GraphQL input: `requireTenantId(currentUser)` throws
+// `ForbiddenException` before `BookingsService` is called for the
+// unreachable-in-practice null-tenant case (every `@Roles(...WRITE_ROLES)`
+// caller excludes SUPER_ADMIN, the only role that can carry it).
 @Resolver(() => BookingDTO)
 export class BookingMutationResolver {
   constructor(private readonly bookingsService: BookingsService) {}
@@ -34,7 +32,7 @@ export class BookingMutationResolver {
     const command: CreateBookingCommand = {
       ...input,
       actorId: currentUser.id,
-      tenantId: currentUser.tenantId,
+      tenantId: requireTenantId(currentUser),
     };
     const booking = await this.bookingsService.create(command);
     return toBookingDto(booking);
@@ -47,7 +45,11 @@ export class BookingMutationResolver {
     @Args('id', { type: () => ID }) id: string,
     @CurrentUser() currentUser: AuthenticatedPrincipal,
   ): Promise<BookingDTO> {
-    const booking = await this.bookingsService.remove(id, currentUser.id);
+    const booking = await this.bookingsService.remove(
+      id,
+      currentUser.id,
+      requireTenantId(currentUser),
+    );
     return toBookingDto(booking);
   }
 
@@ -62,7 +64,7 @@ export class BookingMutationResolver {
     const command: UpdateBookingCommand = {
       ...changes,
       actorId: currentUser.id,
-      tenantId: currentUser.tenantId,
+      tenantId: requireTenantId(currentUser),
     };
     const booking = await this.bookingsService.update(id, command);
     return toBookingDto(booking);
