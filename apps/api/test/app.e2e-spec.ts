@@ -29,6 +29,10 @@ describe('Bookings (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    // REST /bookings now requires the session cookie (#85 Slice decision
+    // 3/4), so this suite needs cookie-parser wired the same way the
+    // GraphQL describe block below does.
+    app.use(cookieParser());
     // Mirrors main.ts's bootstrap(), which this test doesn't go through.
     applyPlatformPipes(app);
     await app.init();
@@ -42,20 +46,38 @@ describe('Bookings (e2e)', () => {
   // mirrors bookings.e2e-spec.ts's own createFixture() for the same reason.
   //
   // The booking itself is inserted directly via repository, not through
-  // `POST /bookings`: as of #82 Slice decision 4, that unauthenticated REST
-  // route always builds its command with `tenantId: null`, which never
-  // resolves a row and fails closed with 404 even given a real
-  // customer/property — `bookings-rest.e2e-spec.ts` is the dedicated proof
-  // of that fail-closed contract. This smoke test only needs a real booking
-  // to exist so it can prove GET/DELETE /bookings still work end-to-end.
+  // `POST /bookings`, and attached to the bootstrap tenant (#85 Slice
+  // decision 3: REST /bookings is now authenticated and tenant-scoped like
+  // GraphQL) — `bookings-rest.e2e-spec.ts` is the dedicated REST contract
+  // suite. This smoke test only needs a real, tenant-owned booking to exist
+  // so it can prove GET/DELETE /bookings still work end-to-end for an
+  // authenticated caller.
   it('finds and deletes a booking via GET/DELETE /bookings', async () => {
     const server = app.getHttpServer();
 
+    const adminUserRepository: Repository<AdminUserEntity> = app.get(
+      getRepositoryToken(AdminUserEntity),
+    );
     const customersService = app.get(CustomersService);
     const propertiesService = app.get(PropertiesService);
     const servicesService = app.get(ServicesService);
     const pricingRulesService = app.get(PricingRulesService);
     const bookingRepository = app.get(getRepositoryToken(BookingEntity));
+
+    const owner = await seedOwner(adminUserRepository);
+    const loginResponse = await request(server)
+      .post('/graphql')
+      .send({
+        query: `mutation Login($input: LoginInput!) {
+          login(loginInput: $input) { success }
+        }`,
+        variables: { input: { email: owner.email, password: owner.password } },
+      });
+    expect(loginResponse.body.errors).toBeUndefined();
+    const setCookieHeader = loginResponse.headers['set-cookie'] as unknown as
+      string[] | undefined;
+    const sessionCookie = setCookieHeader?.[0].split(';')[0];
+    expect(sessionCookie).toBeDefined();
 
     const customer = await customersService.create({
       actorId: 'e2e',
@@ -92,6 +114,7 @@ describe('Bookings (e2e)', () => {
       propertyId: property.id,
       serviceId: service.id,
       teamId: null,
+      tenantId: BOOTSTRAP_TENANT_ID,
       scheduledAt: new Date('2026-10-01T10:00:00.000Z'),
       status: BookingStatus.PENDING,
     });
@@ -105,8 +128,11 @@ describe('Bookings (e2e)', () => {
     const booking = await bookingRepository.save(seedEntity);
     const bookingId: string = booking.id;
 
+    await request(server).get('/bookings').expect(401);
+
     await request(server)
       .get('/bookings')
+      .set('Cookie', sessionCookie!)
       .expect(200)
       .expect((res) => {
         expect(Array.isArray(res.body)).toBe(true);
@@ -115,7 +141,10 @@ describe('Bookings (e2e)', () => {
         ).toBe(true);
       });
 
-    await request(server).delete(`/bookings/${bookingId}`).expect(200);
+    await request(server)
+      .delete(`/bookings/${bookingId}`)
+      .set('Cookie', sessionCookie!)
+      .expect(200);
   });
 
   afterEach(async () => {

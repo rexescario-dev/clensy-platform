@@ -313,7 +313,7 @@ describe('BookingsService (real Postgres)', () => {
         priceMinorUnits: 6000,
       });
 
-      const refetched = await bookingsService.findOne(booking.id);
+      const refetched = await bookingsService.findOne(booking.id, TENANT_ID);
       expect(refetched.pricingSnapshot.priceMinorUnits).toBe(5000);
     });
 
@@ -330,24 +330,6 @@ describe('BookingsService (real Postgres)', () => {
       });
 
       expect(booking.pricingSnapshot.priceMinorUnits).toBe(5000);
-    });
-
-    it('does not emit an audit event when actorId is null (REST posture, spec §4.4)', async () => {
-      const { customer, property, service } = await createFixture();
-
-      const booking = await bookingsService.create({
-        actorId: null,
-        customerId: customer.id,
-        propertyId: property.id,
-        serviceId: service.id,
-        tenantId: TENANT_ID,
-        scheduledAt: new Date(),
-      });
-
-      const events = await dataSource
-        .getRepository(AuditEventEntity)
-        .findBy({ entityId: booking.id });
-      expect(events).toHaveLength(0);
     });
 
     it('rolls back the booking row when the audit write fails inside the transaction', async () => {
@@ -502,29 +484,6 @@ describe('BookingsService (real Postgres)', () => {
         .findOneByOrFail({ id: booking.id });
       expect(row.scheduledAt).toEqual(booking.scheduledAt);
     });
-
-    it('does not emit an audit event when actorId is null (REST posture)', async () => {
-      const { customer, property, service } = await createFixture();
-      const booking = await bookingsService.create({
-        actorId: 'actor-1',
-        customerId: customer.id,
-        propertyId: property.id,
-        serviceId: service.id,
-        tenantId: TENANT_ID,
-        scheduledAt: new Date('2026-09-01T09:00:00Z'),
-      });
-
-      await bookingsService.update(booking.id, {
-        actorId: null,
-        tenantId: null,
-        scheduledAt: new Date('2026-12-25T09:00:00Z'),
-      });
-
-      const events = await dataSource
-        .getRepository(AuditEventEntity)
-        .findBy({ action: 'booking.update', entityId: booking.id });
-      expect(events).toHaveLength(0);
-    });
   });
 
   describe('remove', () => {
@@ -539,7 +498,11 @@ describe('BookingsService (real Postgres)', () => {
         scheduledAt: new Date('2026-09-01T09:00:00Z'),
       });
 
-      const removed = await bookingsService.remove(booking.id, 'actor-1');
+      const removed = await bookingsService.remove(
+        booking.id,
+        'actor-1',
+        TENANT_ID,
+      );
 
       // Regression guard against a real bug this level caught (a mocked
       // unit test could not): TypeORM's `manager.remove()` strips the id
@@ -559,33 +522,5 @@ describe('BookingsService (real Postgres)', () => {
         }),
       );
     });
-  });
-
-  // REST-audit-suppression (spec §4.4, plan §3's revision): the test that
-  // would have caught this plan's own first-draft defect (auditing REST
-  // calls under a placeholder actor string instead of skipping audit
-  // entirely).
-  it('REST-audit-suppression: create/update/remove with actorId null produce zero audit_event rows', async () => {
-    const { customer, property, service } = await createFixture();
-
-    const booking = await bookingsService.create({
-      actorId: null,
-      customerId: customer.id,
-      propertyId: property.id,
-      serviceId: service.id,
-      tenantId: TENANT_ID,
-      scheduledAt: new Date('2026-09-01T09:00:00Z'),
-    });
-    await bookingsService.update(booking.id, {
-      actorId: null,
-      tenantId: null,
-      scheduledAt: new Date('2026-09-02T09:00:00Z'),
-    });
-    await bookingsService.remove(booking.id, null);
-
-    const events = await dataSource
-      .getRepository(AuditEventEntity)
-      .findBy({ entityId: booking.id });
-    expect(events).toHaveLength(0);
   });
 });

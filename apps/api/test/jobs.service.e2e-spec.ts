@@ -214,6 +214,7 @@ describe('JobsService (real Postgres)', () => {
     const job = await jobsService.createFromBooking({
       actorId: 'actor-1',
       bookingId: booking.id,
+      tenantId: TENANT_ID,
     });
 
     expect(job.status).toBe(JobStatus.PENDING);
@@ -250,6 +251,7 @@ describe('JobsService (real Postgres)', () => {
       jobsService.createFromBooking({
         actorId: 'actor-1',
         bookingId: booking.id,
+        tenantId: TENANT_ID,
       }),
     ).resolves.toMatchObject({
       bookingId: booking.id,
@@ -264,6 +266,7 @@ describe('JobsService (real Postgres)', () => {
       jobsService.createFromBooking({
         actorId: 'actor-1',
         bookingId: booking.id,
+        tenantId: TENANT_ID,
       }),
     ).resolves.toMatchObject({
       bookingId: booking.id,
@@ -278,6 +281,7 @@ describe('JobsService (real Postgres)', () => {
       jobsService.createFromBooking({
         actorId: 'actor-1',
         bookingId: booking.id,
+        tenantId: TENANT_ID,
       }),
     ).rejects.toThrow(
       new BadRequestException('Cannot create a job from a cancelled booking'),
@@ -295,6 +299,7 @@ describe('JobsService (real Postgres)', () => {
     const job = await jobsService.createFromBooking({
       actorId: 'actor-1',
       bookingId: booking.id,
+      tenantId: TENANT_ID,
     });
 
     await bookingsService.update(booking.id, {
@@ -323,10 +328,12 @@ describe('JobsService (real Postgres)', () => {
       jobsService.createFromBooking({
         actorId: 'actor-1',
         bookingId: booking.id,
+        tenantId: TENANT_ID,
       }),
       jobsService.createFromBooking({
         actorId: 'actor-2',
         bookingId: booking.id,
+        tenantId: TENANT_ID,
       }),
     ]);
 
@@ -357,6 +364,7 @@ describe('JobsService (real Postgres)', () => {
       jobsService.createFromBooking({
         actorId: 'actor-1',
         bookingId: booking.id,
+        tenantId: TENANT_ID,
       }),
     ).rejects.toThrow('audit down');
 
@@ -378,9 +386,12 @@ describe('JobsService (real Postgres)', () => {
     await jobsService.createFromBooking({
       actorId: 'actor-1',
       bookingId: booking.id,
+      tenantId: TENANT_ID,
     });
 
-    await expect(bookingsService.remove(booking.id, 'actor-1')).rejects.toThrow(
+    await expect(
+      bookingsService.remove(booking.id, 'actor-1', TENANT_ID),
+    ).rejects.toThrow(
       new ConflictException(
         'Booking cannot be deleted because other records reference it',
       ),
@@ -442,6 +453,7 @@ describe('JobsService (real Postgres)', () => {
       const job = await jobsService.createFromBooking({
         actorId: 'actor-1',
         bookingId: booking.id,
+        tenantId: TENANT_ID,
       });
       const [checklist] = await jobsService.getChecklistsByJobIds([job.id]);
       const items = [
@@ -652,6 +664,7 @@ describe('JobsService (real Postgres)', () => {
       const job = await jobsService.createFromBooking({
         actorId: 'actor-1',
         bookingId: booking.id,
+        tenantId: TENANT_ID,
       });
       expect(job.teamId).toBeNull();
       const [checklist] = await jobsService.getChecklistsByJobIds([job.id]);
