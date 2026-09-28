@@ -190,7 +190,8 @@ export class InvoicesService {
     const [services, addOns] = await Promise.all([
       // #84 Task 6: wire the authenticated principal's tenant instead of `null`.
       this.servicesService.getServicesByIds(serviceIds, null),
-      this.addOnsService.getAddOnsByIds(addOnIds),
+      // #84 Task 6: wire the authenticated principal's tenant instead of `null`.
+      this.addOnsService.getAddOnsByIds(addOnIds, null),
     ]);
     const serviceName = new Map(services.map((s) => [s.id, s.name]));
     const addOnName = new Map(addOns.map((a) => [a.id, a.name]));

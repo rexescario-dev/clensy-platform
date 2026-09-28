@@ -3,6 +3,7 @@ import { Args, ID, Mutation, Resolver } from '@nestjs/graphql';
 import { AddOnsService } from '../../application/services/add-ons.service';
 import { CreateAddOnCommand } from '../../application/commands/create-add-on.command';
 import { UpdateAddOnCommand } from '../../application/commands/update-add-on.command';
+import { requireTenantId } from '../../../../platform/auth/authorization/require-tenant-id';
 import { CurrentUser } from '../../../../platform/auth/decorators/current-user.decorator';
 import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
 import type { AuthenticatedPrincipal } from '../../../../platform/auth/domain/authenticated-principal';
@@ -32,6 +33,7 @@ export class AddOnResolver {
     const command: CreateAddOnCommand = {
       ...input,
       actorId: currentUser.id,
+      tenantId: requireTenantId(currentUser),
     };
     const addOn = await this.addOnsService.createAddOn(command);
     return toAddOnType(addOn);
@@ -48,6 +50,7 @@ export class AddOnResolver {
     const command: UpdateAddOnCommand = {
       ...input,
       actorId: currentUser.id,
+      tenantId: requireTenantId(currentUser),
     };
     const addOn = await this.addOnsService.updateAddOn(id, command);
     return toAddOnType(addOn);
