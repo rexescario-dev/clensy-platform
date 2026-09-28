@@ -265,9 +265,10 @@ describe('Catalog tenant isolation (e2e)', () => {
     ({ customer: customerB, property: propertyB } =
       await insertCustomerAndProperty(tenantB, 'B'));
 
-    // A booking, as A, via `BookingsService.create` (Bookings/Laundry/Billing
-    // are not tenant-owned tables yet — #85/#87 — so this is a direct
-    // service call, not the `createBooking` mutation).
+    // A booking, as A, via `BookingsService.create` — fixture setup
+    // convenience, mirroring the catalog fixtures above (also application
+    // services, not GraphQL mutations). Booking is tenant-owned as of #85;
+    // Laundry/Billing are not yet (#87).
     bookingA = await bookingsService.create({
       actorId: ownerAId,
       customerId: customerA.id,
