@@ -99,6 +99,7 @@ These resolve planning-level choices the RFC leaves to M4. None adds product sem
 - The laundry-order cross-tenant pricing path recorded in #84 is unchanged by this slice (#87).
 - nestjs-query keeps one per-request `ctx.authorizer`; if a relation field ever read an authorizer set by a concurrently resolving field of a different parent type, `authorizeRelation` falls back to `{}` (unfiltered). A review probe (100 runs, 4 query shapes) found no leak, and it is only exploitable through an unscoped parent → tenant-owned relation, i.e. `CleaningJob.booking` until #86. #86 MUST close this structurally by scoping the job root.
 - (Pre-existing, out of scope) `guards`/`@Roles()` declared on nestjs-query relation options never run because field-resolver guards are not enabled; every root field still enforces access. Candidate follow-up for #90.
+- `jobs(filter: { booking: { … } })` on the still-unscoped CleaningJob root joins bookings without `BookingDTO`'s authorizer (nestjs-query does not apply relation authorizers to root relation filters), so tenant B can use it as an existence/value oracle over tenant A's booking scalar fields (`id`, `status`, `scheduledAt`, `createdAt`). Pre-existing; #86 MUST close it by scoping the job root and SHOULD add it as a two-tenant acceptance case.
 
 **Interim operating rule (unchanged from #82–#84):** do not provision a second production tenant before #86 and #87 have shipped.
 

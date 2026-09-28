@@ -286,7 +286,9 @@ describe('AuthGuard', () => {
       };
       lookup.findActiveAdminById.mockResolvedValue(principal);
       const dummy = new DummyResolver();
-      const req = { cookies: { [SESSION_COOKIE_NAME]: token } };
+      const req: { cookies: Record<string, string>; user?: unknown } = {
+        cookies: { [SESSION_COOKIE_NAME]: token },
+      };
       const context = buildHttpContext(req, dummy.noRolesDeclared);
 
       await expect(guard.canActivate(context)).resolves.toBe(true);

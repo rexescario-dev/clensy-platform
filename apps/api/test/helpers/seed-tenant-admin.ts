@@ -45,7 +45,11 @@ export async function createTestTenant(
 // these tenants' services/add-ons, MUST delete those rows first:
 // `fk_laundry_order_customer`, `fk_laundry_order_line_service`, and
 // `fk_laundry_order_line_add_on` are all `ON DELETE RESTRICT`, so this call
-// fails loudly (not silently) if a caller forgot.
+// fails loudly (not silently) if a caller forgot. Likewise, a CleaningJob
+// (including one on a bootstrap-tenant booking) referencing one of these
+// tenants' teams (`fk_cleaning_job_team`, ON DELETE RESTRICT, id-only until
+// #86) is not deleted here and would make the team delete fail loudly —
+// callers creating such rows must delete them first.
 export async function removeTestTenants(
   dataSource: DataSource,
   tenantIds: readonly string[],
