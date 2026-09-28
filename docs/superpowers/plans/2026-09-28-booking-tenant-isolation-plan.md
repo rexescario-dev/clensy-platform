@@ -2,14 +2,16 @@
 
 | Field | Value |
 | --- | --- |
-| **Status** | Draft |
+| **Status** | Accepted |
 | **Kind** | Implementation plan (M4) for **one** delivery slice |
 | **Date** | 2026-09-28 |
 | **Tracking** | GitHub [#85](https://github.com/rexescario-dev/clensy-platform/issues/85) (program [#81](https://github.com/rexescario-dev/clensy-platform/issues/81)). One PR for this plan (Accepted at M5) + implementation (process §2.8). Branch `feat/85-booking-tenant-isolation`. |
 | **Package / repo** | `clensy-platform` — `apps/api` only |
 | **Depends on (Accepted)** | [Multi-Tenant Architecture](../specs/2026-09-23-multi-tenant-architecture-design.md) (Accepted, M3 2026-09-23). **Where this plan and that specification disagree, the specification wins** — stop and return to M2/M3. Relies on the shipped [Tenant Identity Foundation plan](2026-09-23-tenant-identity-foundation-plan.md) (#68: principal `{ id, role, scope, tenantId }`, `BOOTSTRAP_TENANT_ID`, `test/helpers/seed-tenant-admin.ts`), [Customer & Property Tenant Isolation plan](2026-09-24-customer-property-tenant-isolation-plan.md) (#82: `tenantReadAuthorizer` / `tenantFilterFor`, `requireTenantId`, `uq_customer_id_tenant`, `uq_property_id_tenant`, relation-override regression pattern, I1 relation-filter finding carried to this slice), [Teams & Cleaners Tenant Isolation plan](2026-09-27-teams-cleaners-tenant-isolation-plan.md) (#83: `uq_team_id_tenant`, `UpdateBookingCommand.tenantId`) and [Catalog Tenant Isolation plan](2026-09-28-catalog-tenant-isolation-plan.md) (#84: `uq_service_id_tenant`, booking-root service-name probe handed to #85). Also relies on [Bookings](../specs/2026-08-22-bookings-design.md), [Jobs & Checklists](../specs/2026-08-27-jobs-checklists-design.md), [nestjs-query GraphQL Reads](../specs/2026-08-28-nestjs-query-graphql-reads-design.md), [Paginated GraphQL Collections](../specs/2026-08-28-paginated-graphql-collections-design.md) and [Admin Foundation](../specs/2026-08-14-admin-foundation-design.md) (§4.1 cookie JWT / `AuthGuard`, §4.2 `@Roles()`, §4.7 `@CurrentUser()`) as **extended/constrained by the RFC**. |
 
-> **For agentic workers:** Draft — awaiting M5. Execution method is chosen at M5. Steps use checkbox (`- [ ]`) syntax. Do **not** invent product semantics; the Accepted specification wins. M6 constraints: no production-tenant provisioning, no unrelated refactoring, no push or PR as a side effect; do not weaken failing assertions to get a suite green.
+> **For agentic workers:** **M5 Accepted 2026-09-29.** Tracking [#85](https://github.com/rexescario-dev/clensy-platform/issues/85). Execution method: superpowers:subagent-driven-development (chosen at M5), one review gate per task; no task starts until the previous task's review passes, and a design/signature problem found at a gate is fixed there (plan or implementation) before continuing. Steps use checkbox (`- [ ]`) syntax. Do **not** invent product semantics; the Accepted specification wins. M6 constraints: no production-tenant provisioning, no unrelated refactoring, no push or PR as a side effect; do not weaken failing assertions to get a suite green.
+>
+> **M5 review (2026-09-29): Accepted — no plan blockers.** Repository checks passed: migration SQL/order against current constraint names and `(id, "tenantId")` uniques; existing GraphQL guard tests exercise the preserved path; REST `tenantId` omission is local; relation inventory matches metadata; `removeTestTenants` excludes the bootstrap tenant; two-tenant cases trace to RFC §4.4/§4.5/§4.9. Non-blocking amendment applied: Task 8 case 2 uses `property.customerId` (the only filterable non-id Property field) instead of `property.label`.
 
 **Goal:** Make Booking tenant-owned: required `tenantId`, database-enforced same-tenant references to Customer, Property, Service and Team, and the caller's tenant applied to every booking read and write on GraphQL, REST and the Jobs lookup. REST `/bookings` becomes authenticated.
 
@@ -767,7 +769,7 @@ export function toBookingResponse(booking: Booking): Omit<Booking, 'tenantId'> {
      - `{ customer: { id: { eq: customerA.id } } }`
      - `{ customer: { fullName: { like: "Customer A ${run}%" } } }`
      - `{ property: { id: { eq: propertyA.id } } }`
-     - `{ property: { label: { like: "Home A ${run}%" } } }`
+     - `{ property: { customerId: { eq: customerA.id } } }` (M5: `label` is not filterable on `PropertyType`)
      - `{ service: { name: { eq: serviceA.name } } }`
      - `{ team: { id: { eq: teamA.id } } }`
      - `{ team: { name: { eq: teamA.name } } }`
