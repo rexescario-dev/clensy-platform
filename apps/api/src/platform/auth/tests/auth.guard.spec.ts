@@ -84,6 +84,27 @@ describe('AuthGuard', () => {
     } as unknown as ExecutionContext;
   }
 
+  // The Express shape: `getArgByIndex`/`getArgs` index 2 is `next`, not a
+  // GraphQL context — #85 Slice decision 4.
+  function buildHttpContext(
+    req: Record<string, unknown>,
+    handler: () => unknown,
+  ): ExecutionContext {
+    const args = [req, {}, () => undefined];
+    return {
+      getArgByIndex: (i: number) => args[i],
+      getArgs: () => args,
+      getClass: () => DummyResolver,
+      getHandler: () => handler,
+      getType: () => 'http',
+      switchToHttp: () => ({
+        getNext: () => args[2],
+        getRequest: () => req,
+        getResponse: () => ({}),
+      }),
+    } as unknown as ExecutionContext;
+  }
+
   it('denies when there is no session cookie', async () => {
     const dummy = new DummyResolver();
     const context = buildContext({ cookies: {} }, dummy.noRolesDeclared);
@@ -173,6 +194,111 @@ describe('AuthGuard', () => {
 
     await expect(guard.canActivate(context)).rejects.toThrow(
       ForbiddenException,
+    );
+  });
+
+  // #85 Slice decision 4: the same guard authenticates HTTP requests,
+  // branching explicitly on `context.getType()` rather than assuming
+  // GraphQL.
+  describe('over HTTP', () => {
+    it('denies when there is no session cookie', async () => {
+      const dummy = new DummyResolver();
+      const context = buildHttpContext({ cookies: {} }, dummy.noRolesDeclared);
+
+      await expect(guard.canActivate(context)).rejects.toThrow();
+    });
+
+    it('denies when the token is valid but ADMIN_IDENTITY_LOOKUP returns null (disabled/unknown account)', async () => {
+      const token = tokenService.issue('admin-1');
+      lookup.findActiveAdminById.mockResolvedValue(null);
+      const dummy = new DummyResolver();
+      const context = buildHttpContext(
+        { cookies: { [SESSION_COOKIE_NAME]: token } },
+        dummy.noRolesDeclared,
+      );
+
+      await expect(guard.canActivate(context)).rejects.toThrow();
+    });
+
+    it('allows when the token is valid, the account is active, and no @Roles() is declared', async () => {
+      const token = tokenService.issue('admin-1');
+      lookup.findActiveAdminById.mockResolvedValue({
+        id: 'admin-1',
+        tenantId: 'tenant-1',
+        role: Role.SCHEDULER,
+        scope: AdminScope.TENANT,
+      });
+      const dummy = new DummyResolver();
+      const context = buildHttpContext(
+        { cookies: { [SESSION_COOKIE_NAME]: token } },
+        dummy.noRolesDeclared,
+      );
+
+      await expect(guard.canActivate(context)).resolves.toBe(true);
+    });
+
+    it('denies when the principal role is not in the @Roles() list', async () => {
+      const token = tokenService.issue('admin-1');
+      lookup.findActiveAdminById.mockResolvedValue({
+        id: 'admin-1',
+        tenantId: 'tenant-1',
+        role: Role.SCHEDULER,
+        scope: AdminScope.TENANT,
+      });
+      const dummy = new DummyResolver();
+      const context = buildHttpContext(
+        { cookies: { [SESSION_COOKIE_NAME]: token } },
+        dummy.tenantOwnerOnly,
+      );
+
+      await expect(guard.canActivate(context)).rejects.toThrow();
+    });
+
+    // Multi-tenant spec §4.2: Super Admin is NOT implicitly added to any
+    // tenant role list — a platform principal is denied like any other role
+    // not on `@Roles()`.
+    it('denies a Super Admin on a TENANT_OWNER-only operation', async () => {
+      const token = tokenService.issue('admin-1');
+      lookup.findActiveAdminById.mockResolvedValue({
+        id: 'admin-1',
+        tenantId: null,
+        role: Role.SUPER_ADMIN,
+        scope: AdminScope.PLATFORM,
+      });
+      const dummy = new DummyResolver();
+      const context = buildHttpContext(
+        { cookies: { [SESSION_COOKIE_NAME]: token } },
+        dummy.tenantOwnerOnly,
+      );
+
+      await expect(guard.canActivate(context)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('attaches the looked-up principal to req.user', async () => {
+      const token = tokenService.issue('admin-1');
+      const principal = {
+        id: 'admin-1',
+        tenantId: 'tenant-1',
+        role: Role.SCHEDULER,
+        scope: AdminScope.TENANT,
+      };
+      lookup.findActiveAdminById.mockResolvedValue(principal);
+      const dummy = new DummyResolver();
+      const req = { cookies: { [SESSION_COOKIE_NAME]: token } };
+      const context = buildHttpContext(req, dummy.noRolesDeclared);
+
+      await expect(guard.canActivate(context)).resolves.toBe(true);
+      expect(req.user).toEqual(principal);
+    });
+  });
+
+  it('rejects an unsupported execution context type instead of treating it as HTTP', () => {
+    const context = { getType: () => 'rpc' } as unknown as ExecutionContext;
+
+    expect(() => guard.getRequest(context)).toThrow(
+      /unsupported execution context type "rpc"/,
     );
   });
 });

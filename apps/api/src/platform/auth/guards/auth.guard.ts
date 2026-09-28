@@ -4,7 +4,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { GqlExecutionContext } from '@nestjs/graphql';
+import { GqlContextType, GqlExecutionContext } from '@nestjs/graphql';
 import { AuthGuard as PassportAuthGuard } from '@nestjs/passport';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import { AuthenticatedPrincipal } from '../domain/authenticated-principal';
@@ -32,6 +32,15 @@ interface GqlContext {
 // "must be authenticated" (bare `@UseGuards(AuthGuard)`, no `@Roles()`) and
 // "must be authenticated AND hold one of these roles" (`@Roles(...)`, OR
 // semantics — spec §4.2).
+//
+// #85 Slice decision 4: `getRequest`/`getResponse` branch explicitly on
+// `context.getType()` so this same guard also authenticates HTTP
+// controllers (REST `/bookings`), not just GraphQL resolvers — cookie
+// extraction itself (`JwtStrategy` reading `req.cookies`) was already
+// transport-neutral, only the request/response lookup was GraphQL-only.
+// `@Roles()` and the role check below are unchanged and shared across both
+// transports. Any other execution type (`rpc`, `ws`, …) is out of scope for
+// this slice and throws rather than being silently treated as HTTP.
 @Injectable()
 export class AuthGuard extends PassportAuthGuard('jwt') {
   constructor(private readonly reflector: Reflector) {
@@ -67,10 +76,24 @@ export class AuthGuard extends PassportAuthGuard('jwt') {
   }
 
   getRequest(context: ExecutionContext): RequestWithPrincipal {
-    return GqlExecutionContext.create(context).getContext<GqlContext>().req;
+    const type = context.getType<GqlContextType>();
+    if (type === 'graphql') {
+      return GqlExecutionContext.create(context).getContext<GqlContext>().req;
+    }
+    if (type === 'http') {
+      return context.switchToHttp().getRequest<RequestWithPrincipal>();
+    }
+    throw new Error(`AuthGuard: unsupported execution context type "${type}"`);
   }
 
   getResponse(context: ExecutionContext): unknown {
-    return GqlExecutionContext.create(context).getContext<GqlContext>().res;
+    const type = context.getType<GqlContextType>();
+    if (type === 'graphql') {
+      return GqlExecutionContext.create(context).getContext<GqlContext>().res;
+    }
+    if (type === 'http') {
+      return context.switchToHttp().getResponse<unknown>();
+    }
+    throw new Error(`AuthGuard: unsupported execution context type "${type}"`);
   }
 }
