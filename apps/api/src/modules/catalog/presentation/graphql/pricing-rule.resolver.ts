@@ -18,7 +18,12 @@ import { PricingRuleType } from './pricing-rule.type';
 // DIRECTLY, never through `ActivePricingLoader` (that loader exists solely
 // for `ServiceResolver.activePricing`'s batched `@ResolveField` path; spec
 // §3's reconciliation note — the two are separate code paths for separate
-// reasons, not meant to be unified).
+// reasons, not meant to be unified). The tenant comes only from the
+// principal (#84): the read passes it through and the service fails closed
+// (NotFound) on `null`; the write requires it. `PricingRuleType` is not a
+// nestjs-query DTO (#84 slice decision 8) — it has no `@Authorize` of its
+// own; its only read paths are this query and `Service.activePricing`, both
+// tenant-scoped.
 @Resolver(() => PricingRuleType)
 export class PricingRuleResolver {
   constructor(private readonly pricingRulesService: PricingRulesService) {}
@@ -37,11 +42,11 @@ export class PricingRuleResolver {
   )
   async activePricing(
     @Args('serviceId', { type: () => ID }) serviceId: string,
+    @CurrentUser() currentUser: AuthenticatedPrincipal,
   ): Promise<PricingRuleType | null> {
-    // #84 Task 5 wires the real tenant from `@CurrentUser()`.
     const rule = await this.pricingRulesService.getActivePricing(
       serviceId,
-      null,
+      currentUser.tenantId,
     );
     return rule ? toPricingRuleType(rule) : null;
   }

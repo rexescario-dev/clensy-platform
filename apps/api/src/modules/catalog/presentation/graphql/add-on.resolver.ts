@@ -18,7 +18,10 @@ import { UpdateAddOnInput } from './update-add-on.input';
 // a fully independent domain object (global add-ons, not scoped to any
 // `Service`), so there is no single-`addOn(id)` query (matching
 // `AddOnsService`'s own lack of a `getAddOn(id)` read method) and no
-// `@ResolveField` here.
+// `@ResolveField` here. `AddOn` is tenant-owned (RFC §4.4): the tenant comes
+// only from the principal (#84) — writes require it via `requireTenantId`. A
+// command's `tenantId` is set after `...input` so no input key can override
+// it.
 @Resolver(() => AddOnType)
 export class AddOnResolver {
   constructor(private readonly addOnsService: AddOnsService) {}

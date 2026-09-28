@@ -1,3 +1,4 @@
+import { ForbiddenException } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
 import {
@@ -7,9 +8,14 @@ import {
 } from '@nestjs/graphql';
 import { Test } from '@nestjs/testing';
 import { GraphQLObjectType } from 'graphql';
+import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
+import type { AuthenticatedPrincipal } from '../../../../platform/auth/domain/authenticated-principal';
 import { ROLES_KEY } from '../../../../platform/auth/decorators/roles.decorator';
 import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
+import type { PricingRulesService } from '../../application/services/pricing-rules.service';
+import { PricingRule } from '../../domain/pricing-rule';
+import { PricingUnit } from '../../domain/pricing-unit';
 import { PricingRuleResolver } from '../../presentation/graphql/pricing-rule.resolver';
 import { PricingRuleType } from '../../presentation/graphql/pricing-rule.type';
 import { ServiceResolver } from '../../presentation/graphql/service.resolver';
@@ -147,5 +153,85 @@ describe('PricingRuleResolver', () => {
     );
     const calls = createSpy.mock.calls as { serviceId?: string }[][];
     expect(calls[0][0].serviceId).toBeUndefined();
+  });
+});
+
+// Tenant isolation (#84, multi-tenant spec §4.5, controller ruling 2): the
+// tenant comes only from the DB-loaded principal. Reads pass it through
+// (the service fails closed on `null`/NotFound); writes require it. A
+// command's `tenantId` is set after `...input` so no input key can override
+// it. `PricingRuleType` carries no `@Authorize` of its own (#84 slice
+// decision 8) — its only read paths are this query and
+// `Service.activePricing`, both tenant-scoped here and in
+// `ActivePricingLoader`.
+describe('PricingRuleResolver tenant scoping', () => {
+  const principal: AuthenticatedPrincipal = {
+    id: 'u',
+    tenantId: 't-a',
+    role: Role.OPS_MANAGER,
+    scope: AdminScope.TENANT,
+  };
+  const noTenant: AuthenticatedPrincipal = { ...principal, tenantId: null };
+
+  function makeRule(serviceId: string): PricingRule {
+    return {
+      id: `rule-${serviceId}`,
+      addOnId: null,
+      serviceId,
+      tenantId: 't-a',
+      active: true,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      effectiveFrom: new Date('2026-01-01T00:00:00Z'),
+      effectiveTo: null,
+      minimumChargeMinorUnits: null,
+      priceMinorUnits: 100,
+      unit: PricingUnit.FLAT,
+    };
+  }
+
+  let pricingRulesService: {
+    getActivePricing: jest.Mock;
+    createPricingRule: jest.Mock;
+  };
+  let resolver: PricingRuleResolver;
+
+  beforeEach(() => {
+    pricingRulesService = {
+      getActivePricing: jest.fn(),
+      createPricingRule: jest.fn(),
+    };
+    resolver = new PricingRuleResolver(
+      pricingRulesService as unknown as PricingRulesService,
+    );
+  });
+
+  it('activePricing(serviceId) passes the caller tenant', async () => {
+    pricingRulesService.getActivePricing.mockResolvedValue(null);
+    await expect(resolver.activePricing('s-1', principal)).resolves.toBeNull();
+    expect(pricingRulesService.getActivePricing).toHaveBeenCalledWith(
+      's-1',
+      't-a',
+    );
+  });
+
+  it('createPricingRule takes tenantId from the principal, after the input spread', async () => {
+    pricingRulesService.createPricingRule.mockResolvedValue(makeRule('s-1'));
+    await resolver.createPricingRule(
+      { serviceId: 's-1', priceMinorUnits: 100, tenantId: 'evil' } as never,
+      principal,
+    );
+    expect(pricingRulesService.createPricingRule).toHaveBeenCalledWith(
+      expect.objectContaining({ actorId: 'u', tenantId: 't-a' }),
+    );
+  });
+
+  it('createPricingRule with a tenant-less principal is Forbidden before the service is called', async () => {
+    await expect(
+      resolver.createPricingRule(
+        { serviceId: 's-1', priceMinorUnits: 100 },
+        noTenant,
+      ),
+    ).rejects.toThrow(ForbiddenException);
+    expect(pricingRulesService.createPricingRule).not.toHaveBeenCalled();
   });
 });

@@ -25,7 +25,10 @@ import { PricingRuleType } from './pricing-rule.type';
 import { ServiceType, VIEW_ROLES } from './service.type';
 import { UpdateServiceInput } from './update-service.input';
 
-// Exactly the `Service`-scoped operations of spec §4.5 — no others.
+// Exactly the `Service`-scoped operations of spec §4.5 — no others. The
+// tenant comes only from the principal (#84): reads pass it through and the
+// service/loader fail closed on `null`; writes require it. A command's
+// `tenantId` is set after `...input` so no input key can override it.
 @Resolver(() => ServiceType)
 export class ServiceResolver {
   constructor(
@@ -38,12 +41,16 @@ export class ServiceResolver {
   // `@Context()`) to avoid one query per parent row. No separate
   // `@UseGuards`/`@Roles()`: reachable only after the guarded parent query
   // already succeeded, the same precedent `Cleaner.team`/`Team.cleaners`
-  // established.
+  // established. Tenant from the principal, never from the parent row (#84
+  // slice decision 7). No principal ⇒ null-tenant loader ⇒ null.
   @ResolveField(() => PricingRuleType, { nullable: true })
   async activePricing(
     @Parent() service: Pick<Service, 'id'>,
+    @CurrentUser() currentUser: AuthenticatedPrincipal | undefined,
   ): Promise<PricingRuleType | null> {
-    const rule = await this.loader.loader.load(service.id);
+    const rule = await this.loader
+      .loaderFor(currentUser?.tenantId ?? null)
+      .load(service.id);
     return rule ? toPricingRuleType(rule) : null;
   }
 
@@ -71,9 +78,12 @@ export class ServiceResolver {
   @Roles(...VIEW_ROLES)
   async service(
     @Args('id', { type: () => ID }) id: string,
+    @CurrentUser() currentUser: AuthenticatedPrincipal,
   ): Promise<ServiceType | null> {
-    // #84 Task 5: wire the authenticated principal's tenant instead of `null`.
-    const service = await this.servicesService.getService(id, null);
+    const service = await this.servicesService.getService(
+      id,
+      currentUser.tenantId,
+    );
     return service ? toServiceType(service) : null;
   }
 
