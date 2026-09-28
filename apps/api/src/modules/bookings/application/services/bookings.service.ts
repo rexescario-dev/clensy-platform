@@ -274,6 +274,11 @@ export class BookingsService {
       );
     }
 
+    // Application-level same-tenant check (#84 spec §4.4/§4.5, slice
+    // decision 9): `command.tenantId` is the caller's own tenant (`null`
+    // only for the unauthenticated REST `POST /bookings`, which already
+    // fails closed above on the customer lookup). `fk_booking_service`
+    // stays id-only until #85.
     const service = await this.servicesService.getService(
       command.serviceId,
       command.tenantId,

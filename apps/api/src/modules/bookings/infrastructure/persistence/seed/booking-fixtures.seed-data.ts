@@ -32,6 +32,7 @@ export const bookingFixtureProperty = {
 
 export const bookingFixtureService = {
   id: '00000000-0000-0000-0001-000000000003',
+  tenantId: BOOTSTRAP_TENANT_ID,
   active: true,
   description: null,
   durationMinutes: 120,

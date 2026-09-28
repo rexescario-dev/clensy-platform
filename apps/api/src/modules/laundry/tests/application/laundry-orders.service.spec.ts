@@ -257,6 +257,7 @@ describe('LaundryOrdersService', () => {
       actorId: 'a',
       baseServiceId: 'svc-1',
       orderId: 'order-1',
+      tenantId: 't-a',
       addOns: [] as { addOnId: string; quantity?: number }[],
       ...over,
     });
@@ -356,6 +357,43 @@ describe('LaundryOrdersService', () => {
       expect(manager.save).not.toHaveBeenCalled();
       expect(manager.update).not.toHaveBeenCalled();
       expect(auditLogger.log).not.toHaveBeenCalled();
+    });
+
+    it("price resolves every line's effective pricing within the command tenant", async () => {
+      pricingRulesService.resolveEffectivePricing.mockResolvedValue({
+        id: 'rule-1',
+        minimumChargeMinorUnits: null,
+        priceMinorUnits: 1500,
+        unit: PricingUnit.PER_KG,
+      });
+
+      await service.price(
+        cmd({ addOns: [{ addOnId: 'ao-a' }], tenantId: 't-a' }),
+      );
+
+      expect(pricingRulesService.resolveEffectivePricing).toHaveBeenCalledWith(
+        { serviceId: 'svc-1' },
+        expect.any(Date),
+        't-a',
+      );
+      expect(pricingRulesService.resolveEffectivePricing).toHaveBeenCalledWith(
+        { addOnId: 'ao-a' },
+        expect.any(Date),
+        't-a',
+      );
+    });
+
+    it("price with another tenant's service finds no rule and keeps the existing 400", async () => {
+      pricingRulesService.resolveEffectivePricing.mockResolvedValue(null);
+
+      await expect(service.price(cmd({ tenantId: 't-b' }))).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(pricingRulesService.resolveEffectivePricing).toHaveBeenCalledWith(
+        { serviceId: 'svc-1' },
+        expect.any(Date),
+        't-b',
+      );
     });
 
     it('rejects pricing an order that is not WEIGHED (no re-pricing)', async () => {

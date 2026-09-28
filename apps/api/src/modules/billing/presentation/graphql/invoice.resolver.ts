@@ -9,6 +9,7 @@ import {
   ResolveField,
   Resolver,
 } from '@nestjs/graphql';
+import { requireTenantId } from '../../../../platform/auth/authorization/require-tenant-id';
 import { CurrentUser } from '../../../../platform/auth/decorators/current-user.decorator';
 import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
 import type { AuthenticatedPrincipal } from '../../../../platform/auth/domain/authenticated-principal';
@@ -43,7 +44,11 @@ export class InvoiceResolver {
     @CurrentUser() user: AuthenticatedPrincipal,
   ): Promise<InvoiceType> {
     return toInvoiceType(
-      await this.service.generateFromOrder({ ...input, actorId: user.id }),
+      await this.service.generateFromOrder({
+        ...input,
+        actorId: user.id,
+        tenantId: requireTenantId(user),
+      }),
     );
   }
 

@@ -210,6 +210,33 @@ describe('BookingsService', () => {
       expect(pricingRulesService.getActivePricing).not.toHaveBeenCalled();
     });
 
+    it('create looks up the service and its price within the command tenant', async () => {
+      servicesService.getService.mockResolvedValue(null);
+
+      await expect(
+        service.create({ ...command, tenantId: 't-b', serviceId: 's-a' }),
+      ).rejects.toThrow(NotFoundException);
+      expect(servicesService.getService).toHaveBeenCalledWith('s-a', 't-b');
+      expect(pricingRulesService.getActivePricing).not.toHaveBeenCalled();
+    });
+
+    it('create reads the active price within the command tenant', async () => {
+      servicesService.getService.mockResolvedValue({
+        id: 's-a',
+        tenantId: 't-a',
+        active: true,
+      });
+      pricingRulesService.getActivePricing.mockResolvedValue(null);
+
+      await expect(
+        service.create({ ...command, tenantId: 't-a', serviceId: 's-a' }),
+      ).rejects.toThrow(BadRequestException);
+      expect(pricingRulesService.getActivePricing).toHaveBeenCalledWith(
+        's-a',
+        't-a',
+      );
+    });
+
     it('throws BadRequestException when the service is not active', async () => {
       servicesService.getService.mockResolvedValue({
         active: false,

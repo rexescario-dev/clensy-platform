@@ -89,7 +89,10 @@ export class InvoicesService {
       );
     }
 
-    const linePayloads = await this.buildLinePayloads(order.lines);
+    const linePayloads = await this.buildLinePayloads(
+      order.lines,
+      command.tenantId,
+    );
     const { subtotalMinorUnits, totalMinorUnits } = computeInvoiceTotals({
       discountMinorUnits: 0,
       lineAmountsMinorUnits: linePayloads.map((l) => l.amountMinorUnits),
@@ -171,7 +174,10 @@ export class InvoicesService {
     }
   }
 
-  private async buildLinePayloads(lines: OrderForInvoicingLine[]): Promise<
+  private async buildLinePayloads(
+    lines: OrderForInvoicingLine[],
+    tenantId: string,
+  ): Promise<
     Array<{
       description: string;
       quantity: number;
@@ -187,11 +193,12 @@ export class InvoicesService {
       .map((l) => l.addOnId)
       .filter((id): id is string => id !== null);
 
+    // Application-level same-tenant check (#84 slice decision 9): a line
+    // whose catalog row belongs to another tenant does not resolve here and
+    // falls through to the existing "could not be resolved" 400 below.
     const [services, addOns] = await Promise.all([
-      // #84 Task 6: wire the authenticated principal's tenant instead of `null`.
-      this.servicesService.getServicesByIds(serviceIds, null),
-      // #84 Task 6: wire the authenticated principal's tenant instead of `null`.
-      this.addOnsService.getAddOnsByIds(addOnIds, null),
+      this.servicesService.getServicesByIds(serviceIds, tenantId),
+      this.addOnsService.getAddOnsByIds(addOnIds, tenantId),
     ]);
     const serviceName = new Map(services.map((s) => [s.id, s.name]));
     const addOnName = new Map(addOns.map((a) => [a.id, a.name]));

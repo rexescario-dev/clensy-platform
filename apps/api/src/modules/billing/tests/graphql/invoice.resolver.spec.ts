@@ -1,5 +1,8 @@
+import { ForbiddenException } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
+import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
+import type { AuthenticatedPrincipal } from '../../../../platform/auth/domain/authenticated-principal';
 import { ROLES_KEY } from '../../../../platform/auth/decorators/roles.decorator';
 import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
@@ -44,7 +47,14 @@ describe('InvoiceResolver', () => {
       Pick<InvoicesService, 'generateFromOrder' | 'getInvoice'>
     >;
     let resolver: InvoiceResolver;
-    const user = { id: 'actor-9' } as never;
+    const user = { id: 'actor-9', tenantId: 'tenant-9' } as never;
+    const principal: AuthenticatedPrincipal = {
+      id: 'u',
+      tenantId: 't-a',
+      role: Role.FINANCE,
+      scope: AdminScope.TENANT,
+    };
+    const noTenant: AuthenticatedPrincipal = { ...principal, tenantId: null };
     const invoice = {
       id: 'inv-1',
       customerId: 'cust-1',
@@ -86,6 +96,7 @@ describe('InvoiceResolver', () => {
       expect(service.generateFromOrder).toHaveBeenCalledWith({
         actorId: 'actor-9',
         laundryOrderId: 'order-1',
+        tenantId: 'tenant-9',
         paymentTerms: InvoicePaymentTerms.PAY_ON_COMPLETION,
       });
     });
@@ -97,6 +108,33 @@ describe('InvoiceResolver', () => {
           totalMinorUnits: 3725,
         }),
       ).toBe(2725);
+    });
+
+    it('generateInvoiceFromOrder passes requireTenantId(principal)', async () => {
+      service.generateFromOrder.mockResolvedValue(invoice);
+      await resolver.generateInvoiceFromOrder(
+        {
+          laundryOrderId: 'o-1',
+          paymentTerms: InvoicePaymentTerms.PAY_NOW,
+        },
+        principal,
+      );
+      expect(service.generateFromOrder).toHaveBeenCalledWith(
+        expect.objectContaining({ actorId: 'u', tenantId: 't-a' }),
+      );
+    });
+
+    it('generateInvoiceFromOrder with a tenant-less principal is Forbidden before the service is called', async () => {
+      await expect(
+        resolver.generateInvoiceFromOrder(
+          {
+            laundryOrderId: 'o-1',
+            paymentTerms: InvoicePaymentTerms.PAY_NOW,
+          },
+          noTenant,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(service.generateFromOrder).not.toHaveBeenCalled();
     });
   });
 });
