@@ -1,3 +1,4 @@
+import { BOOTSTRAP_TENANT_ID } from '../../../../../platform/database/bootstrap-tenant';
 import { BookingStatus } from '../../../domain/booking-status';
 import {
   bookingFixtureCustomer,
@@ -11,13 +12,15 @@ import {
 // References `booking-fixtures.seed-data.ts`'s ids — those rows are
 // upserted by `platform/database/seed.ts` before `BookingSeeder.seed()`
 // runs (plan §3), so this file no longer needs its own customerName/
-// serviceType fake strings.
+// serviceType fake strings. `tenantId` (#85) is the bootstrap tenant, same
+// as every referenced fixture row.
 export interface BookingSeedData {
   id: string;
   customerId: string;
   propertyId: string;
   serviceId: string;
   teamId: string | null;
+  tenantId: string;
   scheduledAt: Date;
   status: BookingStatus;
   pricingSnapshot: { priceMinorUnits: number };
@@ -30,6 +33,7 @@ export const bookingSeedData: readonly BookingSeedData[] = [
     propertyId: bookingFixtureProperty.id,
     serviceId: bookingFixtureService.id,
     teamId: bookingFixtureTeam.id,
+    tenantId: BOOTSTRAP_TENANT_ID,
     pricingSnapshot: { priceMinorUnits: 250000 },
     scheduledAt: new Date('2026-08-18T09:00:00Z'),
     status: BookingStatus.CONFIRMED,
@@ -40,6 +44,7 @@ export const bookingSeedData: readonly BookingSeedData[] = [
     propertyId: bookingFixtureProperty.id,
     serviceId: bookingFixtureService.id,
     teamId: null,
+    tenantId: BOOTSTRAP_TENANT_ID,
     pricingSnapshot: { priceMinorUnits: 250000 },
     scheduledAt: new Date('2026-08-20T13:30:00Z'),
     status: BookingStatus.PENDING,
@@ -50,6 +55,7 @@ export const bookingSeedData: readonly BookingSeedData[] = [
     propertyId: bookingFixtureProperty.id,
     serviceId: bookingFixtureService.id,
     teamId: bookingFixtureTeam.id,
+    tenantId: BOOTSTRAP_TENANT_ID,
     pricingSnapshot: { priceMinorUnits: 250000 },
     scheduledAt: new Date('2026-08-15T11:00:00Z'),
     status: BookingStatus.COMPLETED,

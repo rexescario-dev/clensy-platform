@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
+import { ForbiddenException } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
 import {
@@ -7,7 +8,15 @@ import {
   GraphQLSchemaFactory,
 } from '@nestjs/graphql';
 import { Test } from '@nestjs/testing';
-import { GraphQLEnumType, GraphQLObjectType } from 'graphql';
+import {
+  GraphQLEnumType,
+  GraphQLInputObjectType,
+  GraphQLObjectType,
+} from 'graphql';
+// @ptc-org/nestjs-query-graphql 9.5.0 does not re-export getAuthorizer from
+// the package root, so this deep import is required (same pattern as #82-#84
+// in service-read.resolver.spec.ts).
+import { getAuthorizer } from '@ptc-org/nestjs-query-graphql/src/decorators';
 import { PLATFORM_PAGE_DEFAULT } from '../../../../platform/graphql/paging';
 import { ROLES_KEY } from '../../../../platform/auth/decorators/roles.decorator';
 import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
@@ -17,6 +26,7 @@ import { CustomerResolver } from '../../../customers/presentation/graphql/custom
 import { PropertyResolver } from '../../../customers/presentation/graphql/property.resolver';
 import { ServiceResolver } from '../../../catalog/presentation/graphql/service.resolver';
 import { TeamResolver } from '../../../cleaners/presentation/graphql/team.resolver';
+import { BookingDTO } from '../../presentation/graphql/booking.dto';
 import { BookingReadResolver } from '../../presentation/graphql/booking-read.resolver';
 import { BookingMutationResolver } from '../../presentation/graphql/booking.resolver';
 
@@ -212,6 +222,40 @@ describe('Booking GraphQL reads and mutations', () => {
     });
   });
 
+  // Local schema-invariant check (#85 Global constraints): `tenantId` is
+  // deliberately never a GraphQL field, filterable field, or input field on
+  // Booking. Easier to diagnose here than in the final generated-schema
+  // diff. Built exactly as service-read.resolver.spec.ts's schema test
+  // (#82-#84 precedent).
+  it('never exposes tenantId as a GraphQL field, filter field, or input field', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [GraphQLSchemaBuilderModule],
+    }).compile();
+    const schemaFactory = moduleRef.get(GraphQLSchemaFactory);
+    const schema = await schemaFactory.create([
+      BookingReadResolver,
+      BookingMutationResolver,
+    ]);
+
+    const bookingType = schema.getType('Booking') as GraphQLObjectType;
+    expect(Object.keys(bookingType.getFields())).not.toContain('tenantId');
+
+    const bookingFilter = schema.getType(
+      'BookingFilter',
+    ) as GraphQLInputObjectType;
+    expect(Object.keys(bookingFilter.getFields())).not.toContain('tenantId');
+
+    const createInput = schema.getType(
+      'CreateBookingInput',
+    ) as GraphQLInputObjectType;
+    expect(Object.keys(createInput.getFields())).not.toContain('tenantId');
+
+    const updateInput = schema.getType(
+      'UpdateBookingInput',
+    ) as GraphQLInputObjectType;
+    expect(Object.keys(updateInput.getFields())).not.toContain('tenantId');
+  });
+
   describe('mutation actorId wiring', () => {
     it('createBooking/updateBooking/removeBooking always pass a non-null actorId', async () => {
       const bookingsService = {
@@ -265,6 +309,7 @@ describe('Booking GraphQL reads and mutations', () => {
       expect(bookingsService.remove).toHaveBeenCalledWith(
         'booking-1',
         'admin-1',
+        'tenant-1',
       );
     });
   });
@@ -293,6 +338,104 @@ describe('Booking GraphQL reads and mutations', () => {
         'b-1',
         expect.objectContaining({ tenantId: 't-a' }),
       );
+    });
+
+    it('removeBooking passes the caller tenant', async () => {
+      const bookingsService = {
+        remove: jest.fn().mockResolvedValue({
+          id: 'b-1',
+          pricingSnapshot: { priceMinorUnits: 1 },
+        }),
+      };
+      const resolver = new BookingMutationResolver(bookingsService as never);
+      const principal = {
+        id: 'u',
+        tenantId: 't-a',
+        role: Role.TENANT_OWNER,
+        scope: AdminScope.TENANT,
+      };
+
+      await resolver.removeBooking('b-1', principal);
+
+      expect(bookingsService.remove).toHaveBeenCalledWith('b-1', 'u', 't-a');
+    });
+
+    // Defense in depth (#85 Slice decision 7 / require-tenant-id.ts): every
+    // mutation resolver sits behind `@Roles(...WRITE_ROLES)`, which excludes
+    // SUPER_ADMIN — the only role that can carry `tenantId: null`. A null
+    // tenant here is unreachable in practice; this guards against that
+    // invariant breaking silently, mirroring customer.resolver.spec.ts.
+    it.each(['createBooking', 'updateBooking', 'removeBooking'] as const)(
+      '%s is forbidden without a principal tenant',
+      async (method) => {
+        const bookingsService = {
+          create: jest.fn(),
+          remove: jest.fn(),
+          update: jest.fn(),
+        };
+        const resolver = new BookingMutationResolver(bookingsService as never);
+        const noTenant = {
+          id: 'u',
+          tenantId: null,
+          role: Role.TENANT_OWNER,
+          scope: AdminScope.PLATFORM,
+        };
+
+        const call =
+          method === 'createBooking'
+            ? resolver.createBooking(
+                {
+                  customerId: 'c1',
+                  propertyId: 'p1',
+                  serviceId: 's1',
+                  scheduledAt: new Date(),
+                },
+                noTenant,
+              )
+            : method === 'updateBooking'
+              ? resolver.updateBooking({ id: 'b-1' }, noTenant)
+              : resolver.removeBooking('b-1', noTenant);
+
+        await expect(call).rejects.toBeInstanceOf(ForbiddenException);
+        expect(bookingsService.create).not.toHaveBeenCalled();
+        expect(bookingsService.update).not.toHaveBeenCalled();
+        expect(bookingsService.remove).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  // @Authorize metadata (mirrors #82-#84's service-read.resolver.spec.ts /
+  // team.resolver.spec.ts precedent). Security invariant: every nestjs-query
+  // read of BookingDTO — the root list/count, `booking(id)`, and every
+  // relation targeting this type — is ANDed with the principal's tenant.
+  describe('BookingDTO tenant authorizer', () => {
+    it('is registered and constrains reads to the principal tenant', async () => {
+      const Authorizer = getAuthorizer(BookingDTO as never);
+      expect(Authorizer).toBeDefined();
+      const authorizer = new Authorizer!({}, undefined);
+      await expect(
+        authorizer.authorize(
+          {
+            req: {
+              user: {
+                id: 'u',
+                tenantId: 't-a',
+                role: Role.OPS_MANAGER,
+                scope: AdminScope.TENANT,
+              },
+            },
+          },
+          { operationGroup: 'read' } as never,
+        ),
+      ).resolves.toEqual({ tenantId: { eq: 't-a' } });
+    });
+
+    it('fails closed (matches no row) when there is no req.user', async () => {
+      const Authorizer = getAuthorizer(BookingDTO as never);
+      const authorizer = new Authorizer!({}, undefined);
+      await expect(
+        authorizer.authorize({ req: {} }, { operationGroup: 'read' } as never),
+      ).resolves.toEqual({ id: { is: null } });
     });
   });
 

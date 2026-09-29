@@ -1,3 +1,4 @@
+import { ForbiddenException } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
 import {
@@ -243,6 +244,52 @@ describe('JobResolver tenant scoping', () => {
       teamId: 'team-a',
       tenantId: 't-a',
     });
+  });
+
+  it('createJobFromBooking passes requireTenantId(principal)', async () => {
+    const jobsService = {
+      createFromBooking: jest.fn().mockResolvedValue({
+        id: 'job-1',
+        bookingId: 'booking-1',
+        teamId: 'team-a',
+        createdAt: new Date(),
+        scheduledAt: new Date(),
+        status: 'PENDING',
+        updatedAt: new Date(),
+      }),
+    };
+    const loaders = { teamLoaderFor: jest.fn() };
+    const resolver = new JobResolver(jobsService as never, loaders as never);
+
+    await resolver.createJobFromBooking({ bookingId: 'booking-1' }, principal);
+
+    expect(jobsService.createFromBooking).toHaveBeenCalledWith({
+      actorId: 'u',
+      bookingId: 'booking-1',
+      tenantId: 't-a',
+    });
+  });
+
+  // Defense in depth (#85 Slice decision 11 / require-tenant-id.ts):
+  // `createJobFromBooking` sits behind `@Roles(...CREATE_ROLES)`, which
+  // excludes SUPER_ADMIN — the only role that can carry `tenantId: null`.
+  // A null tenant here is unreachable in practice; this guards against
+  // that invariant breaking silently, mirroring booking.resolver.spec.ts.
+  it('createJobFromBooking is forbidden without a principal tenant', async () => {
+    const jobsService = { createFromBooking: jest.fn() };
+    const loaders = { teamLoaderFor: jest.fn() };
+    const resolver = new JobResolver(jobsService as never, loaders as never);
+    const noTenant: AuthenticatedPrincipal = {
+      id: 'u',
+      tenantId: null,
+      role: Role.TENANT_OWNER,
+      scope: AdminScope.PLATFORM,
+    };
+
+    await expect(
+      resolver.createJobFromBooking({ bookingId: 'booking-1' }, noTenant),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(jobsService.createFromBooking).not.toHaveBeenCalled();
   });
 
   it('CleaningJob.team uses the loader for the caller tenant', async () => {

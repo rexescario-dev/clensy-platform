@@ -10,7 +10,6 @@ import { AppModule } from '../src/app/app.module';
 import { BookingEntity } from '../src/modules/bookings/infrastructure/persistence/booking.entity';
 import { PricingRulesService } from '../src/modules/catalog/application/services/pricing-rules.service';
 import { ServicesService } from '../src/modules/catalog/application/services/services.service';
-import { ServiceEntity } from '../src/modules/catalog/infrastructure/persistence/service.entity';
 import { CleanersService } from '../src/modules/cleaners/application/services/cleaners.service';
 import { TeamsService } from '../src/modules/cleaners/application/services/teams.service';
 import { Cleaner } from '../src/modules/cleaners/domain/cleaner';
@@ -248,8 +247,9 @@ describe('Teams & Cleaners tenant isolation (e2e)', () => {
       priceMinorUnits: 2500,
     });
 
-    // Booking/Job are not tenant-owned yet (#85/#86): tenant B can see this
-    // booking and job, so their `team` fields are relation-scoping probes.
+    // Booking/Job: booking is tenant-owned as of #85 (tenant A here); the
+    // job itself is not yet (#86), so `CleaningJob.team` stays a
+    // relation-scoping probe while `Booking.team` is now a root-scoping one.
     const bookingRepository = dataSource.getRepository(BookingEntity);
     booking = await bookingRepository.save(
       bookingRepository.create({
@@ -257,6 +257,7 @@ describe('Teams & Cleaners tenant isolation (e2e)', () => {
         propertyId: propertyA.id,
         serviceId: bookableServiceA.id,
         teamId: teamA.id,
+        tenantId: tenantA,
         pricingSnapshot: { priceMinorUnits: 2500 },
         scheduledAt: new Date('2030-01-01T09:00:00Z'),
       }),
@@ -269,6 +270,7 @@ describe('Teams & Cleaners tenant isolation (e2e)', () => {
         propertyId: propertyA.id,
         serviceId: bookableServiceA.id,
         teamId: null,
+        tenantId: tenantA,
         pricingSnapshot: { priceMinorUnits: 2500 },
         scheduledAt: new Date('2030-01-02T09:00:00Z'),
       }),
@@ -286,45 +288,15 @@ describe('Teams & Cleaners tenant isolation (e2e)', () => {
   afterAll(async () => {
     try {
       const tenantIds = [tenantA, tenantB].filter(Boolean);
-      if (dataSource) {
-        if (job) {
-          await dataSource
-            .getRepository(CleaningJobEntity)
-            .delete({ id: job.id });
-        }
-        if (booking) {
-          await dataSource
-            .getRepository(BookingEntity)
-            .delete({ id: booking.id });
-        }
-        if (unassignedBooking) {
-          await dataSource
-            .getRepository(BookingEntity)
-            .delete({ id: unassignedBooking.id });
-        }
-        if (bookableServiceA) {
-          await dataSource.query(
-            `DELETE FROM "pricing_rule_entity" WHERE "serviceId" = $1`,
-            [bookableServiceA.id],
-          );
-          await dataSource
-            .getRepository(ServiceEntity)
-            .delete({ id: bookableServiceA.id });
-        }
-        if (bookableServiceB) {
-          await dataSource.query(
-            `DELETE FROM "pricing_rule_entity" WHERE "serviceId" = $1`,
-            [bookableServiceB.id],
-          );
-          await dataSource
-            .getRepository(ServiceEntity)
-            .delete({ id: bookableServiceB.id });
-        }
-        if (tenantIds.length > 0) {
-          // Removes every Team/Cleaner/Customer/Property row under these
-          // tenants, including the ones tests below create via GraphQL.
-          await removeTestTenants(dataSource, tenantIds);
-        }
+      if (dataSource && tenantIds.length > 0) {
+        // `job`/`booking`/`unassignedBooking`/`bookableServiceA`/
+        // `bookableServiceB` (and its pricing rule) are all owned by
+        // tenant A/B, not the bootstrap tenant — `removeTestTenants`
+        // deletes cleaning jobs, then bookings, then pricing rules/
+        // services (FK order), so it alone covers all of them, plus every
+        // Team/Cleaner/Customer/Property row under these tenants,
+        // including the ones tests below create via GraphQL.
+        await removeTestTenants(dataSource, tenantIds);
       }
     } finally {
       await app?.close();
@@ -482,12 +454,11 @@ describe('Teams & Cleaners tenant isolation (e2e)', () => {
         }
       `;
 
-      // Booking is unscoped until #85: B sees the row, not A's team.
+      // Booking is tenant-owned as of #85: the root itself excludes A's
+      // booking for B, not merely `Booking.team`.
       const responseB = await gql(cookieB, BOOKING_QUERY, { id: booking.id });
       expect(responseB.body.errors).toBeUndefined();
-      expect(responseB.body.data.bookings.nodes).toEqual([
-        { id: booking.id, team: null },
-      ]);
+      expect(responseB.body.data.bookings.nodes).toEqual([]);
 
       const responseA = await gql(cookieA, BOOKING_QUERY, { id: booking.id });
       expect(responseA.body.errors).toBeUndefined();
@@ -675,17 +646,20 @@ describe('Teams & Cleaners tenant isolation (e2e)', () => {
     });
   });
 
-  // Case 7 (Slice decision 6): unauthenticated REST has no tenant scope, so
-  // any non-null `teamId` fails closed.
-  describe('REST fail-closed', () => {
-    it('PATCH /bookings/:id with a teamId is 404 and leaves the team unchanged', async () => {
+  // Case 7 (#85 Slice decision 3): REST is now authenticated and
+  // tenant-scoped like GraphQL — an authenticated caller naming another
+  // tenant's team gets the same 404 GraphQL does, not a special
+  // unauthenticated-fails-closed case.
+  describe('REST cross-tenant team (authenticated)', () => {
+    it("PATCH /bookings/:id with another tenant's team id is 404 and leaves the team unchanged", async () => {
       // Uses `unassignedBooking` (teamId: null), not `booking` (teamId:
       // teamA already), so the re-read below can actually detect a leak: if
-      // the PATCH wrongly applied `teamId: teamA.id`, `stillBooking.teamId`
-      // would flip from null to teamA.id instead of staying null.
+      // the PATCH wrongly applied `teamId: teamB.id`, `stillBooking.teamId`
+      // would flip from null to teamB.id instead of staying null.
       const response = await request(app.getHttpServer())
         .patch(`/bookings/${unassignedBooking.id}`)
-        .send({ teamId: teamA.id });
+        .set('Cookie', cookieA)
+        .send({ teamId: teamB.id });
       expect(response.status).toBe(404);
 
       const stillBooking = await dataSource
@@ -697,20 +671,23 @@ describe('Teams & Cleaners tenant isolation (e2e)', () => {
     it('PATCH /bookings/:id without a teamId still succeeds', async () => {
       const response = await request(app.getHttpServer())
         .patch(`/bookings/${booking.id}`)
+        .set('Cookie', cookieA)
         .send({ status: 'CONFIRMED' });
       expect(response.status).toBe(200);
       expect(response.body.status).toBe('CONFIRMED');
       expect(response.body.teamId).toBe(teamA.id);
+      expect(response.body).not.toHaveProperty('tenantId');
     });
 
-    it('POST /bookings with a teamId is 404', async () => {
+    it("POST /bookings with another tenant's team id is 404", async () => {
       const response = await request(app.getHttpServer())
         .post('/bookings')
+        .set('Cookie', cookieA)
         .send({
           customerId: customerA.id,
           propertyId: propertyA.id,
           serviceId: bookableServiceA.id,
-          teamId: teamA.id,
+          teamId: teamB.id,
           scheduledAt: '2030-03-01T09:00:00.000Z',
         });
       expect(response.status).toBe(404);

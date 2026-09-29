@@ -1,5 +1,6 @@
 import { SortDirection } from '@ptc-org/nestjs-query-core';
 import {
+  Authorize,
   FilterableField,
   FilterableRelation,
   IDField,
@@ -11,6 +12,7 @@ import {
   PLATFORM_PAGE_DEFAULT,
   PLATFORM_PAGE_MAX,
 } from '../../../../platform/graphql/paging';
+import { tenantReadAuthorizer } from '../../../../platform/auth/authorization/tenant-read.authorizer';
 import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
 import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
@@ -32,6 +34,13 @@ const VIEW_ROLES = [
   Role.ANALYST,
 ];
 
+const WRITE_ROLES = [
+  Role.TENANT_OWNER,
+  Role.OPS_MANAGER,
+  Role.SCHEDULER,
+  Role.CUSTOMER_SUPPORT,
+];
+
 const relationReadOpts = {
   decorators: [Roles(...VIEW_ROLES)],
   guards: [AuthGuard],
@@ -40,6 +49,11 @@ const relationReadOpts = {
 };
 
 @ObjectType('Booking')
+// Security invariant (#85 multi-tenant spec §4.5): every nestjs-query read
+// of this type — the root list/count, `booking(id)`, and every relation
+// targeting this type — is ANDed with the principal's tenant. `tenantId` is
+// deliberately not a GraphQL field; the filter applies to the entity column.
+@Authorize(tenantReadAuthorizer<BookingDTO>())
 @QueryOptions({
   defaultResultSize: PLATFORM_PAGE_DEFAULT,
   defaultSort: [
@@ -83,4 +97,4 @@ export class BookingDTO {
   createdAt!: Date;
 }
 
-export { VIEW_ROLES };
+export { VIEW_ROLES, WRITE_ROLES };

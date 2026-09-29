@@ -174,12 +174,13 @@ describe('Customers & Properties tenant isolation (e2e)', () => {
       }),
     );
 
-    // Bookings are not tenant-owned yet (#85) — a booking that references
-    // tenant A's customer/property is visible to tenant B, which is exactly
-    // what makes it a relation-scoping probe. `service` itself is owned by
-    // tenant A (catalog IS tenant-owned as of #84) but is never validated
-    // against a tenant here — this booking is inserted directly, bypassing
-    // `BookingsService`, and no test below reads `Booking.service`.
+    // Bookings are tenant-owned as of #85 — this booking belongs to tenant
+    // A (same tenant as its customer/property/service) and is the
+    // cross-tenant probe: tenant B must not be able to see it at all.
+    // `service` itself is owned by tenant A (catalog IS tenant-owned as of
+    // #84) but is never validated against a tenant here — this booking is
+    // inserted directly, bypassing `BookingsService`, and no test below
+    // reads `Booking.service`.
     const serviceRepository = dataSource.getRepository(ServiceEntity);
     service = await serviceRepository.save(
       serviceRepository.create({
@@ -197,6 +198,7 @@ describe('Customers & Properties tenant isolation (e2e)', () => {
         propertyId: propertyA.id,
         serviceId: service.id,
         teamId: null,
+        tenantId: tenantA,
         pricingSnapshot: { priceMinorUnits: 1000 },
         scheduledAt: new Date('2030-01-01T09:00:00Z'),
       }),
@@ -227,33 +229,16 @@ describe('Customers & Properties tenant isolation (e2e)', () => {
   afterAll(async () => {
     try {
       const tenantIds = [tenantA, tenantB].filter(Boolean);
-      if (dataSource) {
-        if (crossTenantBooking) {
-          await dataSource
-            .getRepository(BookingEntity)
-            .delete({ id: crossTenantBooking.id });
-        }
-        if (service) {
-          await dataSource
-            .getRepository(ServiceEntity)
-            .delete({ id: service.id });
-        }
-        if (bookableService) {
-          await dataSource.query(
-            `DELETE FROM "pricing_rule_entity" WHERE "serviceId" = $1`,
-            [bookableService.id],
-          );
-          await dataSource
-            .getRepository(ServiceEntity)
-            .delete({ id: bookableService.id });
-        }
-        if (tenantIds.length > 0) {
-          // Deletes every Customer/Property row under these tenants,
-          // including ones individual tests below create via GraphQL
-          // (item 8's duplicate-email customers, item 9's audit-probe
-          // customer/property) — not just the two inserted above.
-          await removeTestTenants(dataSource, tenantIds);
-        }
+      if (dataSource && tenantIds.length > 0) {
+        // `crossTenantBooking`, `service`, and `bookableService` (plus its
+        // pricing rule) are all owned by tenant A/B, not the bootstrap
+        // tenant — `removeTestTenants` deletes bookings before pricing
+        // rules/services (FK order), so it alone covers all of them, plus
+        // every Customer/Property row under these tenants, including ones
+        // individual tests below create via GraphQL (item 8's
+        // duplicate-email customers, item 9's audit-probe
+        // customer/property).
+        await removeTestTenants(dataSource, tenantIds);
       }
     } finally {
       await app?.close();
@@ -314,42 +299,38 @@ describe('Customers & Properties tenant isolation (e2e)', () => {
     expect(page.totalCount).toBe(0);
   });
 
-  // Booking is not tenant-owned yet (#85), so tenant B can see a booking that
-  // references tenant A's customer/property. The tenant authorizer (applied
-  // to the relation via the target DTO's `@Authorize`) filters the related
-  // row out; `Booking.customer` / `Booking.property` are non-nullable, so the
-  // field errors instead of returning A's row. That error is the evidence
-  // the relation read ran and was scoped — not a vacuous empty result.
-  it.each(['customer', 'property'] as const)(
-    "never resolves another tenant's %s through a booking relation",
-    async (relation) => {
-      const response = await gql(
-        cookieB,
-        `query Bookings($id: ID!) {
-          bookings(filter: { id: { eq: $id } }) {
-            nodes { id ${relation} { id } }
-          }
-        }`,
-        { id: crossTenantBooking.id },
-      );
-      const serialized = JSON.stringify(response.body);
-      expect(serialized).not.toContain(customerA.id);
-      expect(serialized).not.toContain(propertyA.id);
-      const errors = (
-        response.body as { errors?: { path?: unknown[]; message?: string }[] }
-      ).errors;
-      expect(errors?.map((error) => error.path)).toEqual([
-        ['bookings', 'nodes', 0, relation],
-      ]);
-      // Interim error shape (#85 makes this booking invisible to B instead):
-      // GraphQL's non-null-field violation, not a bespoke tenant-scoping
-      // error — asserted precisely so a future relaxation of `customer`/
-      // `property`'s non-nullability is caught here, not just by the path.
-      expect(errors?.[0]?.message).toMatch(
-        /Cannot return null for non-nullable field Booking\.(customer|property)/,
-      );
-    },
-  );
+  // Booking is tenant-owned as of #85: `crossTenantBooking` belongs to
+  // tenant A, so the tenant-scoped `bookings` root excludes it entirely for
+  // tenant B — not merely a relation-level error on an otherwise-visible
+  // row. A's own query is the positive control proving the fixture and
+  // query shape are otherwise correct.
+  it("does not return another tenant's booking at all", async () => {
+    const query = `query Bookings($id: ID!) {
+      bookings(filter: { id: { eq: $id } }) {
+        totalCount
+        nodes { id customer { id } property { id } }
+      }
+    }`;
+
+    const asB = await gql(cookieB, query, { id: crossTenantBooking.id });
+    expect(asB.body.errors).toBeUndefined();
+    expect(asB.body.data.bookings.nodes).toEqual([]);
+    expect(asB.body.data.bookings.totalCount).toBe(0);
+    const serializedB = JSON.stringify(asB.body);
+    expect(serializedB).not.toContain(customerA.id);
+    expect(serializedB).not.toContain(propertyA.id);
+
+    const asA = await gql(cookieA, query, { id: crossTenantBooking.id });
+    expect(asA.body.errors).toBeUndefined();
+    expect(asA.body.data.bookings.nodes).toEqual([
+      {
+        id: crossTenantBooking.id,
+        customer: { id: customerA.id },
+        property: { id: propertyA.id },
+      },
+    ]);
+    expect(asA.body.data.bookings.totalCount).toBe(1);
+  });
 
   // `@Authorize` is relied on for reads only; write isolation comes from the
   // four custom service-backed mutations. Any nestjs-query-generated

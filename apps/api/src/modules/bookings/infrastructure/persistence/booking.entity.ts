@@ -7,6 +7,7 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { TenantEntity } from '../../../admins/infrastructure/persistence/tenant.entity';
 import { CustomerEntity } from '../../../customers/infrastructure/persistence/customer.entity';
 import { PropertyEntity } from '../../../customers/infrastructure/persistence/property.entity';
 import { ServiceEntity } from '../../../catalog/infrastructure/persistence/service.entity';
@@ -22,10 +23,32 @@ import { BookingPricingSnapshotEmbeddable } from './booking-pricing-snapshot.emb
 // register them on forFeature. Non-eager, no cascade, no TypeORM lazy: true.
 // Inverse `@OneToMany` lives on PropertyEntity (`bookings`) for nested
 // GraphQL; application code MUST NOT use that collection.
+//
+// Tenant ownership (#85): `tenantId` + `fk_booking_tenant` are expressed
+// here. On `customer`/`property`/`service`/`team`, the composite
+// `fk_booking_*_tenant` FKs are hand-written in `AddBookingTenant`;
+// `migration:generate` may propose dropping them or re-adding id-only FKs —
+// do not apply that. `AddBookingTenant` also hand-writes `uq_booking_id_
+// tenant` (target of #86's cleaning-job composite FK) and
+// `idx_booking_tenant_scheduled`.
 @Entity()
 export class BookingEntity implements Booking {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
+
+  @Column({ type: 'uuid' })
+  tenantId!: string;
+
+  @ManyToOne(() => TenantEntity, {
+    nullable: false,
+    eager: false,
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({
+    name: 'tenantId',
+    foreignKeyConstraintName: 'fk_booking_tenant',
+  })
+  tenant!: TenantEntity;
 
   @Column({ type: 'uuid' })
   @Index()
@@ -34,12 +57,9 @@ export class BookingEntity implements Booking {
   @ManyToOne(() => CustomerEntity, {
     nullable: false,
     eager: false,
-    onDelete: 'RESTRICT',
+    createForeignKeyConstraints: false,
   })
-  @JoinColumn({
-    name: 'customerId',
-    foreignKeyConstraintName: 'fk_booking_customer',
-  })
+  @JoinColumn({ name: 'customerId' })
   customer!: CustomerEntity;
 
   @Column({ type: 'uuid' })
@@ -49,12 +69,9 @@ export class BookingEntity implements Booking {
   @ManyToOne(() => PropertyEntity, (property) => property.bookings, {
     nullable: false,
     eager: false,
-    onDelete: 'RESTRICT',
+    createForeignKeyConstraints: false,
   })
-  @JoinColumn({
-    name: 'propertyId',
-    foreignKeyConstraintName: 'fk_booking_property',
-  })
+  @JoinColumn({ name: 'propertyId' })
   property!: PropertyEntity;
 
   @Column({ type: 'uuid' })
@@ -64,12 +81,9 @@ export class BookingEntity implements Booking {
   @ManyToOne(() => ServiceEntity, {
     nullable: false,
     eager: false,
-    onDelete: 'RESTRICT',
+    createForeignKeyConstraints: false,
   })
-  @JoinColumn({
-    name: 'serviceId',
-    foreignKeyConstraintName: 'fk_booking_service',
-  })
+  @JoinColumn({ name: 'serviceId' })
   service!: ServiceEntity;
 
   @Column({ type: 'uuid', nullable: true })
@@ -79,9 +93,9 @@ export class BookingEntity implements Booking {
   @ManyToOne(() => TeamEntity, {
     nullable: true,
     eager: false,
-    onDelete: 'RESTRICT',
+    createForeignKeyConstraints: false,
   })
-  @JoinColumn({ name: 'teamId', foreignKeyConstraintName: 'fk_booking_team' })
+  @JoinColumn({ name: 'teamId' })
   team!: TeamEntity | null;
 
   @Column({ type: 'timestamptz' })

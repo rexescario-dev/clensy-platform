@@ -32,19 +32,24 @@ export async function createTestTenant(
   return tenant.id;
 }
 
-// Deletes test-only tenants, their admins, and their Customer/Property (#82),
-// Team/Cleaner (#83), and Service/AddOn/PricingRule (#84) rows — properties
+// Deletes test-only tenants, their admins, their Booking/CleaningJob rows
+// (#85), and their Customer/Property (#82), Team/Cleaner (#83), and
+// Service/AddOn/PricingRule (#84) rows — jobs before bookings, properties
 // before customers, cleaners before teams, pricing rules before services/
 // add-ons, all before the tenant itself (FK order). Never touches the
-// bootstrap tenant. Callers whose tests insert a Booking/LaundryOrder
-// referencing one of these tenants' customers/properties, a Booking/
-// CleaningJob referencing one of these tenants' teams, or a Booking/
-// LaundryOrderLine referencing one of these tenants' services/add-ons, MUST
-// delete those rows first: `fk_booking_customer`, `fk_booking_property`,
-// `fk_laundry_order_customer`, `fk_booking_team`, `fk_cleaning_job_team`,
-// `fk_booking_service`, `fk_laundry_order_line_service`, and
+// bootstrap tenant. Bookings (and the cleaning jobs referencing them) owned
+// by a supplied test tenant are deleted here; callers no longer delete such
+// bookings by hand, but still clean up their own bootstrap-tenant rows.
+// Callers whose tests insert a LaundryOrder referencing one of these
+// tenants' customers/properties, or a LaundryOrderLine referencing one of
+// these tenants' services/add-ons, MUST delete those rows first:
+// `fk_laundry_order_customer`, `fk_laundry_order_line_service`, and
 // `fk_laundry_order_line_add_on` are all `ON DELETE RESTRICT`, so this call
-// fails loudly (not silently) if a caller forgot.
+// fails loudly (not silently) if a caller forgot. Likewise, a CleaningJob
+// (including one on a bootstrap-tenant booking) referencing one of these
+// tenants' teams (`fk_cleaning_job_team`, ON DELETE RESTRICT, id-only until
+// #86) is not deleted here and would make the team delete fail loudly —
+// callers creating such rows must delete them first.
 export async function removeTestTenants(
   dataSource: DataSource,
   tenantIds: readonly string[],
@@ -53,6 +58,16 @@ export async function removeTestTenants(
   if (ids.length === 0) {
     return;
   }
+  // Jobs first: `fk_cleaning_job_booking` is ON DELETE RESTRICT; their
+  // checklists/items go with them (both FKs are ON DELETE CASCADE).
+  await dataSource.query(
+    `DELETE FROM "cleaning_job_entity" WHERE "bookingId" IN (SELECT "id" FROM "booking_entity" WHERE "tenantId" = ANY($1))`,
+    [ids],
+  );
+  await dataSource.query(
+    `DELETE FROM "booking_entity" WHERE "tenantId" = ANY($1)`,
+    [ids],
+  );
   await dataSource.query(
     `DELETE FROM "property_entity" WHERE "tenantId" = ANY($1)`,
     [ids],

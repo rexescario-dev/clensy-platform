@@ -8,7 +8,6 @@ import { App } from 'supertest/types';
 import { DataSource, Repository } from 'typeorm';
 import { AppModule } from '../src/app/app.module';
 import { BookingsService } from '../src/modules/bookings/application/services/bookings.service';
-import { BookingEntity } from '../src/modules/bookings/infrastructure/persistence/booking.entity';
 import { AddOnsService } from '../src/modules/catalog/application/services/add-ons.service';
 import { PricingRulesService } from '../src/modules/catalog/application/services/pricing-rules.service';
 import { ServicesService } from '../src/modules/catalog/application/services/services.service';
@@ -266,9 +265,10 @@ describe('Catalog tenant isolation (e2e)', () => {
     ({ customer: customerB, property: propertyB } =
       await insertCustomerAndProperty(tenantB, 'B'));
 
-    // A booking, as A, via `BookingsService.create` (Bookings/Laundry/Billing
-    // are not tenant-owned tables yet — #85/#87 — so this is a direct
-    // service call, not the `createBooking` mutation).
+    // A booking, as A, via `BookingsService.create` — fixture setup
+    // convenience, mirroring the catalog fixtures above (also application
+    // services, not GraphQL mutations). Booking is tenant-owned as of #85;
+    // Laundry/Billing are not yet (#87).
     bookingA = await bookingsService.create({
       actorId: ownerAId,
       customerId: customerA.id,
@@ -344,19 +344,13 @@ describe('Catalog tenant isolation (e2e)', () => {
             .getRepository(LaundryOrderEntity)
             .delete({ id: laundryOrderBId });
         }
-        if (bookingA) {
-          await dataSource
-            .getRepository(BookingEntity)
-            .delete({ id: bookingA.id });
-        }
-        if (bookingBId) {
-          await dataSource
-            .getRepository(BookingEntity)
-            .delete({ id: bookingBId });
-        }
-        // Any extra service/add-on/pricing-rule rows this suite's tests
-        // create (uniqueness cases, audit case) live under tenantA/tenantB
-        // and are removed by `removeTestTenants` below.
+        // `bookingA`/`bookingBId` are owned by tenantA/tenantB (#85), so
+        // `removeTestTenants` below deletes them (before the
+        // pricing-rule/service rows they reference, FK order) — this suite
+        // no longer deletes them by hand. Any extra service/add-on/
+        // pricing-rule rows this suite's tests create (uniqueness cases,
+        // audit case) live under tenantA/tenantB and are removed by
+        // `removeTestTenants` too.
         await removeTestTenants(dataSource, [tenantA, tenantB]);
       }
     } finally {
@@ -510,36 +504,30 @@ describe('Catalog tenant isolation (e2e)', () => {
     });
   });
 
-  // Case 5 (interim residual exposure — see #85): the Booking root is not
-  // yet tenant-scoped, so B can still see A's booking row. This case does
-  // NOT pin the exact GraphQL error text as a stable API contract — #85 is
-  // expected to make the booking itself invisible to B instead, at which
-  // point this case is removed/replaced. The only property this guards is
-  // "no data from A's service reaches B" (#82 precedent for
-  // `Booking.customer`).
-  describe('interim residual-exposure guard (remove/replace in #85)', () => {
-    it("does not leak A's service data through B's view of A's (still-unscoped) booking", async () => {
-      const response = await gql(
-        cookieB,
-        `query Bookings($id: ID!) {
-          bookings(filter: { id: { eq: $id } }) {
-            nodes { id service { id } }
-          }
-        }`,
-        { id: bookingA.id },
-      );
-      expect(response.body.errors).toBeDefined();
-      expect(response.body.errors[0].message).toMatch(
-        /Cannot return null for non-nullable field Booking\.service/,
-      );
-      expect(response.body.errors[0].path).toEqual([
-        'bookings',
-        'nodes',
-        0,
-        'service',
-      ]);
-      expect(JSON.stringify(response.body)).not.toContain(serviceA.id);
-    });
+  // Case 5 (#85: the Booking root is now tenant-scoped): B cannot see A's
+  // booking row at all — not merely a relation-level error on an
+  // otherwise-visible row. A's own query is the positive control proving
+  // the fixture and query shape are otherwise correct.
+  it("B cannot see A's booking", async () => {
+    const query = `query Bookings($id: ID!) {
+      bookings(filter: { id: { eq: $id } }) {
+        totalCount
+        nodes { id service { id } }
+      }
+    }`;
+
+    const asB = await gql(cookieB, query, { id: bookingA.id });
+    expect(asB.body.errors).toBeUndefined();
+    expect(asB.body.data.bookings.nodes).toEqual([]);
+    expect(asB.body.data.bookings.totalCount).toBe(0);
+    expect(JSON.stringify(asB.body)).not.toContain(serviceA.id);
+
+    const asA = await gql(cookieA, query, { id: bookingA.id });
+    expect(asA.body.errors).toBeUndefined();
+    expect(asA.body.data.bookings.nodes).toEqual([
+      { id: bookingA.id, service: { id: serviceA.id } },
+    ]);
+    expect(asA.body.data.bookings.totalCount).toBe(1);
   });
 
   // Case 6 (Review Focus 2): cross-tenant catalog writes are 404, not 403,
