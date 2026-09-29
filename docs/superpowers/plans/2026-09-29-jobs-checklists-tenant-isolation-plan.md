@@ -17,6 +17,8 @@
 > - **P2: audit `entityId`.** The existing convention was verified: `job.checklist_item.complete` logs the job id. It is recorded in Decision 10 and asserted as-is in Task 5 case 9.
 >
 > The ChecklistItem ownership decision and the slice scope are unchanged.
+>
+> **Second pre-M5 revision (2026-09-29):** Task 1 Step 6's pass condition contradicted Step 4. TypeORM proposes dropping constraints it has no metadata for, and on `main` it already does so for the hand-written job/checklist FKs (`ExtendPricingRuleEffectiveDating.ts:3-8`). So a proposed drop of a hand-written `_tenant` FK is expected drift. Step 6 now sorts every diff line into one of three buckets: expected, mapping defect, or unexplained. It checks the real constraints separately with `pg_constraint`, looking at column pairs and `ON DELETE` actions, and blocks on unexplained differences.
 
 **Goal:** Make CleaningJob and Checklist tenant-owned: required `tenantId`, database-enforced same-tenant references (job → booking, job → team, checklist → job), the caller's tenant applied to every job and checklist read and write, and job audit events tagged with the caller's tenant. ChecklistItem inherits tenant ownership through its Checklist.
 
@@ -411,12 +413,18 @@ Confirm during M6 that the migration is picked up by the data source's migration
 - [ ] **Step 6: ORM drift check (M5 finding 1).**
    - **Baseline, recorded at M6 start on `main`:** migrate a fresh database with `pnpm --filter api migration:run`, then save the output of `pnpm --filter api typeorm schema:log`. Pre-existing drift, such as that noted in `ExtendPricingRuleEffectiveDating`, is expected there.
    - **After this task:** migrate a fresh database again, rerun `schema:log`, and diff the two outputs.
-   - **Pass condition:** the diff contains no statement that
-     - adds an id-only FK `("bookingId") REFERENCES "booking_entity"`, `("teamId") REFERENCES "team_entity"` or `("jobId") REFERENCES "cleaning_job_entity"`;
-     - drops `fk_cleaning_job_booking_tenant`, `fk_cleaning_job_team_tenant`, `fk_checklist_job_tenant`, `fk_cleaning_job_tenant` or `fk_checklist_tenant`;
-     - touches the `tenantId` columns.
-   - Any other new line beyond the documented hand-written objects is a mapping defect: fix the entity, not the migration.
-   - Record both outputs in the task report.
+   - **Interpretation.** TypeORM's entity-vs-schema diff proposes dropping database constraints it has no metadata for. On `main` it already proposes dropping the hand-written `fk_cleaning_job_team` and `fk_checklist_job` (`ExtendPricingRuleEffectiveDating.ts:3-8`). Constraints this migration deliberately hand-writes will therefore appear as proposed drops. That is **expected drift**, not a defect. Classify every changed line in the diff into exactly one bucket:
+     - **Expected (hand-written, not in entity metadata).** A proposed `DROP CONSTRAINT` of `fk_cleaning_job_booking_tenant`, `fk_cleaning_job_team_tenant`, `fk_checklist_job_tenant` or `uq_cleaning_job_id_tenant`, and a proposed `DROP INDEX` of `idx_cleaning_job_tenant_scheduled`. Also expected: the corresponding **disappearance** of the baseline's proposed drops of `fk_cleaning_job_booking` / `fk_cleaning_job_team` / `fk_checklist_job`, which no longer exist.
+     - **Mapping defect (blocks the task).** A proposed add of an id-only FK `("bookingId") REFERENCES "booking_entity"`, `("teamId") REFERENCES "team_entity"` or `("jobId") REFERENCES "cleaning_job_entity"`. This means the `booking` relation still owns an FK, or a `team`/`job` relation was added. Also blocking: any proposal touching `fk_cleaning_job_tenant`, `fk_checklist_tenant` or either `tenantId` column. These are ORM-mapped through the `tenant` relations and `foreignKeyConstraintName`, so they must show **no** drift.
+     - **Unexplained.** Anything else. Review each line. Unexplained differences block completion until they are fixed in the entity (never by editing the migration to match) or recorded with a reason.
+   - **Constraint verification against the real database** (`schema:log` alone does not prove the constraints are right). On the freshly migrated database, query `pg_constraint`. It must show:
+     - `fk_cleaning_job_booking_tenant` on `("bookingId", "tenantId") → booking_entity ("id", "tenantId")`, `confdeltype = 'r'`;
+     - `fk_cleaning_job_team_tenant` on `("teamId", "tenantId") → team_entity ("id", "tenantId")`, `'r'`;
+     - `fk_checklist_job_tenant` on `("jobId", "tenantId") → cleaning_job_entity ("id", "tenantId")`, `'c'`;
+     - no FK on `cleaning_job_entity` or `checklist_entity` whose column list is only `bookingId`, `teamId` or `jobId`.
+
+     Use `pg_get_constraintdef(oid)` for a readable check. Task 1 case 3 pins the same facts in the migration e2e.
+   - Record both `schema:log` outputs, the classified diff and the constraint query results in the task report. A proposed drop of a deliberately hand-written constraint is not, by itself, evidence that the mapping or the migration is wrong.
 
 - [ ] **Step 7: Run.** `pnpm --filter api test:e2e -- add-job-checklist-tenant` ⇒ PASS. `pnpm --filter api test` (unit) ⇒ PASS. TypeScript may now flag `CleaningJob` / `Checklist` literals in unit specs without `tenantId`; add `tenantId: 'tenant-1'` there. Other e2e suites are expected to fail until Task 4.
 
@@ -699,7 +707,7 @@ describe('Relations targeting CleaningJob / Checklist / ChecklistItem (tenant is
   - `pnpm --filter api build`
   - `migration:run` against a fresh database (`pnpm --filter api migration:run`, per README)
   - `migration:revert` once on that database, then `migration:run` again. `down` restores the original FK names and `ON DELETE` actions without losing rows; Task 1 case 6 is the precise check
-  - the `schema:log` drift check of Task 1 Step 6, rerun on the final branch
+  - the `schema:log` drift classification and `pg_constraint` verification of Task 1 Step 6, rerun on the final branch
   - `git diff --stat main -- apps/web packages` ⇒ empty
   - the generated GraphQL schema diff against `main` ⇒ **empty**
 
@@ -723,4 +731,4 @@ describe('Relations targeting CleaningJob / Checklist / ChecklistItem (tenant is
 
 - **Coupled task window (Tasks 1–4).** e2e is red between Task 1 and Task 4. Unit tests and `tsc` gate each task. Do not merge a partial branch.
 - **Leftover dev data.** A developer database holding jobs on non-bootstrap bookings (#85 two-tenant fixtures that were not cleaned up) makes `AddJobChecklistTenant` abort by design (Decision 11). The fix is to delete those jobs and re-run. Mention this in the PR description.
-- **`migration:generate` drift.** The composite FKs are hand-written, as in #82–#85. The entity comments warn against applying generated drops (Task 1 Step 4).
+- **`migration:generate` drift.** The composite FKs are hand-written, as in #82–#85, so `schema:log` / `migration:generate` will propose dropping them. That is expected and classified in Task 1 Step 6, never applied. The entity comments warn against applying generated drops (Task 1 Step 4).
