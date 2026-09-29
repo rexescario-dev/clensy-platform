@@ -5,8 +5,9 @@ import {
 } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
+import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { BookingsService } from '../../../bookings/application/services/bookings.service';
 import { BookingStatus } from '../../../bookings/domain/booking-status';
 import { TeamsService } from '../../../cleaners/application/services/teams.service';
@@ -154,6 +155,36 @@ describe('JobsService', () => {
       expect(dataSource.transaction).not.toHaveBeenCalled();
     });
 
+    // #86 slice decision 6: the existing-job pre-check is tenant-scoped too.
+    it('pre-checks for an existing job within the command tenant', async () => {
+      await service.createFromBooking(command);
+
+      expect(jobRepository.findOneBy).toHaveBeenCalledWith({
+        bookingId: 'booking-1',
+        tenantId: 't1',
+      });
+    });
+
+    it('creates the job and its checklist in the command tenant; items carry no tenant', async () => {
+      await service.createFromBooking(command);
+
+      expect(manager.create).toHaveBeenCalledWith(
+        CleaningJobEntity,
+        expect.objectContaining({ bookingId: 'booking-1', tenantId: 't1' }),
+      );
+      expect(manager.create).toHaveBeenCalledWith(
+        ChecklistEntity,
+        expect.objectContaining({ tenantId: 't1' }),
+      );
+      const itemPayloads = manager.create.mock.calls
+        .filter(([entityClass]) => entityClass === ChecklistItemEntity)
+        .map(([, data]: [unknown, Record<string, unknown>]) => data);
+      expect(itemPayloads).toHaveLength(DEFAULT_CHECKLIST_ITEMS.length);
+      for (const payload of itemPayloads) {
+        expect(payload).not.toHaveProperty('tenantId');
+      }
+    });
+
     it('maps 23505 on UQ_cleaning_job_booking_id to ConflictException', async () => {
       manager.save.mockRejectedValue({
         code: '23505',
@@ -189,6 +220,8 @@ describe('JobsService', () => {
         entityId: job.id,
         action: 'job.create',
         entityType: 'job',
+        scope: AdminScope.TENANT,
+        tenantId: 't1',
       });
 
       const itemPayloads = manager.create.mock.calls
@@ -207,26 +240,39 @@ describe('JobsService', () => {
   });
 
   describe('getJob', () => {
-    it('returns null when the job is missing', async () => {
+    it('looks the job up by id and tenant in one query; missing is null', async () => {
       jobRepository.findOneBy.mockResolvedValue(null);
 
-      await expect(service.getJob('missing-id')).resolves.toBeNull();
+      await expect(service.getJob('missing-id', 't1')).resolves.toBeNull();
+      expect(jobRepository.findOneBy).toHaveBeenCalledWith({
+        id: 'missing-id',
+        tenantId: 't1',
+      });
+    });
+
+    it('returns null without querying for a null tenant', async () => {
+      await expect(service.getJob('j1', null)).resolves.toBeNull();
+      expect(jobRepository.findOneBy).not.toHaveBeenCalled();
     });
   });
 
   describe('listJobs', () => {
-    it('returns the full set from find() with no filter or order', async () => {
+    it("returns the tenant's jobs", async () => {
       const rows = [{ id: 'j1' }];
       jobRepository.find.mockResolvedValue(rows);
 
-      await expect(service.listJobs()).resolves.toBe(rows);
-      expect(jobRepository.find).toHaveBeenCalledWith();
+      await expect(service.listJobs('t1')).resolves.toBe(rows);
+      expect(jobRepository.find).toHaveBeenCalledWith({
+        where: { tenantId: 't1' },
+      });
     });
   });
 
   describe('getChecklistsByJobIds', () => {
     it('returns an empty array without querying when ids is empty', async () => {
-      await expect(service.getChecklistsByJobIds([])).resolves.toEqual([]);
+      await expect(service.getChecklistsByJobIds([], 't1')).resolves.toEqual(
+        [],
+      );
       expect(checklistRepository.findBy).not.toHaveBeenCalled();
     });
 
@@ -234,16 +280,20 @@ describe('JobsService', () => {
       const found = [{ id: 'c1', jobId: 'a' }];
       checklistRepository.findBy.mockResolvedValue(found);
 
-      await expect(service.getChecklistsByJobIds(['a', 'b'])).resolves.toBe(
-        found,
-      );
+      await expect(
+        service.getChecklistsByJobIds(['a', 'b'], 't1'),
+      ).resolves.toBe(found);
+      expect(checklistRepository.findBy).toHaveBeenCalledWith({
+        jobId: In(['a', 'b']),
+        tenantId: 't1',
+      });
     });
   });
 
   describe('getChecklistItemsByChecklistIds', () => {
     it('returns an empty array without querying when ids is empty', async () => {
       await expect(
-        service.getChecklistItemsByChecklistIds([]),
+        service.getChecklistItemsByChecklistIds([], 't1'),
       ).resolves.toEqual([]);
       expect(checklistItemRepository.findBy).not.toHaveBeenCalled();
     });
@@ -253,8 +303,14 @@ describe('JobsService', () => {
       checklistItemRepository.findBy.mockResolvedValue(found);
 
       await expect(
-        service.getChecklistItemsByChecklistIds(['a', 'b']),
+        service.getChecklistItemsByChecklistIds(['a', 'b'], 't1'),
       ).resolves.toBe(found);
+      // #86 slice decisions 2 and 6: items have no tenant; the parent
+      // checklist's tenant is joined in the same query.
+      expect(checklistItemRepository.findBy).toHaveBeenCalledWith({
+        checklistId: In(['a', 'b']),
+        checklist: { tenantId: 't1' },
+      });
     });
   });
 
@@ -309,12 +365,17 @@ describe('JobsService', () => {
       expect(dataSource.transaction).not.toHaveBeenCalled();
     });
 
-    it('throws NotFoundException when the job is missing', async () => {
+    it('throws NotFoundException when the job is missing (or in another tenant), without updating', async () => {
       manager.findOneBy.mockResolvedValue(null);
 
       await expect(service.assignTeam(command)).rejects.toThrow(
         new NotFoundException('Job job-1 not found'),
       );
+      expect(manager.findOneBy).toHaveBeenCalledWith(CleaningJobEntity, {
+        id: 'job-1',
+        tenantId: 't-a',
+      });
+      expect(manager.update).not.toHaveBeenCalled();
     });
 
     it('throws BadRequestException when the job is COMPLETED', async () => {
@@ -343,17 +404,20 @@ describe('JobsService', () => {
 
       expect(manager.update).toHaveBeenCalledWith(
         CleaningJobEntity,
-        { id: 'job-1' },
-        expect.objectContaining({
-          teamId: 'team-2',
-          updatedAt: expect.any(Date),
-        }),
+        { id: 'job-1', tenantId: 't-a' },
+        { teamId: 'team-2', updatedAt: expect.any(Date) },
       );
+      expect(manager.findOneByOrFail).toHaveBeenCalledWith(CleaningJobEntity, {
+        id: 'job-1',
+        tenantId: 't-a',
+      });
       expect(auditLogger.log).toHaveBeenCalledWith({
         actorId: 'actor-1',
         entityId: 'job-1',
         action: 'job.assign_team',
         entityType: 'job',
+        scope: AdminScope.TENANT,
+        tenantId: 't-a',
       });
       expect(teamsService.getTeam).toHaveBeenCalledWith('team-2', 't-a');
     });
@@ -364,6 +428,7 @@ describe('JobsService', () => {
       actorId: 'actor-1',
       itemId: 'item-1',
       jobId: 'job-1',
+      tenantId: 't1',
     };
 
     function mockAggregate(opts?: {
@@ -379,14 +444,34 @@ describe('JobsService', () => {
         completed: opts?.itemCompleted ?? false,
       };
       manager.findOneBy.mockImplementation(
-        (entityClass: unknown, where: { id?: string; jobId?: string }) => {
-          if (entityClass === CleaningJobEntity && where.id === 'job-1') {
+        (
+          entityClass: unknown,
+          where: {
+            id?: string;
+            jobId?: string;
+            checklistId?: string;
+            tenantId?: string;
+          },
+        ) => {
+          if (
+            entityClass === CleaningJobEntity &&
+            where.id === 'job-1' &&
+            where.tenantId === 't1'
+          ) {
             return Promise.resolve(job);
           }
-          if (entityClass === ChecklistEntity && where.jobId === 'job-1') {
+          if (
+            entityClass === ChecklistEntity &&
+            where.jobId === 'job-1' &&
+            where.tenantId === 't1'
+          ) {
             return Promise.resolve(checklist);
           }
-          if (entityClass === ChecklistItemEntity && where.id === 'item-1') {
+          if (
+            entityClass === ChecklistItemEntity &&
+            where.id === 'item-1' &&
+            where.checklistId === 'checklist-1'
+          ) {
             return Promise.resolve(item);
           }
           return Promise.resolve(null);
@@ -404,26 +489,59 @@ describe('JobsService', () => {
       );
     });
 
-    it('throws NotFoundException when the item belongs to a different job', async () => {
-      manager.findOneBy.mockImplementation((entityClass: unknown) => {
-        if (entityClass === CleaningJobEntity) {
-          return Promise.resolve(pendingJob);
-        }
-        if (entityClass === ChecklistEntity) {
-          return Promise.resolve(checklist);
-        }
-        if (entityClass === ChecklistItemEntity) {
-          return Promise.resolve({
-            ...incompleteItem,
-            checklistId: 'other-checklist',
-          });
-        }
-        return Promise.resolve(null);
+    it('throws NotFoundException for a job in another tenant, without touching checklists or items', async () => {
+      mockAggregate();
+
+      await expect(
+        service.completeChecklistItem({ ...command, tenantId: 't2' }),
+      ).rejects.toThrow(new NotFoundException('Job job-1 not found'));
+      expect(manager.findOneBy).toHaveBeenCalledWith(CleaningJobEntity, {
+        id: 'job-1',
+        tenantId: 't2',
       });
+      expect(manager.findOneBy).toHaveBeenCalledTimes(1);
+      expect(manager.update).not.toHaveBeenCalled();
+    });
+
+    // #86 slice decision 7: the item is resolved only through the scoped
+    // job → checklist chain, in one query keyed on both id and checklistId.
+    it('looks the item up by id AND the scoped checklist id in one query', async () => {
+      mockAggregate();
+
+      await service.completeChecklistItem(command);
+
+      expect(manager.findOneBy).toHaveBeenCalledWith(ChecklistEntity, {
+        jobId: 'job-1',
+        tenantId: 't1',
+      });
+      expect(manager.findOneBy).toHaveBeenCalledWith(ChecklistItemEntity, {
+        id: 'item-1',
+        checklistId: 'checklist-1',
+      });
+    });
+
+    it('throws NotFoundException when the item belongs to a different checklist (another job or tenant)', async () => {
+      mockAggregate();
+
+      await expect(
+        service.completeChecklistItem({ ...command, itemId: 'item-of-a' }),
+      ).rejects.toThrow(new NotFoundException('Checklist item item-of-a not found'));
+      expect(manager.update).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFoundException without an item lookup when the scoped checklist is missing', async () => {
+      manager.findOneBy.mockImplementation((entityClass: unknown) =>
+        Promise.resolve(entityClass === CleaningJobEntity ? pendingJob : null),
+      );
 
       await expect(service.completeChecklistItem(command)).rejects.toThrow(
         new NotFoundException('Checklist item item-1 not found'),
       );
+      expect(manager.findOneBy).not.toHaveBeenCalledWith(
+        ChecklistItemEntity,
+        expect.anything(),
+      );
+      expect(manager.update).not.toHaveBeenCalled();
     });
 
     it('throws BadRequestException on a COMPLETED job', async () => {
@@ -452,17 +570,20 @@ describe('JobsService', () => {
       );
       expect(manager.update).toHaveBeenCalledWith(
         CleaningJobEntity,
-        { id: 'job-1' },
-        expect.objectContaining({
-          status: JobStatus.IN_PROGRESS,
-          updatedAt: expect.any(Date),
-        }),
+        { id: 'job-1', tenantId: 't1' },
+        { status: JobStatus.IN_PROGRESS, updatedAt: expect.any(Date) },
       );
+      expect(manager.findOneByOrFail).toHaveBeenCalledWith(CleaningJobEntity, {
+        id: 'job-1',
+        tenantId: 't1',
+      });
       expect(auditLogger.log).toHaveBeenCalledWith({
         actorId: 'actor-1',
         entityId: 'job-1',
         action: 'job.checklist_item.complete',
         entityType: 'job',
+        scope: AdminScope.TENANT,
+        tenantId: 't1',
       });
     });
 
@@ -478,7 +599,7 @@ describe('JobsService', () => {
       );
       expect(manager.update).toHaveBeenCalledWith(
         CleaningJobEntity,
-        { id: 'job-1' },
+        { id: 'job-1', tenantId: 't1' },
         expect.objectContaining({
           updatedAt: expect.any(Date),
         }),
@@ -503,7 +624,7 @@ describe('JobsService', () => {
 
       expect(manager.update).toHaveBeenCalledWith(
         CleaningJobEntity,
-        { id: 'job-1' },
+        { id: 'job-1', tenantId: 't1' },
         expect.objectContaining({
           updatedAt: expect.any(Date),
         }),
@@ -524,14 +645,19 @@ describe('JobsService', () => {
   });
 
   describe('completeJob', () => {
-    const command = { actorId: 'actor-1', jobId: 'job-1' };
+    const command = { actorId: 'actor-1', jobId: 'job-1', tenantId: 't1' };
 
-    it('throws NotFoundException when the job is missing', async () => {
+    it('throws NotFoundException when the job is missing (or in another tenant)', async () => {
       manager.findOneBy.mockResolvedValue(null);
 
       await expect(service.completeJob(command)).rejects.toThrow(
         new NotFoundException('Job job-1 not found'),
       );
+      expect(manager.findOneBy).toHaveBeenCalledWith(CleaningJobEntity, {
+        id: 'job-1',
+        tenantId: 't1',
+      });
+      expect(manager.update).not.toHaveBeenCalled();
     });
 
     it('throws BadRequestException when any item is incomplete', async () => {
@@ -585,17 +711,27 @@ describe('JobsService', () => {
 
       expect(manager.update).toHaveBeenCalledWith(
         CleaningJobEntity,
-        { id: 'job-1' },
+        { id: 'job-1', tenantId: 't1' },
         expect.objectContaining({
           status: JobStatus.COMPLETED,
           updatedAt: expect.any(Date),
         }),
       );
+      expect(manager.findOneBy).toHaveBeenCalledWith(ChecklistEntity, {
+        jobId: 'job-1',
+        tenantId: 't1',
+      });
+      expect(manager.findOneByOrFail).toHaveBeenCalledWith(CleaningJobEntity, {
+        id: 'job-1',
+        tenantId: 't1',
+      });
       expect(auditLogger.log).toHaveBeenCalledWith({
         actorId: 'actor-1',
         entityId: 'job-1',
         action: 'job.complete',
         entityType: 'job',
+        scope: AdminScope.TENANT,
+        tenantId: 't1',
       });
     });
 
@@ -619,7 +755,7 @@ describe('JobsService', () => {
 
       expect(manager.update).toHaveBeenCalledWith(
         CleaningJobEntity,
-        { id: 'job-1' },
+        { id: 'job-1', tenantId: 't1' },
         expect.objectContaining({
           status: JobStatus.COMPLETED,
           updatedAt: expect.any(Date),
