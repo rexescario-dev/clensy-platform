@@ -3,6 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
+import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { PricingUnit } from '../../../catalog/domain/pricing-unit';
 import { PricingRulesService } from '../../../catalog/application/services/pricing-rules.service';
 import { CustomersService } from '../../../customers/application/services/customers.service';
@@ -16,6 +17,16 @@ import { LaundryOrderLineEntity } from '../../infrastructure/persistence/laundry
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 
 type WhereById = { id: string };
+
+const TENANT = 't-a';
+const tagged = (action: string, entityId = 'order-1') => ({
+  actorId: expect.any(String),
+  entityId,
+  tenantId: TENANT,
+  action,
+  entityType: 'laundry_order',
+  scope: AdminScope.TENANT,
+});
 
 // Mocked Repository/DataSource unit tests (plan §7 Slice C). The mock
 // `manager` stands in for the transaction EntityManager; `findOne` ignores
@@ -44,6 +55,7 @@ describe('LaundryOrdersService', () => {
     ({
       id: 'order-1',
       customerId: 'cust-1',
+      tenantId: TENANT,
       createdAt: new Date('2026-09-06T00:00:00Z'),
       fulfillmentType: LaundryFulfillmentType.PICKUP,
       status: LaundryOrderStatus.RECEIVED,
@@ -126,20 +138,6 @@ describe('LaundryOrdersService', () => {
       );
     });
 
-    it('throws NotFoundException and opens no transaction when tenantId is null (no principal tenant scope)', async () => {
-      // Mirrors CustomersService.getCustomer's real fail-closed contract:
-      // `tenantId: null` never resolves a row.
-      customersService.getCustomer.mockImplementation(
-        (_id: string, tenantId: string | null) =>
-          Promise.resolve(tenantId === null ? null : { id: 'cust-1' }),
-      );
-
-      await expect(
-        service.receive({ ...command, tenantId: null }),
-      ).rejects.toThrow(new NotFoundException('Customer cust-1 not found'));
-      expect(dataSource.transaction).not.toHaveBeenCalled();
-    });
-
     it('creates the order at RECEIVED and audits laundry_order.received', async () => {
       manager.findOneByOrFail.mockImplementation(
         (_e: unknown, where: WhereById) =>
@@ -150,19 +148,21 @@ describe('LaundryOrdersService', () => {
       expect(manager.save).toHaveBeenCalledWith(
         expect.objectContaining({
           customerId: 'cust-1',
+          tenantId: TENANT,
           fulfillmentType: LaundryFulfillmentType.DELIVERY,
           status: LaundryOrderStatus.RECEIVED,
           totalMinorUnits: null,
           weightGrams: null,
         }),
       );
-      expect(auditLogger.log).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'laundry_order.received',
-          actorId: 'actor-1',
-          entityType: 'laundry_order',
-        }),
-      );
+      expect(manager.findOneByOrFail).toHaveBeenCalledWith(LaundryOrderEntity, {
+        id: 'generated-1',
+        tenantId: TENANT,
+      });
+      expect(auditLogger.log).toHaveBeenCalledWith({
+        ...tagged('laundry_order.received', 'generated-1'),
+        actorId: 'actor-1',
+      });
       expect(result.status).toBe(LaundryOrderStatus.RECEIVED);
     });
   });
@@ -171,6 +171,7 @@ describe('LaundryOrdersService', () => {
     const cmd = (over = {}) => ({
       actorId: 'a',
       orderId: 'order-1',
+      tenantId: TENANT,
       weightGrams: 4200,
       ...over,
     });
@@ -190,16 +191,24 @@ describe('LaundryOrdersService', () => {
       );
       await service.weigh(cmd());
 
+      expect(manager.findOne).toHaveBeenCalledWith(LaundryOrderEntity, {
+        lock: { mode: 'pessimistic_write' },
+        where: { id: 'order-1', tenantId: TENANT },
+      });
       expect(manager.update).toHaveBeenCalledWith(
         LaundryOrderEntity,
-        { id: 'order-1' },
+        { id: 'order-1', tenantId: TENANT },
         expect.objectContaining({
           status: LaundryOrderStatus.WEIGHED,
           weightGrams: 4200,
         }),
       );
+      expect(manager.findOneByOrFail).toHaveBeenCalledWith(LaundryOrderEntity, {
+        id: 'order-1',
+        tenantId: TENANT,
+      });
       expect(auditLogger.log).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'laundry_order.weighed' }),
+        tagged('laundry_order.weighed'),
       );
     });
 
@@ -209,12 +218,17 @@ describe('LaundryOrdersService', () => {
       );
       await service.weigh(cmd({ weightGrams: 5000 }));
 
+      expect((manager.update.mock.calls[0] as unknown[])[1]).toEqual({
+        id: 'order-1',
+        tenantId: TENANT,
+      });
       const patch = (manager.update.mock.calls[0] as unknown[])[2] as Record<
         string,
         unknown
       >;
       expect(patch).toHaveProperty('weightGrams', 5000);
       expect(patch).not.toHaveProperty('status');
+      expect(patch).not.toHaveProperty('tenantId');
       expect(auditLogger.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'laundry_order.weighed' }),
       );
@@ -286,9 +300,15 @@ describe('LaundryOrdersService', () => {
       await service.price(cmd());
 
       // 2000 g * 1500 / 1000 = 3000
+      expect(manager.findOne).toHaveBeenCalledWith(LaundryOrderEntity, {
+        lock: { mode: 'pessimistic_write' },
+        where: { id: 'order-1', tenantId: TENANT },
+      });
       expect(manager.save).toHaveBeenCalledWith(
         expect.objectContaining({
           addOnId: null,
+          serviceId: 'svc-1',
+          tenantId: TENANT,
           pricingSnapshot: expect.objectContaining({
             pricingRuleId: 'rule-1',
             amountMinorUnits: 3000,
@@ -298,19 +318,25 @@ describe('LaundryOrdersService', () => {
             rateMinorUnits: 1500,
             unit: PricingUnit.PER_KG,
           }),
-          serviceId: 'svc-1',
         }),
       );
       expect(manager.update).toHaveBeenCalledWith(
         LaundryOrderEntity,
-        { id: 'order-1' },
+        { id: 'order-1', tenantId: TENANT },
         expect.objectContaining({
           status: LaundryOrderStatus.PRICED,
           totalMinorUnits: 3000,
         }),
       );
+      expect(
+        (manager.update.mock.calls[0] as unknown[])[2] as object,
+      ).not.toHaveProperty('tenantId');
+      expect(manager.findOneByOrFail).toHaveBeenCalledWith(LaundryOrderEntity, {
+        id: 'order-1',
+        tenantId: TENANT,
+      });
       expect(auditLogger.log).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'laundry_order.priced' }),
+        tagged('laundry_order.priced'),
       );
     });
 
@@ -345,9 +371,14 @@ describe('LaundryOrdersService', () => {
       );
       expect(manager.update).toHaveBeenCalledWith(
         LaundryOrderEntity,
-        { id: 'order-1' },
+        { id: 'order-1', tenantId: TENANT },
         expect.objectContaining({ totalMinorUnits: 4750 }),
       );
+      // Every line takes the locked order row's tenant (slice decision 6).
+      expect(savedRows).toHaveLength(2);
+      for (const row of savedRows) {
+        expect(row).toHaveProperty('tenantId', TENANT);
+      }
     });
 
     it('rejects when a target has no effective price and persists nothing', async () => {
@@ -409,7 +440,7 @@ describe('LaundryOrdersService', () => {
   });
 
   describe('transition verbs', () => {
-    const t = { actorId: 'a', orderId: 'order-1' };
+    const t = { actorId: 'a', orderId: 'order-1', tenantId: TENANT };
 
     beforeEach(() => {
       manager.findOneByOrFail.mockImplementation(
@@ -425,7 +456,7 @@ describe('LaundryOrdersService', () => {
       await service.startProcessing(t);
       expect(manager.update).toHaveBeenCalledWith(
         LaundryOrderEntity,
-        { id: 'order-1' },
+        { id: 'order-1', tenantId: TENANT },
         expect.objectContaining({ status: LaundryOrderStatus.PROCESSING }),
       );
       expect(auditLogger.log).toHaveBeenCalledWith(
@@ -473,7 +504,7 @@ describe('LaundryOrdersService', () => {
       await service.markAwaitingDelivery(t);
       expect(manager.update).toHaveBeenCalledWith(
         LaundryOrderEntity,
-        { id: 'order-1' },
+        { id: 'order-1', tenantId: TENANT },
         expect.objectContaining({
           status: LaundryOrderStatus.AWAITING_DELIVERY,
         }),
@@ -490,21 +521,158 @@ describe('LaundryOrdersService', () => {
       );
     });
 
-    it('every transition verb throws NotFoundException for a missing order', async () => {
+    // #87 slice decisions 6, 11: each verb locks, updates and re-reads by
+    // `{ id, tenantId }`, never writes `tenantId`, and tags its audit event.
+    it.each([
+      [
+        'cancel',
+        LaundryOrderStatus.RECEIVED,
+        LaundryOrderStatus.CANCELLED,
+        'laundry_order.cancelled',
+        LaundryFulfillmentType.PICKUP,
+      ],
+      [
+        'complete',
+        LaundryOrderStatus.AWAITING_PICKUP,
+        LaundryOrderStatus.COMPLETED,
+        'laundry_order.completed',
+        LaundryFulfillmentType.PICKUP,
+      ],
+      [
+        'markAwaitingDelivery',
+        LaundryOrderStatus.READY,
+        LaundryOrderStatus.AWAITING_DELIVERY,
+        'laundry_order.awaiting_delivery',
+        LaundryFulfillmentType.DELIVERY,
+      ],
+      [
+        'markAwaitingPayment',
+        LaundryOrderStatus.PRICED,
+        LaundryOrderStatus.AWAITING_PAYMENT,
+        'laundry_order.awaiting_payment',
+        LaundryFulfillmentType.PICKUP,
+      ],
+      [
+        'markAwaitingPickup',
+        LaundryOrderStatus.READY,
+        LaundryOrderStatus.AWAITING_PICKUP,
+        'laundry_order.awaiting_pickup',
+        LaundryFulfillmentType.PICKUP,
+      ],
+      [
+        'markDamaged',
+        LaundryOrderStatus.PROCESSING,
+        LaundryOrderStatus.DAMAGED,
+        'laundry_order.damaged',
+        LaundryFulfillmentType.PICKUP,
+      ],
+      [
+        'markLost',
+        LaundryOrderStatus.PROCESSING,
+        LaundryOrderStatus.LOST,
+        'laundry_order.lost',
+        LaundryFulfillmentType.PICKUP,
+      ],
+      [
+        'markPaid',
+        LaundryOrderStatus.AWAITING_PAYMENT,
+        LaundryOrderStatus.PAID,
+        'laundry_order.paid',
+        LaundryFulfillmentType.PICKUP,
+      ],
+      [
+        'markReady',
+        LaundryOrderStatus.PROCESSING,
+        LaundryOrderStatus.READY,
+        'laundry_order.ready',
+        LaundryFulfillmentType.PICKUP,
+      ],
+      [
+        'refund',
+        LaundryOrderStatus.COMPLETED,
+        LaundryOrderStatus.REFUNDED,
+        'laundry_order.refunded',
+        LaundryFulfillmentType.PICKUP,
+      ],
+      [
+        'reject',
+        LaundryOrderStatus.RECEIVED,
+        LaundryOrderStatus.REJECTED,
+        'laundry_order.rejected',
+        LaundryFulfillmentType.PICKUP,
+      ],
+      [
+        'startProcessing',
+        LaundryOrderStatus.PAID,
+        LaundryOrderStatus.PROCESSING,
+        'laundry_order.processing_started',
+        LaundryFulfillmentType.PICKUP,
+      ],
+    ] as const)(
+      '%s is scoped by { id, tenantId } and audit-tagged',
+      async (verb, from, to, action, fulfillmentType) => {
+        manager.findOne.mockResolvedValue(
+          anOrder({ fulfillmentType, status: from }),
+        );
+        await service[verb](t);
+
+        expect(manager.findOne).toHaveBeenCalledWith(LaundryOrderEntity, {
+          lock: { mode: 'pessimistic_write' },
+          where: { id: 'order-1', tenantId: TENANT },
+        });
+        expect(manager.update).toHaveBeenCalledTimes(1);
+        const [, where, patch] = manager.update.mock.calls[0] as [
+          unknown,
+          unknown,
+          Record<string, unknown>,
+        ];
+        expect(where).toEqual({ id: 'order-1', tenantId: TENANT });
+        expect(patch).toEqual({ status: to, updatedAt: expect.any(Date) });
+        expect(manager.findOneByOrFail).toHaveBeenCalledWith(
+          LaundryOrderEntity,
+          { id: 'order-1', tenantId: TENANT },
+        );
+        expect(auditLogger.log).toHaveBeenCalledWith({
+          ...tagged(action),
+          actorId: 'a',
+        });
+      },
+    );
+
+    it('a lock miss (missing or other-tenant order) is NotFound with no update or audit', async () => {
       manager.findOne.mockResolvedValue(null);
-      await expect(service.complete(t)).rejects.toThrow(NotFoundException);
+      await expect(service.complete(t)).rejects.toThrow(
+        new NotFoundException('Laundry order order-1 not found'),
+      );
+      expect(manager.update).not.toHaveBeenCalled();
+      expect(auditLogger.log).not.toHaveBeenCalled();
     });
   });
 
   describe('reads', () => {
-    it('getOrder returns null for a missing id', async () => {
+    it('getOrder looks the order up by { id, tenantId }', async () => {
       orderRepository.findOneBy.mockResolvedValue(null);
-      await expect(service.getOrder('nope')).resolves.toBeNull();
+      await expect(service.getOrder('nope', TENANT)).resolves.toBeNull();
+      expect(orderRepository.findOneBy).toHaveBeenCalledWith({
+        id: 'nope',
+        tenantId: TENANT,
+      });
+    });
+
+    it('getOrder with a null tenant returns null without a query', async () => {
+      await expect(service.getOrder('order-1', null)).resolves.toBeNull();
+      expect(orderRepository.findOneBy).not.toHaveBeenCalled();
     });
 
     it('getOrderForInvoicing returns null for a missing id', async () => {
       orderRepository.findOneBy.mockResolvedValue(null);
-      await expect(service.getOrderForInvoicing('nope')).resolves.toBeNull();
+      await expect(
+        service.getOrderForInvoicing('nope', TENANT),
+      ).resolves.toBeNull();
+      expect(orderRepository.findOneBy).toHaveBeenCalledWith({
+        id: 'nope',
+        tenantId: TENANT,
+      });
       expect(lineRepository.find).not.toHaveBeenCalled();
     });
 
@@ -512,6 +680,7 @@ describe('LaundryOrdersService', () => {
       orderRepository.findOneBy.mockResolvedValue({
         id: 'order-1',
         customerId: 'cust-1',
+        tenantId: TENANT,
         status: LaundryOrderStatus.PRICED,
         totalMinorUnits: 3500,
       });
@@ -544,9 +713,12 @@ describe('LaundryOrdersService', () => {
         },
       ]);
 
-      await expect(service.getOrderForInvoicing('order-1')).resolves.toEqual({
+      await expect(
+        service.getOrderForInvoicing('order-1', TENANT),
+      ).resolves.toEqual({
         id: 'order-1',
         customerId: 'cust-1',
+        tenantId: TENANT,
         lines: [
           {
             addOnId: null,
@@ -571,6 +743,10 @@ describe('LaundryOrdersService', () => {
         ],
         status: LaundryOrderStatus.PRICED,
         totalMinorUnits: 3500,
+      });
+      expect(lineRepository.find).toHaveBeenCalledWith({
+        order: { createdAt: 'ASC' },
+        where: { laundryOrderId: 'order-1', tenantId: TENANT },
       });
     });
   });
