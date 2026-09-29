@@ -10,6 +10,13 @@
 | **Depends on (Accepted)** | [Multi-Tenant Architecture](../specs/2026-09-23-multi-tenant-architecture-design.md) (Accepted, M3 2026-09-23). **Where this plan and that specification disagree, the specification wins** — stop and return to M2/M3. Relies on the shipped [Tenant Identity Foundation plan](2026-09-23-tenant-identity-foundation-plan.md) (#68: principal `{ id, role, scope, tenantId }`, `BOOTSTRAP_TENANT_ID`, `test/helpers/seed-tenant-admin.ts`), [Customer & Property plan](2026-09-24-customer-property-tenant-isolation-plan.md) (#82: `tenantReadAuthorizer` / `tenantFilterFor`, `requireTenantId`, relation-override regression pattern), [Teams & Cleaners plan](2026-09-27-teams-cleaners-tenant-isolation-plan.md) (#83: `uq_team_id_tenant`, per-tenant `JobRelationLoaders.teamLoaderFor`, `AssignTeamToJobCommand.tenantId`, audit tagging pattern), [Catalog plan](2026-09-28-catalog-tenant-isolation-plan.md) (#84) and [Booking plan](2026-09-28-booking-tenant-isolation-plan.md) (#85: `uq_booking_id_tenant`, `CreateJobFromBookingCommand.tenantId`, `fieldResolverEnhancers: ['interceptors']`, and the three #86-owned residual exposures). Also relies on [Jobs & Checklists](../specs/2026-08-27-jobs-checklists-design.md), [nestjs-query GraphQL Reads](../specs/2026-08-28-nestjs-query-graphql-reads-design.md), [Paginated GraphQL Collections](../specs/2026-08-28-paginated-graphql-collections-design.md) and [Admin Foundation](../specs/2026-08-14-admin-foundation-design.md) §4.6 (audit) as **extended/constrained by the RFC**. |
 
 > **For agentic workers:** Draft — **do not execute** until M5 Accepts this plan. Steps use checkbox (`- [ ]`) syntax. Do **not** invent product semantics; the Accepted specification wins. M6 constraints: no production-tenant provisioning, no unrelated refactoring, no push or PR as a side effect; do not weaken failing assertions to get a suite green.
+>
+> **Pre-M5 review revision (2026-09-29):** three findings, each verified against the code before it was applied.
+> - **P1: ORM ownership of the parent FKs.** Only `booking` is a TypeORM relation. `teamId` and `ChecklistEntity.jobId` are plain columns whose FKs were always hand-written. This is now stated explicitly in Task 1 Step 4, and a `schema:log` drift check was added (Task 1 Step 6, final gate).
+> - **P2: checklist-item lookup.** `getChecklistItemsByChecklistIds` is now scoped through the parent checklist's `tenantId` in the same query. Items still have no `tenantId` (Decisions 2, 6).
+> - **P2: audit `entityId`.** The existing convention was verified: `job.checklist_item.complete` logs the job id. It is recorded in Decision 10 and asserted as-is in Task 5 case 9.
+>
+> The ChecklistItem ownership decision and the slice scope are unchanged.
 
 **Goal:** Make CleaningJob and Checklist tenant-owned: required `tenantId`, database-enforced same-tenant references (job → booking, job → team, checklist → job), the caller's tenant applied to every job and checklist read and write, and job audit events tagged with the caller's tenant. ChecklistItem inherits tenant ownership through its Checklist.
 
@@ -81,7 +88,7 @@ These resolve planning-level choices the RFC leaves to M4. None adds product sem
    - `createFromBooking`: `BookingsService.findOne(bookingId, tenantId)` (#85, unchanged); the existing-job pre-check becomes `findOneBy({ bookingId, tenantId })`; the job and checklist are created with `tenantId: command.tenantId`; items as today.
    - `getChecklistsByJobIds(ids, tenantId: string)`: `findBy({ jobId: In(ids), tenantId })`.
    - `listJobs(tenantId: string)`: `find({ where: { tenantId } })`. It has no production caller; it is scoped rather than removed so no unscoped public service method remains (removal would be unrelated refactoring).
-   - `getChecklistItemsByChecklistIds(ids)`: unchanged in signature. It has no production caller (only unit and service-e2e tests). A comment states the Decision 2 contract: callers pass checklist ids obtained from a tenant-scoped lookup.
+   - `getChecklistItemsByChecklistIds(ids, tenantId: string)`: `findBy({ checklistId: In(ids), checklist: { tenantId } })`, a join through the existing `ChecklistItemEntity.checklist` `@ManyToOne` in the same query (M5 finding 2). The service boundary enforces the parent's tenant, so safety does not depend on a caller convention. Items still have no `tenantId` of their own (Decision 2). It has no production caller (only unit and service-e2e tests), and it is scoped for the same reason as `listJobs`.
 
 7. **`completeChecklistItem` resolves the item only through the scoped chain.** Job `{ id: jobId, tenantId }` ⇒ checklist `{ jobId: job.id, tenantId }` ⇒ item `findOneBy(ChecklistItemEntity, { id: itemId, checklistId: checklist.id })`. This replaces today's fetch-by-id-then-compare `item.checklistId !== checklist.id`. The missing-row outcomes are the existing ones: missing job ⇒ `NotFoundException('Job … not found')`; missing checklist or item (including an item of another job or tenant) ⇒ `NotFoundException('Checklist item … not found')`. The item `UPDATE` stays keyed on `{ id: item.id }`, because the item was already resolved through the tenant-scoped chain inside the same transaction. The job `UPDATE` is keyed on `{ id, tenantId }`.
 
@@ -89,7 +96,7 @@ These resolve planning-level choices the RFC leaves to M4. None adds product sem
 
 9. **Mutations take the tenant from `requireTenantId(currentUser)`.** `CompleteChecklistItemCommand` and `CompleteJobCommand` gain `tenantId: string`. `AssignTeamToJobCommand` and `CreateJobFromBookingCommand` already carry it (#83, #85). A null-tenant principal ⇒ `ForbiddenException` before the service is called. The `@Roles()` lists (`CREATE_ROLES`, `EXECUTE_ROLES`, `VIEW_ROLES`) are unchanged, and `SUPER_ADMIN` is not added (RFC §4.2).
 
-10. **Audit (developer decision, 2026-09-29; RFC §4.6).** `job.create`, `job.assign_team`, `job.checklist_item.complete` and `job.complete` record `scope: AdminScope.TENANT` and `tenantId: command.tenantId`. `command.tenantId` is the value `requireTenantId` validated from the principal, never client input. This follows the #82–#84 precedent (each slice tags its own module's events) using the existing `AuditLogger.log` fields (`audit-logger.port.ts`: `tenantId?`, `scope?`), exactly as `TeamsService` does. No new audit format. `actorId`, `action`, `entityType` and `entityId` are unchanged. Booking, laundry and invoice audit tagging stays with #90.
+10. **Audit (developer decision, 2026-09-29; RFC §4.6).** `job.create`, `job.assign_team`, `job.checklist_item.complete` and `job.complete` record `scope: AdminScope.TENANT` and `tenantId: command.tenantId`. `command.tenantId` is the value `requireTenantId` validated from the principal, never client input. This follows the #82–#84 precedent (each slice tags its own module's events) using the existing `AuditLogger.log` fields (`audit-logger.port.ts`: `tenantId?`, `scope?`), exactly as `TeamsService` does. No new audit format. `actorId`, `action`, `entityType` and `entityId` are unchanged. The existing convention (verified at M5 in `jobs.service.ts`) is that all four events log `entityType: 'job'` and `entityId: <job id>`, including `job.checklist_item.complete` (job id, not item id). Booking, laundry and invoice audit tagging stays with #90.
 
 11. **Migration backfill and validation (RFC §4.7).** Every existing job and checklist is attached to the bootstrap tenant, per the RFC's literal rule (#85 precedent), and is not derived from the booking. Before any constraint is created, the migration validates:
     - **booking** tenant equality for **every** job (required reference);
@@ -144,7 +151,7 @@ These resolve planning-level choices the RFC leaves to M4. None adds product sem
 | `CleaningJobEntity` | + `tenantId` column and `tenant` relation (`fk_cleaning_job_tenant`); `booking` `@ManyToOne` gets `createForeignKeyConstraints: false` (#82 `PropertyEntity` precedent) |
 | `ChecklistEntity` | + `tenantId` column and `tenant` relation (`fk_checklist_tenant`) |
 | `CompleteChecklistItemCommand`, `CompleteJobCommand` | + `tenantId: string` |
-| `JobsService` | `assignTeam` / `completeChecklistItem` / `completeJob` / `createFromBooking` scoped per Decisions 6–7 and audit-tagged (Decision 10); `getJob(id, tenantId: string \| null)`; `listJobs(tenantId: string)`; `getChecklistsByJobIds(ids, tenantId: string)`; `getChecklistItemsByChecklistIds` unchanged |
+| `JobsService` | `assignTeam` / `completeChecklistItem` / `completeJob` / `createFromBooking` scoped per Decisions 6–7 and audit-tagged (Decision 10); `getJob(id, tenantId: string \| null)`; `listJobs(tenantId: string)`; `getChecklistsByJobIds(ids, tenantId: string)`; `getChecklistItemsByChecklistIds(ids, tenantId: string)` (scoped through the parent checklist) |
 | `JobRelationLoaders` | `checklistLoader` → `checklistLoaderFor(tenantId: string \| null)`; `createChecklistBatchFn(jobsService, tenantId)` |
 | GraphQL `CleaningJobType`, `ChecklistType` | `@Authorize(tenantReadAuthorizer<…>())` |
 | GraphQL `JobResolver` | `job(id)` passes `currentUser.tenantId`; `checklist` field uses the principal's tenant loader; `completeChecklistItem` / `completeJob` pass `requireTenantId(currentUser)` |
@@ -372,6 +379,15 @@ Confirm during M6 that the migration is picked up by the data source's migration
      - Replace the header comment's FK sentence with the #82-style note: "the composite `fk_cleaning_job_booking_tenant` / `fk_cleaning_job_team_tenant` FKs are hand-written in `AddJobChecklistTenant`; `migration:generate` may propose dropping them or re-adding id-only FKs — do not apply that".
    - `ChecklistEntity`: add a `tenantId` column plus a `tenant` relation (`fk_checklist_tenant`), and the same note for `fk_checklist_job_tenant`.
    - `ChecklistItemEntity` is unchanged (Decision 2).
+   - **ORM ownership of the three parent FKs (M5 finding 1; recon 2026-09-29):**
+
+     | Constraint replaced | ORM mapping today | Action |
+     | --- | --- | --- |
+     | `fk_cleaning_job_booking` | `CleaningJobEntity.booking` `@ManyToOne` + `@JoinColumn({ foreignKeyConstraintName })` (TypeORM-owned) | `createForeignKeyConstraints: false`, keeping the relation (Relatable filters `jobs(filter: { booking })` need it) |
+     | `fk_cleaning_job_team` | **none**: `teamId` is a plain `@Column` + `@Index()`; the FK exists only in the hand-written `AddCleaningJob` | No relation is added (adding one would make TypeORM own an id-only FK). Keep `teamId` a plain column. The entity comment names `fk_cleaning_job_team_tenant` as hand-written |
+     | `fk_checklist_job` | **none**: `ChecklistEntity.jobId` is a plain `@Column`; the FK is hand-written in `AddCleaningJob` | Same: no relation added, and the comment names `fk_checklist_job_tenant` |
+
+     Re-confirm this table at M6 start (`grep -n "ManyToOne\|JoinColumn" apps/api/src/modules/jobs/infrastructure/persistence/*.ts`). If a `team` or `job` relation has appeared since, give it `createForeignKeyConstraints: false` like `booking`.
 
 - [ ] **Step 5: Cleanup helper.** In `removeTestTenants`, replace the booking-keyed job delete with a tenant-keyed one, still before the booking delete:
 
@@ -392,9 +408,19 @@ Confirm during M6 that the migration is picked up by the data source's migration
    - Keep the bootstrap-exclusion invariant unchanged.
    - Re-check at M6 with `grep -rn 'REFERENCES "cleaning_job_entity"' apps/api/src/platform/database/migrations` that no new RESTRICT reference to jobs exists.
 
-- [ ] **Step 6: Run.** `pnpm --filter api test:e2e -- add-job-checklist-tenant` ⇒ PASS. `pnpm --filter api test` (unit) ⇒ PASS. TypeScript may now flag `CleaningJob` / `Checklist` literals in unit specs without `tenantId`; add `tenantId: 'tenant-1'` there. Other e2e suites are expected to fail until Task 4.
+- [ ] **Step 6: ORM drift check (M5 finding 1).**
+   - **Baseline, recorded at M6 start on `main`:** migrate a fresh database with `pnpm --filter api migration:run`, then save the output of `pnpm --filter api typeorm schema:log`. Pre-existing drift, such as that noted in `ExtendPricingRuleEffectiveDating`, is expected there.
+   - **After this task:** migrate a fresh database again, rerun `schema:log`, and diff the two outputs.
+   - **Pass condition:** the diff contains no statement that
+     - adds an id-only FK `("bookingId") REFERENCES "booking_entity"`, `("teamId") REFERENCES "team_entity"` or `("jobId") REFERENCES "cleaning_job_entity"`;
+     - drops `fk_cleaning_job_booking_tenant`, `fk_cleaning_job_team_tenant`, `fk_checklist_job_tenant`, `fk_cleaning_job_tenant` or `fk_checklist_tenant`;
+     - touches the `tenantId` columns.
+   - Any other new line beyond the documented hand-written objects is a mapping defect: fix the entity, not the migration.
+   - Record both outputs in the task report.
 
-- [ ] **Step 7: Commit.** `git commit -m "feat(86): add job/checklist tenant ownership and composite parent FKs"`
+- [ ] **Step 7: Run.** `pnpm --filter api test:e2e -- add-job-checklist-tenant` ⇒ PASS. `pnpm --filter api test` (unit) ⇒ PASS. TypeScript may now flag `CleaningJob` / `Checklist` literals in unit specs without `tenantId`; add `tenantId: 'tenant-1'` there. Other e2e suites are expected to fail until Task 4.
+
+- [ ] **Step 8: Commit.** `git commit -m "feat(86): add job/checklist tenant ownership and composite parent FKs"`
 
 ---
 
@@ -414,7 +440,8 @@ Confirm during M6 that the migration is picked up by the data source's migration
   - `CompleteJobCommand { actorId; jobId; tenantId: string }`;
   - `getJob(id: string, tenantId: string | null): Promise<CleaningJob | null>`;
   - `listJobs(tenantId: string): Promise<CleaningJob[]>`;
-  - `getChecklistsByJobIds(ids: string[], tenantId: string): Promise<Checklist[]>`.
+  - `getChecklistsByJobIds(ids: string[], tenantId: string): Promise<Checklist[]>`;
+  - `getChecklistItemsByChecklistIds(ids: string[], tenantId: string): Promise<ChecklistItem[]>`.
 
 - [ ] **Step 1: Write failing unit tests** (extend the existing mocks):
    - **`createFromBooking({ actorId: 'u', bookingId: 'b1', tenantId: 't1' })`:**
@@ -443,14 +470,15 @@ Confirm during M6 that the migration is picked up by the data source's migration
      - `listJobs('t1')` ⇒ `find({ where: { tenantId: 't1' } })`;
      - `getChecklistsByJobIds([], 't1')` ⇒ `[]` with no call;
      - `getChecklistsByJobIds(['a'], 't1')` ⇒ `findBy({ jobId: In(['a']), tenantId: 't1' })`.
-   - Replace the existing `getJob('missing-id')` / `listJobs()` tests with the scoped forms. The `getChecklistItemsByChecklistIds` tests are unchanged.
+   - `getChecklistItemsByChecklistIds([], 't1')` ⇒ `[]` with no call; `getChecklistItemsByChecklistIds(['a', 'b'], 't1')` ⇒ `checklistItemRepository.findBy({ checklistId: In(['a', 'b']), checklist: { tenantId: 't1' } })`.
+   - Replace the existing `getJob('missing-id')`, `listJobs()` and `getChecklistItemsByChecklistIds` tests with the scoped forms.
 
 - [ ] **Step 2: Run** `pnpm --filter api test -- jobs.service` ⇒ FAIL.
 
 - [ ] **Step 3: Implement** per Step 1 and Decisions 6, 7 and 10:
    - Import `AdminScope` from `platform/auth/domain/admin-scope`.
    - Refresh the stale comments: "`fk_cleaning_job_team` stays id-only until #86" becomes "application half of I-1; `fk_cleaning_job_team_tenant` is the database half". Remove "`cleaning_job_entity` stays unscoped by tenant until #86".
-   - Add the Decision 2 contract comment on `getChecklistItemsByChecklistIds`.
+   - On `getChecklistItemsByChecklistIds`, add a comment citing Decisions 2 and 6: items have no tenant of their own and are scoped through the parent checklist's `tenantId` in the same query.
 
 - [ ] **Step 4: Run** `pnpm --filter api test -- jobs.service` ⇒ PASS. The resolver and loaders will not compile until Task 3; run with `--testPathPattern jobs.service` for now.
 
@@ -575,7 +603,8 @@ describe('Relations targeting CleaningJob / Checklist / ChecklistItem (tenant is
    Any other failure is a defect in Tasks 1–3: stop and fix it there.
 
 - [ ] **Step 2: (a)/(b) `jobs.service.e2e-spec.ts`.**
-   - Pass `TENANT_ID` (the suite's bootstrap constant) as the new `tenantId` argument or command field.
+   - Pass `TENANT_ID` (the suite's bootstrap constant) as the new `tenantId` argument or command field, including the four `getChecklistItemsByChecklistIds` calls.
+   - Add one real-Postgres case: `getChecklistItemsByChecklistIds([checklist.id], <a createTestTenant() id>)` ⇒ `[]`, proving the join-through-parent predicate in SQL, not only in mocks. Remove that tenant with `removeTestTenants` in `afterAll`.
    - Add `tenantId: TENANT_ID` to any direct job or checklist insert.
    - Keep every assertion. Where the suite asserts audit rows, extend the `job.*` rows to expect `tenantId: TENANT_ID` and `scope: 'TENANT'`.
 
@@ -641,7 +670,7 @@ describe('Relations targeting CleaningJob / Checklist / ChecklistItem (tenant is
      - `gql(...)` with an added `x-tenant-id: tenantA` header running `jobs { nodes { id } }` ⇒ only B's rows;
      - `createJobFromBooking(input: { bookingId: <B's>, tenantId: tenantA })` ⇒ GraphQL validation error, no row.
   8. **Role boundary.** The Super Admin cookie on `jobs`, `job(id)` and each of the four mutations ⇒ 403 (role, RFC §4.2), with no A or B data in the body.
-  9. **Audit (Decision 10).** As A, run `assignTeamToJob` (A's own team), `completeChecklistItem` for each of A's three items, and `completeJob` on `jobA`. Then the `audit_event_entity` rows for `entityId = jobA.id` with actions `job.create`, `job.assign_team`, `job.checklist_item.complete` and `job.complete` all have `tenantId = tenantA`, `scope = 'TENANT'` and `actorId` = A's owner. This case runs **after** cases 4–5, which require `jobA` to be incomplete; order the `describe`s accordingly.
+  9. **Audit (Decision 10).** As A, run `assignTeamToJob` (A's own team), `completeChecklistItem` for each of A's three items, and `completeJob` on `jobA`. Then the `audit_event_entity` rows with `entityType = 'job'` and `entityId = jobA.id` include actions `job.create`, `job.assign_team`, `job.checklist_item.complete` (×3) and `job.complete`. All of them have `tenantId = tenantA`, `scope = 'TENANT'` and `actorId` = A's owner. Keying `job.checklist_item.complete` on the job id asserts the existing convention (Decision 10, verified at M5), not a new one. If M6 finds the convention differs, assert the existing one and keep the tenant/scope assertions. This case runs **after** cases 4–5, which require `jobA` to be incomplete; order the `describe`s accordingly.
   10. **Database backstop (I-1 database half).** Each insert below rejects with `QueryFailedError` whose `driverError.constraint` names the given FK:
       - `cleaning_job_entity` insert with `tenantId: tenantB` and `bookingId` = a B booking with no job, but `teamId: teamA.id` ⇒ `fk_cleaning_job_team_tenant`;
       - `tenantId: tenantB` and `bookingId: bookingA.id` ⇒ `fk_cleaning_job_booking_tenant`. `UQ_cleaning_job_booking_id` would also fire, since `bookingA` already has a job, so use a fresh A booking without a job;
@@ -669,10 +698,12 @@ describe('Relations targeting CleaningJob / Checklist / ChecklistItem (tenant is
   - `pnpm --filter api test:e2e`
   - `pnpm --filter api build`
   - `migration:run` against a fresh database (`pnpm --filter api migration:run`, per README)
+  - `migration:revert` once on that database, then `migration:run` again. `down` restores the original FK names and `ON DELETE` actions without losing rows; Task 1 case 6 is the precise check
+  - the `schema:log` drift check of Task 1 Step 6, rerun on the final branch
   - `git diff --stat main -- apps/web packages` ⇒ empty
   - the generated GraphQL schema diff against `main` ⇒ **empty**
 
-  Record all outputs for the M6 Slice Completion Report.
+  Compare e2e results against the baseline failures recorded on `main` at M6 start (TDD / verification strategy). Record all outputs for the M6 Slice Completion Report.
 - [ ] **Step 3: Commit.** `git commit -m "docs(86): document job/checklist tenant isolation; refresh stale #86 comments"`
 
 ---
