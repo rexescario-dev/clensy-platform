@@ -3,7 +3,9 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
+import { AdminScope } from '../src/platform/auth/domain/admin-scope';
 import { AuditEventEntity } from '../src/platform/audit/infrastructure/persistence/audit-event.entity';
 import { BookingsService } from '../src/modules/bookings/application/services/bookings.service';
 import { BookingStatus } from '../src/modules/bookings/domain/booking-status';
@@ -223,11 +225,23 @@ describe('JobsService (real Postgres)', () => {
     expect(job.teamId).toBe(team.id);
     expect(job.createdAt).toEqual(job.updatedAt);
 
-    const checklists = await jobsService.getChecklistsByJobIds([job.id]);
+    const checklists = await jobsService.getChecklistsByJobIds(
+      [job.id],
+      TENANT_ID,
+    );
     expect(checklists).toHaveLength(1);
-    const items = await jobsService.getChecklistItemsByChecklistIds([
-      checklists[0].id,
-    ]);
+    const items = await jobsService.getChecklistItemsByChecklistIds(
+      [checklists[0].id],
+      TENANT_ID,
+    );
+    // #86 slice decisions 2/6: items are scoped through their checklist's
+    // tenant in SQL — another tenant id finds none of them.
+    await expect(
+      jobsService.getChecklistItemsByChecklistIds(
+        [checklists[0].id],
+        randomUUID(),
+      ),
+    ).resolves.toEqual([]);
     expect(
       [...items]
         .sort((a, b) => a.position - b.position)
@@ -239,6 +253,8 @@ describe('JobsService (real Postgres)', () => {
         actorId: 'actor-1',
         entityId: job.id,
         action: 'job.create',
+        scope: AdminScope.TENANT,
+        tenantId: TENANT_ID,
         entityType: 'job',
       }),
     );
@@ -309,7 +325,7 @@ describe('JobsService (real Postgres)', () => {
       scheduledAt: new Date('2026-12-25T09:00:00Z'),
     });
 
-    const refetched = await jobsService.getJob(job.id);
+    const refetched = await jobsService.getJob(job.id, TENANT_ID);
     expect(refetched).not.toBeNull();
     expect(refetched?.scheduledAt).toEqual(job.scheduledAt);
     expect(refetched?.teamId).toBe(team.id);
@@ -404,6 +420,8 @@ describe('JobsService (real Postgres)', () => {
     ).not.toBeNull();
   });
 
+  // #86 replaced the three id-only parent FKs with composite
+  // `_tenant` FKs, keeping each ON DELETE action.
   it('named unique and FK constraints exist with the specified delete actions', async () => {
     const rows: Array<{
       conname: string;
@@ -415,9 +433,9 @@ describe('JobsService (real Postgres)', () => {
        WHERE c.conname IN (
          'UQ_cleaning_job_booking_id',
          'UQ_checklist_job_id',
-         'fk_cleaning_job_booking',
-         'fk_cleaning_job_team',
-         'fk_checklist_job',
+         'fk_cleaning_job_booking_tenant',
+         'fk_cleaning_job_team_tenant',
+         'fk_checklist_job_tenant',
          'fk_checklist_item_checklist'
        )
        ORDER BY c.conname`,
@@ -429,15 +447,15 @@ describe('JobsService (real Postgres)', () => {
       contype: 'u',
     });
     expect(byName.UQ_checklist_job_id).toMatchObject({ contype: 'u' });
-    expect(byName.fk_cleaning_job_booking).toMatchObject({
+    expect(byName.fk_cleaning_job_booking_tenant).toMatchObject({
       confdeltype: 'r',
       contype: 'f',
     });
-    expect(byName.fk_cleaning_job_team).toMatchObject({
+    expect(byName.fk_cleaning_job_team_tenant).toMatchObject({
       confdeltype: 'r',
       contype: 'f',
     });
-    expect(byName.fk_checklist_job).toMatchObject({
+    expect(byName.fk_checklist_job_tenant).toMatchObject({
       confdeltype: 'c',
       contype: 'f',
     });
@@ -455,9 +473,15 @@ describe('JobsService (real Postgres)', () => {
         bookingId: booking.id,
         tenantId: TENANT_ID,
       });
-      const [checklist] = await jobsService.getChecklistsByJobIds([job.id]);
+      const [checklist] = await jobsService.getChecklistsByJobIds(
+        [job.id],
+        TENANT_ID,
+      );
       const items = [
-        ...(await jobsService.getChecklistItemsByChecklistIds([checklist.id])),
+        ...(await jobsService.getChecklistItemsByChecklistIds(
+          [checklist.id],
+          TENANT_ID,
+        )),
       ].sort((a, b) => a.position - b.position);
       return { checklist, items, job, team };
     }
@@ -497,6 +521,8 @@ describe('JobsService (real Postgres)', () => {
       expect(auditLogger.log).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'job.assign_team',
+          scope: AdminScope.TENANT,
+          tenantId: TENANT_ID,
           entityId: job.id,
         }),
       );
@@ -523,7 +549,11 @@ describe('JobsService (real Postgres)', () => {
         first.updatedAt.getTime(),
       );
       expect(auditLogger.log).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'job.assign_team' }),
+        expect.objectContaining({
+          action: 'job.assign_team',
+          scope: AdminScope.TENANT,
+          tenantId: TENANT_ID,
+        }),
       );
     });
 
@@ -534,6 +564,7 @@ describe('JobsService (real Postgres)', () => {
         actorId: 'actor-1',
         itemId: items[0].id,
         jobId: job.id,
+        tenantId: TENANT_ID,
       });
       expect(afterFirst.status).toBe(JobStatus.IN_PROGRESS);
 
@@ -541,17 +572,20 @@ describe('JobsService (real Postgres)', () => {
         actorId: 'actor-1',
         itemId: items[1].id,
         jobId: job.id,
+        tenantId: TENANT_ID,
       });
       const afterLast = await jobsService.completeChecklistItem({
         actorId: 'actor-1',
         itemId: items[2].id,
         jobId: job.id,
+        tenantId: TENANT_ID,
       });
       expect(afterLast.status).toBe(JobStatus.IN_PROGRESS);
 
-      const persistedItems = await jobsService.getChecklistItemsByChecklistIds([
-        items[0].checklistId,
-      ]);
+      const persistedItems = await jobsService.getChecklistItemsByChecklistIds(
+        [items[0].checklistId],
+        TENANT_ID,
+      );
       expect(persistedItems.every((item) => item.completed)).toBe(true);
     });
 
@@ -561,6 +595,7 @@ describe('JobsService (real Postgres)', () => {
         actorId: 'actor-1',
         itemId: items[0].id,
         jobId: job.id,
+        tenantId: TENANT_ID,
       });
       auditLogger.log.mockClear();
 
@@ -568,13 +603,18 @@ describe('JobsService (real Postgres)', () => {
         actorId: 'actor-1',
         itemId: items[0].id,
         jobId: job.id,
+        tenantId: TENANT_ID,
       });
       expect(again.status).toBe(JobStatus.IN_PROGRESS);
       expect(again.updatedAt.getTime()).toBeGreaterThan(
         first.updatedAt.getTime(),
       );
       expect(auditLogger.log).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'job.checklist_item.complete' }),
+        expect.objectContaining({
+          action: 'job.checklist_item.complete',
+          scope: AdminScope.TENANT,
+          tenantId: TENANT_ID,
+        }),
       );
     });
 
@@ -582,7 +622,11 @@ describe('JobsService (real Postgres)', () => {
       const { job, items } = await createdJob();
 
       await expect(
-        jobsService.completeJob({ actorId: 'actor-1', jobId: job.id }),
+        jobsService.completeJob({
+          actorId: 'actor-1',
+          jobId: job.id,
+          tenantId: TENANT_ID,
+        }),
       ).rejects.toThrow(
         new BadRequestException(
           'Cannot complete a job with incomplete checklist items',
@@ -594,12 +638,14 @@ describe('JobsService (real Postgres)', () => {
           actorId: 'actor-1',
           itemId: item.id,
           jobId: job.id,
+          tenantId: TENANT_ID,
         });
       }
 
       const completed = await jobsService.completeJob({
         actorId: 'actor-1',
         jobId: job.id,
+        tenantId: TENANT_ID,
       });
       expect(completed.status).toBe(JobStatus.COMPLETED);
 
@@ -607,13 +653,18 @@ describe('JobsService (real Postgres)', () => {
       const again = await jobsService.completeJob({
         actorId: 'actor-1',
         jobId: job.id,
+        tenantId: TENANT_ID,
       });
       expect(again.status).toBe(JobStatus.COMPLETED);
       expect(again.updatedAt.getTime()).toBeGreaterThan(
         completed.updatedAt.getTime(),
       );
       expect(auditLogger.log).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'job.complete' }),
+        expect.objectContaining({
+          action: 'job.complete',
+          scope: AdminScope.TENANT,
+          tenantId: TENANT_ID,
+        }),
       );
     });
 
@@ -624,9 +675,14 @@ describe('JobsService (real Postgres)', () => {
           actorId: 'actor-1',
           itemId: item.id,
           jobId: job.id,
+          tenantId: TENANT_ID,
         });
       }
-      await jobsService.completeJob({ actorId: 'actor-1', jobId: job.id });
+      await jobsService.completeJob({
+        actorId: 'actor-1',
+        jobId: job.id,
+        tenantId: TENANT_ID,
+      });
 
       await expect(
         jobsService.assignTeam({
@@ -643,6 +699,7 @@ describe('JobsService (real Postgres)', () => {
           actorId: 'actor-1',
           itemId: items[0].id,
           jobId: job.id,
+          tenantId: TENANT_ID,
         }),
       ).rejects.toThrow(
         new BadRequestException(
@@ -667,19 +724,28 @@ describe('JobsService (real Postgres)', () => {
         tenantId: TENANT_ID,
       });
       expect(job.teamId).toBeNull();
-      const [checklist] = await jobsService.getChecklistsByJobIds([job.id]);
-      const items = await jobsService.getChecklistItemsByChecklistIds([
-        checklist.id,
-      ]);
+      const [checklist] = await jobsService.getChecklistsByJobIds(
+        [job.id],
+        TENANT_ID,
+      );
+      const items = await jobsService.getChecklistItemsByChecklistIds(
+        [checklist.id],
+        TENANT_ID,
+      );
       for (const item of items) {
         await jobsService.completeChecklistItem({
           actorId: 'actor-1',
           itemId: item.id,
           jobId: job.id,
+          tenantId: TENANT_ID,
         });
       }
       await expect(
-        jobsService.completeJob({ actorId: 'actor-1', jobId: job.id }),
+        jobsService.completeJob({
+          actorId: 'actor-1',
+          jobId: job.id,
+          tenantId: TENANT_ID,
+        }),
       ).resolves.toMatchObject({ status: JobStatus.COMPLETED, teamId: null });
     });
   });

@@ -803,42 +803,34 @@ describe('Bookings tenant isolation (e2e)', () => {
     expect(job).toBeNull();
   });
 
-  // Case 10 (known residual exposure — closed by #86): `jobs`/`job(id)` are
-  // not yet tenant-scoped, so B can still name A's job. But selecting
-  // `booking` on it resolves through `BookingDTO`'s own tenant authorizer,
-  // finds nothing (bookingA is tenant A's), and the response carries no A
-  // data — whether that surfaces as a GraphQL non-null-field error or not
-  // is deliberately not pinned here.
-  it("B naming A's job through job(id) gets no A booking/customer data back", async () => {
+  // Case 10 (#86 closed the #85 residual exposure): jobs are tenant-owned,
+  // so B naming A's job gets `job: null` — no error and no A booking or
+  // customer data. As A (positive control) the same query resolves the
+  // booking.
+  it("B naming A's job through job(id) gets null and no A booking/customer data", async () => {
     const createRes = await gql(cookieA, CREATE_JOB_MUTATION, {
       input: { bookingId: bookingA.id },
     });
     expect(createRes.body.errors).toBeUndefined();
     const jobAId: string = createRes.body.data.createJobFromBooking.id;
+    const JOB_QUERY = `query($id: ID!){ job(id:$id){ id booking { id customer { id } } } }`;
 
-    const res = await gql(
-      cookieB,
-      `query($id: ID!){ job(id:$id){ id booking { id customer { id } } } }`,
-      { id: jobAId },
-    );
-
+    const res = await gql(cookieB, JOB_QUERY, { id: jobAId });
+    expect(res.body.errors).toBeUndefined();
+    expect(res.body.data.job).toBeNull();
     const raw = JSON.stringify(res.body);
     expect(raw).not.toContain(bookingA.id);
     expect(raw).not.toContain(customerA.id);
 
-    if (res.body.errors) {
-      const errorPath = res.body.errors[0].path as unknown[];
-      expect(errorPath[errorPath.length - 1]).toBe('booking');
-    }
+    const resA = await gql(cookieA, JOB_QUERY, { id: jobAId });
+    expect(resA.body.errors).toBeUndefined();
+    expect(resA.body.data.job.booking.id).toBe(bookingA.id);
   });
 
-  // Case 10b (regression for the Case 10 root cause): nestjs-query's
-  // relation filter comes from `context.authorizer`, which is shared by the
-  // whole request. Before field-resolver interceptors were enabled, a
-  // sibling nestjs-query root (`bookings`) left its own authorizer there,
-  // `BookingDTO`'s authorizer has no `booking` relation, and
-  // `CleaningJob.booking` again resolved unfiltered.
-  it("B naming A's job next to a nestjs-query root field still gets no A booking/customer data back", async () => {
+  // Case 10b (regression for the #85 Case 10 root cause): with a sibling
+  // nestjs-query root (`bookings`) in the same request, B still gets
+  // `job: null` and no A data.
+  it("B naming A's job next to a nestjs-query root field still gets null and no A data", async () => {
     const job = await cleaningJobRepository.findOneByOrFail({
       bookingId: bookingA.id,
     });
@@ -852,14 +844,11 @@ describe('Bookings tenant isolation (e2e)', () => {
       { id: job.id },
     );
 
+    expect(res.body.errors).toBeUndefined();
+    expect(res.body.data.job).toBeNull();
     const raw = JSON.stringify(res.body);
     expect(raw).not.toContain(bookingA.id);
     expect(raw).not.toContain(customerA.id);
-
-    if (res.body.errors) {
-      const errorPath = res.body.errors[0].path as unknown[];
-      expect(errorPath[errorPath.length - 1]).toBe('booking');
-    }
   });
 
   // Case 11 (I-1 database half): even bypassing the application layer, the
