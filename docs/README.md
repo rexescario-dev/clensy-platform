@@ -70,7 +70,7 @@ Every Catalog read and write uses the tenant of the logged-in user. That covers 
 
 ## Booking tenant isolation (#85)
 
-Shipped in this slice (branch `feat/85-booking-tenant-isolation`). Booking is tenant-owned: a required `tenantId`, composite FKs keep a booking's customer, property, service and team (when set) in the booking's tenant, and `uq_booking_id_tenant` is the FK target #86 will use.
+Shipped in this slice (PR [#98](https://github.com/rexescario-dev/clensy-platform/pull/98)). Booking is tenant-owned: a required `tenantId`, composite FKs keep a booking's customer, property, service and team (when set) in the booking's tenant, and `uq_booking_id_tenant` is the FK target #86 will use.
 
 Every Booking read and write uses the tenant of the logged-in user. That covers the `bookings` list/count (including relation filters on customer/property/service/team), the `booking(id)` query, the `createBooking`/`updateBooking`/`removeBooking` mutations, `Property.bookings`, `CleaningJob.booking`, and `createJobFromBooking`'s booking lookup. Another tenant's booking behaves exactly like a missing one — the existing not-found error or an empty list — never 403.
 
