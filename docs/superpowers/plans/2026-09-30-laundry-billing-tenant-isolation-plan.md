@@ -154,7 +154,7 @@ These resolve planning-level choices the RFC leaves to M4. None adds product sem
     - The migration does **not** copy the global sequence value into any counter.
     - It first validates, in this order:
       - every existing `invoiceNumber` matches `^INV-[0-9]{4}-[0-9]{6,}$`;
-      - every suffix, compared as `numeric` so oversized digit strings cannot overflow a `bigint` cast, is `<= 9007199254740991`, the allocator's safe-integer contract (F7);
+      - every suffix, compared as `numeric` (exact arbitrary precision, so oversized digit strings neither overflow a `bigint` cast nor round), satisfies `1 ≤ n ≤ 2^53 − 1 = 9007199254740991`, the allocator's contract (F7). The counter `CHECK` allows `0 … 2^53 − 1`, where `0` is the column default meaning "nothing allocated". The allocator itself never returns below `1` (it inserts `1`, or increments), and it rejects anything else. The three ranges are therefore consistent: issued numbers are `1 … 2^53 − 1`, and the stored counter is that range or `0`;
       - no numeric suffix repeats within a tenant. The suffix is the allocation value and the year is presentation only, so `INV-2025-000010` and `INV-2026-000010` in one tenant are a duplicate.
     - Any violation ⇒ an explicit error naming the counts, and the transaction rolls back with nothing modified.
     - It then seeds one counter row per tenant that owns invoices, with `lastValue = MAX(suffix)` for that tenant. After the backfill that is exactly one row, for the bootstrap tenant.
@@ -278,13 +278,21 @@ These resolve planning-level choices the RFC leaves to M4. None adds product sem
 - **Real-Postgres invoice race** (`billing.service.e2e-spec.ts`, two `DataSource`s): one invoice, one conflict, net counter +1; 5 parallel generates ⇒ contiguous suffixes (F1).
 - **Cleanup regression** (`remove-test-tenants.e2e-spec.ts`, F8).
 - **Two-tenant API e2e** (real Postgres, `AppModule`): the full-schema surface and reachability inventory (F4, F9), every Decision 5–11 case, the #82 I1 criterion, spoofing (I-2), audit tags, per-tenant numbering and concurrency (I-3), and the DB backstop (I-1).
+- **Expected intermediate failures (by task).** Anything outside this list is a regression and blocks:
+  - after Task 1: e2e suites that insert laundry/invoice rows or call the laundry/billing services (fixed in Task 3 for `billing.service`, and in Task 5 for the rest);
+  - after Task 2: `tsc` errors only in `modules/billing` and the laundry/billing resolvers (fixed in Tasks 3–4), so unit runs use `--testPathPattern`;
+  - after Task 3: `tsc` errors only in the two resolvers (Task 4);
+  - after Task 4: the full unit suite and `build` are green, and e2e failures are limited to Task 5's file list.
 - **Suite health:** Tasks 1–5 are coupled. After Task 1 the NOT NULL columns break e2e fixtures and service calls. Unit tests MUST be green at the end of every task. The full e2e suite MUST be green from Task 5 onward, except failures that already exist on `main`: record their names at the start of M6 by running `pnpm --filter api test:e2e` on `main`. Any other failure blocks.
 - **Final gate (Task 7):**
   - `pnpm --filter api lint`, `test`, `test:e2e` and `build`;
   - `migration:run` against a fresh database, then `migration:revert` + `migration:run`;
   - `schema:log` drift classification and `pg_constraint` verification;
   - `git diff --stat main -- apps/web packages` empty;
-  - generated GraphQL schema diff against `main` empty: regenerate `apps/api/src/schema.gql` on `main` and on the branch (it is untracked; `autoSchemaFile`) and `diff` them.
+  - generated GraphQL schema diff against `main` empty. `apps/api/src/schema.gql` is untracked and written at app init by `autoSchemaFile` in `platform/graphql/graphql.module.ts`, the real application configuration (no `sortSchema`, so output order follows module registration, which is deterministic for a given tree). Procedure:
+    - `git worktree add ../clensy-main main`, then in each tree delete `apps/api/src/schema.gql` and run `pnpm --filter api test:e2e -- paginated-collections-allowlist`. That suite boots `AppModule`, and `pnpm --filter api` sets `cwd` to `apps/api`, so the file is regenerated from that tree's own code;
+    - `diff` the two files. The result must be empty;
+    - remove the worktree.
 
 ## Review Focus
 
@@ -298,7 +306,7 @@ These are failure modes the RFC implies but reviewers can easily miss. The task 
    - N parallel `generateInvoiceFromOrder` calls on N distinct priced orders in one tenant ⇒ N distinct numbers whose suffixes are exactly `{k+1 … k+N}`.
    - A racing duplicate generate on one order ⇒ one `ConflictException`, and the counter still advanced by exactly one.
    - Two tenants each get `…000001` on their first invoice. (Task 6 case 9; Task 3 unit for the SQL)
-3. **Lock scoped by tenant:** as B, every one of the 14 laundry mutations on A's order ⇒ 404, and A's status, `weightGrams`, `totalMinorUnits`, lines and `updatedAt` are unchanged (Task 2 unit, Task 6 case 4).
+3. **Lock scoped by tenant:** as B, every one of the 14 laundry mutations that target an existing order (all 15 except `receiveLaundryOrder`, which Task 6 case 5 covers) on A's order ⇒ 404, and A's status, `weightGrams`, `totalMinorUnits`, lines and `updatedAt` are unchanged (Task 2 unit, Task 6 case 4).
 4. **Invoice tenant from the order row, not the request:** the unit test asserts the created invoice's and the audit's `tenantId` come from `order.tenantId`. It uses a mock where `getOrderForInvoicing` returns `tenantId: 't1'` and the command carries `'t1'`, and checks that the service passes `command.tenantId` into `getOrderForInvoicing` (Task 3).
 5. **Client input tries to supply or widen the tenant (I-2):**
    - `invoices(filter: { tenantId: … })` ⇒ schema error;
@@ -357,6 +365,7 @@ const OLD_CONSTRAINTS = [
 Helpers in the spec file:
 - `snapshot()` reads `SELECT last_value, is_called FROM billing_invoice_number_seq`, plus every row of `invoice_entity` ordered by `id` (all columns), plus the constraint names of the three tables.
 - `expectUntouched(before)` re-reads the same and asserts deep equality, that no table has a `tenantId` column, and that `invoice_number_counter` does not exist (`to_regclass` is `NULL`). Every failed-`up` case (1–3) takes a `snapshot()` before `up` and calls `expectUntouched` after it (F6).
+- **Transaction boundary (F2, F6).** `snapshot()` runs on the shared `queryRunner` with **no** transaction open, after the fixtures committed. `up`/`down` run inside the #86 harness's explicit `inTransaction` wrapper (`startTransaction` → run → `commitTransaction`, or `rollbackTransaction` + rethrow; `add-job-checklist-tenant.migration.e2e-spec.ts:42-51`, verified). `expectUntouched` runs after `inTransaction` has returned, that is after the `ROLLBACK`. The comparison is therefore committed-state before vs committed-state after. `last_value` / `is_called` are read without calling `nextval`, so reading does not change them.
 
 Cases, in order:
 1. **Bootstrap missing ⇒ abort.** With the bootstrap tenant row temporarily absent (the technique the job suite uses), `up` rejects with `/bootstrap tenant .* not found/`, followed by `expectUntouched`.
@@ -367,18 +376,23 @@ Cases, in order:
    - an invoice on a bootstrap order whose `customerId` is the second tenant's customer ⇒ `/invoice.*customer/`.
 3. **Invoice-number validation aborts (Decision 10).** Same assertions as case 2.
    - an invoice numbered `LEGACY-7` ⇒ `/invoice number format/`;
-   - an invoice numbered `INV-2026-9007199254740992` (one above the safe-integer bound) ⇒ `/invoice number suffix out of range/` (F7);
+   - an invoice numbered `INV-2026-9007199254740992` (2^53, the first unsupported value) ⇒ `/invoice number suffix out of range/` (F7);
+   - an invoice numbered `INV-2026-000000` (suffix 0; the supported range is `1 ≤ n ≤ 2^53 − 1`) ⇒ the same range error. Negative suffixes cannot occur, because the format regex admits digits only (`INV-2026--5` ⇒ the format error, asserted too);
    - an invoice numbered `INV-2026-99999999999999999999999` (overflows `bigint`) ⇒ the same range error, not a cast error;
    - two bootstrap invoices `INV-2025-000010` and `INV-2026-000010` (same suffix, different years) ⇒ `/duplicate invoice number/`.
 4. **Unreachable validation branches, called directly (F3, F5).** These cannot be produced by pre-`up` data (Decision 12), so each sub-case prepares the post-backfill state by hand inside `inTransaction` and then **rolls it back**:
    - add the three nullable `tenantId` columns and set every row to the bootstrap tenant (mirroring steps 1–2);
    - apply one corruption;
-   - assert that the problem list returned by `AddLaundryBillingTenant1790784000000.validateBackfill(queryRunner)` contains an entry matching the pattern. `up` joins that list into its thrown error, so a match here is the message `up` would throw.
+   - assert that the problem list returned by `AddLaundryBillingTenant1790784000000.validateBackfill(queryRunner)` has **exactly one** entry, matching the pattern. One entry proves the fixture fails for its intended reason and trips no other check.
+
+   **Same implementation, not a parallel one (F3).** `up` calls this exact static method and throws on its joined list. Case 2's `up` failures and this case therefore exercise the same predicate code, and no validation SQL exists outside `validateBackfill` / `validateInvoiceNumbers`.
+
+   **No constraint bypass is needed.** At this point the `tenantId` columns are nullable with no FK or check. The id-only parent FKs are still in place and every corruption keeps them satisfied, since only `tenantId` values, or a same-tenant `customerId` swap, change. A corruption that an existing constraint rejected would fail the setup step, not the assertion, so the setup inserts/updates are awaited outside the `expect`.
 
    The helper throws after its assertion, forcing a rollback, and the case then runs `expectUntouched`. Corruptions:
    - a line whose `tenantId` is the second tenant while its order is bootstrap ⇒ `/laundry line\(s\) reference an order/`;
    - an invoice whose `tenantId` is the second tenant while its order is bootstrap (its customer also set to a second-tenant customer, so only the order check can be under test; assert the message contains the order clause) ⇒ `/invoice\(s\) reference a laundry order/`;
-   - a line with `tenantId` set back to `NULL` ⇒ `/laundry_order_line_entity: 1 row\(s\) without a tenant/`, and the same for an order and for an invoice.
+   - a line with `tenantId` set back to `NULL` ⇒ `/laundry_order_line_entity: 1 row\(s\) without a tenant/`, and the same for an order and for an invoice. Each yields exactly one entry, because a NULL `tenantId` makes the mismatch joins' `<>` NULL and so not counted.
 5. **Happy path.** Insert:
    - two bootstrap orders with lines, one line with `serviceId` only and one with `addOnId` only (proving validation accepts the null side);
    - two invoices `INV-2026-000041` and `INV-2026-000042`, each with one invoice line;
@@ -393,7 +407,9 @@ Cases, in order:
    - `invoice_line_entity` has no `tenantId` column;
    - `SELECT to_regclass('billing_invoice_number_seq')` is `NULL`;
    - `invoice_number_counter` holds exactly one row, `(BOOTSTRAP_TENANT_ID, 42)`. That is the max suffix, **not** the sequence's 45 (Decision 10);
-   - `ck_invoice_number_counter_range` rejects `lastValue = 9007199254740992`.
+   - `ck_invoice_number_counter_range` rejects `lastValue = 9007199254740992` and `-1`, and accepts `9007199254740991`;
+   - **allocation at the ceiling (F7):** set a counter row to `9007199254740991` and run the allocator's exact upsert (the `ALLOCATE_SQL` string from Task 3) for that tenant. It rejects with `driverError.constraint = 'ck_invoice_number_counter_range'`, and the row keeps `9007199254740991`: no wrap and no rounding. Restore the row afterwards.
+5b. **Maximum supported suffix is accepted (F7).** A separate `describe` with its own throwaway database, created and dropped by the same harness. Insert one bootstrap order and one invoice numbered `INV-2026-9007199254740991`, then run `up`. It succeeds, and `invoice_number_counter` holds `lastValue = '9007199254740991'` exactly. Compare as a string, since `pg` returns `bigint` as text.
 6. **Composite FKs reject mismatches (I-1).** Each case expects a rejection whose `error.driverError.constraint` names the matching FK:
    - a bootstrap-tenant order with the second tenant's customer ⇒ `fk_laundry_order_customer_tenant`;
    - a line with `tenantId` = the second tenant on a bootstrap order ⇒ `fk_laundry_order_line_order_tenant`;
@@ -519,10 +535,10 @@ export class AddLaundryBillingTenant1790784000000 implements MigrationInterface 
       return [`${malformed} invoice(s) do not match the invoice number format`];
     }
     const [{ outOfRange }] = (await queryRunner.query(
-      `SELECT COUNT(*)::int AS "outOfRange" FROM "invoice_entity" WHERE ${SUFFIX}::numeric > ${MAX_INVOICE_SUFFIX}`,
+      `SELECT COUNT(*)::int AS "outOfRange" FROM "invoice_entity" WHERE ${SUFFIX}::numeric NOT BETWEEN 1 AND ${MAX_INVOICE_SUFFIX}`,
     )) as { outOfRange: number }[];
     if (outOfRange > 0) {
-      return [`${outOfRange} invoice number suffix out of range (max ${MAX_INVOICE_SUFFIX})`];
+      return [`${outOfRange} invoice number suffix out of range (1..${MAX_INVOICE_SUFFIX})`];
     }
     const [{ duplicates }] = (await queryRunner.query(
       `SELECT COUNT(*)::int AS "duplicates" FROM (SELECT 1 FROM "invoice_entity" GROUP BY "tenantId", ${SUFFIX}::bigint HAVING COUNT(*) > 1) d`,
@@ -671,7 +687,7 @@ Format with Prettier as the repository's lint config requires; the long tuple li
    - `createTestTenant()`, then insert with raw SQL for that tenant: a customer, a service, an add-on, an order, one service line and one add-on line, an invoice for the order with one invoice line, and an `invoice_number_counter` row.
    - Call `removeTestTenants(dataSource, [tenantId])`. It resolves, so no RESTRICT FK blocked any delete.
    - Assert that zero rows remain for that tenant in every one of those tables, including invoice lines by `invoiceId` and lines by `laundryOrderId`, plus `customer_entity`, `service_entity`, `add_on_entity` and `tenant_entity`.
-   - Assert the bootstrap counts are unchanged.
+   - Assert the bootstrap counts are unchanged, and that the bootstrap `invoice_number_counter.lastValue` (if a row exists) is unchanged. Assert zero rows for the test tenant in `invoice_line_entity`: join through the recorded invoice id, which must also be gone, rather than trusting the cascade.
 
    Write it now with the other Task 1 tests. It fails until the helper change above is in place, because the tenant delete hits `fk_invoice_tenant`.
 
@@ -870,7 +886,7 @@ export async function allocateInvoiceNumber(
 - [ ] **Step 1: Failing tests.**
    - **`laundry-order.resolver.spec.ts`:**
      - `laundryOrder('o1', principal)` calls `getOrder('o1', principal.tenantId)`, and a principal with `tenantId: null` calls `getOrder('o1', null)`;
-     - `it.each` over the 14 mutations: each passes `tenantId: principal.tenantId` in its command, and a `tenantId: null` principal ⇒ `ForbiddenException` with the service not called.
+     - `it.each` over all **15** mutations of `LaundryOrderResolver` (`cancelLaundryOrder`, `completeLaundryOrder`, `markLaundryOrderAwaitingDelivery`, `markLaundryOrderAwaitingPayment`, `markLaundryOrderAwaitingPickup`, `markLaundryOrderDamaged`, `markLaundryOrderLost`, `markLaundryOrderPaid`, `markLaundryOrderReady`, `priceLaundryOrder`, `receiveLaundryOrder`, `refundLaundryOrder`, `rejectLaundryOrder`, `startLaundryProcessing`, `weighLaundryOrder`; verified by `grep -c "@Mutation"` = 15 on 2026-09-30): each passes `tenantId: principal.tenantId` in its command, and a `tenantId: null` principal ⇒ `ForbiddenException` with the service not called.
    - **`invoice.resolver.spec.ts`:** `invoice('i1', principal)` ⇒ `getInvoice('i1', principal.tenantId)`. `generateInvoiceFromOrder` keeps its existing tenant tests.
    - **`laundry-order-read.authorization.spec.ts`:** a tenant-authorizer `describe.each` over `[LaundryOrderType, InvoiceType]`, copied from `apps/api/src/modules/catalog/tests/graphql/service-read.resolver.spec.ts:118-150`. It checks:
      - the authorizer is registered;
@@ -960,7 +976,8 @@ describe('Relations targeting laundry / invoice types (tenant isolation, #87)', 
 **Spec:** RFC §4.5; Slice decisions 6, 7. No product change: this task brings existing tests in line with Tasks 1–4 and replaces the interim cases #82 and #84 marked "#87".
 
 **Files** (verify at M6 start with `grep -rln "LaundryOrderEntity\|InvoiceEntity\|laundryOrdersService\.\|invoicesService\.\|#87\|nextval" apps/api/test`):
-- Modify: `apps/api/test/laundry.e2e-spec.ts`, `laundry.service.e2e-spec.ts`, `billing.e2e-spec.ts`, `billing.service.e2e-spec.ts`, `catalog.tenant-isolation.e2e-spec.ts`
+- Modify: `apps/api/test/laundry.e2e-spec.ts`, `laundry.service.e2e-spec.ts`, `billing.e2e-spec.ts`, `catalog.tenant-isolation.e2e-spec.ts`
+- **Not** `billing.service.e2e-spec.ts`: Task 3 already moved it onto the new signatures and added the counter assertions. Task 5 touches it only if Step 1 shows a new failure there, and that would be a defect to fix in Task 3's code, not an alignment.
 - Modify only if failing: `customers-properties.tenant-isolation.e2e-spec.ts`, `paginated-collections-allowlist.e2e-spec.ts`
 
 - [ ] **Step 1: Run** `pnpm --filter api test:e2e` and list the failures. Every failure must be one of:
@@ -1012,7 +1029,7 @@ describe('Relations targeting laundry / invoice types (tenant isolation, #87)', 
      - **Reachability inventory.** Walk every object type's fields, including `Query` and `Mutation`, and collect each `Type.field` whose named output type (after unwrapping lists, non-null and `…Connection` / `…OffsetConnection` node types) is `LaundryOrder`, `LaundryOrderLine`, `Invoice` or `InvoiceLine`. Assert the set equals exactly:
        - `Query.laundryOrders`, `Query.laundryOrder`, `Query.invoices`, `Query.invoice`;
        - `Invoice.laundryOrder`, `LaundryOrder.lines`, `Invoice.lines`;
-       - the 14 laundry mutations and `Mutation.generateInvoiceFromOrder`.
+       - the 15 laundry mutations (`cancelLaundryOrder`, `completeLaundryOrder`, `markLaundryOrderAwaitingDelivery`, `markLaundryOrderAwaitingPayment`, `markLaundryOrderAwaitingPickup`, `markLaundryOrderDamaged`, `markLaundryOrderLost`, `markLaundryOrderPaid`, `markLaundryOrderReady`, `priceLaundryOrder`, `receiveLaundryOrder`, `refundLaundryOrder`, `rejectLaundryOrder`, `startLaundryProcessing`, `weighLaundryOrder`) and `Mutation.generateInvoiceFromOrder`.
 
        Also assert that no `…Aggregate`, `…Count`, `updateOne…` / `deleteOne…` / `…Many` or generated `one` roots exist for these types.
 
@@ -1029,6 +1046,8 @@ describe('Relations targeting laundry / invoice types (tenant isolation, #87)', 
      - `invoices(filter: { laundryOrder: { id: { eq: orderA.id } } })`
      - `invoices(filter: { laundryOrder: { status: { eq: <orderA.status> } }, customerId: { eq: customerA.id } })`
      - `invoices(filter: { or: [ { customer: { fullName: { like: "Alpha%" } } }, { id: { eq: invoiceA.id } } ] })`
+
+     - **Cannot add or remove B's rows (records and counts).** As B, `invoices(filter: { or: [ { customer: { fullName: { like: "Alpha%" } } }, { id: { eq: invoiceB.id } } ] }) { totalCount nodes { id } }` ⇒ exactly `[invoiceB]`, `totalCount: 1`. The same with `and: [ { id: { eq: invoiceB.id } }, { customer: { id: { neq: customerA.id } } } ]` ⇒ exactly `[invoiceB]`, `totalCount: 1`. The laundry mirror, with `laundryOrders` and `orderB`, gives the same results. The cross-tenant clause contributes nothing, and a negated cross-tenant clause excludes nothing.
 
      Use `it.each`. If a field is not filterable on the related DTO, drop that row and record it in the task report. The `id` rows always stay.
   3. **Nested paths.**
