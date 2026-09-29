@@ -45,11 +45,10 @@ export async function createTestTenant(
 // these tenants' services/add-ons, MUST delete those rows first:
 // `fk_laundry_order_customer`, `fk_laundry_order_line_service`, and
 // `fk_laundry_order_line_add_on` are all `ON DELETE RESTRICT`, so this call
-// fails loudly (not silently) if a caller forgot. Likewise, a CleaningJob
-// (including one on a bootstrap-tenant booking) referencing one of these
-// tenants' teams (`fk_cleaning_job_team`, ON DELETE RESTRICT, id-only until
-// #86) is not deleted here and would make the team delete fail loudly —
-// callers creating such rows must delete them first.
+// fails loudly (not silently) if a caller forgot. CleaningJobs are
+// tenant-owned (#86) and deleted by `tenantId`; by the composite
+// `fk_cleaning_job_booking_tenant` / `fk_cleaning_job_team_tenant` FKs a
+// test tenant's job can only reference that tenant's booking and team.
 export async function removeTestTenants(
   dataSource: DataSource,
   tenantIds: readonly string[],
@@ -58,10 +57,11 @@ export async function removeTestTenants(
   if (ids.length === 0) {
     return;
   }
-  // Jobs first: `fk_cleaning_job_booking` is ON DELETE RESTRICT; their
-  // checklists/items go with them (both FKs are ON DELETE CASCADE).
+  // Jobs first: `fk_cleaning_job_booking_tenant` is ON DELETE RESTRICT;
+  // their checklists/items go with them (`fk_checklist_job_tenant` and
+  // `fk_checklist_item_checklist` are ON DELETE CASCADE).
   await dataSource.query(
-    `DELETE FROM "cleaning_job_entity" WHERE "bookingId" IN (SELECT "id" FROM "booking_entity" WHERE "tenantId" = ANY($1))`,
+    `DELETE FROM "cleaning_job_entity" WHERE "tenantId" = ANY($1)`,
     [ids],
   );
   await dataSource.query(
