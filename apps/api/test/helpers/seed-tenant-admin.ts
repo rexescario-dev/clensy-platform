@@ -40,12 +40,9 @@ export async function createTestTenant(
 // bootstrap tenant. Bookings (and the cleaning jobs referencing them) owned
 // by a supplied test tenant are deleted here; callers no longer delete such
 // bookings by hand, but still clean up their own bootstrap-tenant rows.
-// Callers whose tests insert a LaundryOrder referencing one of these
-// tenants' customers/properties, or a LaundryOrderLine referencing one of
-// these tenants' services/add-ons, MUST delete those rows first:
-// `fk_laundry_order_customer`, `fk_laundry_order_line_service`, and
-// `fk_laundry_order_line_add_on` are all `ON DELETE RESTRICT`, so this call
-// fails loudly (not silently) if a caller forgot. CleaningJobs are
+// LaundryOrders (with their lines), Invoices (with their lines) and the
+// `invoice_number_counter` row are tenant-owned (#87) and deleted by
+// `tenantId`, before the customers/catalog they reference. CleaningJobs are
 // tenant-owned (#86) and deleted by `tenantId`; by the composite
 // `fk_cleaning_job_booking_tenant` / `fk_cleaning_job_team_tenant` FKs a
 // test tenant's job can only reference that tenant's booking and team.
@@ -57,6 +54,25 @@ export async function removeTestTenants(
   if (ids.length === 0) {
     return;
   }
+  // Invoices first: `fk_invoice_laundry_order_tenant` / `_customer_tenant`
+  // are ON DELETE RESTRICT (their lines go by `fk_invoice_line_invoice`
+  // CASCADE). Then laundry orders (lines CASCADE via
+  // `fk_laundry_order_line_order_tenant`; the line → service/add-on FKs are
+  // RESTRICT, so orders must go before the catalog). The counter row
+  // references the tenant (RESTRICT). By #87's composite FKs a test
+  // tenant's order/invoice can only reference that tenant's rows.
+  await dataSource.query(
+    `DELETE FROM "invoice_entity" WHERE "tenantId" = ANY($1)`,
+    [ids],
+  );
+  await dataSource.query(
+    `DELETE FROM "laundry_order_entity" WHERE "tenantId" = ANY($1)`,
+    [ids],
+  );
+  await dataSource.query(
+    `DELETE FROM "invoice_number_counter" WHERE "tenantId" = ANY($1)`,
+    [ids],
+  );
   // Jobs first: `fk_cleaning_job_booking_tenant` is ON DELETE RESTRICT;
   // their checklists/items go with them (`fk_checklist_job_tenant` and
   // `fk_checklist_item_checklist` are ON DELETE CASCADE).

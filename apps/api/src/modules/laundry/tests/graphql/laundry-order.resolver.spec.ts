@@ -81,6 +81,7 @@ describe('LaundryOrderResolver', () => {
     const order = {
       id: 'o1',
       customerId: 'c1',
+      tenantId: 'tenant-1',
       createdAt: new Date(),
       fulfillmentType: LaundryFulfillmentType.PICKUP,
       status: LaundryOrderStatus.RECEIVED,

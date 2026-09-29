@@ -9,6 +9,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { TenantEntity } from '../../../admins/infrastructure/persistence/tenant.entity';
 import { CustomerEntity } from '../../../customers/infrastructure/persistence/customer.entity';
 import { LaundryFulfillmentType } from '../../domain/laundry-fulfillment-type';
 import { LaundryOrder } from '../../domain/laundry-order';
@@ -30,10 +31,32 @@ import { LaundryOrderLineEntity } from './laundry-order-line.entity';
 // backed by a hand-added `CHECK ("weightGrams" IS NULL OR "weightGrams"
 // >= 0)` in the migration (spec §4.8) — defense-in-depth for the
 // application-level non-negative-integer rule.
+//
+// Tenant ownership (#87): `tenantId` + `fk_laundry_order_tenant` are
+// expressed here. `customer` keeps the relation for Relatable but sets
+// `createForeignKeyConstraints: false`. The composite
+// `fk_laundry_order_customer_tenant`, `uq_laundry_order_id_tenant` and
+// `idx_laundry_order_tenant_created` are hand-written in
+// `AddLaundryBillingTenant`. `migration:generate` may propose dropping them
+// or re-adding an id-only FK — do not apply that.
 @Entity()
 export class LaundryOrderEntity implements LaundryOrder {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
+
+  @Column({ type: 'uuid' })
+  tenantId!: string;
+
+  @ManyToOne(() => TenantEntity, {
+    nullable: false,
+    eager: false,
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({
+    name: 'tenantId',
+    foreignKeyConstraintName: 'fk_laundry_order_tenant',
+  })
+  tenant!: TenantEntity;
 
   @Column({ type: 'uuid' })
   @Index('IDX_laundry_order_customer_id')
@@ -42,12 +65,9 @@ export class LaundryOrderEntity implements LaundryOrder {
   @ManyToOne(() => CustomerEntity, {
     nullable: false,
     eager: false,
-    onDelete: 'RESTRICT',
+    createForeignKeyConstraints: false,
   })
-  @JoinColumn({
-    name: 'customerId',
-    foreignKeyConstraintName: 'fk_laundry_order_customer',
-  })
+  @JoinColumn({ name: 'customerId' })
   customer!: CustomerEntity;
 
   @Column({

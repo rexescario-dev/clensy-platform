@@ -59,6 +59,7 @@ describe('InvoiceResolver', () => {
       id: 'inv-1',
       customerId: 'cust-1',
       laundryOrderId: 'order-1',
+      tenantId: 'tenant-1',
       amountPaidMinorUnits: 0,
       createdAt: new Date(),
       discountMinorUnits: 0,

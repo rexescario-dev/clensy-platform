@@ -10,6 +10,7 @@ import {
   Unique,
   UpdateDateColumn,
 } from 'typeorm';
+import { TenantEntity } from '../../../admins/infrastructure/persistence/tenant.entity';
 import { CustomerEntity } from '../../../customers/infrastructure/persistence/customer.entity';
 import { LaundryOrderEntity } from '../../../laundry/infrastructure/persistence/laundry-order.entity';
 import { Invoice } from '../../domain/invoice';
@@ -22,7 +23,7 @@ import { InvoiceLineEntity } from './invoice-line.entity';
 // `amountPaidMinorUnits` / `paymentStatus` are the designated #39 mutation
 // surface (#38 writes `0` / `UNPAID` once).
 //
-// `@Unique('uq_invoice_number' / 'uq_invoice_laundry_order', …)` emit real
+// `@Unique('uq_invoice_tenant_number' / 'uq_invoice_laundry_order', …)` emit real
 // PostgreSQL UNIQUE constraints (visible in `pg_constraint`, driver-reported
 // name = the given name) — NOT `@Index(..., { unique: true })`.
 // `uq_invoice_laundry_order` is the correctness mechanism for one-invoice-
@@ -34,14 +35,39 @@ import { InvoiceLineEntity } from './invoice-line.entity';
 // `CustomerEntity` on any `forFeature` (spec §4.1). There is no relation to
 // any `Payment` / `Promotion` / logistics aggregate.
 //
+// Tenant ownership (#87): `tenantId` (the originating order's) +
+// `fk_invoice_tenant` are expressed here; invoice numbers are unique per
+// tenant (`uq_invoice_tenant_number`) and allocated per tenant from the
+// hand-written `invoice_number_counter` table (#87 slice decision 9), which
+// has no entity. `laundryOrder` / `customer` keep their relations but set
+// `createForeignKeyConstraints: false`; the composite
+// `fk_invoice_laundry_order_tenant` / `fk_invoice_customer_tenant` FKs and
+// `idx_invoice_tenant_issue` are hand-written in `AddLaundryBillingTenant`.
+// `migration:generate` may propose dropping them or re-adding id-only FKs —
+// do not apply that.
+//
 // `amountDueMinorUnits` is deliberately NOT a column — it is
 // `totalMinorUnits - amountPaidMinorUnits`, resolved on read.
 @Entity()
-@Unique('uq_invoice_number', ['invoiceNumber'])
+@Unique('uq_invoice_tenant_number', ['tenantId', 'invoiceNumber'])
 @Unique('uq_invoice_laundry_order', ['laundryOrderId'])
 export class InvoiceEntity implements Invoice {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
+
+  @Column({ type: 'uuid' })
+  tenantId!: string;
+
+  @ManyToOne(() => TenantEntity, {
+    nullable: false,
+    eager: false,
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({
+    name: 'tenantId',
+    foreignKeyConstraintName: 'fk_invoice_tenant',
+  })
+  tenant!: TenantEntity;
 
   @Column({ type: 'varchar' })
   invoiceNumber!: string;
@@ -52,12 +78,9 @@ export class InvoiceEntity implements Invoice {
   @ManyToOne(() => LaundryOrderEntity, {
     nullable: false,
     eager: false,
-    onDelete: 'RESTRICT',
+    createForeignKeyConstraints: false,
   })
-  @JoinColumn({
-    name: 'laundryOrderId',
-    foreignKeyConstraintName: 'fk_invoice_laundry_order',
-  })
+  @JoinColumn({ name: 'laundryOrderId' })
   laundryOrder!: LaundryOrderEntity;
 
   @Column({ type: 'uuid' })
@@ -67,12 +90,9 @@ export class InvoiceEntity implements Invoice {
   @ManyToOne(() => CustomerEntity, {
     nullable: false,
     eager: false,
-    onDelete: 'RESTRICT',
+    createForeignKeyConstraints: false,
   })
-  @JoinColumn({
-    name: 'customerId',
-    foreignKeyConstraintName: 'fk_invoice_customer',
-  })
+  @JoinColumn({ name: 'customerId' })
   customer!: CustomerEntity;
 
   @Column({ type: 'integer' })
