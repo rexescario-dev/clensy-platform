@@ -6,8 +6,8 @@ export interface GenerateInvoiceFromOrderCommand {
   actorId: string;
   laundryOrderId: string;
   paymentTerms: InvoicePaymentTerms;
-  // The principal's tenant (`requireTenantId`, #84 spec §4.5/§4.4). Used
-  // only for the catalog name-resolution lookups below — `invoice_entity`
-  // has no `tenantId` until #87.
+  // The principal's tenant (`requireTenantId`, #84 spec §4.5/§4.4). Scopes
+  // the order lookup and the catalog name resolution; the invoice's own
+  // `tenantId` is the scoped order row's (#87 slice decision 6).
   tenantId: string;
 }

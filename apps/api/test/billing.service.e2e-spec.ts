@@ -201,7 +201,12 @@ describe('InvoicesService (real Postgres) — concurrent generation', () => {
       tenantId: TENANT_ID,
       fulfillmentType: LaundryFulfillmentType.PICKUP,
     });
-    await laundry.weigh({ actorId: 'a', orderId: order.id, weightGrams: 2000 });
+    await laundry.weigh({
+      actorId: 'a',
+      orderId: order.id,
+      tenantId: TENANT_ID,
+      weightGrams: 2000,
+    });
     await laundry.price({
       actorId: 'a',
       baseServiceId: service.id,
@@ -212,8 +217,23 @@ describe('InvoicesService (real Postgres) — concurrent generation', () => {
     return order.id;
   }
 
+  // The tenant's counter persists across tests (`TRUNCATE` does not, and must
+  // not, include `invoice_number_counter`), so assertions are relative to
+  // its value before each race (#87 slice decision 9, F1).
+  async function counterValue(): Promise<number> {
+    const rows: { lastValue: string }[] = await dsA.query(
+      `SELECT "lastValue" FROM "invoice_number_counter" WHERE "tenantId" = $1`,
+      [TENANT_ID],
+    );
+    return rows.length === 0 ? 0 : Number(rows[0].lastValue);
+  }
+
+  const suffix = (invoiceNumber: string): number =>
+    Number(invoiceNumber.split('-')[2]);
+
   it('two concurrent generateFromOrder calls: exactly one invoice, one conflict, no orphan rows', async () => {
     const orderId = await pricedOrderId(dsA);
+    const before = await counterValue();
     const a = buildInvoicesService(dsA, auditA);
     const b = buildInvoicesService(dsB, auditB);
 
@@ -237,6 +257,13 @@ describe('InvoicesService (real Postgres) — concurrent generation', () => {
     const invoices = await dsA.getRepository(InvoiceEntity).find();
     expect(invoices).toHaveLength(1);
     expect(invoices[0].invoiceNumber).toMatch(/^INV-\d{4}-\d{6,}$/);
+    expect(invoices[0].tenantId).toBe(TENANT_ID);
+
+    // Net +1: the loser either conflicted before allocating, or its
+    // increment rolled back with its transaction (slice decision 9).
+    const after = await counterValue();
+    expect(after).toBe(before + 1);
+    expect(suffix(invoices[0].invoiceNumber)).toBe(after);
 
     // no orphan lines from the failed attempt: every line belongs to the
     // one surviving invoice (the loser rolls back before inserting lines)
@@ -252,7 +279,33 @@ describe('InvoicesService (real Postgres) — concurrent generation', () => {
     ].filter(([e]) => e.action === 'invoice.generated');
     expect(genCalls).toHaveLength(1);
 
-    // the losing attempt's drawn sequence value is burned — the test does
-    // not assert contiguity, only that the surviving number is well-formed
+    // the losing attempt's counter increment rolled back with its
+    // transaction, so numbering stays gapless (slice decision 9)
+  });
+
+  it('five concurrent generateFromOrder calls on distinct orders get contiguous distinct numbers', async () => {
+    const orderIds: string[] = [];
+    for (let index = 0; index < 5; index += 1) {
+      orderIds.push(await pricedOrderId(dsA));
+    }
+    const before = await counterValue();
+    const a = buildInvoicesService(dsA, auditA);
+    const b = buildInvoicesService(dsB, auditB);
+
+    const results = await Promise.all(
+      orderIds.map((laundryOrderId, index) =>
+        (index % 2 === 0 ? a : b).generateFromOrder({
+          actorId: `actor-${index}`,
+          laundryOrderId,
+          tenantId: TENANT_ID,
+          paymentTerms: InvoicePaymentTerms.PAY_NOW,
+        }),
+      ),
+    );
+
+    expect(
+      results.map((inv) => suffix(inv.invoiceNumber)).sort((x, y) => x - y),
+    ).toEqual([before + 1, before + 2, before + 3, before + 4, before + 5]);
+    expect(await counterValue()).toBe(before + 5);
   });
 });
