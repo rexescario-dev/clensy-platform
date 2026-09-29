@@ -2,14 +2,23 @@
 
 | Field | Value |
 | --- | --- |
-| **Status** | Draft |
+| **Status** | Accepted |
 | **Kind** | Implementation plan (M4) for **one** delivery slice |
 | **Date** | 2026-09-29 |
 | **Tracking** | GitHub [#86](https://github.com/rexescario-dev/clensy-platform/issues/86) (program [#81](https://github.com/rexescario-dev/clensy-platform/issues/81)). One PR for this plan (Accepted at M5) + implementation (process §2.8). Branch `feat/86-jobs-checklists-tenant-isolation`. |
 | **Package / repo** | `clensy-platform` — `apps/api` only |
 | **Depends on (Accepted)** | [Multi-Tenant Architecture](../specs/2026-09-23-multi-tenant-architecture-design.md) (Accepted, M3 2026-09-23). **Where this plan and that specification disagree, the specification wins** — stop and return to M2/M3. Relies on the shipped [Tenant Identity Foundation plan](2026-09-23-tenant-identity-foundation-plan.md) (#68: principal `{ id, role, scope, tenantId }`, `BOOTSTRAP_TENANT_ID`, `test/helpers/seed-tenant-admin.ts`), [Customer & Property plan](2026-09-24-customer-property-tenant-isolation-plan.md) (#82: `tenantReadAuthorizer` / `tenantFilterFor`, `requireTenantId`, relation-override regression pattern), [Teams & Cleaners plan](2026-09-27-teams-cleaners-tenant-isolation-plan.md) (#83: `uq_team_id_tenant`, per-tenant `JobRelationLoaders.teamLoaderFor`, `AssignTeamToJobCommand.tenantId`, audit tagging pattern), [Catalog plan](2026-09-28-catalog-tenant-isolation-plan.md) (#84) and [Booking plan](2026-09-28-booking-tenant-isolation-plan.md) (#85: `uq_booking_id_tenant`, `CreateJobFromBookingCommand.tenantId`, `fieldResolverEnhancers: ['interceptors']`, and the three #86-owned residual exposures). Also relies on [Jobs & Checklists](../specs/2026-08-27-jobs-checklists-design.md), [nestjs-query GraphQL Reads](../specs/2026-08-28-nestjs-query-graphql-reads-design.md), [Paginated GraphQL Collections](../specs/2026-08-28-paginated-graphql-collections-design.md) and [Admin Foundation](../specs/2026-08-14-admin-foundation-design.md) §4.6 (audit) as **extended/constrained by the RFC**. |
 
-> **For agentic workers:** Draft — **do not execute** until M5 Accepts this plan. Steps use checkbox (`- [ ]`) syntax. Do **not** invent product semantics; the Accepted specification wins. M6 constraints: no production-tenant provisioning, no unrelated refactoring, no push or PR as a side effect; do not weaken failing assertions to get a suite green.
+> **For agentic workers:** **M5 Accepted 2026-09-29.** Tracking [#86](https://github.com/rexescario-dev/clensy-platform/issues/86). Execution method: inline (superpowers:executing-plans) in the developer's session, chosen at M5 with M6–M10 authorized to run in sequence. Each task ends green on unit tests and `tsc` before the next task starts, and a design/signature problem found in a task is fixed there (plan or implementation) before continuing. Steps use checkbox (`- [ ]`) syntax. Do **not** invent product semantics; the Accepted specification wins. M6 constraints: no production-tenant provisioning, no unrelated refactoring, no push or PR as a side effect; do not weaken failing assertions to get a suite green.
+>
+> **M5 review (2026-09-29): Accepted — no plan blockers.** The reviewer's final checklist was checked against the repository:
+> 1. The expected-drift list matches the migration's hand-written objects (three composite FKs, `uq_cleaning_job_id_tenant`, `idx_cleaning_job_tenant_scheduled`). The baseline diff itself is taken at M6 Task 1 Step 6.
+> 2. The `pg_constraint` check names the exact column pairs, `confdeltype` `r`/`r`/`c`, and id-only FK detection.
+> 3. The final gate reruns both checks.
+> 4. The execution-risks note and revision notes reflect the correction.
+> 5. No implementation or push happened during review.
+>
+> The migrations glob (`data-source.ts`: `migrations/*.ts`) picks up the new file.
 >
 > **Pre-M5 review revision (2026-09-29):** three findings, each verified against the code before it was applied.
 > - **P1: ORM ownership of the parent FKs.** Only `booking` is a TypeORM relation. `teamId` and `ChecklistEntity.jobId` are plain columns whose FKs were always hand-written. This is now stated explicitly in Task 1 Step 4, and a `schema:log` drift check was added (Task 1 Step 6, final gate).
