@@ -267,8 +267,8 @@ describe('Catalog tenant isolation (e2e)', () => {
 
     // A booking, as A, via `BookingsService.create` — fixture setup
     // convenience, mirroring the catalog fixtures above (also application
-    // services, not GraphQL mutations). Booking is tenant-owned as of #85;
-    // Laundry/Billing are not yet (#87).
+    // services, not GraphQL mutations). Booking (#85), LaundryOrder and
+    // Invoice (#87) are tenant-owned.
     bookingA = await bookingsService.create({
       actorId: ownerAId,
       customerId: customerA.id,
@@ -289,6 +289,7 @@ describe('Catalog tenant isolation (e2e)', () => {
     await laundryOrdersService.weigh({
       actorId: ownerAId,
       orderId: receivedA.id,
+      tenantId: tenantA,
       weightGrams: 1000,
     });
     const pricedA = await laundryOrdersService.price({
@@ -312,6 +313,7 @@ describe('Catalog tenant isolation (e2e)', () => {
     await laundryOrdersService.weigh({
       actorId: ownerBId,
       orderId: receivedB.id,
+      tenantId: tenantB,
       weightGrams: 1000,
     });
     laundryOrderBId = receivedB.id;
@@ -695,18 +697,15 @@ describe('Catalog tenant isolation (e2e)', () => {
       generateInvoiceFromOrder(input:$i){ id }
     }`;
 
-    it("generateInvoiceFromOrder on A's priced order is 400 for B, and succeeds for A", async () => {
+    // #87 slice decision 7: A's order is now tenant-owned, so B naming it is
+    // a missing order (404) — no longer #84's late 400 on catalog names.
+    it("generateInvoiceFromOrder on A's priced order is 404 for B (missing order), and succeeds for A", async () => {
       const asB = await gql(cookieB, GENERATE, {
         i: { laundryOrderId: laundryOrderAId, paymentTerms: 'PAY_NOW' },
       });
       expect(asB.body.errors).toBeDefined();
-      expect(errorStatus(asB)).toBe(400);
-      // Anchored to `^Service` — the add-on variant of this same message
-      // ("Add-on ... could not be resolved") would also match a bare
-      // `/could not be resolved/`.
-      expect(asB.body.errors[0].message).toMatch(
-        /^Service .* could not be resolved/,
-      );
+      expect(errorStatus(asB)).toBe(404);
+      expect(asB.body.errors[0].message).toMatch(/^Laundry order .* not found/);
 
       const asA = await gql(cookieA, GENERATE, {
         i: { laundryOrderId: laundryOrderAId, paymentTerms: 'PAY_NOW' },

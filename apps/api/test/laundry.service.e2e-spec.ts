@@ -211,6 +211,7 @@ describe('LaundryOrdersService (real Postgres)', () => {
     order = await svc.laundry.weigh({
       actorId: 'actor-1',
       orderId: order.id,
+      tenantId: TENANT_ID,
       weightGrams: 2350,
     });
     expect(order.status).toBe(LaundryOrderStatus.WEIGHED);
@@ -256,24 +257,29 @@ describe('LaundryOrdersService (real Postgres)', () => {
     order = await svc.laundry.markPaid({
       actorId: 'actor-1',
       orderId: order.id,
+      tenantId: TENANT_ID,
     });
     expect(order.status).toBe(LaundryOrderStatus.PAID);
     order = await svc.laundry.startProcessing({
       actorId: 'actor-1',
       orderId: order.id,
+      tenantId: TENANT_ID,
     });
     order = await svc.laundry.markReady({
       actorId: 'actor-1',
       orderId: order.id,
+      tenantId: TENANT_ID,
     });
     order = await svc.laundry.markAwaitingPickup({
       actorId: 'actor-1',
       orderId: order.id,
+      tenantId: TENANT_ID,
     });
     expect(order.status).toBe(LaundryOrderStatus.AWAITING_PICKUP);
     order = await svc.laundry.complete({
       actorId: 'actor-1',
       orderId: order.id,
+      tenantId: TENANT_ID,
     });
     expect(order.status).toBe(LaundryOrderStatus.COMPLETED);
 
@@ -300,6 +306,7 @@ describe('LaundryOrdersService (real Postgres)', () => {
     order = await svc.laundry.weigh({
       actorId: 'actor-1',
       orderId: order.id,
+      tenantId: TENANT_ID,
       weightGrams: 1000,
     });
     order = await svc.laundry.price({
@@ -328,7 +335,7 @@ describe('LaundryOrdersService (real Postgres)', () => {
       ))!.priceMinorUnits,
     ).toBe(9999);
 
-    const reFetched = await svc.laundry.getOrder(order.id);
+    const reFetched = await svc.laundry.getOrder(order.id, TENANT_ID);
     expect(reFetched!.totalMinorUnits).toBe(originalTotal);
     const lines = await dsA
       .getRepository(LaundryOrderLineEntity)
@@ -348,6 +355,7 @@ describe('LaundryOrdersService (real Postgres)', () => {
     order = await svc.laundry.weigh({
       actorId: 'actor-1',
       orderId: order.id,
+      tenantId: TENANT_ID,
       weightGrams: 3000,
     });
     order = await svc.laundry.price({
@@ -361,7 +369,8 @@ describe('LaundryOrdersService (real Postgres)', () => {
     const before = await dsA
       .getRepository(LaundryOrderLineEntity)
       .find({ order: { id: 'ASC' }, where: { laundryOrderId: order.id } });
-    const beforeTotal = (await svc.laundry.getOrder(order.id))!.totalMinorUnits;
+    const beforeTotal = (await svc.laundry.getOrder(order.id, TENANT_ID))!
+      .totalMinorUnits;
 
     await expect(
       svc.laundry.price({
@@ -378,9 +387,9 @@ describe('LaundryOrdersService (real Postgres)', () => {
       .find({ order: { id: 'ASC' }, where: { laundryOrderId: order.id } });
     expect(after).toHaveLength(before.length);
     expect(after).toEqual(before);
-    expect((await svc.laundry.getOrder(order.id))!.totalMinorUnits).toBe(
-      beforeTotal,
-    );
+    expect(
+      (await svc.laundry.getOrder(order.id, TENANT_ID))!.totalMinorUnits,
+    ).toBe(beforeTotal);
   });
 
   it('rejects an illegal transition (startProcessing on a PRICED order) without changing status', async () => {
@@ -394,6 +403,7 @@ describe('LaundryOrdersService (real Postgres)', () => {
     order = await svc.laundry.weigh({
       actorId: 'actor-1',
       orderId: order.id,
+      tenantId: TENANT_ID,
       weightGrams: 2000,
     });
     order = await svc.laundry.price({
@@ -405,9 +415,13 @@ describe('LaundryOrdersService (real Postgres)', () => {
     });
 
     await expect(
-      svc.laundry.startProcessing({ actorId: 'actor-1', orderId: order.id }),
+      svc.laundry.startProcessing({
+        actorId: 'actor-1',
+        orderId: order.id,
+        tenantId: TENANT_ID,
+      }),
     ).rejects.toBeInstanceOf(BadRequestException);
-    expect((await svc.laundry.getOrder(order.id))!.status).toBe(
+    expect((await svc.laundry.getOrder(order.id, TENANT_ID))!.status).toBe(
       LaundryOrderStatus.PRICED,
     );
   });
@@ -430,6 +444,7 @@ describe('LaundryOrdersService (real Postgres)', () => {
       order = await svc.laundry.weigh({
         actorId: 'actor-1',
         orderId: order.id,
+        tenantId: TENANT_ID,
         weightGrams: 2000,
       });
       order = await svc.laundry.price({
@@ -442,13 +457,18 @@ describe('LaundryOrdersService (real Postgres)', () => {
       order = await svc.laundry.markAwaitingPayment({
         actorId: 'actor-1',
         orderId: order.id,
+        tenantId: TENANT_ID,
       });
       return order.id;
     }
 
     async function paidOrder(): Promise<string> {
       const orderId = await awaitingPaymentOrder();
-      await svc.laundry.markPaid({ actorId: 'actor-1', orderId });
+      await svc.laundry.markPaid({
+        actorId: 'actor-1',
+        orderId,
+        tenantId: TENANT_ID,
+      });
       return orderId;
     }
 
@@ -461,8 +481,8 @@ describe('LaundryOrdersService (real Postgres)', () => {
       auditA.log.mockClear();
 
       const [rPaid, rCancel] = await Promise.allSettled([
-        svc.laundry.markPaid({ actorId: 'a', orderId }),
-        svcB.laundry.cancel({ actorId: 'b', orderId }),
+        svc.laundry.markPaid({ actorId: 'a', orderId, tenantId: TENANT_ID }),
+        svcB.laundry.cancel({ actorId: 'b', orderId, tenantId: TENANT_ID }),
       ]);
 
       const fulfilled = [rPaid, rCancel].filter(
@@ -473,7 +493,8 @@ describe('LaundryOrdersService (real Postgres)', () => {
       expect(rejected).toHaveLength(1);
       expect(rejected[0].reason).toBeInstanceOf(BadRequestException);
 
-      const finalStatus = (await svc.laundry.getOrder(orderId))!.status;
+      const finalStatus = (await svc.laundry.getOrder(orderId, TENANT_ID))!
+        .status;
       const paidWon = rPaid.status === 'fulfilled';
       expect(finalStatus).toBe(
         paidWon ? LaundryOrderStatus.PAID : LaundryOrderStatus.CANCELLED,
@@ -500,8 +521,16 @@ describe('LaundryOrdersService (real Postgres)', () => {
       auditA.log.mockClear();
 
       const results = await Promise.allSettled([
-        svc.laundry.startProcessing({ actorId: 'a', orderId }),
-        svcB.laundry.startProcessing({ actorId: 'b', orderId }),
+        svc.laundry.startProcessing({
+          actorId: 'a',
+          orderId,
+          tenantId: TENANT_ID,
+        }),
+        svcB.laundry.startProcessing({
+          actorId: 'b',
+          orderId,
+          tenantId: TENANT_ID,
+        }),
       ]);
       expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
       const loser = results.find(
@@ -509,7 +538,7 @@ describe('LaundryOrdersService (real Postgres)', () => {
       ) as PromiseRejectedResult;
       expect(loser.reason).toBeInstanceOf(BadRequestException);
 
-      expect((await svc.laundry.getOrder(orderId))!.status).toBe(
+      expect((await svc.laundry.getOrder(orderId, TENANT_ID))!.status).toBe(
         LaundryOrderStatus.PROCESSING,
       );
       const totalAuditCalls =
