@@ -1,5 +1,6 @@
 import { SortDirection } from '@ptc-org/nestjs-query-core';
 import {
+  Authorize,
   FilterableField,
   FilterableRelation,
   IDField,
@@ -11,6 +12,7 @@ import {
   PLATFORM_PAGE_DEFAULT,
   PLATFORM_PAGE_MAX,
 } from '../../../../platform/graphql/paging';
+import { tenantReadAuthorizer } from '../../../../platform/auth/authorization/tenant-read.authorizer';
 import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
 import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
@@ -38,6 +40,12 @@ const relationReadOpts = {
 };
 
 @ObjectType('CleaningJob')
+// Security invariant (#86 multi-tenant spec §4.5): every nestjs-query read
+// of this type — the root `jobs` list/count and its relation filters (e.g.
+// `jobs(filter: { booking: … })`) — is ANDed with the principal's tenant.
+// `tenantId` is deliberately not a GraphQL field; the filter applies to the
+// entity column. `job(id)` is a custom query scoped in `JobsService.getJob`.
+@Authorize(tenantReadAuthorizer<CleaningJobType>())
 @QueryOptions({
   defaultResultSize: PLATFORM_PAGE_DEFAULT,
   defaultSort: [
