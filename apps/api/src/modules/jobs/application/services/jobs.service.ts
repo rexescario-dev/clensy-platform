@@ -30,12 +30,6 @@ import { CompleteJobCommand } from '../commands/complete-job.command';
 const POSTGRES_UNIQUE_VIOLATION = '23505';
 const JOB_BOOKING_UNIQUE_CONSTRAINT = 'UQ_cleaning_job_booking_id';
 
-// Job audit events carry the caller's tenant (#86 Slice decision 10; RFC
-// §4.6). `tenantId` is always the command's, i.e. `requireTenantId`'s.
-function jobAuditTags(tenantId: string) {
-  return { scope: AdminScope.TENANT, tenantId };
-}
-
 // Constraint-scoped unique-violation check (spec §4.2 / §4.7). Accepts a
 // `{ code, constraint }` driver shape so unit tests do not reconstruct
 // TypeORM `QueryFailedError`; also unwraps `QueryFailedError.driverError`
@@ -52,6 +46,12 @@ export function isPostgresUniqueViolation(
     driver?.code === POSTGRES_UNIQUE_VIOLATION &&
     driver?.constraint === constraint
   );
+}
+
+// Job audit events carry the caller's tenant (#86 Slice decision 10; RFC
+// §4.6). `tenantId` is always the command's, i.e. `requireTenantId`'s.
+function jobAuditTags(tenantId: string) {
+  return { tenantId, scope: AdminScope.TENANT };
 }
 
 @Injectable()
@@ -267,9 +267,9 @@ export class JobsService {
         runAuditInTransaction(manager, async () => {
           const now = new Date();
           const job = manager.create(CleaningJobEntity, {
-            tenantId: command.tenantId,
             bookingId: booking.id,
             teamId: booking.teamId,
+            tenantId: command.tenantId,
             createdAt: now,
             scheduledAt: booking.scheduledAt,
             status: JobStatus.PENDING,
@@ -278,8 +278,8 @@ export class JobsService {
           await manager.save(job);
 
           const checklist = manager.create(ChecklistEntity, {
-            tenantId: command.tenantId,
             jobId: job.id,
+            tenantId: command.tenantId,
           });
           await manager.save(checklist);
 
@@ -339,7 +339,10 @@ export class JobsService {
   // Nullable read (#86 Slice decision 5, #83 `getTeam` precedent): a null
   // tenant (no tenant principal) and another tenant's job both return
   // `null`, the existing missing-row contract of `job(id)`.
-  async getJob(id: string, tenantId: string | null): Promise<CleaningJob | null> {
+  async getJob(
+    id: string,
+    tenantId: string | null,
+  ): Promise<CleaningJob | null> {
     if (tenantId === null) {
       return null;
     }

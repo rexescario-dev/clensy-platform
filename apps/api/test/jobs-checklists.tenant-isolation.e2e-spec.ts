@@ -8,7 +8,6 @@ import { App } from 'supertest/types';
 import { DataSource, In, Repository } from 'typeorm';
 import { AppModule } from '../src/app/app.module';
 import { BookingsService } from '../src/modules/bookings/application/services/bookings.service';
-import { BookingEntity } from '../src/modules/bookings/infrastructure/persistence/booking.entity';
 import { PricingRulesService } from '../src/modules/catalog/application/services/pricing-rules.service';
 import { ServicesService } from '../src/modules/catalog/application/services/services.service';
 import { PricingUnit } from '../src/modules/catalog/domain/pricing-unit';
@@ -419,13 +418,13 @@ describe('Jobs & Checklists tenant isolation (e2e)', () => {
     expect(asA.body.data.job).toEqual({
       id: jobA.id,
       booking: { id: bookingA.id },
-      team: { id: teamA.id },
       checklist: {
         id: checklistA.id,
         items: {
           nodes: expect.arrayContaining(itemsA.map(({ id }) => ({ id }))),
         },
       },
+      team: { id: teamA.id },
     });
     expect(asA.body.data.job.checklist.items.nodes).toHaveLength(3);
   });
@@ -647,9 +646,9 @@ describe('Jobs & Checklists tenant isolation (e2e)', () => {
       const bookingB2 = await createBooking('B', '2031-03-05T09:00:00Z');
       await expect(
         jobRepository.insert({
-          tenantId: tenantB,
           bookingId: bookingB2.id,
           teamId: teamA.id,
+          tenantId: tenantB,
           scheduledAt: new Date(),
         }),
       ).rejects.toMatchObject({
@@ -663,9 +662,9 @@ describe('Jobs & Checklists tenant isolation (e2e)', () => {
       const bookingA2 = await createBooking('A', '2031-03-06T09:00:00Z');
       await expect(
         jobRepository.insert({
-          tenantId: tenantB,
           bookingId: bookingA2.id,
           teamId: null,
+          tenantId: tenantB,
           scheduledAt: new Date(),
         }),
       ).rejects.toMatchObject({
@@ -675,9 +674,9 @@ describe('Jobs & Checklists tenant isolation (e2e)', () => {
       // An A job with no checklist yet, so `UQ_checklist_job_id` cannot
       // fire first.
       const inserted = await jobRepository.insert({
-        tenantId: tenantA,
         bookingId: bookingA2.id,
         teamId: null,
+        tenantId: tenantA,
         scheduledAt: new Date(),
       });
       const jobA2Id = (inserted.identifiers[0] as { id: string }).id;

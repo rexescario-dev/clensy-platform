@@ -108,7 +108,14 @@ export class AddJobChecklistTenant1790697600000 implements MigrationInterface {
       `ALTER TABLE "cleaning_job_entity" ADD CONSTRAINT "uq_cleaning_job_id_tenant" UNIQUE ("id", "tenantId")`,
     );
 
-    for (const [table, oldName, newName, column, parent, onDelete] of PARENT_FKS) {
+    for (const [
+      table,
+      oldName,
+      newName,
+      column,
+      parent,
+      onDelete,
+    ] of PARENT_FKS) {
       await queryRunner.query(
         `ALTER TABLE "${table}" DROP CONSTRAINT "${oldName}"`,
       );

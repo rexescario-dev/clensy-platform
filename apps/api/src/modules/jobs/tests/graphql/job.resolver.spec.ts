@@ -294,9 +294,9 @@ describe('JobResolver tenant scoping', () => {
 
   const jobRow = {
     id: 'job-1',
-    tenantId: 't-a',
     bookingId: 'booking-1',
     teamId: null,
+    tenantId: 't-a',
     createdAt: new Date(),
     scheduledAt: new Date(),
     status: 'PENDING',
@@ -401,9 +401,9 @@ describe('JobResolver tenant scoping', () => {
     const loaders = { checklistLoaderFor: jest.fn().mockReturnValue({ load }) };
     const resolver = new JobResolver({} as never, loaders as never);
 
-    await expect(resolver.checklist({ id: 'job-1' }, principal)).resolves.toEqual(
-      { id: 'c-1' },
-    );
+    await expect(
+      resolver.checklist({ id: 'job-1' }, principal),
+    ).resolves.toEqual({ id: 'c-1' });
     expect(loaders.checklistLoaderFor).toHaveBeenCalledWith('t-a');
     expect(load).toHaveBeenCalledWith('job-1');
   });

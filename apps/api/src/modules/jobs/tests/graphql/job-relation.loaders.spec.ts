@@ -18,11 +18,10 @@ describe('JobRelationLoaders batch functions', () => {
         .mockResolvedValue([checklistA, checklistC]),
     };
 
-    const result = await createChecklistBatchFn(jobsService, 't-a')([
-      'a',
-      'b',
-      'c',
-    ]);
+    const result = await createChecklistBatchFn(
+      jobsService,
+      't-a',
+    )(['a', 'b', 'c']);
 
     expect(jobsService.getChecklistsByJobIds).toHaveBeenCalledWith(
       ['a', 'b', 'c'],

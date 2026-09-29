@@ -252,10 +252,10 @@ describe('JobsService (real Postgres)', () => {
       expect.objectContaining({
         actorId: 'actor-1',
         entityId: job.id,
-        action: 'job.create',
-        scope: AdminScope.TENANT,
         tenantId: TENANT_ID,
+        action: 'job.create',
         entityType: 'job',
+        scope: AdminScope.TENANT,
       }),
     );
   });
@@ -520,10 +520,10 @@ describe('JobsService (real Postgres)', () => {
       );
       expect(auditLogger.log).toHaveBeenCalledWith(
         expect.objectContaining({
+          entityId: job.id,
+          tenantId: TENANT_ID,
           action: 'job.assign_team',
           scope: AdminScope.TENANT,
-          tenantId: TENANT_ID,
-          entityId: job.id,
         }),
       );
     });
@@ -551,8 +551,8 @@ describe('JobsService (real Postgres)', () => {
       expect(auditLogger.log).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'job.assign_team',
-          scope: AdminScope.TENANT,
           tenantId: TENANT_ID,
+          scope: AdminScope.TENANT,
         }),
       );
     });
@@ -612,8 +612,8 @@ describe('JobsService (real Postgres)', () => {
       expect(auditLogger.log).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'job.checklist_item.complete',
-          scope: AdminScope.TENANT,
           tenantId: TENANT_ID,
+          scope: AdminScope.TENANT,
         }),
       );
     });
@@ -662,8 +662,8 @@ describe('JobsService (real Postgres)', () => {
       expect(auditLogger.log).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'job.complete',
-          scope: AdminScope.TENANT,
           tenantId: TENANT_ID,
+          scope: AdminScope.TENANT,
         }),
       );
     });

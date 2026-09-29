@@ -218,10 +218,10 @@ describe('JobsService', () => {
       expect(auditLogger.log).toHaveBeenCalledWith({
         actorId: 'actor-1',
         entityId: job.id,
+        tenantId: 't1',
         action: 'job.create',
         entityType: 'job',
         scope: AdminScope.TENANT,
-        tenantId: 't1',
       });
 
       const itemPayloads = manager.create.mock.calls
@@ -414,10 +414,10 @@ describe('JobsService', () => {
       expect(auditLogger.log).toHaveBeenCalledWith({
         actorId: 'actor-1',
         entityId: 'job-1',
+        tenantId: 't-a',
         action: 'job.assign_team',
         entityType: 'job',
         scope: AdminScope.TENANT,
-        tenantId: 't-a',
       });
       expect(teamsService.getTeam).toHaveBeenCalledWith('team-2', 't-a');
     });
@@ -525,7 +525,9 @@ describe('JobsService', () => {
 
       await expect(
         service.completeChecklistItem({ ...command, itemId: 'item-of-a' }),
-      ).rejects.toThrow(new NotFoundException('Checklist item item-of-a not found'));
+      ).rejects.toThrow(
+        new NotFoundException('Checklist item item-of-a not found'),
+      );
       expect(manager.update).not.toHaveBeenCalled();
     });
 
@@ -580,10 +582,10 @@ describe('JobsService', () => {
       expect(auditLogger.log).toHaveBeenCalledWith({
         actorId: 'actor-1',
         entityId: 'job-1',
+        tenantId: 't1',
         action: 'job.checklist_item.complete',
         entityType: 'job',
         scope: AdminScope.TENANT,
-        tenantId: 't1',
       });
     });
 
@@ -728,10 +730,10 @@ describe('JobsService', () => {
       expect(auditLogger.log).toHaveBeenCalledWith({
         actorId: 'actor-1',
         entityId: 'job-1',
+        tenantId: 't1',
         action: 'job.complete',
         entityType: 'job',
         scope: AdminScope.TENANT,
-        tenantId: 't1',
       });
     });
 

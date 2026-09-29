@@ -278,9 +278,9 @@ describe('Teams & Cleaners tenant isolation (e2e)', () => {
     const jobRepository = dataSource.getRepository(CleaningJobEntity);
     job = await jobRepository.save(
       jobRepository.create({
-        tenantId: tenantA,
         bookingId: booking.id,
         teamId: teamA.id,
+        tenantId: tenantA,
         scheduledAt: booking.scheduledAt,
       }),
     );

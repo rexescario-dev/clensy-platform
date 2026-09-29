@@ -66,9 +66,7 @@ describe('Job GraphQL collections (§3.6 mechanism 1)', () => {
       'CompleteChecklistItemInput',
     ]) {
       const type = schema.getType(typeName) as
-        | GraphQLObjectType
-        | GraphQLInputObjectType
-        | undefined;
+        GraphQLInputObjectType | GraphQLObjectType | undefined;
       expect(type).toBeDefined();
       expect(Object.keys(type!.getFields())).not.toContain('tenantId');
     }

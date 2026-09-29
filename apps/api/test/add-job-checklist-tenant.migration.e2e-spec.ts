@@ -423,11 +423,17 @@ describe('AddJobChecklistTenant migration (real Postgres)', () => {
   it('down restores the id-only FKs and drops the tenant columns, index, unique and composite FKs', async () => {
     const counts = async () =>
       Promise.all(
-        ['cleaning_job_entity', 'checklist_entity', 'checklist_item_entity'].map(
+        [
+          'cleaning_job_entity',
+          'checklist_entity',
+          'checklist_item_entity',
+        ].map(
           async (table) =>
-            ((await queryRunner.query(`SELECT count(*) FROM "${table}"`)) as {
-              count: string;
-            }[])[0].count,
+            (
+              (await queryRunner.query(`SELECT count(*) FROM "${table}"`)) as {
+                count: string;
+              }[]
+            )[0].count,
         ),
       );
     const before = await counts();
