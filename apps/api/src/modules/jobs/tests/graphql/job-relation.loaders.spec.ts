@@ -9,7 +9,7 @@ function makeTeam(id: string): { id: string; tenantId: string } {
 }
 
 describe('JobRelationLoaders batch functions', () => {
-  it('createChecklistBatchFn preserves order and gap-fills, calling only getChecklistsByJobIds', async () => {
+  it('createChecklistBatchFn asks for the ids within the given tenant, preserving order and gap-filling', async () => {
     const checklistA = { id: 'c-a', jobId: 'a' };
     const checklistC = { id: 'c-c', jobId: 'c' };
     const jobsService = {
@@ -18,14 +18,25 @@ describe('JobRelationLoaders batch functions', () => {
         .mockResolvedValue([checklistA, checklistC]),
     };
 
-    const result = await createChecklistBatchFn(jobsService)(['a', 'b', 'c']);
+    const result = await createChecklistBatchFn(
+      jobsService,
+      't-a',
+    )(['a', 'b', 'c']);
 
-    expect(jobsService.getChecklistsByJobIds).toHaveBeenCalledWith([
-      'a',
-      'b',
-      'c',
-    ]);
+    expect(jobsService.getChecklistsByJobIds).toHaveBeenCalledWith(
+      ['a', 'b', 'c'],
+      't-a',
+    );
     expect(result).toEqual([checklistA, null, checklistC]);
+  });
+
+  // #86 Slice decision 5, mirroring the team batch function.
+  it('createChecklistBatchFn with a null tenant resolves every key to null without calling the service', async () => {
+    const jobsService = { getChecklistsByJobIds: jest.fn() };
+    await expect(
+      createChecklistBatchFn(jobsService, null)(['a', 'b']),
+    ).resolves.toEqual([null, null]);
+    expect(jobsService.getChecklistsByJobIds).not.toHaveBeenCalled();
   });
 });
 
@@ -74,17 +85,26 @@ describe('JobRelationLoaders.teamLoaderFor', () => {
     expect(getTeamsByIds).toHaveBeenCalledWith(['a', 'b'], 't-a');
   });
 
-  it('checklistLoader is unchanged and still resolves via getChecklistsByJobIds', async () => {
+  // #86 Review Focus 4: a cached checklist is only served back to the
+  // tenant it was loaded for.
+  it('checklistLoaderFor returns one DataLoader per tenant id and batches within it', async () => {
     const checklistA = { id: 'c-a', jobId: 'a' };
     const getChecklistsByJobIds = jest.fn().mockResolvedValue([checklistA]);
     const loaders = new JobRelationLoaders(
       { getTeamsByIds: jest.fn() } as never,
-      {
-        getChecklistsByJobIds,
-      } as never,
+      { getChecklistsByJobIds } as never,
     );
-    await expect(loaders.checklistLoader.load('a')).resolves.toEqual(
-      checklistA,
+    expect(loaders.checklistLoaderFor('t-a')).toBe(
+      loaders.checklistLoaderFor('t-a'),
     );
+    expect(loaders.checklistLoaderFor('t-a')).not.toBe(
+      loaders.checklistLoaderFor('t-b'),
+    );
+    const loader = loaders.checklistLoaderFor('t-a');
+    await expect(
+      Promise.all([loader.load('a'), loader.load('b')]),
+    ).resolves.toEqual([checklistA, null]);
+    expect(getChecklistsByJobIds).toHaveBeenCalledTimes(1);
+    expect(getChecklistsByJobIds).toHaveBeenCalledWith(['a', 'b'], 't-a');
   });
 });

@@ -292,6 +292,131 @@ describe('JobResolver tenant scoping', () => {
     expect(jobsService.createFromBooking).not.toHaveBeenCalled();
   });
 
+  const jobRow = {
+    id: 'job-1',
+    bookingId: 'booking-1',
+    teamId: null,
+    tenantId: 't-a',
+    createdAt: new Date(),
+    scheduledAt: new Date(),
+    status: 'PENDING',
+    updatedAt: new Date(),
+  };
+  const noTenant: AuthenticatedPrincipal = {
+    id: 'u',
+    tenantId: null,
+    role: Role.TENANT_OWNER,
+    scope: AdminScope.PLATFORM,
+  };
+
+  // #86 Slice decision 5: nullable read, #83 `team(id)` precedent.
+  it("job(id) looks the job up in the caller's tenant", async () => {
+    const jobsService = { getJob: jest.fn().mockResolvedValue(null) };
+    const resolver = new JobResolver(jobsService as never, {} as never);
+
+    await expect(resolver.job('job-1', principal)).resolves.toBeNull();
+    expect(jobsService.getJob).toHaveBeenCalledWith('job-1', 't-a');
+  });
+
+  it('job(id) passes a null tenant through (the service returns null)', async () => {
+    const jobsService = { getJob: jest.fn().mockResolvedValue(null) };
+    const resolver = new JobResolver(jobsService as never, {} as never);
+
+    await expect(resolver.job('job-1', noTenant)).resolves.toBeNull();
+    expect(jobsService.getJob).toHaveBeenCalledWith('job-1', null);
+  });
+
+  it('completeChecklistItem passes requireTenantId(principal)', async () => {
+    const jobsService = {
+      completeChecklistItem: jest.fn().mockResolvedValue(jobRow),
+    };
+    const resolver = new JobResolver(jobsService as never, {} as never);
+
+    await resolver.completeChecklistItem(
+      { jobId: 'job-1', itemId: 'item-1' },
+      principal,
+    );
+
+    expect(jobsService.completeChecklistItem).toHaveBeenCalledWith({
+      actorId: 'u',
+      itemId: 'item-1',
+      jobId: 'job-1',
+      tenantId: 't-a',
+    });
+  });
+
+  it('completeJob passes requireTenantId(principal)', async () => {
+    const jobsService = { completeJob: jest.fn().mockResolvedValue(jobRow) };
+    const resolver = new JobResolver(jobsService as never, {} as never);
+
+    await resolver.completeJob({ id: 'job-1' }, principal);
+
+    expect(jobsService.completeJob).toHaveBeenCalledWith({
+      actorId: 'u',
+      jobId: 'job-1',
+      tenantId: 't-a',
+    });
+  });
+
+  // Defense in depth (#86 Slice decision 9 / require-tenant-id.ts), as for
+  // createJobFromBooking above.
+  it.each([
+    [
+      'assignTeamToJob',
+      'assignTeam',
+      (r: JobResolver) =>
+        r.assignTeamToJob({ jobId: 'job-1', teamId: 'team-a' }, noTenant),
+    ],
+    [
+      'completeChecklistItem',
+      'completeChecklistItem',
+      (r: JobResolver) =>
+        r.completeChecklistItem({ jobId: 'job-1', itemId: 'i' }, noTenant),
+    ],
+    [
+      'completeJob',
+      'completeJob',
+      (r: JobResolver) => r.completeJob({ id: 'job-1' }, noTenant),
+    ],
+  ] as const)(
+    '%s is forbidden without a principal tenant',
+    async (_name, serviceMethod, call) => {
+      const jobsService = { [serviceMethod]: jest.fn() };
+      const resolver = new JobResolver(jobsService as never, {} as never);
+
+      await expect(call(resolver)).rejects.toBeInstanceOf(ForbiddenException);
+      expect(jobsService[serviceMethod]).not.toHaveBeenCalled();
+    },
+  );
+
+  // #86 Slice decision 5: the checklist loader is per tenant, the tenant
+  // taken from the principal (never the parent row).
+  it("CleaningJob.checklist uses the checklist loader for the caller's tenant", async () => {
+    const load = jest.fn().mockResolvedValue({
+      id: 'c-1',
+      jobId: 'job-1',
+      tenantId: 't-a',
+      createdAt: new Date(),
+    });
+    const loaders = { checklistLoaderFor: jest.fn().mockReturnValue({ load }) };
+    const resolver = new JobResolver({} as never, loaders as never);
+
+    await expect(
+      resolver.checklist({ id: 'job-1' }, principal),
+    ).resolves.toEqual({ id: 'c-1' });
+    expect(loaders.checklistLoaderFor).toHaveBeenCalledWith('t-a');
+    expect(load).toHaveBeenCalledWith('job-1');
+  });
+
+  it('CleaningJob.checklist with no principal uses the null-tenant loader', async () => {
+    const load = jest.fn().mockResolvedValue({ id: 'c-1' });
+    const loaders = { checklistLoaderFor: jest.fn().mockReturnValue({ load }) };
+    const resolver = new JobResolver({} as never, loaders as never);
+
+    await resolver.checklist({ id: 'job-1' }, undefined);
+    expect(loaders.checklistLoaderFor).toHaveBeenCalledWith(null);
+  });
+
   it('CleaningJob.team uses the loader for the caller tenant', async () => {
     const jobsService = {};
     const load = jest.fn().mockResolvedValue(null);

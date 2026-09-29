@@ -247,9 +247,9 @@ describe('Teams & Cleaners tenant isolation (e2e)', () => {
       priceMinorUnits: 2500,
     });
 
-    // Booking/Job: booking is tenant-owned as of #85 (tenant A here); the
-    // job itself is not yet (#86), so `CleaningJob.team` stays a
-    // relation-scoping probe while `Booking.team` is now a root-scoping one.
+    // Booking/Job: both are tenant-owned (#85, #86; tenant A here), so
+    // `Booking.team` and `CleaningJob.team` are root-scoping probes: B
+    // cannot reach A's booking or job at all.
     const bookingRepository = dataSource.getRepository(BookingEntity);
     booking = await bookingRepository.save(
       bookingRepository.create({
@@ -280,6 +280,7 @@ describe('Teams & Cleaners tenant isolation (e2e)', () => {
       jobRepository.create({
         bookingId: booking.id,
         teamId: teamA.id,
+        tenantId: tenantA,
         scheduledAt: booking.scheduledAt,
       }),
     );
@@ -430,12 +431,15 @@ describe('Teams & Cleaners tenant isolation (e2e)', () => {
       expect(response.body.data.cleaner.team).toEqual({ id: teamA.id });
     });
 
-    it("CleaningJob.team is null for another tenant's team", async () => {
+    // #86: the job is tenant-owned, so B does not see A's job at all
+    // (replaces the #83 interim "team is null" relation probe).
+    it("B cannot see another tenant's job (and so not its team)", async () => {
       const JOB_QUERY = `query Job($id: ID!) { job(id: $id) { id team { id } } }`;
 
       const responseB = await gql(cookieB, JOB_QUERY, { id: job.id });
       expect(responseB.body.errors).toBeUndefined();
-      expect(responseB.body.data.job).toEqual({ id: job.id, team: null });
+      expect(responseB.body.data.job).toBeNull();
+      expect(JSON.stringify(responseB.body)).not.toContain(teamA.id);
 
       const responseA = await gql(cookieA, JOB_QUERY, { id: job.id });
       expect(responseA.body.errors).toBeUndefined();
@@ -516,8 +520,10 @@ describe('Teams & Cleaners tenant isolation (e2e)', () => {
     );
 
     it("assignTeamToJob with another tenant's team is 404 and changes nothing", async () => {
-      // Assigning A's own team from B: the job is unscoped (#86), the team
-      // lookup is tenant-scoped, so B cannot even name A's team.
+      // Assigning A's own team to A's job from B: B can name neither (the
+      // team lookup and, since #86, the job lookup are tenant-scoped), so it
+      // is a missing row. B's own job + A's team is covered by the #86
+      // jobs-checklists isolation suite.
       const response = await gql(
         cookieB,
         `mutation AssignTeamToJob($input: AssignTeamToJobInput!) {

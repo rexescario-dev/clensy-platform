@@ -10,6 +10,7 @@ import { DataSource, In, QueryFailedError, Repository } from 'typeorm';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import type { AuditLogger } from '../../../../platform/audit/application/audit-logger.port';
 import { runAuditInTransaction } from '../../../../platform/audit/infrastructure/audit-logger.service';
+import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { BookingsService } from '../../../bookings/application/services/bookings.service';
 import { BookingStatus } from '../../../bookings/domain/booking-status';
 import { TeamsService } from '../../../cleaners/application/services/teams.service';
@@ -47,6 +48,12 @@ export function isPostgresUniqueViolation(
   );
 }
 
+// Job audit events carry the caller's tenant (#86 Slice decision 10; RFC
+// §4.6). `tenantId` is always the command's, i.e. `requireTenantId`'s.
+function jobAuditTags(tenantId: string) {
+  return { tenantId, scope: AdminScope.TENANT };
+}
+
 @Injectable()
 export class JobsService {
   constructor(
@@ -64,10 +71,12 @@ export class JobsService {
 
   // `TeamsService.getTeam` runs BEFORE the Jobs transaction (spec §4.2 /
   // plan Task 3). Same-state assignment still `manager.update()`s so
-  // `updatedAt` bumps and `job.assign_team` fires.
+  // `updatedAt` bumps and `job.assign_team` fires. Every job lookup and
+  // update carries `tenantId` in the same query (#86 Slice decision 6); a
+  // job in another tenant is the existing 404.
   async assignTeam(command: AssignTeamToJobCommand): Promise<CleaningJob> {
-    // Application-level same-tenant check (#83 Slice decision 6):
-    // `fk_cleaning_job_team` stays id-only until #86.
+    // Application half of I-1 (#83 Slice decision 6);
+    // `fk_cleaning_job_team_tenant` is the database half (#86).
     const team = await this.teamsService.getTeam(
       command.teamId,
       command.tenantId,
@@ -78,9 +87,8 @@ export class JobsService {
 
     return this.dataSource.transaction((manager) =>
       runAuditInTransaction(manager, async () => {
-        const job = await manager.findOneBy(CleaningJobEntity, {
-          id: command.jobId,
-        });
+        const where = { id: command.jobId, tenantId: command.tenantId };
+        const job = await manager.findOneBy(CleaningJobEntity, where);
         if (!job) {
           throw new NotFoundException(`Job ${command.jobId} not found`);
         }
@@ -90,36 +98,39 @@ export class JobsService {
           );
         }
 
-        await manager.update(
-          CleaningJobEntity,
-          { id: command.jobId },
-          { teamId: command.teamId, updatedAt: new Date() },
-        );
+        await manager.update(CleaningJobEntity, where, {
+          teamId: command.teamId,
+          updatedAt: new Date(),
+        });
 
         await this.auditLogger.log({
           actorId: command.actorId,
           entityId: command.jobId,
           action: 'job.assign_team',
           entityType: 'job',
+          ...jobAuditTags(command.tenantId),
         });
 
-        return manager.findOneByOrFail(CleaningJobEntity, {
-          id: command.jobId,
-        });
+        return manager.findOneByOrFail(CleaningJobEntity, where);
       }),
     );
   }
 
   // All job/item/audit reads and writes stay inside one transaction
   // (plan Task 3). Last-item complete does not set COMPLETED.
+  //
+  // #86 Slice decision 7: the item is resolved only through the
+  // tenant-scoped job → checklist chain, in one query keyed on both its id
+  // and the scoped checklist's id. Items have no tenant of their own
+  // (Slice decision 2), so an item of another job or tenant is simply not
+  // found. The item UPDATE keys on the id resolved that way.
   async completeChecklistItem(
     command: CompleteChecklistItemCommand,
   ): Promise<CleaningJob> {
     return this.dataSource.transaction((manager) =>
       runAuditInTransaction(manager, async () => {
-        const job = await manager.findOneBy(CleaningJobEntity, {
-          id: command.jobId,
-        });
+        const where = { id: command.jobId, tenantId: command.tenantId };
+        const job = await manager.findOneBy(CleaningJobEntity, where);
         if (!job) {
           throw new NotFoundException(`Job ${command.jobId} not found`);
         }
@@ -131,11 +142,15 @@ export class JobsService {
 
         const checklist = await manager.findOneBy(ChecklistEntity, {
           jobId: job.id,
+          tenantId: command.tenantId,
         });
-        const item = await manager.findOneBy(ChecklistItemEntity, {
-          id: command.itemId,
-        });
-        if (!item || !checklist || item.checklistId !== checklist.id) {
+        const item = checklist
+          ? await manager.findOneBy(ChecklistItemEntity, {
+              id: command.itemId,
+              checklistId: checklist.id,
+            })
+          : null;
+        if (!item) {
           throw new NotFoundException(
             `Checklist item ${command.itemId} not found`,
           );
@@ -156,32 +171,36 @@ export class JobsService {
         if (flipping && job.status === JobStatus.PENDING) {
           jobPatch.status = JobStatus.IN_PROGRESS;
         }
-        await manager.update(CleaningJobEntity, { id: job.id }, jobPatch);
+        await manager.update(CleaningJobEntity, where, jobPatch);
 
         await this.auditLogger.log({
           actorId: command.actorId,
           entityId: job.id,
           action: 'job.checklist_item.complete',
           entityType: 'job',
+          ...jobAuditTags(command.tenantId),
         });
 
-        return manager.findOneByOrFail(CleaningJobEntity, { id: job.id });
+        return manager.findOneByOrFail(CleaningJobEntity, where);
       }),
     );
   }
 
+  // Job and checklist lookups, the update and the re-read all carry
+  // `tenantId` (#86 Slice decision 6). Items are read through the scoped
+  // checklist (Slice decision 2).
   async completeJob(command: CompleteJobCommand): Promise<CleaningJob> {
     return this.dataSource.transaction((manager) =>
       runAuditInTransaction(manager, async () => {
-        const job = await manager.findOneBy(CleaningJobEntity, {
-          id: command.jobId,
-        });
+        const where = { id: command.jobId, tenantId: command.tenantId };
+        const job = await manager.findOneBy(CleaningJobEntity, where);
         if (!job) {
           throw new NotFoundException(`Job ${command.jobId} not found`);
         }
 
         const checklist = await manager.findOneBy(ChecklistEntity, {
           jobId: job.id,
+          tenantId: command.tenantId,
         });
         const items = checklist
           ? await manager.findBy(ChecklistItemEntity, {
@@ -194,20 +213,20 @@ export class JobsService {
           );
         }
 
-        await manager.update(
-          CleaningJobEntity,
-          { id: job.id },
-          { status: JobStatus.COMPLETED, updatedAt: new Date() },
-        );
+        await manager.update(CleaningJobEntity, where, {
+          status: JobStatus.COMPLETED,
+          updatedAt: new Date(),
+        });
 
         await this.auditLogger.log({
           actorId: command.actorId,
           entityId: job.id,
           action: 'job.complete',
           entityType: 'job',
+          ...jobAuditTags(command.tenantId),
         });
 
-        return manager.findOneByOrFail(CleaningJobEntity, { id: job.id });
+        return manager.findOneByOrFail(CleaningJobEntity, where);
       }),
     );
   }
@@ -219,7 +238,8 @@ export class JobsService {
   // `command.tenantId` (#85 Slice decision 11) is passed straight through
   // to `BookingsService.findOne`: a cross-tenant booking is the existing
   // `NotFoundException` (#85 Slice decision 9), same as a nonexistent
-  // booking id. `cleaning_job_entity` stays unscoped by tenant until #86.
+  // booking id. The job and its checklist are created in that tenant, the
+  // booking's own (#86 Slice decision 6).
   async createFromBooking(
     command: CreateJobFromBookingCommand,
   ): Promise<CleaningJob> {
@@ -236,6 +256,7 @@ export class JobsService {
 
     const existing = await this.jobRepository.findOneBy({
       bookingId: command.bookingId,
+      tenantId: command.tenantId,
     });
     if (existing) {
       throw new ConflictException('A job already exists for this booking');
@@ -248,6 +269,7 @@ export class JobsService {
           const job = manager.create(CleaningJobEntity, {
             bookingId: booking.id,
             teamId: booking.teamId,
+            tenantId: command.tenantId,
             createdAt: now,
             scheduledAt: booking.scheduledAt,
             status: JobStatus.PENDING,
@@ -257,6 +279,7 @@ export class JobsService {
 
           const checklist = manager.create(ChecklistEntity, {
             jobId: job.id,
+            tenantId: command.tenantId,
           });
           await manager.save(checklist);
 
@@ -276,6 +299,7 @@ export class JobsService {
             entityId: job.id,
             action: 'job.create',
             entityType: 'job',
+            ...jobAuditTags(command.tenantId),
           });
 
           return job;
@@ -289,25 +313,43 @@ export class JobsService {
     }
   }
 
-  getChecklistItemsByChecklistIds(ids: string[]): Promise<ChecklistItem[]> {
+  // Items have no tenant of their own (#86 Slice decision 2): the parent
+  // checklist's `tenantId` is joined in the same query (Slice decision 6),
+  // so the service boundary enforces it whatever ids a caller passes.
+  getChecklistItemsByChecklistIds(
+    ids: string[],
+    tenantId: string,
+  ): Promise<ChecklistItem[]> {
     if (ids.length === 0) {
       return Promise.resolve([]);
     }
-    return this.checklistItemRepository.findBy({ checklistId: In(ids) });
+    return this.checklistItemRepository.findBy({
+      checklistId: In(ids),
+      checklist: { tenantId },
+    });
   }
 
-  getChecklistsByJobIds(ids: string[]): Promise<Checklist[]> {
+  getChecklistsByJobIds(ids: string[], tenantId: string): Promise<Checklist[]> {
     if (ids.length === 0) {
       return Promise.resolve([]);
     }
-    return this.checklistRepository.findBy({ jobId: In(ids) });
+    return this.checklistRepository.findBy({ jobId: In(ids), tenantId });
   }
 
-  async getJob(id: string): Promise<CleaningJob | null> {
-    return this.jobRepository.findOneBy({ id });
+  // Nullable read (#86 Slice decision 5, #83 `getTeam` precedent): a null
+  // tenant (no tenant principal) and another tenant's job both return
+  // `null`, the existing missing-row contract of `job(id)`.
+  async getJob(
+    id: string,
+    tenantId: string | null,
+  ): Promise<CleaningJob | null> {
+    if (tenantId === null) {
+      return null;
+    }
+    return this.jobRepository.findOneBy({ id, tenantId });
   }
 
-  listJobs(): Promise<CleaningJob[]> {
-    return this.jobRepository.find();
+  listJobs(tenantId: string): Promise<CleaningJob[]> {
+    return this.jobRepository.find({ where: { tenantId } });
   }
 }

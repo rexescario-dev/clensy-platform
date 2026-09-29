@@ -58,11 +58,18 @@ export class JobResolver {
     return toCleaningJobType(job);
   }
 
+  // Tenant from the principal, never from the parent row (#86 Slice
+  // decision 5). A job reached through a tenant-scoped path has a
+  // same-tenant checklist (`fk_checklist_job_tenant`, created in the same
+  // transaction).
   @ResolveField(() => ChecklistType)
   async checklist(
     @Parent() job: Pick<CleaningJob, 'id'>,
+    @CurrentUser() currentUser: AuthenticatedPrincipal | undefined,
   ): Promise<ChecklistType> {
-    const checklist = await this.loaders.checklistLoader.load(job.id);
+    const checklist = await this.loaders
+      .checklistLoaderFor(currentUser?.tenantId ?? null)
+      .load(job.id);
     return toChecklistType(checklist!);
   }
 
@@ -77,6 +84,7 @@ export class JobResolver {
       actorId: currentUser.id,
       itemId: input.itemId,
       jobId: input.jobId,
+      tenantId: requireTenantId(currentUser),
     });
     return toCleaningJobType(job);
   }
@@ -91,6 +99,7 @@ export class JobResolver {
     const job = await this.jobsService.completeJob({
       actorId: currentUser.id,
       jobId: input.id,
+      tenantId: requireTenantId(currentUser),
     });
     return toCleaningJobType(job);
   }
@@ -113,10 +122,13 @@ export class JobResolver {
   @Query(() => CleaningJobType, { name: 'job', nullable: true })
   @UseGuards(AuthGuard)
   @Roles(...VIEW_ROLES)
+  // Nullable read (#86 Slice decision 5): another tenant's job is `null`,
+  // exactly like a nonexistent id.
   async job(
     @Args('id', { type: () => ID }) id: string,
+    @CurrentUser() currentUser: AuthenticatedPrincipal,
   ): Promise<CleaningJobType | null> {
-    const found = await this.jobsService.getJob(id);
+    const found = await this.jobsService.getJob(id, currentUser.tenantId);
     return found ? toCleaningJobType(found) : null;
   }
 

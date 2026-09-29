@@ -29,7 +29,8 @@ import { BookingPricingSnapshotEmbeddable } from './booking-pricing-snapshot.emb
 // `fk_booking_*_tenant` FKs are hand-written in `AddBookingTenant`;
 // `migration:generate` may propose dropping them or re-adding id-only FKs —
 // do not apply that. `AddBookingTenant` also hand-writes `uq_booking_id_
-// tenant` (target of #86's cleaning-job composite FK) and
+// tenant` (target of the cleaning-job composite
+// `fk_cleaning_job_booking_tenant`, #86) and
 // `idx_booking_tenant_scheduled`.
 @Entity()
 export class BookingEntity implements Booking {
