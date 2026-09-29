@@ -1,5 +1,6 @@
 import { SortDirection } from '@ptc-org/nestjs-query-core';
 import {
+  Authorize,
   FilterableField,
   FilterableRelation,
   IDField,
@@ -12,6 +13,7 @@ import {
   PLATFORM_PAGE_DEFAULT,
   PLATFORM_PAGE_MAX,
 } from '../../../../platform/graphql/paging';
+import { tenantReadAuthorizer } from '../../../../platform/auth/authorization/tenant-read.authorizer';
 import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
 import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
@@ -45,6 +47,15 @@ const relationReadOpts = {
 // at generation; `amountPaidMinorUnits` / `paymentStatus` are the #39
 // mutation surface. `amountDueMinorUnits` is a computed `@ResolveField` on
 // `InvoiceResolver` (`total - amountPaid`) — never a stored column.
+// Security invariant (#87 multi-tenant spec §4.5; slice decision 5): every
+// nestjs-query read of this type — the root `invoices` list/count and its
+// relation filters — is ANDed with the principal's tenant. `customer` /
+// `laundryOrder` relation filters can then only match same-tenant rows:
+// every visible invoice's `customerId` / `laundryOrderId` is bound to its
+// tenant by the composite FKs (#82 I1; slice decision 4). `tenantId` is
+// deliberately not a GraphQL field. `invoice(id)` is a custom query scoped
+// in `InvoicesService.getInvoice`.
+@Authorize(tenantReadAuthorizer<InvoiceType>())
 @ObjectType('Invoice')
 @QueryOptions({
   defaultResultSize: PLATFORM_PAGE_DEFAULT,

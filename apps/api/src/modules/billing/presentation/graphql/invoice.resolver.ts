@@ -57,8 +57,10 @@ export class InvoiceResolver {
   @Roles(...VIEW_ROLES)
   async invoice(
     @Args('id', { type: () => ID }) id: string,
+    @CurrentUser() currentUser: AuthenticatedPrincipal,
   ): Promise<InvoiceType | null> {
-    const invoice = await this.service.getInvoice(id);
+    // Cross-tenant = missing row (#87 slice decision 7).
+    const invoice = await this.service.getInvoice(id, currentUser.tenantId);
     return invoice ? toInvoiceType(invoice) : null;
   }
 }
