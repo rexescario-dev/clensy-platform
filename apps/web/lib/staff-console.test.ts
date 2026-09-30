@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canManageStaff, staffMutationErrorKey } from './staff-console';
+import { canManageStaff, disableConfirmDescription, staffMutationErrorKey } from './staff-console';
 
 // Mirrors what the API actually sends (@nestjs/apollo 13, probed against the
 // running API): a status with a dedicated Apollo code (400 BAD_REQUEST, 403
@@ -76,4 +76,23 @@ describe('staffMutationErrorKey', () => {
     expect(staffMutationErrorKey('create', error)).toBe('createFailed');
     expect(staffMutationErrorKey('disable', error)).toBe('disableFailed');
   });
+});
+
+describe('disableConfirmDescription', () => {
+  const template = 'This will disable {email}. They will no longer be able to sign in.';
+
+  it('inserts the email', () => {
+    expect(disableConfirmDescription(template, 'a@x.test')).toBe(
+      'This will disable a@x.test. They will no longer be able to sign in.',
+    );
+  });
+
+  it.each(['a$&b@x.test', "a$'b@x.test", 'a$`b@x.test', 'a$$b@x.test'])(
+    'inserts %s literally, without String.replace substitution patterns',
+    (email) => {
+      expect(disableConfirmDescription(template, email)).toBe(
+        `This will disable ${email}. They will no longer be able to sign in.`,
+      );
+    },
+  );
 });

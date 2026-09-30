@@ -19,7 +19,7 @@ import {
 import { useLocale } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { canManageStaff, staffMutationErrorKey } from '../../../lib/staff-console';
+import { canManageStaff, disableConfirmDescription, staffMutationErrorKey } from '../../../lib/staff-console';
 
 const EMPTY_FORM: CreateStaffFormValues = { email: '', password: '', role: 'CUSTOMER_SUPPORT' };
 
@@ -87,6 +87,8 @@ function StaffConsole({ currentAdminId }: { currentAdminId: string }) {
   function openCreateForm() {
     setFormValues(EMPTY_FORM);
     setFormErrorKey(undefined);
+    // Starting a new action drops the previous disable failure's message.
+    setDisableErrorKey(undefined);
     setFormOpen(true);
   }
 
@@ -164,8 +166,7 @@ function StaffConsole({ currentAdminId }: { currentAdminId: string }) {
         }}
         onConfirm={handleConfirmDisable}
         title={t('confirmDisable.title')}
-        // `t` has no interpolation; {email} is the only placeholder.
-        description={confirmTarget ? t('confirmDisable.description').replace('{email}', confirmTarget.email) : ''}
+        description={confirmTarget ? disableConfirmDescription(t('confirmDisable.description'), confirmTarget.email) : ''}
         confirmLabel={t('confirmDisable.confirm')}
         confirming={disabling}
       />

@@ -36,3 +36,11 @@ export function staffMutationErrorKey(operation: StaffMutation, error: unknown):
   const status = extensions?.status ?? extensions?.originalError?.statusCode;
   return (typeof status === 'number' && keys[status]) || keys.fallback;
 }
+
+// Fills the confirm-disable template's single `{email}` placeholder
+// (useClensyTranslations has no interpolation). A function replacer, so an
+// email containing `$&`, `$'`, `` $` `` or `$$` — all valid in a local part —
+// is inserted literally rather than read as a String.replace pattern.
+export function disableConfirmDescription(template: string, email: string): string {
+  return template.replace('{email}', () => email);
+}

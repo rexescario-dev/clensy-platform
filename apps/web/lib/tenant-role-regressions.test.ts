@@ -36,6 +36,24 @@ describe('tenant role contract in the staff console', () => {
     expect(adminPage).not.toContain('ROLE_OPTIONS');
   });
 
+  it('fills the disable confirmation through disableConfirmDescription, not a raw String.replace', () => {
+    const adminPage = readWebSource('app/app/admin/page.tsx');
+
+    expect(adminPage).toContain('disableConfirmDescription(');
+    expect(adminPage).not.toMatch(/\.replace\('\{email\}'/);
+  });
+
+  // No DOM test environment exists in this repo, so the page's error-state
+  // transition is pinned at source level: starting a new create clears a
+  // stale disable error, so it can't linger after a later successful create.
+  it('clears a stale disable error when the create dialog opens', () => {
+    const adminPage = readWebSource('app/app/admin/page.tsx');
+    const openCreateForm = /function openCreateForm\(\) \{([^}]*)\}/.exec(adminPage)?.[1];
+
+    expect(openCreateForm).toBeDefined();
+    expect(openCreateForm).toContain('setDisableErrorKey(undefined)');
+  });
+
   it.each(['app/app/admin/page.tsx', 'app/app/laundry/page.tsx'])(
     'no longer references the retired OWNER role in %s',
     (path) => {
