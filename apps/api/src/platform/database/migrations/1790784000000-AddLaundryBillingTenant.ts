@@ -279,9 +279,21 @@ export class AddLaundryBillingTenant1790784000000 implements MigrationInterface 
   // and the global `uq_invoice_number`, and recreates a *usable*
   // `billing_invoice_number_seq` positioned after the highest remaining
   // suffix — not the exact pre-`up` sequence state, which `up` discards.
-  // Re-adding the global unique fails, rolling the revert back, if two
-  // tenants hold the same number string; it never renumbers.
+  // It refuses up front, with a counted error and before any DDL (#101), if
+  // two tenants hold the same number string, which the global unique cannot
+  // represent; it never renumbers.
   public async down(queryRunner: QueryRunner): Promise<void> {
+    // #101: refuse with an explicit, counted error before any DDL rather
+    // than surfacing the raw Postgres unique-index failure below.
+    const [{ shared }] = (await queryRunner.query(
+      `SELECT COUNT(*)::int AS "shared" FROM (SELECT 1 FROM "invoice_entity" GROUP BY "invoiceNumber" HAVING COUNT(DISTINCT "tenantId") > 1) d`,
+    )) as { shared: number }[];
+    if (shared > 0) {
+      throw new Error(
+        `AddLaundryBillingTenant: cannot revert — ${shared} invoice number(s) are held by more than one tenant, which the global uq_invoice_number cannot represent; resolve those invoices first`,
+      );
+    }
+
     await queryRunner.query(`DROP INDEX "public"."idx_invoice_tenant_issue"`);
     await queryRunner.query(
       `DROP INDEX "public"."idx_laundry_order_tenant_created"`,
