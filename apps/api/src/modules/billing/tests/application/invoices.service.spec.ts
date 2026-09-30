@@ -214,20 +214,40 @@ describe('InvoicesService', () => {
     // Review Focus 4: the invoice's and the audit's tenant come from the
     // tenant-scoped order row (which `getOrderForInvoicing` matched on the
     // command's tenant), never from an independent request value.
-    it('stamps the invoice and the audit with the order row’s tenant', async () => {
-      laundryOrdersService.getOrderForInvoicing.mockImplementation(
-        (_id: string, tenantId: string) =>
-          Promise.resolve(anOrder({ tenantId })),
+    it('stamps the invoice, its number and the audit with the order row’s tenant', async () => {
+      // Distinct values (never equal at runtime, since the lookup filters on
+      // the command's tenant) so the test can tell the two sources apart.
+      laundryOrdersService.getOrderForInvoicing.mockResolvedValue(
+        anOrder({ tenantId: 't-order' }),
       );
-      await service.generateFromOrder(cmd({ tenantId: 't-z' }));
+      await service.generateFromOrder(cmd({ tenantId: 't-cmd' }));
 
-      expect(savedInvoice()).toEqual(
-        expect.objectContaining({ tenantId: 't-z' }),
+      expect(laundryOrdersService.getOrderForInvoicing).toHaveBeenCalledWith(
+        'order-1',
+        't-cmd',
       );
+      expect(savedInvoice()).toEqual(
+        expect.objectContaining({ tenantId: 't-order' }),
+      );
+      expect((manager.query.mock.calls[0] as unknown[])[1]).toEqual([
+        't-order',
+      ]);
+      expect(invoiceRepository.findOneBy).toHaveBeenCalledWith({
+        laundryOrderId: 'order-1',
+        tenantId: 't-order',
+      });
+      expect(manager.findOneBy).toHaveBeenCalledWith(InvoiceEntity, {
+        laundryOrderId: 'order-1',
+        tenantId: 't-order',
+      });
+      expect(manager.findOneByOrFail).toHaveBeenCalledWith(InvoiceEntity, {
+        id: 'generated-1',
+        tenantId: 't-order',
+      });
       expect(auditLogger.log).toHaveBeenCalledWith({
         actorId: 'actor-1',
         entityId: 'generated-1',
-        tenantId: 't-z',
+        tenantId: 't-order',
         action: 'invoice.generated',
         entityType: 'invoice',
         scope: AdminScope.TENANT,

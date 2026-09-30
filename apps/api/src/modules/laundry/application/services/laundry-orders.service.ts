@@ -291,8 +291,8 @@ export class LaundryOrdersService {
 
   // `getCustomer` runs before the transaction for a clean `NotFoundException`;
   // `fk_laundry_order_customer_tenant` is the actual check/write-race guard
-  // (spec §4.1; #87 slice decision 4). The order is created with zero lines — lines are created only by
-  // `price` (spec §4.5).
+  // (spec §4.1; #87 slice decision 4). The order is created with zero
+  // lines — lines are created only by `price` (spec §4.5).
   async receive(command: ReceiveLaundryOrderCommand): Promise<LaundryOrder> {
     const customer = await this.customersService.getCustomer(
       command.customerId,

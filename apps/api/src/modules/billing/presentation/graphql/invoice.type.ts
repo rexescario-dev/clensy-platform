@@ -47,6 +47,7 @@ const relationReadOpts = {
 // at generation; `amountPaidMinorUnits` / `paymentStatus` are the #39
 // mutation surface. `amountDueMinorUnits` is a computed `@ResolveField` on
 // `InvoiceResolver` (`total - amountPaid`) — never a stored column.
+//
 // Security invariant (#87 multi-tenant spec §4.5; slice decision 5): every
 // nestjs-query read of this type — the root `invoices` list/count and its
 // relation filters — is ANDed with the principal's tenant. `customer` /

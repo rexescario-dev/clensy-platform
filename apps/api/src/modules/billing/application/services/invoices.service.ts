@@ -263,8 +263,8 @@ export class InvoicesService {
           'An invoice already exists for this laundry order',
         );
       }
-      // `uq_invoice_tenant_number` and anything else: an integrity failure, never
-      // a business conflict — rethrow unchanged (spec §4.6).
+      // `uq_invoice_tenant_number` and anything else: an integrity failure,
+      // never a business conflict — rethrow unchanged (spec §4.6).
       throw error;
     }
   }

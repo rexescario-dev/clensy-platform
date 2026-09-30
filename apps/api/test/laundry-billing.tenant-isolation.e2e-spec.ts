@@ -842,6 +842,25 @@ describe('Laundry & Billing tenant isolation (e2e)', () => {
         }),
       );
       expect(res.body.data.invoices).toEqual({ nodes: [], totalCount: 0 });
+      const orders = await ok(
+        await gql(cookieB, ORDERS, {
+          f: { or: [{ id: { eq: orderA } }, { id: { is: null } }] },
+        }),
+      );
+      expect(orders.body.data.laundryOrders).toEqual({
+        nodes: [],
+        totalCount: 0,
+      });
+      // Positive control: A's own row through the same filter.
+      const asA = await ok(
+        await gql(cookieA, ORDERS, {
+          f: { or: [{ id: { eq: orderA } }, { id: { is: null } }] },
+        }),
+      );
+      expect(asA.body.data.laundryOrders).toEqual({
+        nodes: [{ id: orderA }],
+        totalCount: 1,
+      });
     });
 
     it('an x-tenant-id header is ignored', async () => {
