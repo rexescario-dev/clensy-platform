@@ -15,13 +15,24 @@ const ERROR_KEYS: Record<StaffMutation, Partial<Record<number, StaffErrorKey>> &
   disable: { 403: 'disableForbidden', 404: 'accountNotFound', 409: 'lastTenantOwner', fallback: 'disableFailed' },
 };
 
+interface GraphQLErrorExtensions {
+  originalError?: { statusCode?: unknown };
+  status?: unknown;
+}
+
 // Maps a failed staff mutation to a typed message key by operation + the
-// GraphQL error's `extensions.status` (the HTTP status Nest attaches). Never
-// inspects message text. Read structurally so any Apollo error shape (or a
-// non-Apollo throw) degrades to the operation's generic key.
+// HTTP status Nest attached to the GraphQL error. Never inspects message
+// text or the Apollo `code`. Nest puts a status that has a dedicated Apollo
+// code (400 BAD_REQUEST, 403 FORBIDDEN) only at
+// `extensions.originalError.statusCode`, and others (404, 409) also at
+// `extensions.status` — the same two-shape read as the API e2e helpers (e.g.
+// apps/api/test/catalog.tenant-isolation.e2e-spec.ts). Read structurally so
+// any other error shape (or a non-Apollo throw) degrades to the operation's
+// generic key.
 export function staffMutationErrorKey(operation: StaffMutation, error: unknown): StaffErrorKey {
   const keys = ERROR_KEYS[operation];
-  const status = (error as { graphQLErrors?: { extensions?: { status?: unknown } }[] } | null | undefined)
-    ?.graphQLErrors?.[0]?.extensions?.status;
+  const extensions = (error as { graphQLErrors?: { extensions?: GraphQLErrorExtensions }[] } | null | undefined)
+    ?.graphQLErrors?.[0]?.extensions;
+  const status = extensions?.status ?? extensions?.originalError?.statusCode;
   return (typeof status === 'number' && keys[status]) || keys.fallback;
 }

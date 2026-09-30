@@ -1,8 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { canManageStaff, staffMutationErrorKey } from './staff-console';
 
+// Mirrors what the API actually sends (@nestjs/apollo 13, probed against the
+// running API): a status with a dedicated Apollo code (400 BAD_REQUEST, 403
+// FORBIDDEN) carries it only at `extensions.originalError.statusCode`; any
+// other status (404, 409, 500) also gets a top-level `extensions.status`.
+const APOLLO_CODES: Partial<Record<number, string>> = { 400: 'BAD_REQUEST', 401: 'UNAUTHENTICATED', 403: 'FORBIDDEN' };
+
 const gqlError = (status?: number) => ({
-  graphQLErrors: [{ message: 'ignored text', extensions: status === undefined ? {} : { status } }],
+  graphQLErrors: [
+    {
+      message: 'ignored text',
+      extensions:
+        status === undefined
+          ? {}
+          : APOLLO_CODES[status]
+            ? { code: APOLLO_CODES[status], originalError: { statusCode: status } }
+            : { code: 'INTERNAL_SERVER_ERROR', originalError: { statusCode: status }, status },
+    },
+  ],
 });
 
 describe('canManageStaff', () => {
@@ -30,6 +46,17 @@ describe('staffMutationErrorKey', () => {
     ['disable', 500, 'disableFailed'],
   ] as const)('%s + %i → %s', (operation, status, key) => {
     expect(staffMutationErrorKey(operation, gqlError(status))).toBe(key);
+  });
+
+  it('reads the status from originalError.statusCode when extensions.status is absent', () => {
+    const forbidden = { graphQLErrors: [{ message: 'Forbidden', extensions: { code: 'FORBIDDEN', originalError: { statusCode: 403 } } }] };
+    expect(staffMutationErrorKey('create', forbidden)).toBe('createForbidden');
+    expect(staffMutationErrorKey('disable', forbidden)).toBe('disableForbidden');
+  });
+
+  it('never matches on the Apollo code alone', () => {
+    const error = { graphQLErrors: [{ message: 'x', extensions: { code: 'BAD_REQUEST' } }] };
+    expect(staffMutationErrorKey('create', error)).toBe('createFailed');
   });
 
   it('never matches on message text', () => {
