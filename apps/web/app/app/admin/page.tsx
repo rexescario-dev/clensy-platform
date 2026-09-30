@@ -1,262 +1,179 @@
 'use client';
 
 import {
-  Role,
   useAdminsQuery,
   useCreateAdminMutation,
   useCurrentAdminQuery,
   useDisableAdminMutation,
 } from '@clensy/client';
+import { Button, ConfirmDialog, FormDialog, PageHeader } from '@clensy/ui';
 import {
-  Button,
-  ConfirmDialog,
-  DataTable,
-  FormDialog,
-  FormField,
-  PageHeader,
-  StatusBadge,
-} from '@clensy/ui';
-import type { DataTableColumn } from '@clensy/ui';
+  ClensyI18nProvider,
+  CreateStaffForm,
+  StaffDataTable,
+  useClensyTranslations,
+  type CreateStaffFormValues,
+  type StaffErrorKey,
+  type StaffMember,
+} from '@clensy/web';
+import { useLocale } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { canManageStaff, staffMutationErrorKey } from '../../../lib/staff-console';
 
-// A Tenant Owner can create staff and other Tenant Owners in their own
-// tenant, never a Super Admin (multi-tenant spec §4.3).
-const ROLE_OPTIONS: Role[] = ['TENANT_OWNER', 'OPS_MANAGER', 'FINANCE', 'CUSTOMER_SUPPORT', 'SCHEDULER', 'ANALYST'];
+const EMPTY_FORM: CreateStaffFormValues = { email: '', password: '', role: 'CUSTOMER_SUPPORT' };
 
-// `DataTable<T>` (packages/ui) constrains `T extends Record<string, unknown>`
-// — the index signature below satisfies that constraint while keeping the
-// named fields concretely typed.
-type AdminRow = {
-  id: string;
-  email: string;
-  role: Role;
-  isActive: boolean;
-  [key: string]: unknown;
-};
-
-// Spec §4.1: `middleware.ts` only checked whether the session cookie is
-// present, not whether it's still valid — an expired, invalid, or
-// disabled-account session sails past middleware and lands here. This page
-// is where that actually gets caught: `currentAdmin` is guarded on the API
-// side (`AuthGuard`), so an invalid session surfaces as a GraphQL error (or,
-// defensively, a missing `currentAdmin` in the response) rather than a
-// success. Either case sends the user back to `/login`. The `role !==
-// TENANT_OWNER` branch below is a UX nicety only — the API independently
-// enforces Tenant-Owner-only, same-tenant access on
-// `admins`/`createAdmin`/`disableAdmin` regardless of what this page renders.
+// Staff copy (page, table, form, errors) comes from @clensy/web's `staff`
+// namespace, as LoginForm owns its copy; this route only composes, wires
+// GraphQL and routes (multi-tenant spec §4.8).
 export default function AdminPage() {
-  const router = useRouter();
-  const { data: meData, loading: meLoading, error: meError } = useCurrentAdminQuery({
-    fetchPolicy: 'network-only',
-  });
+  const locale = useLocale();
+  return (
+    <ClensyI18nProvider locale={locale}>
+      <StaffAdminGate />
+    </ClensyI18nProvider>
+  );
+}
 
-  const isAuthenticated = !meLoading && !meError && Boolean(meData?.currentAdmin);
-  const isOwner = isAuthenticated && meData?.currentAdmin?.role === 'TENANT_OWNER';
+// Spec §4.1 (Admin Foundation): `middleware.ts` only checks that the session
+// cookie is present, not that it's still valid — an expired, invalid, or
+// disabled-account session lands here, where the guarded `currentAdmin`
+// surfaces it as an error (or a missing `currentAdmin`) and we send the user
+// back to `/login`. `canManageStaff` is a UX nicety only — the API
+// independently enforces Tenant-Owner-only, same-tenant access on
+// `admins`/`createAdmin`/`disableAdmin` (multi-tenant spec §4.2).
+function StaffAdminGate() {
+  const t = useClensyTranslations('staff');
+  const router = useRouter();
+  const { data, loading, error } = useCurrentAdminQuery({ fetchPolicy: 'network-only' });
+  const currentAdmin = data?.currentAdmin;
 
   useEffect(() => {
-    if (!meLoading && (meError || !meData?.currentAdmin)) {
+    if (!loading && (error || !currentAdmin)) {
       router.replace('/login');
     }
-  }, [meLoading, meError, meData, router]);
+  }, [loading, error, currentAdmin, router]);
 
-  if (meLoading) {
-    return <p className="text-sm text-slate-500">Loading…</p>;
+  if (loading) {
+    return <p className="text-sm text-slate-500">{t('page.loading')}</p>;
   }
 
-  if (!isAuthenticated) {
-    // Redirect already dispatched in the effect above; render nothing while
-    // it takes effect.
+  if (error || !currentAdmin) {
+    // Redirect already dispatched in the effect above.
     return null;
   }
 
-  if (!isOwner) {
-    return <p className="text-sm text-slate-700">You are not authorized to view this page.</p>;
+  if (!canManageStaff(currentAdmin)) {
+    return <p className="text-sm text-slate-700">{t('page.notAuthorized')}</p>;
   }
 
-  return <OwnerAdminConsole />;
+  return <StaffConsole currentAdminId={currentAdmin.id} />;
 }
 
-function OwnerAdminConsole() {
+function StaffConsole({ currentAdminId }: { currentAdminId: string }) {
+  const t = useClensyTranslations('staff');
   const { data, loading, error, refetch } = useAdminsQuery({ fetchPolicy: 'network-only' });
   const [createAdmin, { loading: creating }] = useCreateAdminMutation();
   const [disableAdmin, { loading: disabling }] = useDisableAdminMutation();
 
   const [formOpen, setFormOpen] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [role, setRole] = useState<Role>('CUSTOMER_SUPPORT');
-  const [formError, setFormError] = useState<string | undefined>(undefined);
+  const [formValues, setFormValues] = useState<CreateStaffFormValues>(EMPTY_FORM);
+  const [formErrorKey, setFormErrorKey] = useState<StaffErrorKey | undefined>(undefined);
 
-  // Step 8 of the Task 5 brief: the existing "Disable" action wired through
-  // `ConfirmDialog` instead of firing `handleDisable` directly from the row
-  // button. `confirmTarget` holds the row pending confirmation; `ConfirmDialog`
-  // is open whenever it is set.
-  const [confirmTarget, setConfirmTarget] = useState<AdminRow | undefined>(undefined);
-  const [disableError, setDisableError] = useState<string | undefined>(undefined);
-
-  function resetForm() {
-    setEmail('');
-    setPassword('');
-    setRole('CUSTOMER_SUPPORT');
-    setFormError(undefined);
-  }
+  // `ConfirmDialog` is open whenever `confirmTarget` is set.
+  const [confirmTarget, setConfirmTarget] = useState<StaffMember | undefined>(undefined);
+  const [disableErrorKey, setDisableErrorKey] = useState<StaffErrorKey | undefined>(undefined);
 
   function openCreateForm() {
-    resetForm();
+    setFormValues(EMPTY_FORM);
+    setFormErrorKey(undefined);
     setFormOpen(true);
   }
 
   async function handleCreateSubmit() {
-    setFormError(undefined);
+    setFormErrorKey(undefined);
     try {
-      await createAdmin({ variables: { createAdminInput: { email, password, role } } });
+      await createAdmin({ variables: { createAdminInput: formValues } });
       setFormOpen(false);
-      resetForm();
+      setFormValues(EMPTY_FORM);
       await refetch();
-    } catch {
-      setFormError('Unable to create staff account.');
+    } catch (createError) {
+      // Dialog stays open so the owner can correct the input.
+      setFormErrorKey(staffMutationErrorKey('create', createError));
     }
-  }
-
-  async function handleDisable(id: string) {
-    await disableAdmin({ variables: { id } });
-    await refetch();
   }
 
   async function handleConfirmDisable() {
     if (!confirmTarget) return;
-    setDisableError(undefined);
+    setDisableErrorKey(undefined);
     try {
-      await handleDisable(confirmTarget.id);
-    } catch {
-      // `ConfirmDialog` has no error-display slot in its contract, so the
-      // dialog still closes here (matching its prior always-closes
-      // behavior) and the failure surfaces as inline text on the page
-      // itself, below where the dialog was — visible once the overlay is
-      // gone, same idea as `formError` for the create form above.
-      setDisableError('Unable to disable staff account.');
+      await disableAdmin({ variables: { id: confirmTarget.id } });
+      await refetch();
+    } catch (disableError) {
+      // `ConfirmDialog` has no error slot, so the dialog closes and the
+      // failure shows inline on the page below it.
+      const key = staffMutationErrorKey('disable', disableError);
+      setDisableErrorKey(key);
+      // The target is no longer available to this operation; refresh the
+      // list so the UI reflects the current tenant-scoped state.
+      if (key === 'accountNotFound') await refetch();
     } finally {
       setConfirmTarget(undefined);
     }
   }
 
-  const columns: DataTableColumn<AdminRow>[] = [
-    { header: 'Email', key: 'email' },
-    { header: 'Role', key: 'role' },
-    {
-      header: 'Status',
-      key: 'status',
-      render: (row) =>
-        row.isActive ? (
-          <StatusBadge label="Active" tone="success" />
-        ) : (
-          <StatusBadge label="Disabled" tone="danger" />
-        ),
-    },
-    {
-      header: '',
-      key: 'actions',
-      render: (row) =>
-        row.isActive ? (
-          <Button
-            variant="destructive"
-            disabled={disabling}
-            onClick={() => {
-              setDisableError(undefined);
-              setConfirmTarget(row);
-            }}
-          >
-            Disable
-          </Button>
-        ) : null,
-    },
-  ];
-
-  const rows: AdminRow[] = data?.admins ?? [];
-
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
-        title="Staff Accounts"
+        title={t('page.title')}
         actions={
           <Button type="button" onClick={openCreateForm}>
-            + New Staff Account
+            {t('page.newAccount')}
           </Button>
         }
       />
 
-      <DataTable
-        columns={columns}
-        rows={rows}
-        rowKey={(row) => row.id}
-        emptyMessage="No staff accounts."
+      <StaffDataTable
+        staff={data?.admins ?? []}
+        currentAdminId={currentAdminId}
         loading={loading}
-        error={error ? 'Unable to load staff accounts.' : undefined}
+        hasError={Boolean(error)}
+        disabling={disabling}
+        onDisable={(member) => {
+          setDisableErrorKey(undefined);
+          setConfirmTarget(member);
+        }}
       />
 
       <FormDialog
         open={formOpen}
         onClose={() => setFormOpen(false)}
-        title="Add staff account"
+        title={t('form.title')}
         onSubmit={handleCreateSubmit}
-        submitLabel={creating ? 'Creating…' : 'Create staff account'}
+        submitLabel={creating ? t('form.creating') : t('form.submit')}
         submitting={creating}
       >
-        <FormField
-          label="Email"
-          name="new-email"
-          type="email"
-          required
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-        />
-        <FormField
-          label="Password"
-          name="new-password"
-          type="password"
-          required
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-        />
-        <div className="flex flex-col gap-1">
-          <label htmlFor="new-role" className="text-sm font-medium text-slate-700">
-            Role
-          </label>
-          <select
-            id="new-role"
-            name="new-role"
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-            value={role}
-            onChange={(event) => setRole(event.target.value as Role)}
-          >
-            {ROLE_OPTIONS.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </div>
-        {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
+        <CreateStaffForm values={formValues} onChange={setFormValues} errorKey={formErrorKey} />
       </FormDialog>
 
       <ConfirmDialog
         open={Boolean(confirmTarget)}
         onClose={() => {
           setConfirmTarget(undefined);
-          setDisableError(undefined);
+          setDisableErrorKey(undefined);
         }}
         onConfirm={handleConfirmDisable}
-        title="Disable this staff account?"
-        description={
-          confirmTarget
-            ? `This will disable ${confirmTarget.email}. They will no longer be able to sign in.`
-            : ''
-        }
-        confirmLabel="Disable"
+        title={t('confirmDisable.title')}
+        // `t` has no interpolation; {email} is the only placeholder.
+        description={confirmTarget ? t('confirmDisable.description').replace('{email}', confirmTarget.email) : ''}
+        confirmLabel={t('confirmDisable.confirm')}
         confirming={disabling}
       />
-      {disableError ? <p className="text-sm text-red-600">{disableError}</p> : null}
+      {disableErrorKey ? (
+        <p role="alert" className="text-sm text-red-600">
+          {t(`errors.${disableErrorKey}`)}
+        </p>
+      ) : null}
     </div>
   );
 }
