@@ -1,5 +1,6 @@
 import { SortDirection } from '@ptc-org/nestjs-query-core';
 import {
+  Authorize,
   FilterableField,
   FilterableRelation,
   IDField,
@@ -12,6 +13,7 @@ import {
   PLATFORM_PAGE_DEFAULT,
   PLATFORM_PAGE_MAX,
 } from '../../../../platform/graphql/paging';
+import { tenantReadAuthorizer } from '../../../../platform/auth/authorization/tenant-read.authorizer';
 import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
 import { Role } from '../../../../platform/auth/domain/role';
 import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
@@ -39,6 +41,14 @@ const relationReadOpts = {
   update: { enabled: false },
 };
 
+// Security invariant (#87 multi-tenant spec §4.5; slice decision 5): every
+// nestjs-query read of this type — the root `laundryOrders` list/count, its
+// relation filters (e.g. `laundryOrders(filter: { customer: … })`) and the
+// `Invoice.laundryOrder` relation — is ANDed with the principal's tenant.
+// `tenantId` is deliberately not a GraphQL field; the filter applies to the
+// entity column. `laundryOrder(id)` is a custom query scoped in
+// `LaundryOrdersService.getOrder`.
+@Authorize(tenantReadAuthorizer<LaundryOrderType>())
 @ObjectType('LaundryOrder')
 @QueryOptions({
   defaultResultSize: PLATFORM_PAGE_DEFAULT,

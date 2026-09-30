@@ -204,6 +204,18 @@ describe('Laundry (e2e)', () => {
         'laundry_order.completed',
       ].sort(),
     );
+    // #87 slice decision 11: every event carries the order's tenant.
+    const [{ tenantId }]: { tenantId: string }[] =
+      await auditEventRepository.manager.query(
+        `SELECT "tenantId" FROM "laundry_order_entity" WHERE "id" = $1`,
+        [orderId],
+      );
+    for (const event of events) {
+      expect({ scope: event.scope, tenantId: event.tenantId }).toEqual({
+        scope: 'TENANT',
+        tenantId,
+      });
+    }
   });
 
   it('rejects laundryOrders for an unauthenticated request', async () => {

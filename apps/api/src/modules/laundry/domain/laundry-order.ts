@@ -12,6 +12,9 @@ import { LaundryOrderStatus } from './laundry-order-status';
 // until `PRICED`, then the frozen sum of every line's `amountMinorUnits`.
 export interface LaundryOrder {
   id: string;
+  // Owning tenant (#87). Authoritative for the order's customer and every
+  // line and invoice of the order (slice decision 3, I-1).
+  tenantId: string;
   customerId: string;
   fulfillmentType: LaundryFulfillmentType;
   status: LaundryOrderStatus;

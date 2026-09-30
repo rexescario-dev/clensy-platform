@@ -10,6 +10,9 @@ import { LaundryOrderStatus } from '../../domain/laundry-order-status';
 // Only the four snapshot fields Billing copies verbatim are projected;
 // `minimumChargeMinorUnits` / `minimumChargeApplied` / `pricingRuleId` are
 // intentionally omitted (Billing does not copy them).
+//
+// `tenantId` is the order row's tenant; Billing stamps it on the invoice
+// (#87 slice decision 6).
 export interface OrderForInvoicingLine {
   serviceId: string | null;
   addOnId: string | null;
@@ -23,6 +26,7 @@ export interface OrderForInvoicingLine {
 
 export interface OrderForInvoicing {
   id: string;
+  tenantId: string;
   customerId: string;
   status: LaundryOrderStatus;
   totalMinorUnits: number | null;

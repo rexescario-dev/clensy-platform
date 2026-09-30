@@ -10,6 +10,7 @@ import { DataSource, EntityManager, Repository } from 'typeorm';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import type { AuditLogger } from '../../../../platform/audit/application/audit-logger.port';
 import { runAuditInTransaction } from '../../../../platform/audit/infrastructure/audit-logger.service';
+import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { AddOnsService } from '../../../catalog/application/services/add-ons.service';
 import { ServicesService } from '../../../catalog/application/services/services.service';
 import { LaundryOrdersService } from '../../../laundry/application/services/laundry-orders.service';
@@ -27,12 +28,12 @@ import {
 import { InvoicePaymentStatus } from '../../domain/invoice-payment-status';
 import { InvoicePaymentTerms } from '../../domain/invoice-payment-terms';
 import { InvoiceEntity } from '../../infrastructure/persistence/invoice.entity';
+import { allocateInvoiceNumber } from '../../infrastructure/persistence/invoice-number-counter';
 import { InvoiceLineEntity } from '../../infrastructure/persistence/invoice-line.entity';
 import { GenerateInvoiceFromOrderCommand } from '../commands/generate-invoice-from-order.command';
 import { isPostgresUniqueViolation } from './unique-violation';
 
 const ENTITY_TYPE = 'invoice';
-const NUMBER_SEQUENCE = 'billing_invoice_number_seq';
 
 // spec §4.3: an order is billable iff its pricing is frozen
 // (`totalMinorUnits !== null`, the authoritative #37 signal for "passed
@@ -65,6 +66,14 @@ export class InvoicesService {
   // order (spec §4.3, §4.4, §4.6). All eligibility and catalog-resolution
   // checks run BEFORE the write transaction; `uq_invoice_laundry_order` —
   // not the pre-check — is the concurrency correctness mechanism.
+  //
+  // Tenancy (#87 slice decisions 6, 9, 11): the order is read in the
+  // caller's tenant; the invoice, its number and its audit event take the
+  // scoped order row's tenant. Allocation, the invoice/line saves and the
+  // audit run on the one transaction manager, and a
+  // `uq_invoice_laundry_order` loser's `ConflictException` is raised inside
+  // the callback, so TypeORM rolls the counter increment back before the
+  // caller sees it.
   async generateFromOrder(
     command: GenerateInvoiceFromOrderCommand,
   ): Promise<Invoice> {
@@ -72,6 +81,7 @@ export class InvoicesService {
 
     const order = await this.laundryOrdersService.getOrderForInvoicing(
       command.laundryOrderId,
+      command.tenantId,
     );
     if (!order) {
       throw new NotFoundException(
@@ -81,7 +91,8 @@ export class InvoicesService {
     this.assertEligible(order);
 
     const existing = await this.invoiceRepository.findOneBy({
-      laundryOrderId: command.laundryOrderId,
+      laundryOrderId: order.id,
+      tenantId: order.tenantId,
     });
     if (existing) {
       throw new ConflictException(
@@ -103,7 +114,8 @@ export class InvoicesService {
     return this.dataSource.transaction((manager) =>
       runAuditInTransaction(manager, async () => {
         const raced = await manager.findOneBy(InvoiceEntity, {
-          laundryOrderId: command.laundryOrderId,
+          laundryOrderId: order.id,
+          tenantId: order.tenantId,
         });
         if (raced) {
           throw new ConflictException(
@@ -111,17 +123,15 @@ export class InvoicesService {
           );
         }
 
-        const rows: Array<{ n: string }> = await manager.query(
-          `SELECT nextval('${NUMBER_SEQUENCE}') AS n`,
-        );
         const invoiceNumber = formatInvoiceNumber(
-          Number(rows[0].n),
+          await allocateInvoiceNumber(manager, order.tenantId),
           resolveManilaYear(issueDate),
         );
 
         const invoice = manager.create(InvoiceEntity, {
           customerId: order.customerId,
           laundryOrderId: order.id,
+          tenantId: order.tenantId,
           amountPaidMinorUnits: 0,
           discountMinorUnits: 0,
           dueDate,
@@ -145,17 +155,30 @@ export class InvoicesService {
         await this.auditLogger.log({
           actorId: command.actorId,
           entityId: invoice.id,
+          tenantId: invoice.tenantId,
           action: 'invoice.generated',
           entityType: ENTITY_TYPE,
+          scope: AdminScope.TENANT,
         });
 
-        return manager.findOneByOrFail(InvoiceEntity, { id: invoice.id });
+        return manager.findOneByOrFail(InvoiceEntity, {
+          id: invoice.id,
+          tenantId: invoice.tenantId,
+        });
       }),
     );
   }
 
-  getInvoice(id: string): Promise<Invoice | null> {
-    return this.invoiceRepository.findOneBy({ id });
+  // Tenant in the same query as the id (#87 slice decision 5). A null
+  // tenant (a platform principal) reads nothing.
+  async getInvoice(
+    id: string,
+    tenantId: string | null,
+  ): Promise<Invoice | null> {
+    if (tenantId === null) {
+      return null;
+    }
+    return this.invoiceRepository.findOneBy({ id, tenantId });
   }
 
   private assertEligible(order: OrderForInvoicing): void {
@@ -240,8 +263,8 @@ export class InvoicesService {
           'An invoice already exists for this laundry order',
         );
       }
-      // `uq_invoice_number` and anything else: an integrity failure, never
-      // a business conflict — rethrow unchanged (spec §4.6).
+      // `uq_invoice_tenant_number` and anything else: an integrity failure,
+      // never a business conflict — rethrow unchanged (spec §4.6).
       throw error;
     }
   }

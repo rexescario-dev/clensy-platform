@@ -59,6 +59,7 @@ describe('InvoiceResolver', () => {
       id: 'inv-1',
       customerId: 'cust-1',
       laundryOrderId: 'order-1',
+      tenantId: 'tenant-1',
       amountPaidMinorUnits: 0,
       createdAt: new Date(),
       discountMinorUnits: 0,
@@ -82,7 +83,14 @@ describe('InvoiceResolver', () => {
 
     it('invoice returns null for a missing id', async () => {
       service.getInvoice.mockResolvedValue(null);
-      await expect(resolver.invoice('nope')).resolves.toBeNull();
+      await expect(resolver.invoice('nope', principal)).resolves.toBeNull();
+      expect(service.getInvoice).toHaveBeenCalledWith('nope', 't-a');
+    });
+
+    it('invoice with a tenant-less principal passes a null tenant', async () => {
+      service.getInvoice.mockResolvedValue(null);
+      await expect(resolver.invoice('i1', noTenant)).resolves.toBeNull();
+      expect(service.getInvoice).toHaveBeenCalledWith('i1', null);
     });
 
     it('generateInvoiceFromOrder threads the actor id into the command', async () => {

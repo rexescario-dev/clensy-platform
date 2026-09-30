@@ -20,6 +20,9 @@ import { InvoicePaymentTerms } from './invoice-payment-terms';
 // All money is integer minor units. No float anywhere.
 export interface Invoice {
   id: string;
+  // The originating laundry order's tenant (#87 slice decisions 3, 6):
+  // authoritative for the invoice's order and customer.
+  tenantId: string;
   invoiceNumber: string;
   laundryOrderId: string;
   customerId: string;

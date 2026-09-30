@@ -261,6 +261,16 @@ describe('Billing (e2e)', () => {
       where: { entityId: inv.id, entityType: 'invoice' },
     });
     expect(events.map((e) => e.action)).toEqual(['invoice.generated']);
+    // #87 slice decision 11: tagged with the invoice's (the order's) tenant.
+    const [{ tenantId }]: { tenantId: string }[] =
+      await auditEventRepository.manager.query(
+        `SELECT "tenantId" FROM "invoice_entity" WHERE "id" = $1`,
+        [inv.id],
+      );
+    expect({ scope: events[0].scope, tenantId: events[0].tenantId }).toEqual({
+      scope: 'TENANT',
+      tenantId,
+    });
 
     // appears in the root connection
     const list = await gql(

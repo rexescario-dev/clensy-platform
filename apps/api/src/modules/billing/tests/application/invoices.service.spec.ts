@@ -7,6 +7,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
+import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { PricingUnit } from '../../../catalog/domain/pricing-unit';
 import { AddOnsService } from '../../../catalog/application/services/add-ons.service';
 import { ServicesService } from '../../../catalog/application/services/services.service';
@@ -18,8 +19,8 @@ import { InvoiceEntity } from '../../infrastructure/persistence/invoice.entity';
 import { InvoicesService } from '../../application/services/invoices.service';
 
 // Mocked Repository/DataSource unit tests (plan §7 Slice D). The mock
-// `manager` stands in for the transaction EntityManager; `query` returns the
-// next sequence value.
+// `manager` stands in for the transaction EntityManager; `query` answers the
+// per-tenant counter upsert (#87 slice decision 9).
 describe('InvoicesService', () => {
   let service: InvoicesService;
   let manager: {
@@ -39,6 +40,7 @@ describe('InvoicesService', () => {
   const anOrder = (over = {}) => ({
     id: 'order-1',
     customerId: 'cust-1',
+    tenantId: 't-a',
     lines: [
       {
         addOnId: null,
@@ -88,7 +90,7 @@ describe('InvoicesService', () => {
       findOneByOrFail: jest.fn((_e: unknown, where: { id: string }) =>
         Promise.resolve({ id: where.id, invoiceNumber: 'INV-2026-000042' }),
       ),
-      query: jest.fn(() => Promise.resolve([{ n: String(++seq) }])),
+      query: jest.fn(() => Promise.resolve([{ lastValue: String(++seq) }])),
       save: jest.fn((entity: unknown) => Promise.resolve(entity)),
     };
     dataSource = {
@@ -146,6 +148,7 @@ describe('InvoicesService', () => {
         expect.objectContaining({
           customerId: 'cust-1',
           laundryOrderId: 'order-1',
+          tenantId: 't-a',
           amountPaidMinorUnits: 0,
           discountMinorUnits: 0,
           invoiceNumber: 'INV-2026-000042',
@@ -179,23 +182,84 @@ describe('InvoicesService', () => {
       ]);
     });
 
-    it('draws exactly one sequence value', async () => {
+    it('allocates exactly one number from the tenant counter on the transaction manager', async () => {
       await service.generateFromOrder(cmd());
       expect(manager.query).toHaveBeenCalledTimes(1);
-      expect((manager.query.mock.calls[0] as unknown[])[0] as string).toMatch(
-        /nextval/i,
-      );
+      const [sql, params] = manager.query.mock.calls[0] as [string, unknown[]];
+      expect(sql).toMatch(/INSERT INTO "invoice_number_counter"/);
+      expect(sql).not.toMatch(/nextval|MAX\(/i);
+      expect(params).toEqual(['t-a']);
     });
 
-    it('audits invoice.generated', async () => {
+    it('scopes the order lookup, both invoice-exists checks and the re-read by tenant', async () => {
       await service.generateFromOrder(cmd());
-      expect(auditLogger.log).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'invoice.generated',
-          actorId: 'actor-1',
-          entityType: 'invoice',
-        }),
+      expect(laundryOrdersService.getOrderForInvoicing).toHaveBeenCalledWith(
+        'order-1',
+        't-a',
       );
+      expect(invoiceRepository.findOneBy).toHaveBeenCalledWith({
+        laundryOrderId: 'order-1',
+        tenantId: 't-a',
+      });
+      expect(manager.findOneBy).toHaveBeenCalledWith(InvoiceEntity, {
+        laundryOrderId: 'order-1',
+        tenantId: 't-a',
+      });
+      expect(manager.findOneByOrFail).toHaveBeenCalledWith(InvoiceEntity, {
+        id: 'generated-1',
+        tenantId: 't-a',
+      });
+    });
+
+    // Review Focus 4: the invoice's and the audit's tenant come from the
+    // tenant-scoped order row (which `getOrderForInvoicing` matched on the
+    // command's tenant), never from an independent request value.
+    it('stamps the invoice, its number and the audit with the order row’s tenant', async () => {
+      // Distinct values (never equal at runtime, since the lookup filters on
+      // the command's tenant) so the test can tell the two sources apart.
+      laundryOrdersService.getOrderForInvoicing.mockResolvedValue(
+        anOrder({ tenantId: 't-order' }),
+      );
+      await service.generateFromOrder(cmd({ tenantId: 't-cmd' }));
+
+      expect(laundryOrdersService.getOrderForInvoicing).toHaveBeenCalledWith(
+        'order-1',
+        't-cmd',
+      );
+      expect(savedInvoice()).toEqual(
+        expect.objectContaining({ tenantId: 't-order' }),
+      );
+      expect((manager.query.mock.calls[0] as unknown[])[1]).toEqual([
+        't-order',
+      ]);
+      expect(invoiceRepository.findOneBy).toHaveBeenCalledWith({
+        laundryOrderId: 'order-1',
+        tenantId: 't-order',
+      });
+      expect(manager.findOneBy).toHaveBeenCalledWith(InvoiceEntity, {
+        laundryOrderId: 'order-1',
+        tenantId: 't-order',
+      });
+      expect(manager.findOneByOrFail).toHaveBeenCalledWith(InvoiceEntity, {
+        id: 'generated-1',
+        tenantId: 't-order',
+      });
+      expect(auditLogger.log).toHaveBeenCalledWith({
+        actorId: 'actor-1',
+        entityId: 'generated-1',
+        tenantId: 't-order',
+        action: 'invoice.generated',
+        entityType: 'invoice',
+        scope: AdminScope.TENANT,
+      });
+    });
+
+    it('runs allocation, the invoice and line saves and the audit on the transaction manager only', async () => {
+      await service.generateFromOrder(cmd());
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(manager.query).toHaveBeenCalledTimes(1);
+      expect(manager.save).toHaveBeenCalledTimes(3);
+      expect(invoiceRepository.findOneBy).toHaveBeenCalledTimes(1);
     });
 
     it('sets dueDate to issueDate for PAY_NOW', async () => {
@@ -216,11 +280,12 @@ describe('InvoicesService', () => {
   });
 
   describe('eligibility', () => {
-    it('throws NotFoundException when the order does not exist', async () => {
+    it('throws NotFoundException (missing or other-tenant order) and opens no transaction', async () => {
       laundryOrdersService.getOrderForInvoicing.mockResolvedValue(null);
       await expect(service.generateFromOrder(cmd())).rejects.toThrow(
-        NotFoundException,
+        new NotFoundException('Laundry order order-1 not found'),
       );
+      expect(dataSource.transaction).not.toHaveBeenCalled();
     });
 
     it('throws BadRequestException when the order is not priced', async () => {
@@ -326,7 +391,11 @@ describe('InvoicesService', () => {
         constraint,
       });
 
-    it('translates a uq_invoice_laundry_order violation to ConflictException', async () => {
+    // F1: the mapping happens inside the transaction callback, so the
+    // callback (and therefore `dataSource.transaction`) rejects with it —
+    // which is what makes TypeORM roll the counter increment back before
+    // rethrowing (slice decision 9).
+    it('translates a uq_invoice_laundry_order violation to ConflictException inside the transaction', async () => {
       manager.save.mockImplementation((entity: Record<string, unknown>) =>
         'invoiceNumber' in entity
           ? Promise.reject(violation('uq_invoice_laundry_order'))
@@ -335,10 +404,15 @@ describe('InvoicesService', () => {
       await expect(service.generateFromOrder(cmd())).rejects.toThrow(
         ConflictException,
       );
+      const transactionResult = dataSource.transaction.mock.results[0] as {
+        value: Promise<unknown>;
+      };
+      await expect(transactionResult.value).rejects.toThrow(ConflictException);
+      expect(auditLogger.log).not.toHaveBeenCalled();
     });
 
-    it('rethrows a uq_invoice_number violation unchanged', async () => {
-      const err = violation('uq_invoice_number');
+    it('rethrows a uq_invoice_tenant_number violation unchanged', async () => {
+      const err = violation('uq_invoice_tenant_number');
       manager.save.mockImplementation((entity: Record<string, unknown>) =>
         'invoiceNumber' in entity
           ? Promise.reject(err)
@@ -349,9 +423,18 @@ describe('InvoicesService', () => {
   });
 
   describe('reads', () => {
-    it('getInvoice returns null for a missing id', async () => {
+    it('getInvoice looks the invoice up by { id, tenantId }', async () => {
       invoiceRepository.findOneBy.mockResolvedValue(null);
-      await expect(service.getInvoice('nope')).resolves.toBeNull();
+      await expect(service.getInvoice('nope', 't-a')).resolves.toBeNull();
+      expect(invoiceRepository.findOneBy).toHaveBeenCalledWith({
+        id: 'nope',
+        tenantId: 't-a',
+      });
+    });
+
+    it('getInvoice with a null tenant returns null without a query', async () => {
+      await expect(service.getInvoice('i1', null)).resolves.toBeNull();
+      expect(invoiceRepository.findOneBy).not.toHaveBeenCalled();
     });
   });
 });

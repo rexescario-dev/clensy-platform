@@ -12,8 +12,8 @@ export interface PriceLaundryOrderCommand {
   // Honoured only when the base service's resolved rule is PER_ITEM.
   baseQuantity?: number;
   addOns: LaundryOrderAddOnInput[];
-  // The principal's tenant (`requireTenantId`, #84 spec §4.5/§4.4). Used
-  // only for the catalog pricing lookups below — `laundry_order_entity` has
-  // no `tenantId` until #87.
+  // The principal's tenant (`requireTenantId`, #84 spec §4.5/§4.4; #87
+  // slice decision 8). Scopes the order lock and the catalog pricing
+  // lookups; the new lines take the locked order row's tenant.
   tenantId: string;
 }

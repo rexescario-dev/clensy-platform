@@ -9,6 +9,9 @@ import { LaundryOrderLinePricingSnapshot } from './laundry-order-line-pricing-sn
 // domain objects or entities).
 export interface LaundryOrderLine {
   id: string;
+  // The order's tenant (#87 slice decisions 2, 3): authoritative for the
+  // line's service/add-on, enforced by the composite FKs.
+  tenantId: string;
   laundryOrderId: string;
   serviceId: string | null;
   addOnId: string | null;

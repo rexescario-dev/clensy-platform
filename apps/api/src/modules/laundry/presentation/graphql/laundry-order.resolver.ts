@@ -60,8 +60,10 @@ export class LaundryOrderResolver {
   @Roles(...VIEW_ROLES)
   async laundryOrder(
     @Args('id', { type: () => ID }) id: string,
+    @CurrentUser() currentUser: AuthenticatedPrincipal,
   ): Promise<LaundryOrderType | null> {
-    const order = await this.service.getOrder(id);
+    // Cross-tenant = missing row (#87 slice decision 7).
+    const order = await this.service.getOrder(id, currentUser.tenantId);
     return order ? toLaundryOrderType(order) : null;
   }
 
@@ -162,7 +164,7 @@ export class LaundryOrderResolver {
       await this.service.receive({
         ...input,
         actorId: user.id,
-        tenantId: user.tenantId,
+        tenantId: requireTenantId(user),
       }),
     );
   }
@@ -205,7 +207,11 @@ export class LaundryOrderResolver {
     @CurrentUser() user: AuthenticatedPrincipal,
   ): Promise<LaundryOrderType> {
     return toLaundryOrderType(
-      await this.service.weigh({ ...input, actorId: user.id }),
+      await this.service.weigh({
+        ...input,
+        actorId: user.id,
+        tenantId: requireTenantId(user),
+      }),
     );
   }
 
@@ -214,8 +220,13 @@ export class LaundryOrderResolver {
     user: AuthenticatedPrincipal,
     op: (command: LaundryOrderTransitionCommand) => Promise<LaundryOrder>,
   ): Promise<LaundryOrderType> {
+    // #87 slice decision 8: the tenant comes only from the principal.
     return toLaundryOrderType(
-      await op({ actorId: user.id, orderId: input.orderId }),
+      await op({
+        actorId: user.id,
+        orderId: input.orderId,
+        tenantId: requireTenantId(user),
+      }),
     );
   }
 }

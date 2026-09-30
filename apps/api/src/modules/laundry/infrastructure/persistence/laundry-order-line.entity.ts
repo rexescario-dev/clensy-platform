@@ -7,6 +7,7 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { TenantEntity } from '../../../admins/infrastructure/persistence/tenant.entity';
 import { AddOnEntity } from '../../../catalog/infrastructure/persistence/add-on.entity';
 import { ServiceEntity } from '../../../catalog/infrastructure/persistence/service.entity';
 import { LaundryOrderLine } from '../../domain/laundry-order-line';
@@ -26,10 +27,32 @@ import { LaundryOrderLinePricingSnapshotEmbeddable } from './laundry-order-line-
 // register `ServiceEntity`/`AddOnEntity` on `forFeature`. The `order`
 // relation's inverse (`LaundryOrderEntity.lines`) backs the nested GraphQL
 // connection.
+//
+// Tenant ownership (#87 slice decision 2): `tenantId` (the order's) +
+// `fk_laundry_order_line_tenant` are expressed here. `order` / `service` /
+// `addOn` keep their relations but set `createForeignKeyConstraints: false`;
+// the composite `fk_laundry_order_line_order_tenant` /
+// `_service_tenant` / `_add_on_tenant` FKs are hand-written in
+// `AddLaundryBillingTenant`. `migration:generate` may propose dropping them
+// or re-adding id-only FKs — do not apply that.
 @Entity()
 export class LaundryOrderLineEntity implements LaundryOrderLine {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
+
+  @Column({ type: 'uuid' })
+  tenantId!: string;
+
+  @ManyToOne(() => TenantEntity, {
+    nullable: false,
+    eager: false,
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({
+    name: 'tenantId',
+    foreignKeyConstraintName: 'fk_laundry_order_line_tenant',
+  })
+  tenant!: TenantEntity;
 
   @Column({ type: 'uuid' })
   @Index('IDX_laundry_order_line_order_id')
@@ -38,12 +61,9 @@ export class LaundryOrderLineEntity implements LaundryOrderLine {
   @ManyToOne(() => LaundryOrderEntity, (order) => order.lines, {
     nullable: false,
     eager: false,
-    onDelete: 'CASCADE',
+    createForeignKeyConstraints: false,
   })
-  @JoinColumn({
-    name: 'laundryOrderId',
-    foreignKeyConstraintName: 'fk_laundry_order_line_order',
-  })
+  @JoinColumn({ name: 'laundryOrderId' })
   order!: LaundryOrderEntity;
 
   @Column({ type: 'uuid', nullable: true })
@@ -53,12 +73,9 @@ export class LaundryOrderLineEntity implements LaundryOrderLine {
   @ManyToOne(() => ServiceEntity, {
     nullable: true,
     eager: false,
-    onDelete: 'RESTRICT',
+    createForeignKeyConstraints: false,
   })
-  @JoinColumn({
-    name: 'serviceId',
-    foreignKeyConstraintName: 'fk_laundry_order_line_service',
-  })
+  @JoinColumn({ name: 'serviceId' })
   service!: ServiceEntity | null;
 
   @Column({ type: 'uuid', nullable: true })
@@ -68,12 +85,9 @@ export class LaundryOrderLineEntity implements LaundryOrderLine {
   @ManyToOne(() => AddOnEntity, {
     nullable: true,
     eager: false,
-    onDelete: 'RESTRICT',
+    createForeignKeyConstraints: false,
   })
-  @JoinColumn({
-    name: 'addOnId',
-    foreignKeyConstraintName: 'fk_laundry_order_line_add_on',
-  })
+  @JoinColumn({ name: 'addOnId' })
   addOn!: AddOnEntity | null;
 
   @Column(() => LaundryOrderLinePricingSnapshotEmbeddable, { prefix: false })

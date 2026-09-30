@@ -9,6 +9,7 @@ import { DataSource, EntityManager, Repository } from 'typeorm';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import type { AuditLogger } from '../../../../platform/audit/application/audit-logger.port';
 import { runAuditInTransaction } from '../../../../platform/audit/infrastructure/audit-logger.service';
+import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { PricingRulesService } from '../../../catalog/application/services/pricing-rules.service';
 import { PricingUnit } from '../../../catalog/domain/pricing-unit';
 import { CustomersService } from '../../../customers/application/services/customers.service';
@@ -56,28 +57,41 @@ export class LaundryOrdersService {
 
   // ---- intake ------------------------------------------------------------
 
-  getOrder(id: string): Promise<LaundryOrder | null> {
-    return this.orderRepository.findOneBy({ id });
+  // Tenant in the same query as the id (#87 slice decision 5). A null
+  // tenant (a platform principal) reads nothing.
+  async getOrder(
+    id: string,
+    tenantId: string | null,
+  ): Promise<LaundryOrder | null> {
+    if (tenantId === null) {
+      return null;
+    }
+    return this.orderRepository.findOneBy({ id, tenantId });
   }
 
   // ---- weigh -----------------------------------------------------------
 
   // Read-only projection for the Billing module (#38 spec §4.1). Returns
   // the order plus its lines' `serviceId`/`addOnId` and the four snapshot
-  // fields Billing copies verbatim, or `null` if the order does not exist.
+  // fields Billing copies verbatim, or `null` if the order does not exist in
+  // `tenantId` (#87 slice decision 6: order and lines by `{ …, tenantId }`).
   // Adds no capability to mutate an order and changes no existing contract.
-  async getOrderForInvoicing(id: string): Promise<OrderForInvoicing | null> {
-    const order = await this.orderRepository.findOneBy({ id });
+  async getOrderForInvoicing(
+    id: string,
+    tenantId: string,
+  ): Promise<OrderForInvoicing | null> {
+    const order = await this.orderRepository.findOneBy({ id, tenantId });
     if (!order) {
       return null;
     }
     const lines = await this.lineRepository.find({
       order: { createdAt: 'ASC' },
-      where: { laundryOrderId: id },
+      where: { laundryOrderId: id, tenantId },
     });
     return {
       id: order.id,
       customerId: order.customerId,
+      tenantId: order.tenantId,
       lines: lines.map((line) => ({
         addOnId: line.addOnId,
         pricingSnapshot: {
@@ -146,7 +160,11 @@ export class LaundryOrdersService {
   async price(command: PriceLaundryOrderCommand): Promise<LaundryOrder> {
     return this.dataSource.transaction((manager) =>
       runAuditInTransaction(manager, async () => {
-        const order = await this.lock(manager, command.orderId);
+        const order = await this.lock(
+          manager,
+          command.orderId,
+          command.tenantId,
+        );
 
         // Precondition guard (no re-pricing). The load-bearing transition
         // assertion is immediately before the status write below.
@@ -188,8 +206,9 @@ export class LaundryOrdersService {
           // Application-level same-tenant check (#84 slice decision 9): a
           // cross-tenant `baseServiceId` / `addOnId` has no pricing rule in
           // this tenant, so it falls through to the existing "no effective
-          // price" 400 below. `fk_laundry_order_line_service` /
-          // `_add_on` stay id-only until #87.
+          // price" 400 below. Application half of I-1;
+          // `fk_laundry_order_line_service_tenant` / `_add_on_tenant` are
+          // the database half (#87 slice decision 4).
           const rule = await this.pricingRulesService.resolveEffectivePricing(
             target.column === 'serviceId'
               ? { serviceId: target.id }
@@ -230,10 +249,12 @@ export class LaundryOrdersService {
             },
           );
 
+          // The locked order row's tenant (#87 slice decision 6).
           const line = manager.create(LaundryOrderLineEntity, {
             addOnId: target.column === 'addOnId' ? target.id : null,
             laundryOrderId: order.id,
             serviceId: target.column === 'serviceId' ? target.id : null,
+            tenantId: order.tenantId,
           });
           line.pricingSnapshot = snapshot;
           lines.push(line);
@@ -247,23 +268,31 @@ export class LaundryOrdersService {
         this.policy.assertTransition(order.status, S.PRICED);
         await manager.update(
           LaundryOrderEntity,
-          { id: order.id },
+          { id: order.id, tenantId: order.tenantId },
           {
             status: S.PRICED,
             totalMinorUnits: total,
             updatedAt: new Date(),
           },
         );
-        await this.audit(command.actorId, 'laundry_order.priced', order.id);
-        return manager.findOneByOrFail(LaundryOrderEntity, { id: order.id });
+        await this.audit(
+          command.actorId,
+          'laundry_order.priced',
+          order.id,
+          order.tenantId,
+        );
+        return manager.findOneByOrFail(LaundryOrderEntity, {
+          id: order.id,
+          tenantId: order.tenantId,
+        });
       }),
     );
   }
 
   // `getCustomer` runs before the transaction for a clean `NotFoundException`;
-  // `fk_laundry_order_customer` is the actual check/write-race guard (spec
-  // §4.1). The order is created with zero lines — lines are created only by
-  // `price` (spec §4.5).
+  // `fk_laundry_order_customer_tenant` is the actual check/write-race guard
+  // (spec §4.1; #87 slice decision 4). The order is created with zero
+  // lines — lines are created only by `price` (spec §4.5).
   async receive(command: ReceiveLaundryOrderCommand): Promise<LaundryOrder> {
     const customer = await this.customersService.getCustomer(
       command.customerId,
@@ -277,14 +306,23 @@ export class LaundryOrdersService {
       runAuditInTransaction(manager, async () => {
         const entity = manager.create(LaundryOrderEntity, {
           customerId: command.customerId,
+          tenantId: command.tenantId,
           fulfillmentType: command.fulfillmentType,
           status: S.RECEIVED,
           totalMinorUnits: null,
           weightGrams: null,
         });
         await manager.save(entity);
-        await this.audit(command.actorId, 'laundry_order.received', entity.id);
-        return manager.findOneByOrFail(LaundryOrderEntity, { id: entity.id });
+        await this.audit(
+          command.actorId,
+          'laundry_order.received',
+          entity.id,
+          command.tenantId,
+        );
+        return manager.findOneByOrFail(LaundryOrderEntity, {
+          id: entity.id,
+          tenantId: command.tenantId,
+        });
       }),
     );
   }
@@ -314,60 +352,72 @@ export class LaundryOrdersService {
 
     return this.dataSource.transaction((manager) =>
       runAuditInTransaction(manager, async () => {
-        const order = await this.lock(manager, command.orderId);
+        const order = await this.lock(
+          manager,
+          command.orderId,
+          command.tenantId,
+        );
+        const where = { id: order.id, tenantId: order.tenantId };
 
         if (order.status === S.RECEIVED) {
           this.policy.assertTransition(order.status, S.WEIGHED);
-          await manager.update(
-            LaundryOrderEntity,
-            { id: order.id },
-            {
-              status: S.WEIGHED,
-              updatedAt: new Date(),
-              weightGrams: command.weightGrams,
-            },
-          );
+          await manager.update(LaundryOrderEntity, where, {
+            status: S.WEIGHED,
+            updatedAt: new Date(),
+            weightGrams: command.weightGrams,
+          });
         } else if (order.status === S.WEIGHED) {
           // State-preserving re-weigh (spec §3, §4.4) — no transition.
-          await manager.update(
-            LaundryOrderEntity,
-            { id: order.id },
-            { updatedAt: new Date(), weightGrams: command.weightGrams },
-          );
+          await manager.update(LaundryOrderEntity, where, {
+            updatedAt: new Date(),
+            weightGrams: command.weightGrams,
+          });
         } else {
           throw new BadRequestException(
             `Cannot weigh a laundry order in status ${order.status}`,
           );
         }
 
-        await this.audit(command.actorId, 'laundry_order.weighed', order.id);
-        return manager.findOneByOrFail(LaundryOrderEntity, { id: order.id });
+        await this.audit(
+          command.actorId,
+          'laundry_order.weighed',
+          order.id,
+          order.tenantId,
+        );
+        return manager.findOneByOrFail(LaundryOrderEntity, where);
       }),
     );
   }
 
   // ---- internals ---------------------------------------------------------
 
+  // Tagged with the scoped order's tenant (#87 slice decision 11; RFC §4.6).
   private async audit(
     actorId: string,
     action: string,
     entityId: string,
+    tenantId: string,
   ): Promise<void> {
     await this.auditLogger.log({
       actorId,
       entityId,
+      tenantId,
       action,
       entityType: ENTITY_TYPE,
+      scope: AdminScope.TENANT,
     });
   }
 
+  // Locks by `{ id, tenantId }` in one query (#87 slice decision 6): another
+  // tenant's order is a missing order (slice decision 7).
   private async lock(
     manager: EntityManager,
     id: string,
+    tenantId: string,
   ): Promise<LaundryOrderEntity> {
     const order = await manager.findOne(LaundryOrderEntity, {
       lock: { mode: 'pessimistic_write' },
-      where: { id },
+      where: { id, tenantId },
     });
     if (!order) {
       throw new NotFoundException(`Laundry order ${id} not found`);
@@ -416,10 +466,10 @@ export class LaundryOrdersService {
     this.policy.assertTransition(lockedOrder.status, target);
     await manager.update(
       LaundryOrderEntity,
-      { id: lockedOrder.id },
+      { id: lockedOrder.id, tenantId: lockedOrder.tenantId },
       { status: target, updatedAt: new Date() },
     );
-    await this.audit(actorId, action, lockedOrder.id);
+    await this.audit(actorId, action, lockedOrder.id, lockedOrder.tenantId);
   }
 
   private async transitionVerb(
@@ -430,10 +480,17 @@ export class LaundryOrdersService {
   ): Promise<LaundryOrder> {
     return this.dataSource.transaction((manager) =>
       runAuditInTransaction(manager, async () => {
-        const order = await this.lock(manager, command.orderId);
+        const order = await this.lock(
+          manager,
+          command.orderId,
+          command.tenantId,
+        );
         precondition?.(order);
         await this.transition(manager, order, target, action, command.actorId);
-        return manager.findOneByOrFail(LaundryOrderEntity, { id: order.id });
+        return manager.findOneByOrFail(LaundryOrderEntity, {
+          id: order.id,
+          tenantId: order.tenantId,
+        });
       }),
     );
   }

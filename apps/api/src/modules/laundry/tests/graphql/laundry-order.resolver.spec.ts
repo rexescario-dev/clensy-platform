@@ -61,10 +61,20 @@ describe('LaundryOrderResolver', () => {
     let service: jest.Mocked<
       Pick<
         LaundryOrdersService,
+        | 'cancel'
+        | 'complete'
         | 'getOrder'
+        | 'markAwaitingDelivery'
+        | 'markAwaitingPayment'
+        | 'markAwaitingPickup'
+        | 'markDamaged'
+        | 'markLost'
+        | 'markPaid'
+        | 'markReady'
         | 'price'
         | 'receive'
         | 'refund'
+        | 'reject'
         | 'startProcessing'
         | 'weigh'
       >
@@ -81,6 +91,7 @@ describe('LaundryOrderResolver', () => {
     const order = {
       id: 'o1',
       customerId: 'c1',
+      tenantId: 'tenant-1',
       createdAt: new Date(),
       fulfillmentType: LaundryFulfillmentType.PICKUP,
       status: LaundryOrderStatus.RECEIVED,
@@ -91,20 +102,166 @@ describe('LaundryOrderResolver', () => {
 
     beforeEach(() => {
       service = {
+        cancel: jest.fn().mockResolvedValue(order),
+        complete: jest.fn().mockResolvedValue(order),
         getOrder: jest.fn(),
+        markAwaitingDelivery: jest.fn().mockResolvedValue(order),
+        markAwaitingPayment: jest.fn().mockResolvedValue(order),
+        markAwaitingPickup: jest.fn().mockResolvedValue(order),
+        markDamaged: jest.fn().mockResolvedValue(order),
+        markLost: jest.fn().mockResolvedValue(order),
+        markPaid: jest.fn().mockResolvedValue(order),
+        markReady: jest.fn().mockResolvedValue(order),
         price: jest.fn().mockResolvedValue(order),
         receive: jest.fn().mockResolvedValue(order),
         refund: jest.fn().mockResolvedValue(order),
+        reject: jest.fn().mockResolvedValue(order),
         startProcessing: jest.fn().mockResolvedValue(order),
         weigh: jest.fn().mockResolvedValue(order),
       };
       resolver = new LaundryOrderResolver(service as never);
     });
 
-    it('laundryOrder returns null for a missing id', async () => {
+    it('laundryOrder looks the order up in the principal’s tenant', async () => {
       service.getOrder.mockResolvedValue(null);
-      await expect(resolver.laundryOrder('nope')).resolves.toBeNull();
+      await expect(
+        resolver.laundryOrder('nope', principal),
+      ).resolves.toBeNull();
+      expect(service.getOrder).toHaveBeenCalledWith('nope', 't-a');
     });
+
+    it('laundryOrder with a tenant-less principal passes a null tenant', async () => {
+      service.getOrder.mockResolvedValue(null);
+      await expect(resolver.laundryOrder('o1', noTenant)).resolves.toBeNull();
+      expect(service.getOrder).toHaveBeenCalledWith('o1', null);
+    });
+
+    // All 15 `LaundryOrderResolver` mutations (#87 slice decision 8): each
+    // passes `requireTenantId(principal)`, and a tenant-less principal is
+    // Forbidden before the service is called.
+    const ref = { orderId: 'o1' };
+    const MUTATIONS: Array<
+      [
+        string,
+        keyof typeof service,
+        (p: AuthenticatedPrincipal) => Promise<unknown>,
+      ]
+    > = [
+      [
+        'cancelLaundryOrder',
+        'cancel',
+        (p) => resolver.cancelLaundryOrder(ref, p),
+      ],
+      [
+        'completeLaundryOrder',
+        'complete',
+        (p) => resolver.completeLaundryOrder(ref, p),
+      ],
+      [
+        'markLaundryOrderAwaitingDelivery',
+        'markAwaitingDelivery',
+        (p) => resolver.markLaundryOrderAwaitingDelivery(ref, p),
+      ],
+      [
+        'markLaundryOrderAwaitingPayment',
+        'markAwaitingPayment',
+        (p) => resolver.markLaundryOrderAwaitingPayment(ref, p),
+      ],
+      [
+        'markLaundryOrderAwaitingPickup',
+        'markAwaitingPickup',
+        (p) => resolver.markLaundryOrderAwaitingPickup(ref, p),
+      ],
+      [
+        'markLaundryOrderDamaged',
+        'markDamaged',
+        (p) => resolver.markLaundryOrderDamaged(ref, p),
+      ],
+      [
+        'markLaundryOrderLost',
+        'markLost',
+        (p) => resolver.markLaundryOrderLost(ref, p),
+      ],
+      [
+        'markLaundryOrderPaid',
+        'markPaid',
+        (p) => resolver.markLaundryOrderPaid(ref, p),
+      ],
+      [
+        'markLaundryOrderReady',
+        'markReady',
+        (p) => resolver.markLaundryOrderReady(ref, p),
+      ],
+      [
+        'priceLaundryOrder',
+        'price',
+        (p) =>
+          resolver.priceLaundryOrder(
+            { ...ref, baseServiceId: 's-a', addOns: [] },
+            p,
+          ),
+      ],
+      [
+        'receiveLaundryOrder',
+        'receive',
+        (p) =>
+          resolver.receiveLaundryOrder(
+            {
+              customerId: 'c1',
+              fulfillmentType: LaundryFulfillmentType.PICKUP,
+            },
+            p,
+          ),
+      ],
+      [
+        'refundLaundryOrder',
+        'refund',
+        (p) => resolver.refundLaundryOrder(ref, p),
+      ],
+      [
+        'rejectLaundryOrder',
+        'reject',
+        (p) => resolver.rejectLaundryOrder(ref, p),
+      ],
+      [
+        'startLaundryProcessing',
+        'startProcessing',
+        (p) => resolver.startLaundryProcessing(ref, p),
+      ],
+      [
+        'weighLaundryOrder',
+        'weigh',
+        (p) => resolver.weighLaundryOrder({ ...ref, weightGrams: 1000 }, p),
+      ],
+    ];
+
+    it('covers every @Mutation on LaundryOrderResolver', () => {
+      const mutationNames = Object.keys(RBAC).filter(
+        (name) => name !== 'laundryOrder',
+      );
+      expect(MUTATIONS.map(([name]) => name).sort()).toEqual(
+        mutationNames.sort(),
+      );
+      expect(MUTATIONS).toHaveLength(15);
+    });
+
+    it.each(MUTATIONS)(
+      '%s passes requireTenantId(principal)',
+      async (_name, method, call) => {
+        await call(principal);
+        expect(service[method]).toHaveBeenCalledWith(
+          expect.objectContaining({ actorId: 'u', tenantId: 't-a' }),
+        );
+      },
+    );
+
+    it.each(MUTATIONS)(
+      '%s with a tenant-less principal is Forbidden before the service is called',
+      async (_name, method, call) => {
+        await expect(call(noTenant)).rejects.toThrow(ForbiddenException);
+        expect(service[method]).not.toHaveBeenCalled();
+      },
+    );
 
     it('receiveLaundryOrder threads the actor id into the command', async () => {
       await resolver.receiveLaundryOrder(
@@ -124,6 +281,7 @@ describe('LaundryOrderResolver', () => {
       expect(service.startProcessing).toHaveBeenCalledWith({
         actorId: 'actor-9',
         orderId: 'o1',
+        tenantId: 'tenant-9',
       });
     });
 
