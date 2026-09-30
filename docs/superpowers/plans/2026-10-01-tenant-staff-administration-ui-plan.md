@@ -2,14 +2,14 @@
 
 | Field | Value |
 | --- | --- |
-| **Status** | Draft |
+| **Status** | Accepted |
 | **Kind** | Implementation plan (M4) for **one** delivery slice |
 | **Date** | 2026-10-01 |
 | **Tracking** | GitHub [#88](https://github.com/rexescario-dev/clensy-platform/issues/88) (program [#81](https://github.com/rexescario-dev/clensy-platform/issues/81)). One PR for this plan (to be Accepted at M5) + implementation (process §2.8). Branch `feat/88-tenant-staff-administration-ui`. |
 | **Package / repo** | `clensy-platform` — `packages/web` (`@clensy/web`) and `apps/web` only. **No** `apps/api`, `packages/client`, `packages/ui` changes. |
 | **Depends on (Accepted)** | [Multi-Tenant Architecture](../specs/2026-09-23-multi-tenant-architecture-design.md) (Accepted, M3 2026-09-23) — §3 terminology, §4.2 (UI is not authorization), §4.3 (roles, staff lifecycle), §4.8 (presentation boundary), §10 (deferrals). **Where this plan and that specification disagree, the specification wins** — stop and return to M2/M3. Relies on the shipped [Tenant Identity Foundation plan](2026-09-23-tenant-identity-foundation-plan.md) (#68: `admins` / `createAdmin` / `disableAdmin` tenant-scoped API, `currentAdmin { id role scope tenantId }`, role contract on the staff page), [`@clensy/ui` Shared UI System](../specs/2026-09-16-shadcn-ui-boundary-design.md), [`@clensy/web` Login Form](../specs/2026-09-19-clensy-web-login-form-design.md) / [LoginForm self-translating](../specs/2026-09-20-login-form-self-translating-design.md) (component owns its copy through `@clensy/web` i18n) and [Reusable DataTable](../specs/2026-09-19-reusable-data-table-design.md) (`BookingDataTable` precedent). |
 
-> **For agentic workers:** Status **Draft** — do **not** execute until M5 Accepts this plan. After Accept, execute tasks in order with TDD as written. Steps use checkbox (`- [ ]`) syntax. Each task ends green on its package's `test`, `exec tsc --noEmit` and `lint` (the exact commands are in each task's last Run step) before the next starts; package `build` runs only in Task 6. Do not invent product semantics; stop and report on any need for a design or scope change. No push or PR as a side effect.
+> **For agentic workers:** **M5 Accepted 2026-10-01** (developer review, after the pre-M5 revision below). Tracking [#88](https://github.com/rexescario-dev/clensy-platform/issues/88). Execution method: **Native**, inline (superpowers:executing-plans) in the developer's session, chosen at M5, with one independent whole-branch review as the final gate. The Accept is plan acceptance only, not merge, push or deploy authorization. Execute tasks in order with TDD as written. Steps use checkbox (`- [ ]`) syntax. Each task ends green on its package's `test`, `exec tsc --noEmit` and `lint` (the exact commands are in each task's last Run step) before the next starts; package `build` runs only in Task 6. Do not invent product semantics; stop and report on any need for a design or scope change. No push or PR as a side effect.
 >
 > **Pre-M5 review revision (2026-10-01):** returned for a small revision (seven findings); no design or scope change.
 > 1. The Tenant Owner hint is restored to the settled copy, "Can manage staff accounts for this organization.", in both the namespace and its test.
