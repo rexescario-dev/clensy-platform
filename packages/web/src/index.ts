@@ -9,3 +9,12 @@ export type { ClensyI18nProviderProps } from './i18n/i18n-context';
 export { useClensyTranslations } from './i18n/use-clensy-translations';
 export type { ClensyMessages } from './i18n/messages';
 export type { DeepPartial } from './i18n/deep-merge';
+
+export { StaffDataTable } from './staff/staff-data-table';
+export type { StaffMember, StaffDataTableProps } from './staff/staff-data-table';
+export { CreateStaffForm } from './staff/create-staff-form';
+export type { CreateStaffFormValues, CreateStaffFormProps } from './staff/create-staff-form';
+export { STAFF_ROLE_GROUPS, STAFF_ROLE_OPTIONS, isStaffRole } from './staff/staff-roles';
+export type { StaffRole } from './staff/staff-roles';
+export { STAFF_ERROR_KEYS } from './staff/staff-errors';
+export type { StaffErrorKey } from './staff/staff-errors';

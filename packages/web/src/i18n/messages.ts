@@ -1,5 +1,6 @@
 import { auth } from './messages/en/auth';
 import { bookings } from './messages/en/bookings';
+import { staff } from './messages/en/staff';
 
 // Mirrors apps/web/i18n/messages.ts's own getMessages() convention (a flat
 // object keyed by namespace, assembled from per-namespace files) — the same
@@ -7,7 +8,7 @@ import { bookings } from './messages/en/bookings';
 // than apps/web's page-level ones. Add a line here per namespace as more
 // @clensy/web components need translation.
 export function getDefaultMessages() {
-  return { auth, bookings };
+  return { auth, bookings, staff };
 }
 
 export type ClensyMessages = ReturnType<typeof getDefaultMessages>;
