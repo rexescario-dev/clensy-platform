@@ -735,9 +735,11 @@ describe('AddLaundryBillingTenant migration (real Postgres)', () => {
   });
 
   describe('down (slice decision 15)', () => {
+    // #101: an explicit, counted pre-check before any DDL, not the raw
+    // Postgres unique-index error.
     it('fails loudly, rolling back, while two tenants share a number string', async () => {
       await expect(inTransaction((r) => migration.down(r))).rejects.toThrow(
-        /uq_invoice_number/,
+        'AddLaundryBillingTenant: cannot revert — 1 invoice number(s) are held by more than one tenant, which the global uq_invoice_number cannot represent; resolve those invoices first',
       );
       for (const [table, name] of NEW_CONSTRAINTS) {
         expect(await constraintNames(table)).toContain(name);
