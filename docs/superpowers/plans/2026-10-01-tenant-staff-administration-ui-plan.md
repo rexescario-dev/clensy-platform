@@ -9,7 +9,16 @@
 | **Package / repo** | `clensy-platform` — `packages/web` (`@clensy/web`) and `apps/web` only. **No** `apps/api`, `packages/client`, `packages/ui` changes. |
 | **Depends on (Accepted)** | [Multi-Tenant Architecture](../specs/2026-09-23-multi-tenant-architecture-design.md) (Accepted, M3 2026-09-23) — §3 terminology, §4.2 (UI is not authorization), §4.3 (roles, staff lifecycle), §4.8 (presentation boundary), §10 (deferrals). **Where this plan and that specification disagree, the specification wins** — stop and return to M2/M3. Relies on the shipped [Tenant Identity Foundation plan](2026-09-23-tenant-identity-foundation-plan.md) (#68: `admins` / `createAdmin` / `disableAdmin` tenant-scoped API, `currentAdmin { id role scope tenantId }`, role contract on the staff page), [`@clensy/ui` Shared UI System](../specs/2026-09-16-shadcn-ui-boundary-design.md), [`@clensy/web` Login Form](../specs/2026-09-19-clensy-web-login-form-design.md) / [LoginForm self-translating](../specs/2026-09-20-login-form-self-translating-design.md) (component owns its copy through `@clensy/web` i18n) and [Reusable DataTable](../specs/2026-09-19-reusable-data-table-design.md) (`BookingDataTable` precedent). |
 
-> **For agentic workers:** Status **Draft** — do **not** execute until M5 Accepts this plan. After Accept, execute tasks in order with TDD as written. Steps use checkbox (`- [ ]`) syntax. Each task ends green on its package's `vitest` and `tsc` before the next starts. Do not invent product semantics; stop and report on any need for a design or scope change. No push or PR as a side effect.
+> **For agentic workers:** Status **Draft** — do **not** execute until M5 Accepts this plan. After Accept, execute tasks in order with TDD as written. Steps use checkbox (`- [ ]`) syntax. Each task ends green on its package's `test`, `exec tsc --noEmit` and `lint` (the exact commands are in each task's last Run step) before the next starts; package `build` runs only in Task 6. Do not invent product semantics; stop and report on any need for a design or scope change. No push or PR as a side effect.
+>
+> **Pre-M5 review revision (2026-10-01):** returned for a small revision (seven findings); no design or scope change.
+> 1. The Tenant Owner hint is restored to the settled copy, "Can manage staff accounts for this organization.", in both the namespace and its test.
+> 2. Task 3's error test now asserts the error text **and** `role="alert"` on the same render. A separate case asserts that no alert appears without an error key.
+> 3. Task 1's `resolvedTexts` renders through an explicit `ClensyI18nProvider`.
+> 4. Every task runs `test`, `exec tsc --noEmit` and `lint` explicitly. `build` now runs only in the Task 6 verification.
+> 5. Task 2 records the planning-time verification of the `StatusBadge`, `DataTableColumn.render`, `DataTable.mobileRow` and `Badge` APIs.
+> 6. Task 6 states that the 403 and 400 paths are covered by unit tests and API authorization, not by the manual pass.
+> 7. The page's comment on the disable 404 no longer interprets the backend's reason.
 
 **Goal:** Align the staff console with the tenant identity model — Tenant Owner visibly distinct from operational Staff, human-readable translated role labels, domain components in `@clensy/web`, actionable error messages, no self-disable affordance, and a scope-aware page gate.
 
@@ -122,8 +131,16 @@ function Resolve({ keys }: { keys: string[] }) {
   return <ul>{keys.map((key) => <li key={key} data-key={key}>{t(key)}</li>)}</ul>;
 }
 
+// Rendered through an explicit provider (locale is optional and resolves to
+// 'en'). @clensy/web also supports no provider at all — useClensyI18nContext
+// falls back to the same defaults — but the test pins the provider path the
+// page uses.
 function resolvedTexts(keys: string[]): string[] {
-  const html = renderToStaticMarkup(<Resolve keys={keys} />);
+  const html = renderToStaticMarkup(
+    <ClensyI18nProvider>
+      <Resolve keys={keys} />
+    </ClensyI18nProvider>,
+  );
   return [...html.matchAll(/<li data-key="[^"]*">([^<]*)<\/li>/g)].map((m) => m[1]);
 }
 
@@ -263,7 +280,7 @@ export const staff = {
     title: 'Staff Accounts',
   },
   roleGroups: { owner: 'Tenant Owner', staff: 'Staff' },
-  roleHint: { TENANT_OWNER: 'Tenant Owners can create and disable staff accounts for this organization.' },
+  roleHint: { TENANT_OWNER: 'Can manage staff accounts for this organization.' },
   roles: {
     ANALYST: 'Analyst',
     CUSTOMER_SUPPORT: 'Customer Support',
@@ -280,7 +297,7 @@ In `packages/web/src/i18n/messages.ts`, add `import { staff } from './messages/e
 
 - [ ] **Step 4: Run tests, typecheck, lint**
 
-Run: `pnpm --filter @clensy/web test && pnpm --filter @clensy/web build && pnpm --filter @clensy/web lint`
+Run: `pnpm --filter @clensy/web test && pnpm --filter @clensy/web exec tsc --noEmit && pnpm --filter @clensy/web lint`
 Expected: PASS (existing bookings/i18n tests unaffected).
 
 - [ ] **Step 5: Commit**
@@ -302,6 +319,11 @@ Traces: RFC §3, §4.3 (self-disable forbidden; Tenant Owner vs Staff), §4.8. S
 
 **Interfaces:**
 - Consumes: `isStaffRole` (Task 1), `staff` namespace (Task 1), `DataTable`, `Badge`, `Button`, `StatusBadge`, `DataTableColumn` from `@clensy/ui`.
+- `@clensy/ui` APIs verified at planning time (2026-10-01), matching the `BookingDataTable` precedent:
+  - `StatusBadge({ label: string; tone?: 'danger' | 'neutral' | 'success' | 'warning' })` — `packages/ui/src/base/status-badge.tsx`.
+  - `DataTableColumn<T>.render?: string | ((row: T) => ReactNode)`; `DataTableProps<T>.mobileRow?: (row: T) => ReactNode`; `error?: string`; `emptyMessage?: string` — `packages/ui/src/base/data-table.tsx`.
+  - `Badge` accepts `variant="secondary"` and renders `data-slot="badge"` — `packages/ui/src/base/badge.tsx`.
+  - If any of these has drifted by execution time, adapt the `@clensy/web` implementation to the actual API; do **not** add or change `@clensy/ui` primitives.
 - Produces:
   - `interface StaffMember { id: string; email: string; role: string; isActive: boolean; [key: string]: unknown }` (`role: string` so API `Role` rows are assignable; unknown roles render raw).
   - `interface StaffDataTableProps { staff: StaffMember[]; currentAdminId: string; loading?: boolean; hasError?: boolean; disabling?: boolean; onDisable: (member: StaffMember) => void }`
@@ -387,8 +409,6 @@ describe('StaffDataTable', () => {
   });
 });
 ```
-
-(`data-slot="badge"` is the attribute `packages/ui/src/base/badge.tsx` renders on the badge root — verified at planning time.)
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -506,7 +526,7 @@ export function StaffDataTable({ staff, currentAdminId, loading, hasError, disab
 
 - [ ] **Step 4: Run tests, typecheck, lint**
 
-Run: `pnpm --filter @clensy/web test && pnpm --filter @clensy/web build && pnpm --filter @clensy/web lint`
+Run: `pnpm --filter @clensy/web test && pnpm --filter @clensy/web exec tsc --noEmit && pnpm --filter @clensy/web lint`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -561,13 +581,19 @@ describe('CreateStaffForm', () => {
   });
 
   it('shows the Tenant Owner hint only when Tenant Owner is selected', () => {
-    const hint = 'Tenant Owners can create and disable staff accounts for this organization.';
+    const hint = 'Can manage staff accounts for this organization.';
     expect(render()).not.toContain(hint);
     expect(render({ values: { ...base, role: 'TENANT_OWNER' } })).toContain(hint);
   });
 
-  it('renders the translated error for an error key', () => {
-    expect(render({ errorKey: 'emailInUse' })).toContain('An account with this email already exists.');
+  it('renders the translated error for an error key as an alert', () => {
+    const html = render({ errorKey: 'emailInUse' });
+
+    expect(html).toContain('An account with this email already exists.');
+    expect(html).toContain('role="alert"');
+  });
+
+  it('renders no alert when there is no error key', () => {
     expect(render()).not.toContain('role="alert"');
   });
 
@@ -686,7 +712,7 @@ export type { StaffErrorKey } from './staff/staff-errors';
 
 - [ ] **Step 4: Run tests, typecheck, lint**
 
-Run: `pnpm --filter @clensy/web test && pnpm --filter @clensy/web build && pnpm --filter @clensy/web lint`
+Run: `pnpm --filter @clensy/web test && pnpm --filter @clensy/web exec tsc --noEmit && pnpm --filter @clensy/web lint`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -811,7 +837,7 @@ export function staffMutationErrorKey(operation: StaffMutation, error: unknown):
 
 - [ ] **Step 4: Run tests, lint, typecheck**
 
-Run: `pnpm --filter web test && pnpm --filter web lint && pnpm --filter web exec tsc --noEmit`
+Run: `pnpm --filter web test && pnpm --filter web exec tsc --noEmit && pnpm --filter web lint`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -993,8 +1019,8 @@ function StaffConsole({ currentAdminId }: { currentAdminId: string }) {
       // failure shows inline on the page below it.
       const key = staffMutationErrorKey('disable', disableError);
       setDisableErrorKey(key);
-      // The row is gone (or was never this tenant's — spec §4.5): refresh so
-      // the list stops offering it.
+      // The target is no longer available to this operation; refresh the
+      // list so the UI reflects the current tenant-scoped state.
       if (key === 'accountNotFound') await refetch();
     } finally {
       setConfirmTarget(undefined);
@@ -1062,7 +1088,7 @@ Type notes: `data.admins` rows (`Role` union) are assignable to `StaffMember` (`
 
 - [ ] **Step 3: Run tests, lint, typecheck**
 
-Run: `pnpm --filter web test && pnpm --filter web lint && pnpm --filter web exec tsc --noEmit && pnpm --filter @clensy/web test`
+Run: `pnpm --filter web test && pnpm --filter web exec tsc --noEmit && pnpm --filter web lint && pnpm --filter @clensy/web test`
 Expected: PASS, including `tenant-role-regressions.test.ts` (all cases) and `web-shell-regressions.test.ts` unchanged.
 
 - [ ] **Step 4: Commit**
@@ -1082,7 +1108,7 @@ TDD does not apply to this task; it is the verification gate for M6 handoff.
 
 - [ ] **Step 1: Full mechanical checks**
 
-Run: `pnpm lint && pnpm test && pnpm --filter @clensy/web build && pnpm --filter web exec tsc --noEmit && pnpm --filter web build`
+Run: `pnpm lint && pnpm test && pnpm --filter @clensy/web exec tsc --noEmit && pnpm --filter web exec tsc --noEmit && pnpm --filter @clensy/web build && pnpm --filter web build`
 Expected: all PASS. Record each command's result in the M6 Slice Completion Report Validation table.
 
 - [ ] **Step 2: Boundary greps**
@@ -1102,6 +1128,8 @@ Expected: first command prints nothing (untouched boundaries); second and third 
 4. Select Tenant Owner in the form → the hint appears; the Staff group lists five roles; no Super Admin.
 5. Last-owner protection: create a second Tenant Owner; its row shows the badge and **Disable**; disable it → succeeds and shows Disabled. The only remaining active owner is the signed-in admin, whose row offers no Disable — so the 409 `lastTenantOwner` path is not reachable from a single session by design (only via a concurrent second session). Record this as expected; the 409 → `lastTenantOwner` mapping is pinned by Task 4, and the API behaviour by `apps/api/test/admins.service.e2e-spec.ts` / `admins.service.disable-concurrency.e2e-spec.ts`.
 6. Sign in as a non-owner (e.g. the new `FINANCE` account) → "You are not authorized to view this page."
+
+This pass is **not** comprehensive error coverage. The create/disable **403** mappings (`createForbidden`, `disableForbidden`) are not manually reachable — the gate and the hidden self-row action keep a normal session from producing them. They are covered by the Task 4 mapper unit tests and remain API-authorized behaviour (RFC §4.2); likewise the 400 `invalidInput` path, since the browser's `type="email"` / `required` validation normally blocks it before submit.
 
 Record outcomes (and any screenshots) in the M6 report. Any deviation → stop and report.
 
