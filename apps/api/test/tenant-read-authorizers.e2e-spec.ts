@@ -7,6 +7,12 @@ import {
 } from '@nestjs/graphql';
 // Pinned-version dependency (9.5.0): no public accessor, no `exports` map.
 import { getRelations } from '@ptc-org/nestjs-query-graphql/src/decorators';
+import {
+  AssemblerQueryService,
+  NoOpQueryService,
+  ProxyQueryService,
+  RelationQueryService,
+} from '@ptc-org/nestjs-query-core';
 import { TypeOrmQueryService } from '@ptc-org/nestjs-query-typeorm';
 import {
   getNamedType,
@@ -15,7 +21,10 @@ import {
   isObjectType,
 } from 'graphql';
 import { DataSource, EntityMetadata } from 'typeorm';
-import { bootGraphqlSurface } from './helpers/graphql-surface';
+import {
+  bootGraphqlSurface,
+  collectRootHandlers,
+} from './helpers/graphql-surface';
 
 // Regression guard for the #90 sweep (decisions 7–8; RFC §4.5). Reads live
 // GraphQL, nestjs-query, Nest discovery and TypeORM metadata. A metadata
@@ -35,6 +44,33 @@ const CHILD_ROW_TYPES: Record<string, string> = {
   LaundryOrderLine:
     'tenantId bound to its order by composite FK (#87); reachable only as LaundryOrder.lines, and LaundryOrder is tenant-scoped.',
 };
+
+// Every nestjs-query read resolver, as `Resolver->DTO` (M7 review: an
+// exact set, so a new or unrecognized read resolver fails until classified
+// here instead of being skipped). Sorted (lint).
+const READ_RESOLVERS = [
+  'AddOnReadResolver->AddOn',
+  'BookingReadResolver->Booking',
+  'ChecklistReadResolver->Checklist',
+  'CleanerReadResolver->Cleaner',
+  'CustomerReadResolver->Customer',
+  'InvoiceReadResolver->Invoice',
+  'JobReadResolver->CleaningJob',
+  'LaundryOrderReadResolver->LaundryOrder',
+  'PropertyReadResolver->Property',
+  'ServiceReadResolver->Service',
+  'TeamReadResolver->Team',
+];
+
+// nestjs-query query-service classes other than TypeOrmQueryService: a
+// resolver whose `service` is one of these is a read surface this suite
+// does not know how to map to an entity, so it fails rather than skipping.
+const OTHER_QUERY_SERVICES = [
+  AssemblerQueryService,
+  NoOpQueryService,
+  ProxyQueryService,
+  RelationQueryService,
+];
 
 const CUSTOM_SURFACE_ENTITIES: Record<string, string> = {
   AdminUserEntity:
@@ -90,6 +126,7 @@ describe('Tenant read surfaces (#90 sweep guard)', () => {
   let schema: GraphQLSchema;
   const typesByName = new Map<string, DtoClass>();
   const readResolvers: ReadResolverRecord[] = [];
+  const unrecognizedReadResolvers: string[] = [];
   const relations: RelationRecord[] = [];
   let tenantEntityNames: string[] = [];
 
@@ -159,7 +196,16 @@ describe('Tenant read surfaces (#90 sweep guard)', () => {
     }
     for (const wrapper of app.get(DiscoveryService).getProviders()) {
       const instance = wrapper.instance as { service?: unknown } | undefined;
-      if (!(instance?.service instanceof TypeOrmQueryService)) continue;
+      if (!(instance?.service instanceof TypeOrmQueryService)) {
+        if (
+          OTHER_QUERY_SERVICES.some(
+            (queryService) => instance?.service instanceof queryService,
+          )
+        ) {
+          unrecognizedReadResolvers.push((instance as object).constructor.name);
+        }
+        continue;
+      }
       const service = instance.service as TypeOrmQueryService<object>;
       readResolvers.push({
         dtoName: Reflect.getMetadata(
@@ -193,12 +239,10 @@ describe('Tenant read surfaces (#90 sweep guard)', () => {
 
   it('inventories read resolvers, relations and tenant entities from live metadata (sentinels)', () => {
     expect(typeof getRelations).toBe('function');
-    expect(readResolvers.map((r) => `${r.resolver}->${r.dtoName}`)).toEqual(
-      expect.arrayContaining([
-        'CustomerReadResolver->Customer',
-        'ChecklistReadResolver->Checklist', // relation-only read resolver (no root query)
-      ]),
-    );
+    // Exact set, including the relation-only ChecklistReadResolver.
+    expect(
+      readResolvers.map((r) => `${r.resolver}->${r.dtoName}`).sort(),
+    ).toEqual(READ_RESOLVERS);
     expect(relations).toEqual(
       expect.arrayContaining([
         { name: 'customer', parent: 'Invoice', target: 'Customer' },
@@ -206,6 +250,20 @@ describe('Tenant read surfaces (#90 sweep guard)', () => {
     );
     expect(tenantEntityNames).toEqual(
       expect.arrayContaining(['CustomerEntity']),
+    );
+  });
+
+  it('fails on read resolvers it cannot recognize instead of skipping them', () => {
+    expect(unrecognizedReadResolvers).toEqual([]);
+    // Every generated (inherited) root handler belongs to a recognized
+    // nestjs-query read resolver, so a root list cannot bypass this suite.
+    const recognized = new Set(readResolvers.map((r) => r.resolver));
+    const generatedOwners = collectRootHandlers(app)
+      .filter((handler) => !handler.ownMethod)
+      .map((handler) => handler.owner.split('.')[0]);
+    expect(generatedOwners.length).toBeGreaterThan(0);
+    expect(generatedOwners.filter((owner) => !recognized.has(owner))).toEqual(
+      [],
     );
   });
 
