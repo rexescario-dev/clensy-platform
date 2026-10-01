@@ -7,7 +7,6 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
-import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import type { AuditLogger } from '../../../../platform/audit/application/audit-logger.port';
 import { runAuditInTransaction } from '../../../../platform/audit/infrastructure/audit-logger.service';
@@ -15,6 +14,7 @@ import { AddOn } from '../../domain/add-on';
 import { AddOnEntity } from '../../infrastructure/persistence/add-on.entity';
 import { CreateAddOnCommand } from '../commands/create-add-on.command';
 import { UpdateAddOnCommand } from '../commands/update-add-on.command';
+import { tenantAuditTags } from '../../../../platform/audit/application/audit-tags';
 
 // Postgres unique_violation — see
 // https://www.postgresql.org/docs/current/errcodes-appendix.html
@@ -59,10 +59,9 @@ export class AddOnsService {
         await this.auditLogger.log({
           actorId: command.actorId,
           entityId: entity.id,
-          tenantId: command.tenantId,
           action: 'add_on.create',
           entityType: 'add_on',
-          scope: AdminScope.TENANT,
+          ...tenantAuditTags(command.tenantId),
         });
 
         return entity;
@@ -154,10 +153,9 @@ export class AddOnsService {
         await this.auditLogger.log({
           actorId,
           entityId: updated.id,
-          tenantId,
           action: 'add_on.update',
           entityType: 'add_on',
-          scope: AdminScope.TENANT,
+          ...tenantAuditTags(tenantId),
         });
 
         return updated;

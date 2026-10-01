@@ -17,6 +17,7 @@ import { AdminUser } from '../../domain/admin-user';
 import { AdminUserEntity } from '../../infrastructure/persistence/admin-user.entity';
 import { CreateAdminCommand } from '../commands/create-admin.command';
 import { DisableAdminCommand } from '../commands/disable-admin.command';
+import { tenantAuditTags } from '../../../../platform/audit/application/audit-tags';
 
 const BCRYPT_SALT_ROUNDS = 10;
 
@@ -84,11 +85,10 @@ export class AdminsService {
           await this.auditLogger.log({
             actorId: command.actor.id,
             entityId: entity.id,
-            tenantId,
             action: 'admin.created',
             entityType: 'AdminUser',
             metadata: { role: entity.role },
-            scope: AdminScope.TENANT,
+            ...tenantAuditTags(tenantId),
           });
 
           return entity;
@@ -158,10 +158,9 @@ export class AdminsService {
         await this.auditLogger.log({
           actorId: command.actor.id,
           entityId: target.id,
-          tenantId,
           action: 'admin.disabled',
           entityType: 'AdminUser',
-          scope: AdminScope.TENANT,
+          ...tenantAuditTags(tenantId),
         });
 
         return target;

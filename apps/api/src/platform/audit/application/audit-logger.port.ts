@@ -1,24 +1,28 @@
-import { AdminScope } from '../../auth/domain/admin-scope';
 import { JsonValue } from '../domain/json-value';
+import type { PlatformAuditTags, TenantAuditTags } from './audit-tags';
 
-// The event shape callers pass to `log()` — deliberately not `AuditEvent`
-// itself: `id`/`occurredAt` are assigned by persistence, and `metadata` is
-// optional here (an event may have none) but stored as `null` at rest.
-//
-// `scope`/`tenantId` are the acting principal's (multi-tenant spec §4.6).
-// Optional so modules whose audit calls are not yet tenant-tagged keep
-// compiling — they persist as `null`, i.e. "no principal recorded". The
-// tenant-identity slice tags admin and login events; business modules are
-// tagged by the later audit sweep.
-export interface AuditLogEvent {
-  actorId: string | null;
-  tenantId?: string | null;
-  scope?: AdminScope | null;
+interface AuditEventFields {
   action: string;
   entityType: string | null;
   entityId: string | null;
   metadata?: Record<string, JsonValue>;
 }
+
+// The event shape callers pass to `log()` — deliberately not `AuditEvent`
+// itself: `id`/`occurredAt` are assigned by persistence, and `metadata` is
+// optional here (an event may have none) but stored as `null` at rest.
+//
+// Discriminated on `scope`, mirroring `ck_audit_event_scope_tenant`
+// (multi-tenant spec §4.6; #90 decision 3): a tenant event names its
+// tenant, a platform event has none, and only an actorless event (failed
+// login) may omit both. This is a compile-time shape check only: build
+// tags with `tenantAuditTags` / `principalAuditTags` (`./audit-tags`),
+// which validate at runtime. The DB CHECK stays the last safeguard, but
+// best-effort writes swallow its violations.
+export type AuditLogEvent =
+  | (AuditEventFields & { actorId: null; scope: null; tenantId: null })
+  | (AuditEventFields & PlatformAuditTags & { actorId: string })
+  | (AuditEventFields & TenantAuditTags & { actorId: string });
 
 // Application-facing port (spec §5.3): calling modules depend on this
 // interface/token, never on `platform/audit`'s concrete persistence

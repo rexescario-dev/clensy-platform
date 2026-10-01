@@ -3,6 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { EntityManager } from 'typeorm';
 import { AdminScope } from '../../auth/domain/admin-scope';
+import { tenantAuditTags } from '../application/audit-tags';
 import { AuditEventEntity } from '../infrastructure/persistence/audit-event.entity';
 import {
   AuditLoggerService,
@@ -41,9 +42,11 @@ describe('AuditLoggerService', () => {
     await service.log({
       actorId: null,
       entityId: null,
+      tenantId: null,
       action: 'admin.login.failed',
       entityType: null,
       metadata: { email: 'x@example.com', reason: 'invalid_credentials' },
+      scope: null,
     });
 
     expect(repository.save).toHaveBeenCalledWith(
@@ -83,8 +86,10 @@ describe('AuditLoggerService', () => {
     await service.log({
       actorId: null,
       entityId: null,
+      tenantId: null,
       action: 'admin.login.failed',
       entityType: null,
+      scope: null,
     });
 
     expect(repository.save).toHaveBeenCalledWith(
@@ -102,6 +107,7 @@ describe('AuditLoggerService', () => {
         entityId: 'admin-1',
         action: 'admin.login.succeeded',
         entityType: 'AdminUser',
+        ...tenantAuditTags('tenant-1'),
       }),
     ).resolves.toBeUndefined();
 
@@ -121,6 +127,7 @@ describe('AuditLoggerService', () => {
           action: 'admin.created',
           entityType: 'AdminUser',
           metadata: { role: 'SCHEDULER' },
+          ...tenantAuditTags('tenant-1'),
         }),
       ),
     ).rejects.toThrow('db unavailable');

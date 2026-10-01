@@ -1,8 +1,12 @@
 import * as bcrypt from 'bcrypt';
+import { Logger } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import type { AuditLogEvent } from '../../../../platform/audit/application/audit-logger.port';
+import { InvalidAuditTagsError } from '../../../../platform/audit/application/audit-tags';
+import { AuditLoggerService } from '../../../../platform/audit/infrastructure/audit-logger.service';
+import { AuditEventEntity } from '../../../../platform/audit/infrastructure/persistence/audit-event.entity';
 import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { Role } from '../../../../platform/auth/domain/role';
 import { LoginService } from '../../application/services/login.service';
@@ -222,7 +226,82 @@ describe('LoginService', () => {
 
     const [event] = auditLogger.log.mock.calls[0];
     expect(event.action).toBe('admin.login.failed');
-    expect(event.scope ?? null).toBeNull();
-    expect(event.tenantId ?? null).toBeNull();
+    expect(event.actorId).toBeNull();
+    expect(event.scope).toBeNull();
+    expect(event.tenantId).toBeNull();
+  });
+
+  it('fails closed on an identity row whose scope and tenant disagree (#90 decision 5)', async () => {
+    repository.findOneBy.mockResolvedValue({
+      id: 'admin-x',
+      tenantId: null,
+      email: 'x@example.com',
+      isActive: true,
+      passwordHash: activeAdminPasswordHash,
+      role: Role.OPS_MANAGER,
+      scope: AdminScope.TENANT,
+    });
+
+    await expect(
+      service.login('x@example.com', 'correct-password'),
+    ).rejects.toThrow(InvalidAuditTagsError);
+    expect(auditLogger.log).not.toHaveBeenCalled();
+  });
+});
+
+describe('LoginService with the real AuditLoggerService (best-effort, spec §4.6)', () => {
+  it('still returns the principal when the audit write fails', async () => {
+    const passwordHash = await bcrypt.hash('correct-password', 4);
+    const adminRepository = {
+      findOneBy: jest.fn().mockResolvedValue({
+        id: 'admin-1',
+        tenantId: 'tenant-1',
+        email: 'owner@example.com',
+        isActive: true,
+        passwordHash,
+        role: Role.TENANT_OWNER,
+        scope: AdminScope.TENANT,
+      }),
+    };
+    const auditRepository = {
+      create: jest.fn((data: unknown) => data),
+      save: jest.fn().mockRejectedValue(new Error('audit table unavailable')),
+    };
+    const logger = { error: jest.fn(), log: jest.fn(), warn: jest.fn() };
+    const module = await Test.createTestingModule({
+      providers: [
+        LoginService,
+        AuditLoggerService,
+        { provide: AUDIT_LOGGER, useExisting: AuditLoggerService },
+        {
+          provide: getRepositoryToken(AdminUserEntity),
+          useValue: adminRepository,
+        },
+        {
+          provide: getRepositoryToken(AuditEventEntity),
+          useValue: auditRepository,
+        },
+        { provide: Logger, useValue: logger },
+      ],
+    }).compile();
+
+    const principal = await module
+      .get(LoginService)
+      .login('owner@example.com', 'correct-password');
+
+    expect(principal).toEqual({
+      id: 'admin-1',
+      tenantId: 'tenant-1',
+      role: Role.TENANT_OWNER,
+      scope: AdminScope.TENANT,
+    });
+    expect(auditRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-1',
+        action: 'admin.login.succeeded',
+        scope: AdminScope.TENANT,
+      }),
+    );
+    expect(logger.error).toHaveBeenCalled();
   });
 });

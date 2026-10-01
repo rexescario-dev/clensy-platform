@@ -10,7 +10,6 @@ import { DataSource, EntityManager, Repository } from 'typeorm';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import type { AuditLogger } from '../../../../platform/audit/application/audit-logger.port';
 import { runAuditInTransaction } from '../../../../platform/audit/infrastructure/audit-logger.service';
-import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { AddOnsService } from '../../../catalog/application/services/add-ons.service';
 import { ServicesService } from '../../../catalog/application/services/services.service';
 import { LaundryOrdersService } from '../../../laundry/application/services/laundry-orders.service';
@@ -32,6 +31,7 @@ import { allocateInvoiceNumber } from '../../infrastructure/persistence/invoice-
 import { InvoiceLineEntity } from '../../infrastructure/persistence/invoice-line.entity';
 import { GenerateInvoiceFromOrderCommand } from '../commands/generate-invoice-from-order.command';
 import { isPostgresUniqueViolation } from './unique-violation';
+import { tenantAuditTags } from '../../../../platform/audit/application/audit-tags';
 
 const ENTITY_TYPE = 'invoice';
 
@@ -155,10 +155,9 @@ export class InvoicesService {
         await this.auditLogger.log({
           actorId: command.actorId,
           entityId: invoice.id,
-          tenantId: invoice.tenantId,
           action: 'invoice.generated',
           entityType: ENTITY_TYPE,
-          scope: AdminScope.TENANT,
+          ...tenantAuditTags(invoice.tenantId),
         });
 
         return manager.findOneByOrFail(InvoiceEntity, {

@@ -7,7 +7,6 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
-import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import type { AuditLogger } from '../../../../platform/audit/application/audit-logger.port';
 import { runAuditInTransaction } from '../../../../platform/audit/infrastructure/audit-logger.service';
@@ -17,6 +16,7 @@ import { TeamEntity } from '../../infrastructure/persistence/team.entity';
 import { AssignCleanerToTeamCommand } from '../commands/assign-cleaner-to-team.command';
 import { CreateCleanerCommand } from '../commands/create-cleaner.command';
 import { UpdateCleanerCommand } from '../commands/update-cleaner.command';
+import { tenantAuditTags } from '../../../../platform/audit/application/audit-tags';
 
 // Postgres unique_violation — see
 // https://www.postgresql.org/docs/current/errcodes-appendix.html
@@ -79,10 +79,9 @@ export class CleanersService {
         await this.auditLogger.log({
           actorId: command.actorId,
           entityId: updated.id,
-          tenantId: command.tenantId,
           action: 'cleaner.assign_team',
           entityType: 'cleaner',
-          scope: AdminScope.TENANT,
+          ...tenantAuditTags(command.tenantId),
         });
 
         return updated;
@@ -113,10 +112,9 @@ export class CleanersService {
         await this.auditLogger.log({
           actorId: command.actorId,
           entityId: entity.id,
-          tenantId: command.tenantId,
           action: 'cleaner.create',
           entityType: 'cleaner',
-          scope: AdminScope.TENANT,
+          ...tenantAuditTags(command.tenantId),
         });
 
         return entity;
@@ -208,10 +206,9 @@ export class CleanersService {
         await this.auditLogger.log({
           actorId: command.actorId,
           entityId: updated.id,
-          tenantId: command.tenantId,
           action: 'cleaner.update',
           entityType: 'cleaner',
-          scope: AdminScope.TENANT,
+          ...tenantAuditTags(command.tenantId),
         });
 
         return updated;

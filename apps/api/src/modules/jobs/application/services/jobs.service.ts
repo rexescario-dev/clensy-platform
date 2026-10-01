@@ -10,7 +10,6 @@ import { DataSource, In, QueryFailedError, Repository } from 'typeorm';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import type { AuditLogger } from '../../../../platform/audit/application/audit-logger.port';
 import { runAuditInTransaction } from '../../../../platform/audit/infrastructure/audit-logger.service';
-import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { BookingsService } from '../../../bookings/application/services/bookings.service';
 import { BookingStatus } from '../../../bookings/domain/booking-status';
 import { TeamsService } from '../../../cleaners/application/services/teams.service';
@@ -26,6 +25,7 @@ import { CreateJobFromBookingCommand } from '../commands/create-job-from-booking
 import { AssignTeamToJobCommand } from '../commands/assign-team-to-job.command';
 import { CompleteChecklistItemCommand } from '../commands/complete-checklist-item.command';
 import { CompleteJobCommand } from '../commands/complete-job.command';
+import { tenantAuditTags } from '../../../../platform/audit/application/audit-tags';
 
 const POSTGRES_UNIQUE_VIOLATION = '23505';
 const JOB_BOOKING_UNIQUE_CONSTRAINT = 'UQ_cleaning_job_booking_id';
@@ -46,12 +46,6 @@ export function isPostgresUniqueViolation(
     driver?.code === POSTGRES_UNIQUE_VIOLATION &&
     driver?.constraint === constraint
   );
-}
-
-// Job audit events carry the caller's tenant (#86 Slice decision 10; RFC
-// §4.6). `tenantId` is always the command's, i.e. `requireTenantId`'s.
-function jobAuditTags(tenantId: string) {
-  return { tenantId, scope: AdminScope.TENANT };
 }
 
 @Injectable()
@@ -108,7 +102,7 @@ export class JobsService {
           entityId: command.jobId,
           action: 'job.assign_team',
           entityType: 'job',
-          ...jobAuditTags(command.tenantId),
+          ...tenantAuditTags(command.tenantId),
         });
 
         return manager.findOneByOrFail(CleaningJobEntity, where);
@@ -178,7 +172,7 @@ export class JobsService {
           entityId: job.id,
           action: 'job.checklist_item.complete',
           entityType: 'job',
-          ...jobAuditTags(command.tenantId),
+          ...tenantAuditTags(command.tenantId),
         });
 
         return manager.findOneByOrFail(CleaningJobEntity, where);
@@ -223,7 +217,7 @@ export class JobsService {
           entityId: job.id,
           action: 'job.complete',
           entityType: 'job',
-          ...jobAuditTags(command.tenantId),
+          ...tenantAuditTags(command.tenantId),
         });
 
         return manager.findOneByOrFail(CleaningJobEntity, where);
@@ -299,7 +293,7 @@ export class JobsService {
             entityId: job.id,
             action: 'job.create',
             entityType: 'job',
-            ...jobAuditTags(command.tenantId),
+            ...tenantAuditTags(command.tenantId),
           });
 
           return job;
