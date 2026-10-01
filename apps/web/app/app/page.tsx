@@ -1,11 +1,32 @@
-import { redirect } from 'next/navigation';
+'use client';
 
-// Targets `/app/customers`, the spec's actual final default (spec §4.1) now
-// that Customers exists under `/app/*` (Task 6). This redirect is still
-// temporary M5-M8 behavior overall — M9 (Operations Dashboard) replaces it
-// with real dashboard content — but `/app/customers` is the last handoff
-// this milestone needs to make; no later task in this plan changes this
-// target again.
+import { useCurrentAdminQuery } from '@clensy/client';
+import { useTranslations } from 'next-intl';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+
+import { landingHref } from '../../lib/nav-groups';
+
+// Sends each principal to a destination exposed for its scope and role
+// in the shell, via the same
+// visibility rule as the sidebar (lib/nav-groups.ts): Super Admin to the
+// platform placeholder, tenant users to their first visible nav item. A
+// missing or invalid session (middleware only checks the cookie exists)
+// goes to /login, as on the admin page. UX only — the API remains the
+// authorization boundary (multi-tenant spec §4.2, §5.13).
 export default function AppIndexPage() {
-  redirect('/app/customers');
+  const t = useTranslations('nav');
+  const router = useRouter();
+  const { data, loading, error } = useCurrentAdminQuery({ fetchPolicy: 'network-only' });
+  const currentAdmin = data?.currentAdmin;
+  const target = loading ? undefined : error || !currentAdmin ? '/login' : landingHref(currentAdmin);
+
+  useEffect(() => {
+    if (target) router.replace(target);
+  }, [target, router]);
+
+  if (!loading && !target) {
+    return <p className="text-sm text-slate-500">{t('landing.empty')}</p>;
+  }
+  return <p className="text-sm text-slate-500">{t('landing.loading')}</p>;
 }

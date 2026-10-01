@@ -23,5 +23,13 @@
     "collapse": "Collapse sidebar",
     "collapseLabel": "Collapse",
     "mobileTitle": "Primary navigation"
+  },
+  "landing": {
+    "empty": "No areas are available for your account.",
+    "loading": "Loading…"
+  },
+  "platform": {
+    "description": "Platform administration is not available yet.",
+    "title": "Platform"
   }
 }

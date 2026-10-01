@@ -1,12 +1,13 @@
 'use client';
 
+import { useCurrentAdminQuery } from '@clensy/client';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
-import { NAV_GROUPS, findActiveHref } from '../../lib/nav-groups';
+import { findActiveHref, visibleNavGroups, type NavGroup } from '../../lib/nav-groups';
 import { useSidebarCollapsed } from '../../lib/use-sidebar-collapsed';
 import { cn } from '../../lib/utils';
 import {
@@ -34,6 +35,11 @@ export function AppSidebar({ mobileNavOpen, onMobileNavClose }: AppSidebarProps)
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
   const onMobileNavCloseRef = useRef(onMobileNavClose);
   const activeHref = findActiveHref(pathname ?? '');
+  // Until currentAdmin resolves (or if it fails) no groups render, so a
+  // Super Admin never sees a flash of tenant navigation. UX only — the API
+  // stays the authorization boundary (multi-tenant spec §4.2, §5.13).
+  const { data } = useCurrentAdminQuery();
+  const groups = visibleNavGroups(data?.currentAdmin);
 
   useEffect(() => {
     onMobileNavCloseRef.current = onMobileNavClose;
@@ -60,6 +66,7 @@ export function AppSidebar({ mobileNavOpen, onMobileNavClose }: AppSidebarProps)
           <SidebarNavigation
             activeHref={activeHref}
             collapsed={collapsed}
+            groups={groups}
             portalContainer={portalContainer}
             t={t}
           />
@@ -105,6 +112,7 @@ export function AppSidebar({ mobileNavOpen, onMobileNavClose }: AppSidebarProps)
               <SidebarNavigation
                 activeHref={activeHref}
                 collapsed={false}
+                groups={groups}
                 portalContainer={portalContainer}
                 t={t}
               />
@@ -125,18 +133,20 @@ export function AppSidebar({ mobileNavOpen, onMobileNavClose }: AppSidebarProps)
 function SidebarNavigation({
   activeHref,
   collapsed,
+  groups,
   portalContainer,
   t,
 }: {
   activeHref?: string;
   collapsed: boolean;
+  groups: NavGroup[];
   portalContainer: HTMLElement | null;
   t: ReturnType<typeof useTranslations<'nav'>>;
 }) {
   return (
     <TooltipProvider>
       <div className="flex flex-col gap-6 px-2">
-        {NAV_GROUPS.map((group) => (
+        {groups.map((group) => (
           <div key={group.labelKey} className="flex flex-col gap-1">
             {!collapsed ? (
               <p className="px-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
