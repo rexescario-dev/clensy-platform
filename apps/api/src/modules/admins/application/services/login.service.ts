@@ -4,6 +4,7 @@ import * as bcrypt from 'bcrypt';
 import { Repository } from 'typeorm';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import type { AuditLogger } from '../../../../platform/audit/application/audit-logger.port';
+import { principalAuditTags } from '../../../../platform/audit/application/audit-tags';
 import { AuthenticatedPrincipal } from '../../../../platform/auth/domain/authenticated-principal';
 import { toAuthenticatedPrincipal } from '../../domain/to-authenticated-principal';
 import { AdminUserEntity } from '../../infrastructure/persistence/admin-user.entity';
@@ -54,9 +55,11 @@ export class LoginService {
       await this.auditLogger.log({
         actorId: null,
         entityId: null,
+        tenantId: null,
         action: 'admin.login.failed',
         entityType: null,
         metadata: { email: normalizedEmail, reason: 'invalid_credentials' },
+        scope: null,
       });
       return null;
     }
@@ -64,13 +67,18 @@ export class LoginService {
     // Failed logins above carry no scope/tenant (no principal, spec §4.6);
     // a success records the principal's explicit scope, so a Super Admin
     // login is PLATFORM + null tenant rather than an ambiguous null.
+    // `principalAuditTags` throws on a row whose scope and tenant disagree
+    // (forbidden by the admin_user CHECKs): login fails closed rather than
+    // issuing a session for an identity the RFC says cannot exist (#90
+    // decision 5). That is an identity-validation error, not an audit
+    // persistence failure, so the best-effort rule does not swallow it.
+    const auditTags = principalAuditTags(admin);
     await this.auditLogger.log({
       actorId: admin.id,
       entityId: admin.id,
-      tenantId: admin.tenantId,
       action: 'admin.login.succeeded',
       entityType: 'AdminUser',
-      scope: admin.scope,
+      ...auditTags,
     });
 
     return toAuthenticatedPrincipal(admin);

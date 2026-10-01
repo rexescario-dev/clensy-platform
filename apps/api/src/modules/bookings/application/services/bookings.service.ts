@@ -22,6 +22,7 @@ import { BookingStatus } from '../../domain/booking-status';
 import { BookingEntity } from '../../infrastructure/persistence/booking.entity';
 import { CreateBookingCommand } from '../commands/create-booking.command';
 import { UpdateBookingCommand } from '../commands/update-booking.command';
+import { tenantAuditTags } from '../../../../platform/audit/application/audit-tags';
 
 const POSTGRES_FOREIGN_KEY_VIOLATION = '23503';
 
@@ -72,7 +73,12 @@ export class BookingsService {
         );
         await manager.save(entity);
 
-        await this.logAudit(command.actorId, 'booking.create', entity.id);
+        await this.logAudit(
+          command.actorId,
+          command.tenantId,
+          'booking.create',
+          entity.id,
+        );
 
         return entity;
       }),
@@ -127,7 +133,7 @@ export class BookingsService {
           throw error;
         }
 
-        await this.logAudit(actorId, 'booking.remove', id);
+        await this.logAudit(actorId, tenantId, 'booking.remove', id);
 
         return removed;
       }),
@@ -204,7 +210,7 @@ export class BookingsService {
           await manager.update(BookingEntity, { id, tenantId }, changes);
         }
 
-        await this.logAudit(actorId, 'booking.update', id);
+        await this.logAudit(actorId, tenantId, 'booking.update', id);
 
         return manager.findOneByOrFail(BookingEntity, { id, tenantId });
       }),
@@ -242,10 +248,12 @@ export class BookingsService {
 
   // Every caller has a principal after #85 Slice decision 3: `actorId` is
   // always a real actor, and every successful call emits its audit event
-  // unconditionally. Single enforcement point for that rule, shared by
-  // `create`/`update`/`remove`.
+  // unconditionally. #90 decision 6: tagged with the same principal tenant
+  // the caller's `{ id, tenantId }` lookup used. Single enforcement point
+  // for that rule, shared by `create`/`update`/`remove`.
   private async logAudit(
     actorId: string,
+    tenantId: string,
     action: string,
     entityId: string,
   ): Promise<void> {
@@ -254,6 +262,7 @@ export class BookingsService {
       entityId,
       action,
       entityType: 'booking',
+      ...tenantAuditTags(tenantId),
     });
   }
 

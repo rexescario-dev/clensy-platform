@@ -7,7 +7,6 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
-import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import type { AuditLogger } from '../../../../platform/audit/application/audit-logger.port';
 import { runAuditInTransaction } from '../../../../platform/audit/infrastructure/audit-logger.service';
@@ -17,6 +16,7 @@ import { AddOnEntity } from '../../infrastructure/persistence/add-on.entity';
 import { PricingRuleEntity } from '../../infrastructure/persistence/pricing-rule.entity';
 import { ServiceEntity } from '../../infrastructure/persistence/service.entity';
 import { CreatePricingRuleCommand } from '../commands/create-pricing-rule.command';
+import { tenantAuditTags } from '../../../../platform/audit/application/audit-tags';
 
 // A `PricingRule`'s target: exactly one of a `Service` or an `AddOn` (Laundry
 // Architecture & Catalog Foundation spec §4.2, §4.7). `column` is always one
@@ -183,10 +183,9 @@ export class PricingRulesService {
         await this.auditLogger.log({
           actorId: command.actorId,
           entityId: entity.id,
-          tenantId: command.tenantId,
           action: 'pricing_rule.create',
           entityType: 'pricing_rule',
-          scope: AdminScope.TENANT,
+          ...tenantAuditTags(command.tenantId),
         });
 
         return entity;

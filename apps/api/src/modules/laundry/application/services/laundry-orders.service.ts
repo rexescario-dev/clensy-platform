@@ -9,7 +9,6 @@ import { DataSource, EntityManager, Repository } from 'typeorm';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import type { AuditLogger } from '../../../../platform/audit/application/audit-logger.port';
 import { runAuditInTransaction } from '../../../../platform/audit/infrastructure/audit-logger.service';
-import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { PricingRulesService } from '../../../catalog/application/services/pricing-rules.service';
 import { PricingUnit } from '../../../catalog/domain/pricing-unit';
 import { CustomersService } from '../../../customers/application/services/customers.service';
@@ -27,6 +26,7 @@ import { OrderForInvoicing } from './order-for-invoicing';
 import { PriceLaundryOrderCommand } from '../commands/price-laundry-order.command';
 import { ReceiveLaundryOrderCommand } from '../commands/receive-laundry-order.command';
 import { WeighLaundryOrderCommand } from '../commands/weigh-laundry-order.command';
+import { tenantAuditTags } from '../../../../platform/audit/application/audit-tags';
 
 const S = LaundryOrderStatus;
 const ENTITY_TYPE = 'laundry_order';
@@ -401,10 +401,9 @@ export class LaundryOrdersService {
     await this.auditLogger.log({
       actorId,
       entityId,
-      tenantId,
       action,
       entityType: ENTITY_TYPE,
-      scope: AdminScope.TENANT,
+      ...tenantAuditTags(tenantId),
     });
   }
 

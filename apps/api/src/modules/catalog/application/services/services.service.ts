@@ -7,7 +7,6 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
-import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import type { AuditLogger } from '../../../../platform/audit/application/audit-logger.port';
 import { runAuditInTransaction } from '../../../../platform/audit/infrastructure/audit-logger.service';
@@ -15,6 +14,7 @@ import { Service } from '../../domain/service';
 import { ServiceEntity } from '../../infrastructure/persistence/service.entity';
 import { CreateServiceCommand } from '../commands/create-service.command';
 import { UpdateServiceCommand } from '../commands/update-service.command';
+import { tenantAuditTags } from '../../../../platform/audit/application/audit-tags';
 
 // Postgres unique_violation — see
 // https://www.postgresql.org/docs/current/errcodes-appendix.html
@@ -54,10 +54,9 @@ export class ServicesService {
         await this.auditLogger.log({
           actorId: command.actorId,
           entityId: entity.id,
-          tenantId: command.tenantId,
           action: 'service.create',
           entityType: 'service',
-          scope: AdminScope.TENANT,
+          ...tenantAuditTags(command.tenantId),
         });
 
         return entity;
@@ -155,10 +154,9 @@ export class ServicesService {
         await this.auditLogger.log({
           actorId,
           entityId: updated.id,
-          tenantId,
           action: 'service.update',
           entityType: 'service',
-          scope: AdminScope.TENANT,
+          ...tenantAuditTags(tenantId),
         });
 
         return updated;

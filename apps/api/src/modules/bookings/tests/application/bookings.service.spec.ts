@@ -6,6 +6,7 @@ import {
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource, In } from 'typeorm';
+import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import { BookingsService } from '../../application/services/bookings.service';
 import { BookingStatus } from '../../domain/booking-status';
@@ -286,8 +287,10 @@ describe('BookingsService', () => {
       expect(auditLogger.log).toHaveBeenCalledWith({
         actorId: 'actor-1',
         entityId: result.id,
+        tenantId: 't-a',
         action: 'booking.create',
         entityType: 'booking',
+        scope: AdminScope.TENANT,
       });
     });
 
@@ -300,14 +303,16 @@ describe('BookingsService', () => {
       );
     });
 
-    it('always calls auditLogger.log with no scope/tenant fields (Decision 12)', async () => {
+    it('tags booking.create with the command tenant and TENANT scope (#90 decision 6)', async () => {
       const result = await service.create(command);
 
       expect(auditLogger.log).toHaveBeenCalledWith({
         actorId: 'actor-1',
         entityId: result.id,
+        tenantId: 't-a',
         action: 'booking.create',
         entityType: 'booking',
+        scope: AdminScope.TENANT,
       });
     });
   });
@@ -458,8 +463,10 @@ describe('BookingsService', () => {
       expect(manager.update).not.toHaveBeenCalled();
       expect(auditLogger.log).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: 'booking.update',
           entityId: 'booking-1',
+          tenantId: 't-a',
+          action: 'booking.update',
+          scope: AdminScope.TENANT,
         }),
       );
     });
@@ -499,8 +506,10 @@ describe('BookingsService', () => {
       expect(auditLogger.log).toHaveBeenCalledWith({
         actorId: 'actor-1',
         entityId: 'booking-1',
+        tenantId: 't-a',
         action: 'booking.remove',
         entityType: 'booking',
+        scope: AdminScope.TENANT,
       });
     });
 

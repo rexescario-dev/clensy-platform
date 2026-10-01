@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
-import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import type { AuditLogger } from '../../../../platform/audit/application/audit-logger.port';
 import { runAuditInTransaction } from '../../../../platform/audit/infrastructure/audit-logger.service';
@@ -15,6 +14,7 @@ import { CustomerEntity } from '../../infrastructure/persistence/customer.entity
 import { PropertyEntity } from '../../infrastructure/persistence/property.entity';
 import { CreatePropertyCommand } from '../commands/create-property.command';
 import { UpdatePropertyCommand } from '../commands/update-property.command';
+import { tenantAuditTags } from '../../../../platform/audit/application/audit-tags';
 
 @Injectable()
 export class PropertiesService {
@@ -67,10 +67,9 @@ export class PropertiesService {
         await this.auditLogger.log({
           actorId: command.actorId,
           entityId: entity.id,
-          tenantId: command.tenantId,
           action: 'property.create',
           entityType: 'property',
-          scope: AdminScope.TENANT,
+          ...tenantAuditTags(command.tenantId),
         });
 
         return entity;
@@ -168,10 +167,9 @@ export class PropertiesService {
         await this.auditLogger.log({
           actorId: command.actorId,
           entityId: entity.id,
-          tenantId: command.tenantId,
           action: 'property.update',
           entityType: 'property',
-          scope: AdminScope.TENANT,
+          ...tenantAuditTags(command.tenantId),
         });
 
         return entity;
