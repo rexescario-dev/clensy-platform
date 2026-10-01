@@ -2,14 +2,14 @@
 
 | Field | Value |
 | --- | --- |
-| **Status** | Draft |
+| **Status** | Accepted |
 | **Kind** | Implementation plan (M4) for **one** delivery slice |
 | **Date** | 2026-10-02 |
 | **Tracking** | GitHub [#91](https://github.com/rexescario-dev/clensy-platform/issues/91) (program [#81](https://github.com/rexescario-dev/clensy-platform/issues/81); depends on #85, merged). One PR for this plan (to be Accepted at M5) and the implementation (process §2.8). Branch `feat/91-legacy-rest-surface-cleanup`. |
 | **Package / repo** | `clensy-platform`: `apps/api` (one new source file, `main.ts`, tests), removal of `apps/worker/` and `packages/ui/src/domain/`, comment-only edit in `packages/testing`, and docs. **No** migration, `schema.gql`, `apps/web`, GraphQL resolver, REST route, or documented REST path/operation changes. |
 | **Depends on (Accepted)** | [Multi-Tenant Architecture](../specs/2026-09-23-multi-tenant-architecture-design.md) (Accepted, M3 2026-09-23): §4.5 (REST `/bookings` must not be an unauthenticated production surface; it must use the same cookie-JWT authentication and tenant isolation as GraphQL, or be removed or lab-only), §4.2 (no implicit Super Admin data access), §10 (the open "delete or rebuild REST `/bookings`" deferral, resolved by this slice). **Where this plan and that specification disagree, the specification wins**: stop and return to M2/M3. Relies on the shipped [Booking plan](2026-09-28-booking-tenant-isolation-plan.md) (#85: REST shares `AuthGuard`, `VIEW_ROLES`/`WRITE_ROLES`, `requireTenantId` and audit with GraphQL) and the [Audit & Security Sweep plan](2026-10-01-tenant-aware-audit-security-sweep-plan.md) (#90: metadata-derived GraphQL guard suites; this slice adds the HTTP counterpart). |
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task, as chosen at M5. Steps use checkbox (`- [ ]`) syntax.
+> **For agentic workers:** **M5 Accepted 2026-10-02** (developer review of revision 2, commit `8f875d3`, the implementation contract). **Execution method:** **Native**, inline (superpowers:executing-plans) in the developer's session, with one independent whole-branch review as the final gate. The Accept is plan acceptance only, not merge, push or deploy authorization. Steps use checkbox (`- [ ]`) syntax.
 > - **Order and verification:** execute the tasks in order, test-first as written. Each `apps/api` task ends green on `pnpm --filter api test`, `pnpm --filter api lint` (lint must leave no diff) and the e2e suites the task names. `pnpm --filter api exec tsc --noEmit` must report **no errors beyond the 2 present on `main`** (`src/modules/catalog/tests/graphql/service-read.resolver.spec.ts`, `test/bookings.e2e-spec.ts`; deferred in #90). The full e2e suite, workspace `build`, `lint` and `test` run in Task 6.
 > - **Stop conditions:** do not invent product semantics; stop and report on any need for a design or scope change. No push or PR as a side effect.
 >
