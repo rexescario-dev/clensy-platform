@@ -563,6 +563,7 @@ describe('Bookings (e2e)', () => {
     await servicesService.updateService(s2.id, {
       active: false,
       actorId: 'e2e',
+      tenantId: owner.tenantId,
     });
     const inactiveServiceResponse = await authedRequest(
       ownerSessionCookie,
