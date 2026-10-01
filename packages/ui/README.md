@@ -11,7 +11,7 @@ for the full architecture and rationale.
 
 - Generic UI primitives (shadcn/radix-ui-based) live in `src/base/`.
 - Generic Clensy UI composition lives in `src/base/`, alongside the primitives.
-- Domain-specific composition belongs in `src/domain/`.
+- Domain-specific composition (components representing a Clensy business concept) does not belong here; it lives in [`@clensy/web`](../../packages/web/README.md).
 - This package must not import from `apps/web` (or any application).
 - This package must not contain routing, business logic, or application-level
   data fetching (existing rule, unchanged — see `apps/web/README.md`'s i18n
@@ -34,16 +34,9 @@ for the full architecture and rationale.
   over `Table`, `Checkbox`, and `Pagination` — it is not a table primitive
   itself; see [the design spec](../../docs/superpowers/specs/2026-09-19-reusable-data-table-design.md)
   §4.3.
-- `src/domain/` — **legacy, no new content.** Domain-specific composition
-  (components representing a Clensy business concept) now belongs in
-  [`@clensy/web`](../../packages/web/README.md) instead; see [the design
-  spec](../../docs/superpowers/specs/2026-09-19-clensy-web-login-form-design.md)
-  §4.1. `src/domain/` stays scaffolded but receives no new content after
-  2026-09-19. See [`src/domain/README.md`](src/domain/README.md) for details.
 - `src/internal/` — implementation details not part of the public export
   surface.
-- `src/index.ts` — the public export surface: every `base/` export. `domain/`
-  has nothing to export yet.
+- `src/index.ts` — the public export surface: every `base/` export.
 
 ## Theme tokens
 

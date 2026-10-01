@@ -552,6 +552,46 @@ describe('Bookings tenant isolation (e2e)', () => {
       expect(check.body.data.booking.team).toEqual({ id: teamB.id });
     });
 
+    // #91 decision 4: REST parity. The same tenant-A references are 404
+    // through REST `/bookings`, and nothing is written.
+    let restControlBookingId: string | undefined;
+
+    it('REST POST /bookings accepts the unmodified baseline (all-B) body as a positive control', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/bookings')
+        .set('Cookie', cookieB)
+        .send(baselineCreateInputForB());
+      expect(res.status).toBe(201);
+      restControlBookingId = (res.body as { id: string }).id;
+      expect(restControlBookingId).toBeTruthy();
+    });
+
+    it.each(CROSS_TENANT_REFERENCE_CASES)(
+      'REST POST /bookings with %s pointing at tenant A is 404 and leaves tenant B unchanged',
+      async (_label, buildOverride) => {
+        const countBefore = await bookingCountForTenant(tenantB);
+
+        const res = await request(app.getHttpServer())
+          .post('/bookings')
+          .set('Cookie', cookieB)
+          .send(baselineCreateInputForB(buildOverride()));
+        expect(res.status).toBe(404);
+
+        expect(await bookingCountForTenant(tenantB)).toBe(countBefore);
+      },
+    );
+
+    it("REST PATCH /bookings/:id with A's teamId as B is 404, and bookingB.teamId is unchanged", async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/bookings/${bookingB.id}`)
+        .set('Cookie', cookieB)
+        .send({ teamId: teamA.id });
+      expect(res.status).toBe(404);
+
+      const stillB = await bookingRepository.findOneBy({ id: bookingB.id });
+      expect(stillB?.teamId).toBe(teamB.id);
+    });
+
     afterAll(async () => {
       if (controlBookingId) {
         // Belt-and-suspenders: `removeTestTenants` (afterAll) deletes it
@@ -559,6 +599,9 @@ describe('Bookings tenant isolation (e2e)', () => {
         // block's own accounting exact for any test that runs after it in
         // this file and recomputes tenant B's booking count.
         await bookingRepository.delete({ id: controlBookingId });
+      }
+      if (restControlBookingId) {
+        await bookingRepository.delete({ id: restControlBookingId });
       }
     });
   });

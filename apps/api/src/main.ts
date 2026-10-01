@@ -1,10 +1,10 @@
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import { join } from 'path';
 import { AppModule } from './app/app.module';
 import { applyPlatformPipes } from './platform/graphql/apply-platform-pipes';
+import { setupApiDocs } from './platform/openapi/setup-api-docs';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -28,13 +28,7 @@ async function bootstrap() {
 
   applyPlatformPipes(app);
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('Clensy Platform API')
-    .setDescription('REST surface — see /graphql for the GraphQL equivalent')
-    .setVersion('0.0.1')
-    .build();
-  const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('docs', app, swaggerDocument);
+  setupApiDocs(app, process.env.NODE_ENV);
 
   // Locally-bundled GraphiQL static assets (graphiql.js/.css) — dev-only,
   // matching the GraphiqlController route guard in graphql.module.ts.
