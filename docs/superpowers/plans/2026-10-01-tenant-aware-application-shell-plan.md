@@ -14,6 +14,14 @@
 > **Pre-M5 review revision (2026-10-01):** returned for two small test/verification refinements; no design or scope change.
 > 1. Task 1 gains an explicit consumer audit (new Step 4) before `staff.roles` is deleted. The planning-time result is recorded there, and the audit is re-run as a gate.
 > 2. Task 3's sidebar regression test now asserts that **both** `<SidebarNavigation>` usages (desktop `<nav>` and mobile `Sheet`) receive `groups={groups}`, so neither variant can bypass the filter.
+>
+> **Second pre-M5 review revision (2026-10-01):** returned for small corrections; no design redirect.
+> 1. Task 1 makes the #88 → #89 role contract explicit. `STAFF_ROLE_OPTIONS` / `StaffRole` must already be exactly the six tenant roles (verified at planning time). The contract test asserts this directly, and the implementer stops rather than filtering `OWNER` inside `ADMIN_ROLES`.
+> 2. Task 1's consumer audit uses focused searches. The planning-time inventory plus TypeScript and test failures are the authoritative consumer check; `grep` only supplements it.
+> 3. Task 2 states what its matrix test guarantees: it pins decision 2, not the live API constants (the drift check stays deferred).
+> 4. The `/app` landing comment no longer says "a destination it can use", which could read as authorization.
+> 5. `accountIdentity` fails closed on an unknown scope: no scope line, rather than defaulting to "Organization account".
+> 6. Task 5's boundary checks exit non-zero on a violation. The manual pass records why the inconsistent-principal cases are covered by pure tests only (the database forbids seeding them).
 
 **Goal:** Make the application shell reflect the principal's scope and role — Super Admin gets a minimal platform shell, tenant users see only the nav items their role can read, `/app` lands every user on a destination they can use, and role/menu copy has one translated home — without the shell becoming an authorization boundary.
 
@@ -94,7 +102,7 @@ These are planning decisions recorded for this slice; they add no product semant
 - Modify: `packages/web/src/index.ts`
 
 **Interfaces:**
-- Consumes: `STAFF_ROLE_OPTIONS`, `StaffRole` from `packages/web/src/staff/staff-roles.ts` (unchanged).
+- Consumes: `STAFF_ROLE_OPTIONS`, `StaffRole` from `packages/web/src/staff/staff-roles.ts` (unchanged). **Precondition from #88:** both are exactly the six tenant roles `ANALYST`, `CUSTOMER_SUPPORT`, `FINANCE`, `OPS_MANAGER`, `SCHEDULER`, `TENANT_OWNER`, with no `OWNER` (verified at planning time, `main` @ `f2ed2ad`: `staff-roles.ts:5`). If either still contains `OWNER` or any other role, **stop and report**. Do not filter or redefine roles in #89 (e.g. hiding `OWNER` inside `ADMIN_ROLES`); that would mean #88 did not establish the expected contract.
 - Produces (exported from `@clensy/web`): `type AdminRole = StaffRole | 'SUPER_ADMIN'`; `ADMIN_ROLES: readonly AdminRole[]`; `isAdminRole(role: string): role is AdminRole`; `ROLE_INITIALS: Readonly<Record<AdminRole, string>>`; i18n namespace `roles` (`useClensyTranslations('roles')`, key = role identifier). `ClensyMessages` gains `roles`; `staff.roles` no longer exists.
 
 - [ ] **Step 1: Write the failing contract test**
@@ -105,6 +113,7 @@ Create `packages/web/src/roles/admin-roles.test.tsx`:
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ADMIN_ROLES, ROLE_INITIALS, isAdminRole } from './admin-roles';
+import { STAFF_ROLE_OPTIONS } from '../staff/staff-roles';
 import { ClensyI18nProvider } from '../i18n/i18n-context';
 import { getDefaultMessages } from '../i18n/messages';
 import { useClensyTranslations } from '../i18n/use-clensy-translations';
@@ -125,6 +134,14 @@ function resolvedTexts(keys: string[], overrides?: Parameters<typeof ClensyI18nP
 }
 
 describe('admin role contract', () => {
+  // #88 precondition: ADMIN_ROLES is built from STAFF_ROLE_OPTIONS, so pin
+  // that list itself rather than letting ADMIN_ROLES mask a stale entry.
+  it('builds on exactly the six tenant roles from #88', () => {
+    expect([...STAFF_ROLE_OPTIONS].sort()).toEqual(
+      ['ANALYST', 'CUSTOMER_SUPPORT', 'FINANCE', 'OPS_MANAGER', 'SCHEDULER', 'TENANT_OWNER'].sort(),
+    );
+  });
+
   it('lists exactly the seven AdminUser roles, never the retired OWNER', () => {
     expect([...ADMIN_ROLES].sort()).toEqual(
       ['ANALYST', 'CUSTOMER_SUPPORT', 'FINANCE', 'OPS_MANAGER', 'SCHEDULER', 'SUPER_ADMIN', 'TENANT_OWNER'].sort(),
@@ -250,24 +267,32 @@ Expected: FAIL — `admin-roles.test.tsx` cannot resolve `./admin-roles`; the tw
 
 - [ ] **Step 4: Audit every consumer of the staff-namespace role labels**
 
-Run (from the repo root):
+**Authoritative check:** the planning-time inventory below, plus TypeScript and test failures. Once `staff.roles` is gone, `tsc` rejects a `staff: { roles: … }` override (`DeepPartial<ClensyMessages>`), and the Task 1 tests fail on any component still resolving labels from `staff`. The searches below supplement that check; they do not replace it.
 
-```bash
-grep -rnE "staff\.roles|roles\.\$\{|'roles\.|\"roles\.|\`roles\.|roles: \{" packages/web/src apps/web \
-  --include=*.ts --include=*.tsx --include=*.json --exclude-dir=node_modules --exclude-dir=.next
-```
+Planning-time inventory (2026-10-01, `main` @ `f2ed2ad`). Every consumer is handled in this task:
 
-Planning-time result (2026-10-01, `main` @ `f2ed2ad`): exactly these, all handled in this task:
-
-| Hit | Disposition |
+| Consumer | Disposition |
 | --- | --- |
 | `packages/web/src/staff/create-staff-form.tsx:61` `` t(`roles.${role}`) `` | Migrated in Step 6 to `tRoles(role)` |
 | `packages/web/src/staff/staff-data-table.tsx:91` `` t(`roles.${role}`) `` | Migrated in Step 6 (`RoleLabel` reads `roles`) |
 | `packages/web/src/i18n/messages/en/staff.ts:42` `roles: {` | Deleted in Step 5 |
 | `packages/web/src/staff/staff-contracts.test.tsx:47,57,66-67` | Replaced in Step 2 |
-| `packages/web/src/staff/staff-data-table.test.tsx:27,41` `not.toContain('roles.…')` | Unaffected: negative assertions that no raw key path leaks; still valid with the `roles` namespace |
+| `packages/web/src/staff/staff-data-table.test.tsx:27,41` `not.toContain('roles.…')` | Unaffected: negative assertions that no raw key path leaks |
 
-No apps/web file passes a `staff.roles` override (the admin page's `ClensyI18nProvider` has no `overrides`). If the audit now shows any hit not in this table, migrate it to `useClensyTranslations('roles')` in this task, or stop and report if that would need a design change. Do not delete `staff.roles` until every hit is dispositioned.
+No apps/web file passes a `staff.roles` override (the admin page's `ClensyI18nProvider` has no `overrides`).
+
+Supplementary searches (from the repo root):
+
+```bash
+grep -rnE "staff\.roles|t\(['\"]roles\.|roles\.\$\{|\`roles\." packages/web/src apps/web \
+  --include='*.ts' --include='*.tsx' --include='*.json' --exclude-dir=node_modules --exclude-dir=.next
+grep -rnE "staff[[:space:]]*:[[:space:]]*\{[^}]*roles" packages/web/src apps/web \
+  --include='*.ts' --include='*.tsx' --exclude-dir=node_modules --exclude-dir=.next
+grep -rnE "['\"]roles\.['\"][[:space:]]*\+" packages/web/src apps/web \
+  --include='*.ts' --include='*.tsx' --exclude-dir=node_modules --exclude-dir=.next
+```
+
+Planning-time output: the first search matches `staff-data-table.tsx:91`, `create-staff-form.tsx:61` and `staff-contracts.test.tsx:47`. The second matches `staff-contracts.test.tsx:66`. The third matches nothing. All of these are in the inventory. If a search or a type/test failure surfaces a consumer not in the inventory, migrate it to `useClensyTranslations('roles')` in this task, or stop and report if that would need a design change. Do not delete `staff.roles` until every consumer is dispositioned.
 
 - [ ] **Step 5: Implement the role contract and namespace**
 
@@ -374,7 +399,7 @@ export type { AdminRole } from './roles/admin-roles';
 Run: `pnpm --filter @clensy/web test && pnpm --filter @clensy/web exec tsc --noEmit && pnpm --filter @clensy/web lint`
 Expected: all PASS (the existing "renders an unknown role identifier raw" test still passes: `SUPER_ADMIN` is not a `StaffRole`).
 
-Re-run the Step 4 `grep`. Expected: **no hit in any non-test file**. The only test hits are the two negative assertions in `staff-data-table.test.tsx` and the new top-level `{ roles: { … } }` overrides in `admin-roles.test.tsx`, `staff-data-table.test.tsx` and `create-staff-form.test.tsx`, which target the shared namespace. None is a `staff: { roles: … }` override or a `` t(`roles.…`) `` lookup on the `staff` namespace.
+Re-run the three Step 4 searches. Expected: no output from any of them. The `tsc` and test runs above are the authoritative part of this gate.
 
 - [ ] **Step 8: Commit**
 
@@ -417,7 +442,9 @@ const STAFF = '/app/admin';
 
 const ALL_TENANT_HREFS = [BOOKINGS, JOBS, LAUNDRY, INVOICES, CUSTOMERS, CLEANERS, TEAMS, SERVICES, ADD_ONS, STAFF];
 
-// Plan decision 2 — must match the API VIEW_ROLES constants named in nav-groups.ts.
+// Pins the approved plan decision 2 matrix. It does NOT independently check
+// the live API VIEW_ROLES constants named in nav-groups.ts; that cross-app
+// drift check is deliberately deferred (plan decision 3).
 const VISIBLE_BY_ROLE: Record<Exclude<Role, 'SUPER_ADMIN'>, string[]> = {
   ANALYST: ALL_TENANT_HREFS.filter((href) => href !== STAFF),
   CUSTOMER_SUPPORT: ALL_TENANT_HREFS.filter((href) => ![CLEANERS, TEAMS, STAFF].includes(href)),
@@ -802,7 +829,8 @@ import { useEffect } from 'react';
 
 import { landingHref } from '../../lib/nav-groups';
 
-// Sends each principal to a destination it can use, via the same
+// Sends each principal to a destination exposed for its scope and role
+// in the shell, via the same
 // visibility rule as the sidebar (lib/nav-groups.ts): Super Admin to the
 // platform placeholder, tenant users to their first visible nav item. A
 // missing or invalid session (middleware only checks the cookie exists)
@@ -878,13 +906,14 @@ git commit -m "feat(89): render scope-aware sidebar, role-aware /app landing and
 
 **Interfaces:**
 - Consumes: `ROLE_INITIALS`, `isAdminRole`, `AdminRole`, `ClensyI18nProvider`, `useClensyTranslations('roles')` from `@clensy/web` (Task 1); `AdminScope` from `@clensy/client`.
-- Produces: `accountIdentity(admin: { role: string; scope: AdminScope } | null | undefined): AccountIdentity | undefined` with `AccountIdentity { initials: string; role: AdminRole; scopeKey: 'userMenu.scope.platform' | 'userMenu.scope.tenant' }`; `nav.userMenu.*` message keys.
+- Produces: `accountIdentity(admin: { role: string; scope: AdminScope } | null | undefined): AccountIdentity | undefined` with `AccountIdentity { initials: string; role: AdminRole; scopeKey?: 'userMenu.scope.platform' | 'userMenu.scope.tenant' }` (`scopeKey` undefined for an unknown scope); `nav.userMenu.*` message keys.
 
 - [ ] **Step 1: Write the failing tests**
 
 Create `apps/web/lib/account-identity.test.ts`:
 
 ```ts
+import type { AdminScope } from '@clensy/client';
 import { describe, expect, it } from 'vitest';
 import { accountIdentity } from './account-identity';
 
@@ -908,6 +937,11 @@ describe('accountIdentity', () => {
   it('derives the scope line from scope, not from role', () => {
     expect(accountIdentity({ role: 'TENANT_OWNER', scope: 'PLATFORM' })?.scopeKey).toBe('userMenu.scope.platform');
     expect(accountIdentity({ role: 'SUPER_ADMIN', scope: 'TENANT' })?.scopeKey).toBe('userMenu.scope.tenant');
+  });
+
+  it('shows no scope line for a scope it does not know, rather than guessing', () => {
+    const identity = accountIdentity({ role: 'ANALYST', scope: 'PARTNER' as unknown as AdminScope });
+    expect(identity).toEqual({ initials: 'AN', role: 'ANALYST', scopeKey: undefined });
   });
 
   it('presents no identity without a principal or for an unknown role', () => {
@@ -997,8 +1031,15 @@ import { ROLE_INITIALS, isAdminRole, type AdminRole } from '@clensy/web';
 export interface AccountIdentity {
   initials: string;
   role: AdminRole;
-  scopeKey: 'userMenu.scope.platform' | 'userMenu.scope.tenant';
+  // Undefined for a scope this build does not know: no scope line rather
+  // than a guessed one.
+  scopeKey?: 'userMenu.scope.platform' | 'userMenu.scope.tenant';
 }
+
+const SCOPE_KEYS: Readonly<Record<AdminScope, NonNullable<AccountIdentity['scopeKey']>>> = {
+  PLATFORM: 'userMenu.scope.platform',
+  TENANT: 'userMenu.scope.tenant',
+};
 
 // The user menu's identity line. The scope line comes from the explicit
 // scope, never from role or tenantId (multi-tenant spec §3/§4.1). Display
@@ -1008,7 +1049,7 @@ export function accountIdentity(admin: { role: string; scope: AdminScope } | nul
   return {
     initials: ROLE_INITIALS[admin.role],
     role: admin.role,
-    scopeKey: admin.scope === 'PLATFORM' ? 'userMenu.scope.platform' : 'userMenu.scope.tenant',
+    scopeKey: Object.prototype.hasOwnProperty.call(SCOPE_KEYS, admin.scope) ? SCOPE_KEYS[admin.scope] : undefined,
   };
 }
 ```
@@ -1111,7 +1152,9 @@ function UserMenuContent() {
             <>
               <DropdownMenuLabel>
                 <span className="block">{roleLabel}</span>
-                <span className="block text-xs font-normal text-muted-foreground">{t(identity.scopeKey)}</span>
+                {identity.scopeKey ? (
+                  <span className="block text-xs font-normal text-muted-foreground">{t(identity.scopeKey)}</span>
+                ) : null}
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
             </>
@@ -1178,11 +1221,11 @@ Expected: all PASS; `next build` lists the new `/app/platform` route.
 
 - [ ] **Step 2: Confirm the boundaries held**
 
-Run: `git diff --stat main...HEAD -- apps/api packages/client packages/ui`
-Expected: no output.
+Run: `test -z "$(git diff --name-only main...HEAD -- apps/api packages/client packages/ui)"`
+Expected: exit 0 (non-zero means a protected package changed).
 
-Run: `grep -rn "@clensy/client\|@apollo/client\|next-intl" packages/web/src --include=*.ts --include=*.tsx`
-Expected: no output.
+Run: `test -z "$(grep -rnE '@clensy/client|@apollo/client|next-intl' packages/web/src --include='*.ts' --include='*.tsx')"`
+Expected: exit 0 (non-zero means `@clensy/web` crossed its package boundary).
 
 - [ ] **Step 3: Manual pass against the running app (API + web dev servers, bootstrap tenant)**
 
@@ -1192,6 +1235,8 @@ For a Super Admin and for each tenant role available in the local database (at m
 2. Check the sidebar shows exactly that role's row of decision 2 (Super Admin: brand and collapse control only, no groups).
 3. Open the user menu — expect the role label, the scope line ("Platform account" / "Organization account"), the initials, working theme options and sign-out.
 4. Sign out, then visit `/app` with no cookie — expect `/login`.
+
+Not seeded manually: the inconsistent principals from Review Focus 1 (`PLATFORM` + `TENANT_OWNER`, `TENANT` + `SUPER_ADMIN`). The database forbids them (RFC §4.1 check constraints), so they cannot reach `currentAdmin` from a real account. Their shell behavior is pinned by the pure `visibleNavGroups` / `landingHref` / `accountIdentity` tests, and the query-to-shell wiring is exercised by the consistent principals above.
 
 Typed-URL access to hidden pages is not part of this pass (decision 11); its denial is the API's existing authorization, already covered by the API's tenant-isolation e2e suites.
 
