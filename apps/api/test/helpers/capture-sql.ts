@@ -43,10 +43,18 @@ export function assertNoPerParentChildSelect(
   }
 }
 
+// ESC [ ... final-byte: the SGR color sequences `ansis` emits.
+// eslint-disable-next-line no-control-regex
+const ANSI_ESCAPE = /\u001b\[[0-9;]*[A-Za-z]/g;
+
 /**
  * TypeORM 1.1 logs SQL via `console.log('query:', sql)` (two arguments),
- * not DataSource.logger. Join those args, restore logging and console.log
- * in `finally` so a thrown test cannot leak the intercept.
+ * not DataSource.logger. The prefix goes through `ansis.gray.underline`,
+ * so on a color terminal it carries ANSI escapes: strip them before
+ * matching (#109). Join those args, restore logging and console.log in
+ * `finally` so a thrown test cannot leak the intercept. Every caller runs
+ * a real database request, so capturing nothing means the capture is
+ * broken: fail rather than let O(1) assertions pass vacuously.
  */
 export async function withCapturedSql<T>(
   dataSource: DataSource,
@@ -60,7 +68,8 @@ export async function withCapturedSql<T>(
   console.log = (...args: unknown[]) => {
     const text = args
       .filter((arg): arg is string => typeof arg === 'string')
-      .join(' ');
+      .join(' ')
+      .replace(ANSI_ESCAPE, '');
     if (text.startsWith('query:')) {
       queries.push(text.replace(/^query:\s*/, ''));
       return;
@@ -70,6 +79,11 @@ export async function withCapturedSql<T>(
 
   try {
     const result = await run();
+    if (queries.length === 0) {
+      throw new Error(
+        'withCapturedSql captured no SQL: the TypeORM query log format changed or logging is off',
+      );
+    }
     return { queries, result };
   } finally {
     console.log = originalConsoleLog;

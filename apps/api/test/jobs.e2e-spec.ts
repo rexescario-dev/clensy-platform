@@ -153,9 +153,13 @@ describe('Jobs (e2e)', () => {
     }
   `;
 
+  // Filtered to the jobs the N+1 step creates: the e2e database is never
+  // truncated, so an unfiltered first page holds whichever jobs win the
+  // tie-break on equal `scheduledAt` (#109). Two parents still prove the
+  // relation loads are batched.
   const JOBS_N_PLUS_ONE_QUERY = `
-    query JobsNPlusOne {
-      jobs {
+    query JobsNPlusOne($ids: [ID!]!) {
+      jobs(filter: { id: { in: $ids } }) {
         nodes {
           booking { id }
           team { name }
@@ -478,11 +482,12 @@ describe('Jobs (e2e)', () => {
 
     const nPlusOneResponse = await authedRequest(ownerSessionCookie).send({
       query: JOBS_N_PLUS_ONE_QUERY,
+      variables: { ids: [n1aJob.id, n1bJob.id] },
     });
     expect(nPlusOneResponse.body.errors).toBeUndefined();
     const jobsRows: Array<{ booking: { id: string } }> =
       nPlusOneResponse.body.data.jobs.nodes;
-    expect(jobsRows.length).toBeGreaterThanOrEqual(2);
+    expect(jobsRows).toHaveLength(2);
 
     expect(getTeamsByIdsSpy).toHaveBeenCalledTimes(1);
     expect(getTeamsByIdsSpy.mock.calls[0][0]).toEqual(

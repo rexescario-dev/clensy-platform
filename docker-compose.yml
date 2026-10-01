@@ -53,6 +53,9 @@ services:
       # Same reason: main.ts's CORS origin check otherwise always falls back
       # to its http://localhost:3001 default, regardless of .env.
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3001}
+      # The image defaults to production (Dockerfile); the local stack keeps
+      # GraphiQL and Swagger unless .env sets NODE_ENV=production (#109).
+      NODE_ENV: ${NODE_ENV:-development}
     depends_on:
       postgres:
         condition: service_healthy
