@@ -10,6 +10,10 @@
 | **Depends on (Accepted)** | [Multi-Tenant Architecture](../specs/2026-09-23-multi-tenant-architecture-design.md) (Accepted, M3 2026-09-23) — §3 terminology (scope is explicit), §4.1 (`currentAdmin { id role scope tenantId }`; clients branch on `scope`, never `tenantId`), §4.2 (Super Admin is denied every tenant business resolver; UI visibility is not authorization), §4.3 (roles), §4.8 (presentation boundary; shell/nav MAY reflect scope/role for UX), §5.13 (navigation and middleware are not the security boundary), §10 (deferral: "Shell/nav item visibility per role (UX follow-on; not a security control)" — this slice is that follow-on). **Where this plan and that specification disagree, the specification wins** — stop and return to M2/M3. Relies on the shipped [#88 plan](2026-10-01-tenant-staff-administration-ui-plan.md) (`@clensy/web` `staff` namespace, `StaffDataTable`, `CreateStaffForm`, decision 3: "#89 may consolidate role presentation onto `@clensy/web`"), [Web Shell and Design System](../specs/2026-09-10-web-shell-and-design-system-design.md) (shell is not an authorization boundary), [`@clensy/ui` Shared UI System](../specs/2026-09-16-shadcn-ui-boundary-design.md), [Web i18n Architecture](../specs/2026-09-13-web-i18n-architecture-design.md) and [LoginForm self-translating](../specs/2026-09-20-login-form-self-translating-design.md) (components own copy through `@clensy/web` i18n). |
 
 > **For agentic workers:** Draft — awaiting M5 Plan Review. Do not execute until the plan is Accepted and an execution method is chosen. Execute tasks in order with TDD as written. Steps use checkbox (`- [ ]`) syntax. Each task ends green on its package's `test`, `exec tsc --noEmit` and `lint` (the exact commands are in each task's last Run step) before the next starts; `build` runs only in Task 5. Do not invent product semantics; stop and report on any need for a design or scope change. No push or PR as a side effect.
+>
+> **Pre-M5 review revision (2026-10-01):** returned for two small test/verification refinements; no design or scope change.
+> 1. Task 1 gains an explicit consumer audit (new Step 4) before `staff.roles` is deleted. The planning-time result is recorded there, and the audit is re-run as a gate.
+> 2. Task 3's sidebar regression test now asserts that **both** `<SidebarNavigation>` usages (desktop `<nav>` and mobile `Sheet`) receive `groups={groups}`, so neither variant can bypass the filter.
 
 **Goal:** Make the application shell reflect the principal's scope and role — Super Admin gets a minimal platform shell, tenant users see only the nav items their role can read, `/app` lands every user on a destination they can use, and role/menu copy has one translated home — without the shell becoming an authorization boundary.
 
@@ -244,7 +248,28 @@ describe('staff namespace completeness', () => {
 Run: `pnpm --filter @clensy/web exec vitest run src/roles src/staff`
 Expected: FAIL — `admin-roles.test.tsx` cannot resolve `./admin-roles`; the two new "shared roles namespace" tests fail (labels still come from `staff.roles`, so `Billing` / `Org Owner` are absent).
 
-- [ ] **Step 4: Implement the role contract and namespace**
+- [ ] **Step 4: Audit every consumer of the staff-namespace role labels**
+
+Run (from the repo root):
+
+```bash
+grep -rnE "staff\.roles|roles\.\$\{|'roles\.|\"roles\.|\`roles\.|roles: \{" packages/web/src apps/web \
+  --include=*.ts --include=*.tsx --include=*.json --exclude-dir=node_modules --exclude-dir=.next
+```
+
+Planning-time result (2026-10-01, `main` @ `f2ed2ad`): exactly these, all handled in this task:
+
+| Hit | Disposition |
+| --- | --- |
+| `packages/web/src/staff/create-staff-form.tsx:61` `` t(`roles.${role}`) `` | Migrated in Step 6 to `tRoles(role)` |
+| `packages/web/src/staff/staff-data-table.tsx:91` `` t(`roles.${role}`) `` | Migrated in Step 6 (`RoleLabel` reads `roles`) |
+| `packages/web/src/i18n/messages/en/staff.ts:42` `roles: {` | Deleted in Step 5 |
+| `packages/web/src/staff/staff-contracts.test.tsx:47,57,66-67` | Replaced in Step 2 |
+| `packages/web/src/staff/staff-data-table.test.tsx:27,41` `not.toContain('roles.…')` | Unaffected: negative assertions that no raw key path leaks; still valid with the `roles` namespace |
+
+No apps/web file passes a `staff.roles` override (the admin page's `ClensyI18nProvider` has no `overrides`). If the audit now shows any hit not in this table, migrate it to `useClensyTranslations('roles')` in this task, or stop and report if that would need a design change. Do not delete `staff.roles` until every hit is dispositioned.
+
+- [ ] **Step 5: Implement the role contract and namespace**
 
 Create `packages/web/src/roles/admin-roles.ts`:
 
@@ -318,7 +343,7 @@ In `packages/web/src/i18n/messages/en/staff.ts`, delete the whole `roles: { … 
 // ClensyI18nProvider. Role labels live in the shared `roles` namespace.
 ```
 
-- [ ] **Step 5: Point the staff components at the `roles` namespace**
+- [ ] **Step 6: Point the staff components at the `roles` namespace**
 
 In `packages/web/src/staff/staff-data-table.tsx`, replace `RoleLabel` and its two call sites. `RoleLabel` becomes a component that reads its own namespace:
 
@@ -344,12 +369,14 @@ export { ADMIN_ROLES, ROLE_INITIALS, isAdminRole } from './roles/admin-roles';
 export type { AdminRole } from './roles/admin-roles';
 ```
 
-- [ ] **Step 6: Run the package gate**
+- [ ] **Step 7: Run the package gate**
 
 Run: `pnpm --filter @clensy/web test && pnpm --filter @clensy/web exec tsc --noEmit && pnpm --filter @clensy/web lint`
 Expected: all PASS (the existing "renders an unknown role identifier raw" test still passes: `SUPER_ADMIN` is not a `StaffRole`).
 
-- [ ] **Step 7: Commit**
+Re-run the Step 4 `grep`. Expected: **no hit in any non-test file**. The only test hits are the two negative assertions in `staff-data-table.test.tsx` and the new top-level `{ roles: { … } }` overrides in `admin-roles.test.tsx`, `staff-data-table.test.tsx` and `create-staff-form.test.tsx`, which target the shared namespace. None is a `staff: { roles: … }` override or a `` t(`roles.…`) `` lookup on the `staff` namespace.
+
+- [ ] **Step 8: Commit**
 
 ```bash
 git add packages/web/src
@@ -696,6 +723,11 @@ Append to `describe('web shell regressions', …)` in `apps/web/lib/web-shell-re
     expect(sidebar).toContain('useCurrentAdminQuery(');
     expect(sidebar).toContain('visibleNavGroups(data?.currentAdmin)');
     expect(sidebar).not.toContain('NAV_GROUPS');
+    // Both variants (desktop <nav> and mobile Sheet) must receive the
+    // filtered groups — neither may bypass visibleNavGroups.
+    const usages = sidebar.match(/<SidebarNavigation\b[^>]*\/>/g) ?? [];
+    expect(usages).toHaveLength(2);
+    for (const usage of usages) expect(usage).toContain('groups={groups}');
     expect(sidebar).not.toMatch(/tenantId/);
   });
 
