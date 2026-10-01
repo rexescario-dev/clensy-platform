@@ -13,6 +13,23 @@
 > - **Order and verification:** execute the tasks in order, test-first as written. Each `apps/api` task ends green on `pnpm --filter api test`, `pnpm --filter api lint` (lint must leave no diff) and the e2e suites the task names. `pnpm --filter api exec tsc --noEmit` must report **no errors beyond the 2 present on `main`** (`src/modules/catalog/tests/graphql/service-read.resolver.spec.ts`, `test/bookings.e2e-spec.ts`; deferred in #90). The full e2e suite, workspace `build`, `lint` and `test` run in Task 6.
 > - **Stop conditions:** do not invent product semantics; stop and report on any need for a design or scope change. No push or PR as a side effect.
 >
+> **M6 (2026-10-02): complete.** Tasks 1–6 executed in order. Rulings:
+> - Object keys in the new test files are sorted to satisfy the repo lint rule `contextforge/record-key-order`.
+> - The Task 4 commit staged the `git rm` deletion directly.
+> - The full e2e run is 395/398. The 3 failures are SQL query-count assertions in `bookings.e2e`/`jobs.e2e` and reproduce identically on unmodified `main` (`dbb19d5`), so they are pre-existing and out of scope.
+> - The RFC Tracking cell reads "(PR pending)" until the PR exists.
+>
+> **M7 (2026-10-02): Approved for merge** by an independent whole-branch review: 0 Critical, 1 Important, 4 Minor. The Important finding was that the implementation commits carried a `Co-Authored-By: Claude` trailer, against the developer's global rule. Fixed by rewording the messages with no content change (empty tree diff). Of the Minors:
+> - two README wording items were resolved in M9;
+> - the main.ts-only prefix limit was documented in M8;
+> - "(PR pending)" is carried to PR creation.
+>
+> Declined to judge, and surfaced to the developer: neither `Dockerfile` nor `docker-compose.yml` sets `NODE_ENV`, so a deployment built from them serves Swagger and GraphiQL. That is the pre-existing GraphiQL rule; deployment hardening belongs to #92.
+>
+> **M8: complete.** One comment-only change: the HTTP route guard header now states the main.ts-only global prefix/versioning limit. Merging `http-surface.ts` with #90's `graphql-surface.ts` was judged not worth the risk to #90's accepted suites, for about 10 shared lines.
+>
+> **M9: complete.** README: `main.ts` line and `platform/openapi/` tree entry; the REST row now says "every controller route"; this outcome record.
+>
 > **M5 review 1 (2026-10-02): changes requested; revised.** Each item was checked against the installed code (`@nestjs/core` 11.1.29 `paths-explorer.js`/`guards-context-creator.js`, Express 5.2.1) before it was applied.
 > - **P0, Swagger route ownership.** Production mounts none of `/docs`, `/docs-json`, `/docs-yaml`; non-production mounts all three unchanged. The Task 1 guard covers `AppModule`'s controller routes, and the Swagger suite owns the three Swagger routes (Architecture, decision 2 limits, decision 3, Global Constraints).
 > - **P1, OpenAPI claim narrowed** to the same `info` and documented paths and operations. No full-document snapshot is taken.

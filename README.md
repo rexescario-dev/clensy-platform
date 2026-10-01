@@ -43,7 +43,7 @@ Each business module is layered domain → application → infrastructure → pr
 src/
 ├── app/
 │   └── app.module.ts       composition root — wires platform/ + modules/
-├── main.ts                 bootstrap: global ValidationPipe, Swagger UI
+├── main.ts                 bootstrap: global ValidationPipe, Swagger UI via setupApiDocs (dev-only)
 │
 ├── modules/
 │   └── bookings/
@@ -75,16 +75,19 @@ src/
     │   ├── data-source.ts             plain DataSource for the TypeORM CLI
     │   ├── migrations/                generated migration files
     │   └── seed.ts                    `pnpm db:seed` entrypoint — calls each module's seeder
-    └── graphql/
-        ├── graphql.module.ts          Apollo driver + NestjsQueryGraphQLModule.forRoot({})
-        │                               (playground: false — no landing page at /graphql,
-        │                               see "GraphQL IDE" below)
-        ├── graphiql.controller.ts     GET /graphiql (HTML) — dev-only (registered only when
-        │                               NODE_ENV !== 'production')
-        ├── graphiql/
-        │   └── graphiql.entry.ts      browser entry point — bundled by scripts/build-graphiql.ts
-        ├── directives/                reserved, not yet implemented
-        └── scalars/                   reserved, not yet implemented
+    ├── graphql/
+    │   ├── graphql.module.ts          Apollo driver + NestjsQueryGraphQLModule.forRoot({})
+    │   │                               (playground: false — no landing page at /graphql,
+    │   │                               see "GraphQL IDE" below)
+    │   ├── graphiql.controller.ts     GET /graphiql (HTML) — dev-only (registered only when
+    │   │                               NODE_ENV !== 'production')
+    │   ├── graphiql/
+    │   │   └── graphiql.entry.ts      browser entry point — bundled by scripts/build-graphiql.ts
+    │   ├── directives/                reserved, not yet implemented
+    │   └── scalars/                   reserved, not yet implemented
+    └── openapi/
+        └── setup-api-docs.ts          Swagger /docs, /docs-json, /docs-yaml — dev-only (not mounted
+                                        when NODE_ENV=production; #91)
 
 apps/api/
 ├── scripts/
@@ -140,7 +143,7 @@ The same run also seeds a dev `TENANT_OWNER` `AdminUser` of the migration-create
 | Web console | http://localhost:3001 | Next.js — `/login` (public); `/app/*` shell (protected): `/app`, `/app/admin` (staff/roles for the signed-in Tenant Owner's own tenant, Tenant-Owner-only), `/app/customers`, `/app/cleaners`, `/app/cleaners/teams`, `/app/catalog`, `/app/catalog/add-ons`, `/app/bookings`, `/app/jobs` |
 | GraphQL API | http://localhost:3000/graphql | queries/mutations for `bookings`, `admins`, `customers`/`properties`, `cleaners`/`teams`, `catalog` (`services`/`addOns`/`activePricing`), `jobs` (`job`/`jobs`/`createJobFromBooking`/`assignTeamToJob`/`completeChecklistItem`/`completeJob`) — API only, no browser landing page |
 | GraphQL IDE (GraphiQL) | http://localhost:3000/graphiql | separate route, dev-only (see below) |
-| REST API | http://localhost:3000/bookings | full CRUD — `bookings` only, authenticated with the same session cookie, roles and tenant scope as GraphQL; kept for the REST/GraphQL comparison; `admins`/`customers`/`cleaners`/`catalog`/`jobs` are GraphQL-only; every HTTP route is checked by the #91 route guard |
+| REST API | http://localhost:3000/bookings | full CRUD — `bookings` only, authenticated with the same session cookie, roles and tenant scope as GraphQL; kept for the REST/GraphQL comparison; `admins`/`customers`/`cleaners`/`catalog`/`jobs` are GraphQL-only; every controller route is checked by the #91 route guard |
 | REST docs (Swagger UI) | http://localhost:3000/docs | interactive explorer, equivalent to GraphiQL — dev-only (not mounted when NODE_ENV=production) |
 | OpenAPI spec | http://localhost:3000/docs-json | raw JSON — dev-only, with /docs |
 
