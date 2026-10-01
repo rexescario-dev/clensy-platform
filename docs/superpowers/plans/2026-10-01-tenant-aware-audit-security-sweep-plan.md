@@ -2,14 +2,22 @@
 
 | Field | Value |
 | --- | --- |
-| **Status** | Draft (revision 2 — addresses the first M5 review) |
+| **Status** | Accepted |
 | **Kind** | Implementation plan (M4) for **one** delivery slice |
 | **Date** | 2026-10-01 |
 | **Tracking** | GitHub [#90](https://github.com/rexescario-dev/clensy-platform/issues/90) (program [#81](https://github.com/rexescario-dev/clensy-platform/issues/81); depends on #85, #86, #87, all merged). One PR for this plan (to be Accepted at M5) + implementation (process §2.8). Branch `feat/90-tenant-aware-audit-sweep`. PR: opened at M9. Split out of this slice: [#106](https://github.com/rexescario-dev/clensy-platform/issues/106) (GraphQL relation-level RBAC policy). |
 | **Package / repo** | `clensy-platform` — `apps/api` and docs only. **No** `apps/web`, `packages/*`, migration, or schema (`schema.gql`) changes. |
 | **Depends on (Accepted)** | [Multi-Tenant Architecture](../specs/2026-09-23-multi-tenant-architecture-design.md) (Accepted, M3 2026-09-23) — §4.2 (tenant principal needs role **and** tenant predicate; Super Admin is not on any tenant business resolver), §4.5 (one tenant predicate for services, nestjs-query, relations, loaders, mutations; principal-only tenant source), §4.6 (tenant events record the principal's tenant; platform events record explicit `PLATFORM` scope and `tenantId = null`; failed login has no tenant; transactional vs best-effort rules unchanged), §5 invariants 1, 7, 10. **Where this plan and that specification disagree, the specification wins** — stop and return to M2/M3. Relies on the shipped [Tenant Identity Foundation plan](2026-09-23-tenant-identity-foundation-plan.md) (#68: `audit_event_entity.scope`/`tenantId`, `ck_audit_event_scope_tenant`, `AdminScope`, `test/helpers/seed-tenant-admin.ts`), [Customer & Property plan](2026-09-24-customer-property-tenant-isolation-plan.md) (#82: `tenantReadAuthorizer`, `requireTenantId`), [Booking plan](2026-09-28-booking-tenant-isolation-plan.md) (#85: Decision 12 left `booking.*` audit untagged for #90; REST `/bookings` shares GraphQL auth and audit), [Jobs & Checklists plan](2026-09-29-jobs-checklists-tenant-isolation-plan.md) (#86) and [Laundry & Billing plan](2026-09-30-laundry-billing-tenant-isolation-plan.md) (#87), whose "Still open" lists hand booking audit tagging and the relation-level `guards`/`@Roles()` observation to #90. |
 
-> **For agentic workers:** **Draft — not yet Accepted.** Do not start M6 until M5 Accepts this plan (process §2.5). Once Accepted: execute tasks in order with TDD as written; steps use checkbox (`- [ ]`) syntax. Each task ends green on `pnpm --filter api test`, `pnpm --filter api exec tsc --noEmit` and `pnpm --filter api lint` (lint must leave no diff), plus the e2e suites the task names. The full e2e suite and `build` run in Task 6. Do not invent product semantics; stop and report on any need for a design or scope change. No push or PR as a side effect.
+> **For agentic workers:** **M5 Accepted 2026-10-02** (developer review of revision 2, commit `51cdf84`). Tracking [#90](https://github.com/rexescario-dev/clensy-platform/issues/90).
+> - **Execution method:** **Native**, inline (superpowers:executing-plans) in the developer's session, chosen at M5, with one independent whole-branch review as the final gate. The Accept is plan acceptance only, not merge, push or deploy authorization.
+> - **Order and verification:** execute tasks in order with TDD as written; steps use checkbox (`- [ ]`) syntax. Each task ends green on `pnpm --filter api test`, `pnpm --filter api exec tsc --noEmit` and `pnpm --filter api lint` (lint must leave no diff), plus the e2e suites the task names. The full e2e suite and `build` run in Task 6.
+> - **Stop conditions:** do not invent product semantics; stop and report on any need for a design or scope change. No push or PR as a side effect.
+>
+> **M5 implementation caution (binding, not a blocker):** keep the `TypeMetadataStorage`-based guards schema-derived and deterministic. They must fail on any of the following, rather than silently adapting to whatever metadata happens to be present:
+> - an unexpected handler, a missing handler or a duplicate mapping;
+> - unresolved resolver or type metadata;
+> - an unclassified read field.
 >
 > **M5 review 1 (2026-10-01): returned for targeted revision.** Each finding was checked against the repository and the pinned dependencies (`@nestjs/graphql` 13, `@ptc-org/nestjs-query-*` 9.5.0) before it was applied. Throwaway probes were run against the real `AppModule` and deleted. The scope, the three-variant union, the no-backfill decision and the #106 split are unchanged.
 > - **P0 tenant-id runtime guarantee.** The runtime boundary is now explicit (Audit invariants, item 8). `tenantAuditTags` rejects an empty or blank tenant id, and both helpers throw one error type, `InvalidAuditTagsError`. Tests assert the type, not the message. The union is described as compile-time shape only.
