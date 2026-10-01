@@ -91,6 +91,7 @@ describe('visibleNavGroups', () => {
 describe('landingHref', () => {
   it('sends a platform principal to the platform placeholder', () => {
     expect(landingHref({ role: 'SUPER_ADMIN', scope: 'PLATFORM' })).toBe(PLATFORM_HOME_HREF);
+    expect(landingHref({ role: 'TENANT_OWNER', scope: 'PLATFORM' })).toBe(PLATFORM_HOME_HREF);
     expect(PLATFORM_HOME_HREF).toBe('/app/platform');
   });
 

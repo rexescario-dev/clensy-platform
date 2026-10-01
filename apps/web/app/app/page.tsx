@@ -5,10 +5,10 @@ import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
-import { landingHref } from '../../lib/nav-groups';
+import { landingTarget } from '../../lib/landing-target';
 
-// Sends each principal to a destination exposed for its scope and role
-// in the shell, via the same
+// Sends each principal to a destination exposed for its scope and role in
+// the shell. The decision lives in lib/landing-target.ts and uses the same
 // visibility rule as the sidebar (lib/nav-groups.ts): Super Admin to the
 // platform placeholder, tenant users to their first visible nav item. A
 // missing or invalid session (middleware only checks the cookie exists)
@@ -19,7 +19,7 @@ export default function AppIndexPage() {
   const router = useRouter();
   const { data, loading, error } = useCurrentAdminQuery({ fetchPolicy: 'network-only' });
   const currentAdmin = data?.currentAdmin;
-  const target = loading ? undefined : error || !currentAdmin ? '/login' : landingHref(currentAdmin);
+  const target = landingTarget({ currentAdmin, error, loading });
 
   useEffect(() => {
     if (target) router.replace(target);

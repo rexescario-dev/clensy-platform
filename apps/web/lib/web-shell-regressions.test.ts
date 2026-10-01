@@ -48,11 +48,10 @@ describe('web shell regressions', () => {
     expect(sidebar).not.toMatch(/tenantId/);
   });
 
-  it('lands /app through landingHref and sends a missing session to /login', () => {
+  it('lands /app through landingTarget (decision unit-tested in landing-target.test.ts)', () => {
     const landing = readWebSource('app/app/page.tsx');
 
-    expect(landing).toContain('landingHref(currentAdmin)');
-    expect(landing).toContain("'/login'");
+    expect(landing).toContain('landingTarget({ currentAdmin, error, loading })');
     expect(landing).not.toContain('/app/customers');
     expect(landing).not.toMatch(/tenantId/);
   });
