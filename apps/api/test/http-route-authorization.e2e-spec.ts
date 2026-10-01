@@ -35,6 +35,11 @@ import {
 // restrictions; the 401 probe measures the effective result. The
 // `AuthGuard` check pins the current declared mechanism (class-level
 // `@UseGuards(AuthGuard)`), not a generic Nest guarantee.
+// This boot mirrors `main.ts` by hand (cookie parser, platform pipes). An
+// app-level `setGlobalPrefix`/`enableVersioning` added only in `main.ts`
+// would not appear in either inventory here; prefixes or versions set
+// through module/controller metadata do, and fail closed. A prefix does not
+// change guards or roles, so authorization coverage is unaffected.
 type RouteClass = 'PUBLIC_DEV_ONLY' | 'TENANT_VIEW' | 'TENANT_WRITE';
 
 const ROUTE_CLASSIFICATION: Record<string, RouteClass> = {
