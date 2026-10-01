@@ -7,10 +7,9 @@ pnpm workspace + Turborepo monorepo:
 ```text
 apps/
 ├── api/      NestJS + TypeORM + GraphQL (code-first, Apollo) + REST
-├── web/      Next.js (App Router) web console — /login (public); /app, /app/admin,
-│             /app/customers, /app/cleaners, /app/cleaners/teams, /app/catalog,
-│             /app/catalog/add-ons, /app/bookings, /app/jobs (protected, under the shared /app shell)
-└── worker/   not yet implemented
+└── web/      Next.js (App Router) web console — /login (public); /app, /app/admin,
+              /app/customers, /app/cleaners, /app/cleaners/teams, /app/catalog,
+              /app/catalog/add-ons, /app/bookings, /app/jobs (protected, under the shared /app shell)
 
 packages/
 ├── ui/       shared UI system (primitives and composition together) for apps/web
@@ -104,7 +103,7 @@ cp .env.example .env   # first time only
 docker compose up -d --build
 ```
 
-That's it — `docker compose up` builds and runs `apps/api` (Dockerfile) and `apps/web` (Dockerfile.web) together, both connecting to the `postgres` service over the container network. Set `APP_DEBUG=true` in `.env` and **recreate the API container** (`docker compose up -d api`) to print TypeORM SQL on API stdout (`docker compose logs -f api`); anything other than the exact string `true` leaves query logging off. A `migrate` service runs the pending migrations once before `api` starts (`depends_on: condition: service_completed_successfully`); the table is then empty but schema-correct — see "Seeding fake data" below. `apps/web`'s `NEXT_PUBLIC_API_URL` isn't set in `docker-compose.yml` — it falls back to `http://localhost:3000/graphql` (`packages/client/src/apollo-client.ts`), which is correct here since the browser reaches `api` via the host-mapped port, not the container network. `apps/worker` has no `docker-compose.yml` service — it's not yet implemented (see the tree above).
+That's it — `docker compose up` builds and runs `apps/api` (Dockerfile) and `apps/web` (Dockerfile.web) together, both connecting to the `postgres` service over the container network. Set `APP_DEBUG=true` in `.env` and **recreate the API container** (`docker compose up -d api`) to print TypeORM SQL on API stdout (`docker compose logs -f api`); anything other than the exact string `true` leaves query logging off. A `migrate` service runs the pending migrations once before `api` starts (`depends_on: condition: service_completed_successfully`); the table is then empty but schema-correct — see "Seeding fake data" below. `apps/web`'s `NEXT_PUBLIC_API_URL` isn't set in `docker-compose.yml` — it falls back to `http://localhost:3000/graphql` (`packages/client/src/apollo-client.ts`), which is correct here since the browser reaches `api` via the host-mapped port, not the container network.
 
 ## Database migrations
 
