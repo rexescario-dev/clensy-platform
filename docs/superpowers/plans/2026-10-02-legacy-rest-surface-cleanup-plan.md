@@ -6,18 +6,27 @@
 | **Kind** | Implementation plan (M4) for **one** delivery slice |
 | **Date** | 2026-10-02 |
 | **Tracking** | GitHub [#91](https://github.com/rexescario-dev/clensy-platform/issues/91) (program [#81](https://github.com/rexescario-dev/clensy-platform/issues/81); depends on #85, merged). One PR for this plan (to be Accepted at M5) and the implementation (process §2.8). Branch `feat/91-legacy-rest-surface-cleanup`. |
-| **Package / repo** | `clensy-platform`: `apps/api` (one new source file, `main.ts`, tests), removal of `apps/worker/` and `packages/ui/src/domain/`, comment-only edit in `packages/testing`, and docs. **No** migration, `schema.gql`, `apps/web`, GraphQL resolver, REST route or OpenAPI definition changes. |
+| **Package / repo** | `clensy-platform`: `apps/api` (one new source file, `main.ts`, tests), removal of `apps/worker/` and `packages/ui/src/domain/`, comment-only edit in `packages/testing`, and docs. **No** migration, `schema.gql`, `apps/web`, GraphQL resolver, REST route, or documented REST path/operation changes. |
 | **Depends on (Accepted)** | [Multi-Tenant Architecture](../specs/2026-09-23-multi-tenant-architecture-design.md) (Accepted, M3 2026-09-23): §4.5 (REST `/bookings` must not be an unauthenticated production surface; it must use the same cookie-JWT authentication and tenant isolation as GraphQL, or be removed or lab-only), §4.2 (no implicit Super Admin data access), §10 (the open "delete or rebuild REST `/bookings`" deferral, resolved by this slice). **Where this plan and that specification disagree, the specification wins**: stop and return to M2/M3. Relies on the shipped [Booking plan](2026-09-28-booking-tenant-isolation-plan.md) (#85: REST shares `AuthGuard`, `VIEW_ROLES`/`WRITE_ROLES`, `requireTenantId` and audit with GraphQL) and the [Audit & Security Sweep plan](2026-10-01-tenant-aware-audit-security-sweep-plan.md) (#90: metadata-derived GraphQL guard suites; this slice adds the HTTP counterpart). |
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task, as chosen at M5. Steps use checkbox (`- [ ]`) syntax.
 > - **Order and verification:** execute the tasks in order, test-first as written. Each `apps/api` task ends green on `pnpm --filter api test`, `pnpm --filter api lint` (lint must leave no diff) and the e2e suites the task names. `pnpm --filter api exec tsc --noEmit` must report **no errors beyond the 2 present on `main`** (`src/modules/catalog/tests/graphql/service-read.resolver.spec.ts`, `test/bookings.e2e-spec.ts`; deferred in #90). The full e2e suite, workspace `build`, `lint` and `test` run in Task 6.
 > - **Stop conditions:** do not invent product semantics; stop and report on any need for a design or scope change. No push or PR as a side effect.
+>
+> **M5 review 1 (2026-10-02): changes requested; revised.** Each item was checked against the installed code (`@nestjs/core` 11.1.29 `paths-explorer.js`/`guards-context-creator.js`, Express 5.2.1) before it was applied.
+> - **P0, Swagger route ownership.** Production mounts none of `/docs`, `/docs-json`, `/docs-yaml`; non-production mounts all three unchanged. The Task 1 guard covers `AppModule`'s controller routes, and the Swagger suite owns the three Swagger routes (Architecture, decision 2 limits, decision 3, Global Constraints).
+> - **P1, OpenAPI claim narrowed** to the same `info` and documented paths and operations. No full-document snapshot is taken.
+> - **P1, Express shape.** The reader asserts `router.stack` is an array and fails with a named error; the 5.2.1 dependency is pinned in the Global Constraints.
+> - **P1, owner.** Each route now records `owner` (the controller Nest routes to) and `declaredOn` (the class defining the handler; `getAllMethodNames` includes inherited methods). Both are included in every per-route assertion, and a focused test pins two of them.
+> - **P1, global guards.** The "no global guards" assertion is removed; the RFC does not require it. Nest concatenates global guards before route guards and all must pass, so they cannot weaken a route. The original rationale in this plan ("bypass") was wrong.
+> - **P1, `AuthGuard` identity** is documented as pinning the current declared mechanism.
+> - **P2:** `git grep` replaces `grep`; the first `pnpm install` is labelled lockfile regeneration only; Task 3's expected count follows `CROSS_TENANT_REFERENCE_CASES`.
 
 **Goal:** Close #91. REST `/bookings` stays as the authenticated, tenant-scoped REST/GraphQL comparison surface, and a structural guard now keeps it (and any future REST route) that way. Swagger `/docs` is served outside production only. Two dead workspace surfaces are removed, and the docs and RFC record how the deferral was resolved.
 
-**Architecture:** A new e2e guard suite boots `AppModule` and builds two inventories. One comes from Nest controller metadata (`DiscoveryService`, `PATH_METADATA`, `METHOD_METADATA`). The other is the live Express route layers Nest registered. The suite asserts the two match exactly, classifies every `(method, path)` against an exact table, and checks guards and roles with the precedence Nest uses at runtime. It then probes each route over HTTP. Swagger setup moves out of `main.ts` into `setupApiDocs(app, nodeEnv)`, which mounts `/docs` only when `nodeEnv !== 'production'`, the same rule `GraphqlModule` uses for GraphiQL. The rest is deletions and doc edits.
+**Architecture:** A new e2e guard suite boots `AppModule` and builds two inventories. One comes from Nest controller metadata (`DiscoveryService`, `PATH_METADATA`, `METHOD_METADATA`). The other is the live Express route layers Nest registered. The suite asserts the two match exactly, classifies every `(method, path)` against an exact table, and checks guards and roles with the precedence Nest uses at runtime. It then probes each route over HTTP. That suite covers the **controller routes `AppModule` registers**. Swagger setup moves out of `main.ts` into `setupApiDocs(app, nodeEnv)`, which mounts the Swagger routes only when `nodeEnv !== 'production'`, the same rule `GraphqlModule` uses for GraphiQL. The Swagger routes are `/docs` (UI and its assets), `/docs-json` and `/docs-yaml`. They are registered by `main.ts` and not by `AppModule`, so a separate Swagger suite owns them (decision 3). Together the two suites cover every HTTP route the API serves. The rest is deletions and doc edits.
 
-**Tech Stack:** NestJS 11 (`@nestjs/core` `DiscoveryService`/`MetadataScanner`/`ApplicationConfig`, `@nestjs/common/constants`), `@nestjs/platform-express` (Express 5 `router.stack`), `@nestjs/swagger` 11, Jest unit (`pnpm --filter api test`) and e2e against real Postgres (`pnpm --filter api test:e2e`), pnpm workspace + Turborepo.
+**Tech Stack:** NestJS 11 (`@nestjs/core` `DiscoveryService`/`MetadataScanner`/`Reflector`, `@nestjs/common/constants`), `@nestjs/platform-express` (Express 5.2.1 `router.stack`), `@nestjs/swagger` 11, Jest unit (`pnpm --filter api test`) and e2e against real Postgres (`pnpm --filter api test:e2e`), pnpm workspace + Turborepo.
 
 **Spec:** `docs/superpowers/specs/2026-09-23-multi-tenant-architecture-design.md`
 
@@ -29,7 +38,7 @@ These are planning decisions for this slice. They add no product semantics beyon
 2. **HTTP route authorization guard** (`apps/api/test/http-route-authorization.e2e-spec.ts`), the HTTP counterpart of #90's root-operation suite:
    - **Two inventories, exact match.**
      - *Declared:* every controller from `DiscoveryService.getControllers()`. For each method from `MetadataScanner.getAllMethodNames(prototype)` that carries `METHOD_METADATA`, the route is `<RequestMethod name> /<controller PATH_METADATA>/<method PATH_METADATA>` (slashes collapsed, trailing slash removed, `/` for empty).
-     - *Registered:* every Express `router.stack` layer that has a `route`, one entry per `route.methods` key, upper-cased: `<METHOD> <route.path>`.
+     - *Registered:* every Express `router.stack` layer that has a `route`, one entry per `route.methods` key, upper-cased: `<METHOD> <route.path>`. This deliberately couples the guard to Express internals: Express **5.2.1**, as installed through `@nestjs/platform-express` 11, exposes `app.router.stack`. The reader first asserts that `router.stack` is an array. If it is not, it fails with a named error stating the Express-shape dependency, rather than an opaque `Cannot read properties of undefined`.
      - The two sets must be equal, with no duplicate in either.
      - Fail closed on metadata this guard does not model: a non-string or array controller/method path, `VERSION_METADATA` on a controller or handler, or a `RequestMethod` that is not one of `GET`/`POST`/`PUT`/`PATCH`/`DELETE`.
    - **Exact classification table** keyed by `"<METHOD> <path>"`, no wildcards or prefixes. The table must equal the registered set in both directions, so a new route fails until classified and a stale entry fails too. Current table:
@@ -46,7 +55,9 @@ These are planning decisions for this slice. They add no product semantics beyon
    - **Guards and roles, read the way Nest resolves them.**
      - Guards: class-level `GUARDS_METADATA` followed by method-level `GUARDS_METADATA`. That is the order `GuardsContextCreator` builds from the controller class and the handler function the router invokes. The handler is `prototype[methodName]` of the live controller's metatype.
      - Roles: `Reflector.getAllAndOverride(ROLES_KEY, [handler, class])`. This is the exact call `AuthGuard.canActivate` makes, and the suite uses the app's own `Reflector`.
-     - Global guards: the suite asserts the application has none: `ApplicationConfig.getGlobalGuards()` and `getGlobalRequestGuards()` are both empty. Otherwise a global guard could change effective auth outside the per-route metadata.
+     - Global guards are **not** asserted absent; the RFC requires no such invariant. `GuardsContextCreator` runs global guards and then route guards (`globalGuards.concat(scopedGuards)`), and every guard must pass. A global guard can therefore only add restrictions and can never weaken a route's `AuthGuard`/roles requirement. The live 401 probe measures the effective result.
+     - **Owner.** Nest scans inherited methods too (`MetadataScanner.getAllMethodNames` walks the prototype chain) and invokes `prototype[methodName]`. The inventory therefore records `owner` as `<Controller>.<method>`, which is the controller Nest routes to, plus `declaredOn`: the class in that prototype chain that actually defines the function. Both appear in every per-route assertion object, so a failure names the route's real handler. `declaredOn` is diagnostic only. No rule depends on inheritance, and today's two controllers declare their handlers directly.
+     - **`AuthGuard` identity.** The check is `guards.includes(AuthGuard)`, the class reference. It deliberately pins the repository's **current declared mechanism**, class-level `@UseGuards(AuthGuard)` on `BookingController`. It is not a generic Nest authorization guarantee: a guard applied as an instance or through another wrapper fails the check, and the suite must then be revised consciously.
    - **Class rules.**
      - `PUBLIC_DEV_ONLY`: no `AuthGuard`, no roles.
      - `TENANT_VIEW`: guards contain `AuthGuard`, and roles **equal** `VIEW_ROLES`.
@@ -58,14 +69,15 @@ These are planning decisions for this slice. They add no product semantics beyon
      - `GET /graphiql` returns 200 `text/html`.
      - `GET /graphiql/extra` and `GET /bookings/<uuid>/extra` return 404, which pins that the allowlist is exact and not a prefix.
    - **GraphiQL dev-only** is pinned by a unit test. With `NODE_ENV=production` set before `graphql.module` is loaded (`jest.isolateModules`), `GraphqlModule`'s `controllers` metadata is empty; with `NODE_ENV=test` it is `[GraphiqlController]`.
-   - **Limits, stated in the suite header:** these are metadata and route-table checks plus unauthenticated probes. They do not replace the runtime two-tenant suites. Middleware mounts (`/graphql` Apollo, CORS, body parsers, static assets) are not routes and are out of scope: GraphQL is covered by #90's suites, and `/docs` by decision 3.
+   - **Limits, stated in the suite header:** these are metadata and route-table checks plus unauthenticated probes. They do not replace the runtime two-tenant suites. Middleware mounts (`/graphql` Apollo, CORS, body parsers, static assets) are not routes and are out of scope: GraphQL is covered by #90's suites. The Swagger routes (`/docs*`, `/docs-json`, `/docs-yaml`) are not in this inventory because they are registered by `main.ts` via `setupApiDocs`, not by `AppModule`. The Swagger suite owns them (decision 3).
 3. **Swagger `/docs` is mounted outside production only.**
    - `main.ts`'s inline Swagger block moves verbatim into `src/platform/openapi/setup-api-docs.ts` as `setupApiDocs(app: INestApplication, nodeEnv: string | undefined): void`. It mounts at `docs` iff `nodeEnv !== 'production'`, the same rule as `GraphqlModule`'s GraphiQL.
    - `main.ts` calls `setupApiDocs(app, process.env.NODE_ENV)`.
-   - The `DocumentBuilder` title, description and version, the mount path `docs`, and the generated document are **unchanged**. This is about documentation and schema disclosure only. It touches no auth or tenant context, imports nothing from `platform/auth`, and changes no route.
+   - Route ownership: `setupApiDocs` registers `/docs` (UI plus its asset routes), `/docs-json` and `/docs-yaml`. In production, **none** of them is mounted. Outside production, all of them are mounted exactly as today.
+   - The `DocumentBuilder` title, description and version, the mount path `docs`, and the documented REST paths and operations are unchanged. The slice is about **mounting**, so it does not claim, or test, a byte-identical OpenAPI document. Schemas, parameters and responses are produced by the same unchanged decorators. This is about documentation and schema disclosure only. It touches no auth or tenant context, imports nothing from `platform/auth`, and changes no route.
    - Pinned by `test/api-docs.e2e-spec.ts`:
-     - **Production:** no `/docs` route layer is registered, and `GET /docs` and `GET /docs-json` return 404.
-     - **Non-production:** `GET /docs` returns 200 HTML. `GET /docs-json` returns the document with today's exact `info` and paths: `/graphiql` (`get`), `/bookings` (`get`, `post`), `/bookings/{id}` (`get`, `patch`, `delete`). These values were captured by a planning-time probe against `main`.
+     - **Production:** no route layer whose path starts with `/docs` is registered, and `GET /docs`, `GET /docs-json` and `GET /docs-yaml` all return 404.
+     - **Non-production:** `GET /docs` returns 200 HTML and `GET /docs-yaml` returns 200. `GET /docs-json` returns today's exact `info` and the same documented paths and operations: `/graphiql` (`get`), `/bookings` (`get`, `post`), `/bookings/{id}` (`get`, `patch`, `delete`). These values were captured by a planning-time probe against `main`.
 4. **REST parity for cross-tenant references.**
    - Before this slice, `bookings.tenant-isolation` Case 5 pinned the 404 for another tenant's `customerId`/`propertyId`/`serviceId`/`teamId` on create through GraphQL only.
    - On REST, only `teamId` was covered (`teams-cleaners.tenant-isolation`), and only on `PATCH`/`POST`.
@@ -95,7 +107,9 @@ These are planning decisions for this slice. They add no product semantics beyon
 
 - RFC §4.5: tenant id only from `AuthenticatedPrincipal.tenantId`; REST `/bookings` stays authenticated and tenant-isolated; cross-tenant is 404, never 403.
 - RFC §4.2: no REST route grants `SUPER_ADMIN`.
-- No change to any REST route, DTO, response shape, role set, audit event, GraphQL operation, `schema.gql`, migration, or the generated OpenAPI document (decision 3).
+- No change to any REST route, DTO, response shape, role set, audit event, GraphQL operation, `schema.gql`, migration, or the documented REST paths and operations (decision 3).
+- Route ownership: the HTTP route guard (Task 1) owns every controller route `AppModule` registers. The Swagger suite (Task 2) owns `/docs`, `/docs-json` and `/docs-yaml`, which only `main.ts` registers via `setupApiDocs`: none of them in production, all of them unchanged elsewhere.
+- The route guard's registered inventory depends on Express 5's `router.stack` shape (installed 5.2.1). A shape change must fail with a named error (decision 2).
 - `setupApiDocs` must not depend on auth or tenant context (decision 3).
 - Allowlists are exact `(METHOD, path)` keys with no prefix or wildcard (decision 2).
 - RFC text is edited only in the Tracking cell and the one §10 bullet (decision 6). Historical plans and specs are untouched.
@@ -107,8 +121,8 @@ Failure modes the design implies that no existing test exercises, most likely fi
 
 1. **A route that is registered but not declared, or declared under a different path** (path normalization, a future global prefix or versioning) would slip past a metadata-only guard. Pinned in Task 1: the declared and Express-registered inventories must be equal, and versioning metadata fails closed.
 2. **A prefix-style allowlist** would make `/graphiql/anything` or `/docs/foo` public. Pinned in Task 1: exact-key table equality plus 404 probes on `GET /graphiql/extra` and `GET /bookings/<uuid>/extra`.
-3. **Roles present on the class but overridden on the handler**, or a global guard, changes effective authorization without changing per-method metadata. Pinned in Task 1: roles are read with the app's `Reflector.getAllAndOverride([handler, class])`, global guards are asserted empty, and the live 401 probe runs.
-4. **Swagger gating that also changes the document** (title, paths) or mounts at a different path. Pinned in Task 2: exact `info` and paths in non-production, and no `/docs*` layers plus 404s in production.
+3. **Roles present on the class but overridden on the handler** change effective authorization without changing class metadata. Pinned in Task 1: roles are read with the app's `Reflector.getAllAndOverride([handler, class])`, and the live 401 probe measures the effective result, global guards included.
+4. **Swagger gating that also changes what is documented** (title, paths, operations), or that misses `/docs-json` or `/docs-yaml`. Pinned in Task 2: exact `info`, paths and operations in non-production, and no `/docs*` layers plus 404 on all three in production.
 5. **Deleting a workspace package breaks the lockfile or a turbo pipeline.** Pinned in Task 4: `pnpm install --frozen-lockfile` and the workspace `build`/`lint`/`test` pass.
 
 ---
@@ -121,7 +135,7 @@ Failure modes the design implies that no existing test exercises, most likely fi
 - Create: `apps/api/src/platform/graphql/tests/graphiql-dev-only.spec.ts`
 
 **Interfaces:**
-- Produces: `collectDeclaredRoutes(app: INestApplication): DeclaredRoute[]`, `collectRegisteredRoutes(app: INestApplication): string[]`, `routeKey(method: string, path: string): string`, and `type DeclaredRoute = { key: string; owner: string; guards: unknown[]; roles: Role[] | undefined }`.
+- Produces: `collectDeclaredRoutes(app: INestApplication): DeclaredRoute[]`, `collectRegisteredRoutes(app: INestApplication): string[]`, `routeKey(method: string, path: string): string`, and `type DeclaredRoute = { key: string; owner: string; declaredOn: string; guards: unknown[]; roles: Role[] | undefined }`.
 
 The helper is deliberately separate from #90's `graphql-surface.ts`. That file is left untouched in this slice; merging the two readers is an M8 candidate, not #91 scope.
 
@@ -142,7 +156,11 @@ import type { Role } from '../../src/platform/auth/domain/role';
 
 export interface DeclaredRoute {
   key: string;
+  // `<Controller>.<method>`: the controller Nest routes to.
   owner: string;
+  // The class in that controller's prototype chain that defines the
+  // handler (MetadataScanner also returns inherited methods). Diagnostic.
+  declaredOn: string;
   guards: unknown[];
   roles: Role[] | undefined;
 }
@@ -152,6 +170,19 @@ const SUPPORTED_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 export function routeKey(method: string, path: string): string {
   const normalized = `/${path}`.replace(/\/+/g, '/').replace(/(.)\/$/, '$1');
   return `${method.toUpperCase()} ${normalized}`;
+}
+
+function declaringClass(prototype: object, methodName: string): string {
+  for (
+    let current: object | null = prototype;
+    current;
+    current = Object.getPrototypeOf(current) as object | null
+  ) {
+    if (Object.prototype.hasOwnProperty.call(current, methodName)) {
+      return (current as { constructor: { name: string } }).constructor.name;
+    }
+  }
+  throw new Error(`${methodName}: no declaring class in the prototype chain`);
 }
 
 function singlePath(value: unknown, where: string): string {
@@ -204,6 +235,7 @@ export function collectDeclaredRoutes(app: INestApplication): DeclaredRoute[] {
       routes.push({
         key: routeKey(method, `${basePath}/${path}`),
         owner,
+        declaredOn: declaringClass(prototype, methodName),
         guards: [
           ...((Reflect.getMetadata(GUARDS_METADATA, controller) as
             unknown[] | undefined) ?? []),
@@ -227,11 +259,20 @@ interface ExpressLayer {
 // Registered inventory: the Express route layers that actually serve
 // requests. Middleware mounts (Apollo `/graphql`, CORS, body parsers,
 // static assets) carry no `route` and are out of scope (suite header).
+// Deliberately coupled to Express 5's internal `app.router.stack` (5.2.1
+// via @nestjs/platform-express 11); a shape change fails here by name.
 export function collectRegisteredRoutes(app: INestApplication): string[] {
   const instance = app.getHttpAdapter().getInstance() as {
-    router: { stack: ExpressLayer[] };
+    router?: { stack?: unknown };
   };
-  return instance.router.stack.flatMap((layer) =>
+  const stack = instance.router?.stack;
+  if (!Array.isArray(stack)) {
+    throw new Error(
+      'collectRegisteredRoutes: expected Express 5 `app.router.stack` to be an array; ' +
+        'the Express router shape changed, so update this reader',
+    );
+  }
+  return (stack as ExpressLayer[]).flatMap((layer) =>
     layer.route
       ? Object.keys(layer.route.methods).map((method) =>
           routeKey(method, layer.route!.path),
@@ -246,7 +287,7 @@ export function collectRegisteredRoutes(app: INestApplication): string[] {
 ```ts
 // apps/api/test/http-route-authorization.e2e-spec.ts
 import { INestApplication } from '@nestjs/common';
-import { ApplicationConfig, DiscoveryModule } from '@nestjs/core';
+import { DiscoveryModule } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
 import { randomUUID } from 'crypto';
@@ -272,10 +313,16 @@ import {
 // table below, and carry the guards/roles its class requires, read the
 // way Nest resolves them at runtime. Limits: metadata + route-table checks
 // plus unauthenticated probes. They complement, not replace, the two-tenant
-// runtime suites. Middleware mounts (`/graphql`, CORS, body parsers,
-// static assets) are not routes: GraphQL is covered by #90's suites, and
-// Swagger `/docs` (mounted only by `main.ts`, never in this boot) by
-// `api-docs.e2e-spec.ts`.
+// runtime suites. Scope: the controller routes `AppModule` registers.
+// Middleware mounts (`/graphql`, CORS, body parsers, static assets) are not
+// routes: GraphQL is covered by #90's suites. Swagger's `/docs`,
+// `/docs-json` and `/docs-yaml` are registered only by `main.ts` via
+// `setupApiDocs`, never in this boot, and are owned by
+// `api-docs.e2e-spec.ts`. Global guards are not asserted absent: Nest
+// runs them before route guards and all must pass, so they can only add
+// restrictions; the 401 probe measures the effective result. The
+// `AuthGuard` check pins the current declared mechanism (class-level
+// `@UseGuards(AuthGuard)`), not a generic Nest guarantee.
 type RouteClass = 'PUBLIC_DEV_ONLY' | 'TENANT_VIEW' | 'TENANT_WRITE';
 
 const ROUTE_CLASSIFICATION: Record<string, RouteClass> = {
@@ -312,6 +359,17 @@ describe('HTTP route authorization (#91 guard)', () => {
     expect(process.env.NODE_ENV).not.toBe('production');
   });
 
+  it('records the controller Nest routes to and the declaring class for every route', () => {
+    expect(
+      declared.map(({ key, owner, declaredOn }) => ({ key, owner, declaredOn })),
+    ).toEqual(
+      expect.arrayContaining([
+        { key: 'GET /graphiql', owner: 'GraphiqlController.serve', declaredOn: 'GraphiqlController' },
+        { key: 'DELETE /bookings/:id', owner: 'BookingController.remove', declaredOn: 'BookingController' },
+      ]),
+    );
+  });
+
   it('registers exactly the declared controller routes, without duplicates', () => {
     const declaredKeys = declared.map((route) => route.key);
     expect(new Set(declaredKeys).size).toBe(declaredKeys.length);
@@ -325,18 +383,15 @@ describe('HTTP route authorization (#91 guard)', () => {
     );
   });
 
-  it('has no global guards that would bypass per-route metadata', () => {
-    const config = (app as unknown as { config: ApplicationConfig }).config;
-    expect(config.getGlobalGuards()).toEqual([]);
-    expect(config.getGlobalRequestGuards()).toEqual([]);
-  });
-
   it('grants SUPER_ADMIN on no route', () => {
     expect(VIEW_ROLES).not.toContain(Role.SUPER_ADMIN);
     expect(WRITE_ROLES).not.toContain(Role.SUPER_ADMIN);
     for (const route of declared) {
-      expect({ route: route.key, roles: route.roles ?? [] }).toEqual({
-        route: route.key,
+      const { key, owner, declaredOn } = route;
+      expect({ key, owner, declaredOn, roles: route.roles ?? [] }).toEqual({
+        key,
+        owner,
+        declaredOn,
         roles: expect.not.arrayContaining([Role.SUPER_ADMIN]),
       });
     }
@@ -349,12 +404,15 @@ describe('HTTP route authorization (#91 guard)', () => {
       TENANT_WRITE: { hasAuthGuard: true, roles: [...WRITE_ROLES] },
     };
     for (const route of declared) {
-      const routeClass = ROUTE_CLASSIFICATION[route.key];
+      const { key, owner, declaredOn } = route;
+      const routeClass = ROUTE_CLASSIFICATION[key];
       expect({
-        route: route.key,
+        key,
+        owner,
+        declaredOn,
         hasAuthGuard: route.guards.includes(AuthGuard),
         roles: route.roles ? [...route.roles] : undefined,
-      }).toEqual({ route: route.key, ...expected[routeClass] });
+      }).toEqual({ key, owner, declaredOn, ...expected[routeClass] });
     }
   });
 
@@ -480,7 +538,8 @@ import { collectRegisteredRoutes } from './helpers/http-surface';
 
 // #91 decision 3: Swagger is a documentation/schema-disclosure surface,
 // mounted only outside production (the GraphiQL rule). The document itself
-// is unchanged; the expected values were captured from `main` at planning.
+// documents the same paths and operations; the expected values were
+// captured from `main` at planning.
 async function bootWithDocs(nodeEnv: string): Promise<INestApplication<App>> {
   const moduleFixture = await Test.createTestingModule({
     imports: [AppModule],
@@ -509,10 +568,14 @@ describe('API docs (Swagger) mounting (#91)', () => {
       ).toEqual([]);
     });
 
-    it('serves neither the UI nor the document', async () => {
+    it('serves none of /docs, /docs-json, /docs-yaml', async () => {
       const server = app.getHttpServer();
-      expect((await request(server).get('/docs')).status).toBe(404);
-      expect((await request(server).get('/docs-json')).status).toBe(404);
+      for (const path of ['/docs', '/docs-json', '/docs-yaml']) {
+        expect({ path, status: (await request(server).get(path)).status }).toEqual({
+          path,
+          status: 404,
+        });
+      }
     });
   });
 
@@ -525,13 +588,16 @@ describe('API docs (Swagger) mounting (#91)', () => {
       await app.close();
     });
 
-    it('serves the Swagger UI', async () => {
-      const res = await request(app.getHttpServer()).get('/docs');
-      expect(res.status).toBe(200);
-      expect(res.headers['content-type']).toMatch(/text\/html/);
+    it('serves the Swagger UI and the YAML document', async () => {
+      const ui = await request(app.getHttpServer()).get('/docs');
+      expect(ui.status).toBe(200);
+      expect(ui.headers['content-type']).toMatch(/text\/html/);
+      expect((await request(app.getHttpServer()).get('/docs-yaml')).status).toBe(200);
     });
 
-    it('serves the unchanged OpenAPI document', async () => {
+    // Mounting slice: pins the same info and documented paths/operations,
+    // not a byte-identical OpenAPI document (decision 3).
+    it('documents the same REST paths and operations', async () => {
       const res = await request(app.getHttpServer()).get('/docs-json');
       expect(res.status).toBe(200);
       const doc = res.body as {
@@ -578,7 +644,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 // Swagger UI (`/docs`) and the raw document (`/docs-json`, `/docs-yaml`)
 // are a schema-disclosure/dev tool, like GraphiQL, so they follow the same
 // rule: mounted only when NODE_ENV is not 'production' (#91 decision 3;
-// see graphql.module.ts for GraphiQL). The document itself is unchanged.
+// see graphql.module.ts for GraphiQL). What is documented is unchanged.
 // Deliberately independent of auth and tenant context.
 export function setupApiDocs(
   app: INestApplication,
@@ -687,7 +753,7 @@ If `BookingEntity` exposes the team as a relation rather than a `teamId` column,
 - [ ] **Step 2: Run and verify it passes**
 
 Run: `pnpm --filter api test:e2e -- bookings.tenant-isolation`
-Expected: PASS (6 new tests).
+Expected: PASS, with one REST positive control, one test per existing `CROSS_TENANT_REFERENCE_CASES` entry, and one REST PATCH test.
 
 - [ ] **Step 3: Prove it bites (throwaway, not committed)**
 
@@ -715,8 +781,8 @@ TDD does not apply (deletion plus docs). Verification: lockfile, workspace build
 
 ```bash
 git rm -r apps/worker
-pnpm install
-git diff --stat pnpm-lock.yaml   # expect only the `apps/worker: {}` importer removed
+pnpm install   # lockfile regeneration only, not validation (Step 3 validates)
+git diff pnpm-lock.yaml   # expect only the `apps/worker: {}` importer removed
 ```
 
 If the lockfile diff touches anything other than the `apps/worker` importer, stop and report it.
@@ -733,10 +799,10 @@ If the lockfile diff touches anything other than the `apps/worker` importer, sto
 ```bash
 pnpm install --frozen-lockfile
 pnpm build
-grep -rn "apps/worker\|worker/ " --include=*.md --include=*.ts --include=*.json --include=*.yaml --include=*.yml . | grep -v node_modules | grep -v "docs/superpowers/"
+git grep -n -E 'apps/worker|worker/ ' -- ':!docs/superpowers/'
 ```
 
-Expected: the install and build succeed, and the grep prints nothing. Historical specs and plans are excluded on purpose.
+Expected: `pnpm install --frozen-lockfile` passes (the invariant for the final tree), the build succeeds, and `git grep` finds nothing (exit 1). It scans tracked files only. Historical specs and plans are excluded on purpose.
 
 - [ ] **Step 4: Commit**
 
@@ -771,10 +837,10 @@ git rm -r packages/ui/src/domain
 
 ```bash
 pnpm --filter @clensy/ui build && pnpm --filter @clensy/ui lint && pnpm --filter @clensy/ui test
-grep -rn "src/domain\|domain/" packages/ui --include=*.md --include=*.ts --include=*.tsx --include=*.json | grep -v node_modules
+git grep -n -E 'src/domain|domain/' -- packages/ui
 ```
 
-Expected: all three pass, and the grep prints nothing.
+Expected: all three pass, and `git grep` finds nothing (exit 1).
 
 - [ ] **Step 4: Commit**
 
@@ -805,9 +871,9 @@ TDD does not apply (docs). Verification: the full suites below.
 ```markdown
 ## Legacy REST & surface cleanup (#91)
 
-REST `/bookings` stays as the REST/GraphQL comparison surface. It is authenticated with the same session cookie, roles and tenant scope as GraphQL (#85), which resolves the RFC §10 "delete or rebuild" question: kept, authenticated, tenant-scoped. A new e2e guard (`apps/api/test/http-route-authorization.e2e-spec.ts`) checks every HTTP route on each run. The routes Nest declares must match the routes Express serves exactly. Each route must be listed in an exact classification table. Tenant routes must use `AuthGuard` with GraphQL's own view or write role set, which never includes Super Admin. Every tenant route must return 401 without a session. The only public route is GraphiQL, which is dev-only. These are metadata and route-table checks; the two-tenant suites remain the runtime proof of isolation. REST cross-tenant references (another tenant's customer, property, service or team) are now pinned as 404 alongside the GraphQL cases.
+REST `/bookings` stays as the REST/GraphQL comparison surface. It is authenticated with the same session cookie, roles and tenant scope as GraphQL (#85), which resolves the RFC §10 "delete or rebuild" question: kept, authenticated, tenant-scoped. A new e2e guard (`apps/api/test/http-route-authorization.e2e-spec.ts`) checks every controller route on each run. The routes Nest declares must match the routes Express serves exactly. Each route must be listed in an exact classification table. Tenant routes must use `AuthGuard` with GraphQL's own view or write role set, which never includes Super Admin. Every tenant route must return 401 without a session. The only public route is GraphiQL, which is dev-only. The guard covers the controller routes `AppModule` registers. The Swagger routes are covered by their own suite. These are metadata and route-table checks; the two-tenant suites remain the runtime proof of isolation. REST cross-tenant references (another tenant's customer, property, service or team) are now pinned as 404 alongside the GraphQL cases.
 
-Swagger UI (`/docs`, `/docs-json`, `/docs-yaml`) is now mounted only outside production, the same rule as GraphiQL. The OpenAPI document itself is unchanged.
+Swagger (`/docs`, `/docs-json`, `/docs-yaml`) is now mounted only outside production, the same rule as GraphiQL. In production none of the three is served. Elsewhere they are unchanged and document the same REST paths and operations.
 
 Removed: the unimplemented `apps/worker` placeholder and the empty legacy `packages/ui/src/domain/` directory. Domain composition lives in `@clensy/web`.
 ```
