@@ -32,7 +32,7 @@ Shipped in this slice (PR [#95](https://github.com/rexescario-dev/clensy-platfor
 
 Every Customer/Property read and write uses the tenant of the logged-in user. That covers the services, the `customers`, `customerProperties`, `customer` and `property` queries, the create and update mutations, and the `customer`/`property` relations on Booking, Invoice and LaundryOrder. Another tenant's row behaves exactly like a missing one: null, NotFound, or an empty connection, never 403. Bookings and Laundry look customers up within the caller's tenant. The unauthenticated REST `POST /bookings` now fails with 404; its GET, PATCH and DELETE are unchanged. Booking, Invoice, LaundryOrder and the catalog are **not** tenant-scoped yet; that comes in later slices (#83–#87).
 
-**Known interim gap:** relation *filters* on Booking, Invoice and LaundryOrder (for example `filter: { customer: { fullName: … } }`) are not tenant-scoped until #85/#87. Do not provision a second production tenant before those slices land.
+**Interim gap resolved:** relation filters on Booking, Invoice and LaundryOrder are tenant-scoped since #85 and #87 (their types carry the tenant read authorizer). See "Tenant-aware audit & security sweep (#90)" below for the current state.
 
 - Spec (Accepted): [2026-09-23-multi-tenant-architecture-design.md](superpowers/specs/2026-09-23-multi-tenant-architecture-design.md)
 - Plan (Accepted): [2026-09-24-customer-property-tenant-isolation-plan.md](superpowers/plans/2026-09-24-customer-property-tenant-isolation-plan.md)
@@ -47,7 +47,7 @@ Shipped in this slice (PR [#96](https://github.com/rexescario-dev/clensy-platfor
 
 Every Team/Cleaner read and write uses the tenant of the logged-in user. That covers the services, the `teams`/`cleaners` lists and counts, the `team`/`cleaner` queries, the four mutations (`createTeam`, `createCleaner`, `updateCleaner`, `assignCleanerToTeam`), and the `Team.cleaners`, `Cleaner.team`, `CleaningJob.team` and `Booking.team` relations. Another tenant's row behaves exactly like a missing one: null, NotFound, or empty, never 403. Bookings and Jobs look teams up within the caller's tenant. The unauthenticated REST `PATCH /bookings/:id` with a `teamId` now fails with 404 (`POST` was already 404 since #82); `GET`/`DELETE` and `PATCH` without a `teamId` are unchanged.
 
-**Known interim gap:** `Booking.team` relation *filters* are not tenant-scoped, and the `booking`/`job` team foreign keys stay id-only, until #85/#86. Do not provision a second production tenant before those slices land.
+**Interim gap resolved:** `Booking.team` filters are tenant-scoped (#85), and the booking and job team foreign keys are tenant-aware composites (`fk_booking_team_tenant`, `fk_cleaning_job_team_tenant`; #85, #86).
 
 - Spec (Accepted): [2026-09-23-multi-tenant-architecture-design.md](superpowers/specs/2026-09-23-multi-tenant-architecture-design.md)
 - Plan (Accepted): [2026-09-27-teams-cleaners-tenant-isolation-plan.md](superpowers/plans/2026-09-27-teams-cleaners-tenant-isolation-plan.md)
@@ -62,7 +62,7 @@ Shipped in this slice (PR [#97](https://github.com/rexescario-dev/clensy-platfor
 
 Every Catalog read and write uses the tenant of the logged-in user. That covers the services, the `services`/`addOns` lists and counts, the `service` and `activePricing(serviceId)` queries, `Service.activePricing`, the five mutations (`createService`, `updateService`, `createAddOn`, `updateAddOn`, `createPricingRule`), and the `Booking.service` relation. Another tenant's row behaves exactly like a missing one: null, NotFound, or empty, never 403 — laundry pricing and invoice generation keep their existing 400s for a catalog row that can't be resolved in the caller's tenant. Bookings, laundry pricing and invoice generation now look catalog rows up within the caller's tenant.
 
-**Known interim gap:** `fk_laundry_order_line_service` and `fk_laundry_order_line_add_on` stay id-only until #87. `fk_booking_service` and `Booking.service` relation *filters* are now tenant-scoped — see #85 below. Until #87, a tenant can price another tenant's unscoped laundry order with its own catalog rows (a cross-tenant line reference); the owner's subsequent invoice generation then fails with the existing 400. Do not provision a second production tenant before that slice lands.
+**Interim gap resolved:** laundry order lines reference services and add-ons through tenant-aware composite foreign keys (`fk_laundry_order_line_service_tenant`, `fk_laundry_order_line_add_on_tenant`), and laundry orders are tenant-scoped (#87), so a tenant can no longer price another tenant's order.
 
 - Spec (Accepted): [2026-09-23-multi-tenant-architecture-design.md](superpowers/specs/2026-09-23-multi-tenant-architecture-design.md)
 - Plan (Accepted): [2026-09-28-catalog-tenant-isolation-plan.md](superpowers/plans/2026-09-28-catalog-tenant-isolation-plan.md)
@@ -78,8 +78,25 @@ REST `/bookings` (kept for the REST/GraphQL comparison) now requires the session
 
 GraphQL now runs interceptors on field resolvers (`fieldResolverEnhancers: ['interceptors']`) so nestjs-query relation tenant filters always apply — this fixed a cross-tenant read through `job(id) { booking }` and also tightens `Invoice.customer`, `LaundryOrder.customer` and `Property.bookings` when reached from custom queries.
 
-**Known interim gap (until #86):** cleaning jobs are not tenant-scoped yet, so a tenant can still list another tenant's job (selecting its `booking` returns an error, not the booking) and can use `jobs(filter: { booking: … })` as an oracle over another tenant's booking scalar fields; nestjs-query's shared per-request authorizer also has a theoretical fail-open window reachable only through that unscoped job root. Booking audit events are not tenant-tagged until #90. Do not provision a second production tenant before #86 and #87 land.
+**Interim gap resolved:** cleaning jobs are tenant-scoped (#86), which closes the cross-tenant job listing, the `jobs(filter: { booking: … })` oracle and the shared-authorizer fail-open path. Booking audit events are tenant-tagged since #90.
 
 - Spec (Accepted): [2026-09-23-multi-tenant-architecture-design.md](superpowers/specs/2026-09-23-multi-tenant-architecture-design.md)
 - Plan (Accepted): [2026-09-28-booking-tenant-isolation-plan.md](superpowers/plans/2026-09-28-booking-tenant-isolation-plan.md)
 - Migrating an existing database: see "Database migrations" in the [root README](../README.md).
+
+## Tenant-aware audit & security sweep (#90)
+
+Shipped in this slice (PR [#107](https://github.com/rexescario-dev/clensy-platform/pull/107)). Every audit event now records a scope that matches its principal. `AuditLogEvent` is a union of tenant (`TENANT` + tenant id), platform (`PLATFORM` + no tenant) and anonymous (no actor, scope or tenant; failed login only) events. The TypeScript compiler checks that shape when `tsc --noEmit` runs (CI does not run it yet). The `tenantAuditTags` / `principalAuditTags` helpers validate the values at runtime, and the `ck_audit_event_scope_tenant` CHECK stays as the last safeguard. Booking create/update/remove events, through GraphQL and REST, are now tagged with the caller's tenant like every other module. A login whose stored scope and tenant disagree is refused instead of producing a session.
+
+**No audit backfill.** The feature has not been published and there is no real production data (the repository has no releases or deployments), so events recorded before #90 are left as they are (no scope or tenant) and no migration rewrites audit history.
+
+**Sweep result.** The planning-time sweep identified no additional tenant-filtering gap within the reviewed surfaces: services and query builders, loaders, REST `/bookings`, and every nestjs-query read resolver, relation and custom object field. Two guard suites now check that metadata on every e2e run:
+- `root-operation-authorization` classifies every root query and mutation as public, authenticated-only, or tenant with roles that exclude Super Admin.
+- `tenant-read-authorizers` requires every nestjs-query read resolver, read surface, object field and tenant-owned entity to be tenant-scoped or explicitly allowlisted with a reason.
+
+These suites are metadata checks that complement, not replace, the per-module two-tenant isolation tests.
+
+**Open: relation-level role authorization ([#106](https://github.com/rexescario-dev/clensy-platform/issues/106)).** Relation fields are tenant-filtered, but their reads are not checked against the target type's read roles. For example, Finance can read a customer's fields through `invoice { customer }` although it cannot call `customers`. Treat relation-level role authorization as not enforced until #106 is resolved. The interim rule stands: do not provision a second production tenant before the [#92](https://github.com/rexescario-dev/clensy-platform/issues/92) release gate passes.
+
+- Spec (Accepted): [2026-09-23-multi-tenant-architecture-design.md](superpowers/specs/2026-09-23-multi-tenant-architecture-design.md)
+- Plan (Accepted): [2026-10-01-tenant-aware-audit-security-sweep-plan.md](superpowers/plans/2026-10-01-tenant-aware-audit-security-sweep-plan.md)
