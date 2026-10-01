@@ -23,6 +23,7 @@ export interface CreateStaffFormProps {
 // @clensy/ui has no grouped-select primitive and this slice adds none.
 export function CreateStaffForm({ values, onChange, errorKey }: CreateStaffFormProps) {
   const t = useClensyTranslations('staff');
+  const tRoles = useClensyTranslations('roles');
 
   return (
     <>
@@ -58,7 +59,7 @@ export function CreateStaffForm({ values, onChange, errorKey }: CreateStaffFormP
             <optgroup key={group.id} label={t(`roleGroups.${group.id}`)}>
               {group.roles.map((role) => (
                 <option key={role} value={role}>
-                  {t(`roles.${role}`)}
+                  {tRoles(role)}
                 </option>
               ))}
             </optgroup>

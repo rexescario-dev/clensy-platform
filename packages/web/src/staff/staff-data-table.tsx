@@ -35,7 +35,7 @@ interface StaffActionOptions {
 export function buildStaffColumns(t: Translate, options: StaffActionOptions): DataTableColumn<StaffMember>[] {
   return [
     { header: t('columns.email'), key: 'email' },
-    { header: t('columns.role'), key: 'role', render: (row) => <RoleLabel role={row.role} t={t} /> },
+    { header: t('columns.role'), key: 'role', render: (row) => <RoleLabel role={row.role} /> },
     { header: t('columns.status'), key: 'status', render: (row) => <StatusLabel isActive={row.isActive} t={t} /> },
     { header: '', key: 'actions', render: (row) => renderDisableAction(row, t, options) },
   ];
@@ -55,7 +55,7 @@ export function StaffDataTable({ staff, currentAdminId, loading, hasError, disab
           <StatusLabel isActive={row.isActive} t={t} />
         </div>
         <div className="flex items-center justify-between pt-1">
-          <RoleLabel role={row.role} t={t} />
+          <RoleLabel role={row.role} />
           {renderDisableAction(row, t, actionOptions)}
         </div>
       </div>
@@ -86,9 +86,10 @@ function renderDisableAction(row: StaffMember, t: Translate, options: StaffActio
   );
 }
 
-function RoleLabel({ role, t }: { role: string; t: Translate }) {
+function RoleLabel({ role }: { role: string }) {
+  const tRoles = useClensyTranslations('roles');
   if (!isStaffRole(role)) return <>{role}</>;
-  const label = t(`roles.${role}`);
+  const label = tRoles(role);
   // Tenant Owner is the tenant's administrator, not an operational role
   // (spec §3) — shown as a badge so the distinction reads at a glance.
   return role === 'TENANT_OWNER' ? <Badge variant="secondary">{label}</Badge> : <>{label}</>;

@@ -42,9 +42,8 @@ describe('staff role contract', () => {
 });
 
 describe('staff namespace completeness', () => {
-  it('resolves every role, group and error key to real text', () => {
+  it('resolves every role group and error key to real text', () => {
     const keys = [
-      ...STAFF_ROLE_OPTIONS.map((role) => `roles.${role}`),
       ...STAFF_ROLE_GROUPS.map((group) => `roleGroups.${group.id}`),
       ...STAFF_ERROR_KEYS.map((key) => `errors.${key}`),
     ];
@@ -54,19 +53,19 @@ describe('staff namespace completeness', () => {
   });
 
   it('uses the agreed English labels', () => {
-    expect(resolvedTexts(['roles.TENANT_OWNER', 'roles.OPS_MANAGER', 'errors.lastTenantOwner'])).toEqual([
+    expect(resolvedTexts(['roleGroups.owner', 'roleGroups.staff', 'errors.lastTenantOwner'])).toEqual([
       'Tenant Owner',
-      'Ops Manager',
+      'Staff',
       "You can&#x27;t disable the last active Tenant Owner. Add another Tenant Owner first.",
     ]);
   });
 
   it('lets an application override staff copy through ClensyI18nProvider', () => {
     const html = renderToStaticMarkup(
-      <ClensyI18nProvider overrides={{ staff: { roles: { FINANCE: 'Billing' } } }}>
-        <Resolve keys={['roles.FINANCE']} />
+      <ClensyI18nProvider overrides={{ staff: { status: { active: 'Enabled' } } }}>
+        <Resolve keys={['status.active']} />
       </ClensyI18nProvider>,
     );
-    expect(html).toContain('Billing');
+    expect(html).toContain('Enabled');
   });
 });

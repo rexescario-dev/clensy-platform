@@ -16,5 +16,7 @@ export { CreateStaffForm } from './staff/create-staff-form';
 export type { CreateStaffFormValues, CreateStaffFormProps } from './staff/create-staff-form';
 export { STAFF_ROLE_GROUPS, STAFF_ROLE_OPTIONS, isStaffRole } from './staff/staff-roles';
 export type { StaffRole } from './staff/staff-roles';
+export { ADMIN_ROLES, ROLE_INITIALS, isAdminRole } from './roles/admin-roles';
+export type { AdminRole } from './roles/admin-roles';
 export { STAFF_ERROR_KEYS } from './staff/staff-errors';
 export type { StaffErrorKey } from './staff/staff-errors';
