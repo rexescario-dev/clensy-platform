@@ -1,6 +1,12 @@
+import type { AdminScope, Role } from '@clensy/client';
+
 export interface NavItem {
   href: string;
   labelKey: string;
+  // UX copy of the destination's API read gate — not authorization
+  // (multi-tenant spec §4.2, §5.13). When the named API constant changes,
+  // change this list and the matrix in nav-groups.test.ts with it.
+  viewRoles: readonly Role[];
 }
 
 export interface NavGroup {
@@ -8,33 +14,96 @@ export interface NavGroup {
   labelKey: string;
 }
 
+export interface NavPrincipal {
+  role: Role;
+  scope: AdminScope;
+}
+
+// Super Admin's landing. Not a nav item: there is no platform navigation
+// yet (multi-tenant spec §10 defers the platform control plane).
+export const PLATFORM_HOME_HREF = '/app/platform';
+
 export const NAV_GROUPS: NavGroup[] = [
   {
     items: [
-      { href: '/app/bookings', labelKey: 'items.bookings' },
-      { href: '/app/jobs', labelKey: 'items.jobs' },
-      { href: '/app/laundry', labelKey: 'items.laundry' },
-      { href: '/app/billing', labelKey: 'items.invoices' },
+      {
+        href: '/app/bookings',
+        labelKey: 'items.bookings',
+        // apps/api/src/modules/bookings/presentation/graphql/booking.dto.ts VIEW_ROLES
+        viewRoles: ['TENANT_OWNER', 'OPS_MANAGER', 'SCHEDULER', 'CUSTOMER_SUPPORT', 'FINANCE', 'ANALYST'],
+      },
+      {
+        href: '/app/jobs',
+        labelKey: 'items.jobs',
+        // apps/api/src/modules/jobs/presentation/graphql/cleaning-job.type.ts VIEW_ROLES
+        viewRoles: ['TENANT_OWNER', 'OPS_MANAGER', 'SCHEDULER', 'CUSTOMER_SUPPORT', 'FINANCE', 'ANALYST'],
+      },
+      {
+        href: '/app/laundry',
+        labelKey: 'items.laundry',
+        // apps/api/src/modules/laundry/presentation/graphql/laundry-order.type.ts VIEW_ROLES
+        viewRoles: ['TENANT_OWNER', 'OPS_MANAGER', 'SCHEDULER', 'CUSTOMER_SUPPORT', 'FINANCE', 'ANALYST'],
+      },
+      {
+        href: '/app/billing',
+        labelKey: 'items.invoices',
+        // apps/api/src/modules/billing/presentation/graphql/invoice.type.ts VIEW_ROLES
+        viewRoles: ['TENANT_OWNER', 'OPS_MANAGER', 'SCHEDULER', 'CUSTOMER_SUPPORT', 'FINANCE', 'ANALYST'],
+      },
     ],
     labelKey: 'groups.operations',
   },
   {
     items: [
-      { href: '/app/customers', labelKey: 'items.customers' },
-      { href: '/app/cleaners', labelKey: 'items.cleaners' },
-      { href: '/app/cleaners/teams', labelKey: 'items.teams' },
+      {
+        href: '/app/customers',
+        labelKey: 'items.customers',
+        // apps/api/src/modules/customers/presentation/graphql/customer.type.ts VIEW_ROLES
+        viewRoles: ['TENANT_OWNER', 'OPS_MANAGER', 'SCHEDULER', 'CUSTOMER_SUPPORT', 'ANALYST'],
+      },
+      {
+        href: '/app/cleaners',
+        labelKey: 'items.cleaners',
+        // apps/api/src/modules/cleaners/presentation/graphql/cleaner.type.ts VIEW_ROLES
+        viewRoles: ['TENANT_OWNER', 'OPS_MANAGER', 'SCHEDULER', 'ANALYST'],
+      },
+      {
+        href: '/app/cleaners/teams',
+        labelKey: 'items.teams',
+        // apps/api/src/modules/cleaners/presentation/graphql/team.type.ts VIEW_ROLES
+        viewRoles: ['TENANT_OWNER', 'OPS_MANAGER', 'SCHEDULER', 'ANALYST'],
+      },
     ],
     labelKey: 'groups.people',
   },
   {
     items: [
-      { href: '/app/catalog', labelKey: 'items.services' },
-      { href: '/app/catalog/add-ons', labelKey: 'items.addOns' },
+      {
+        href: '/app/catalog',
+        labelKey: 'items.services',
+        // apps/api/src/modules/catalog/presentation/graphql/service.type.ts VIEW_ROLES
+        viewRoles: ['TENANT_OWNER', 'OPS_MANAGER', 'SCHEDULER', 'CUSTOMER_SUPPORT', 'FINANCE', 'ANALYST'],
+      },
+      {
+        href: '/app/catalog/add-ons',
+        labelKey: 'items.addOns',
+        // apps/api/src/modules/catalog/presentation/graphql/service.type.ts VIEW_ROLES
+        // (imported by add-on-read.resolver.ts)
+        viewRoles: ['TENANT_OWNER', 'OPS_MANAGER', 'SCHEDULER', 'CUSTOMER_SUPPORT', 'FINANCE', 'ANALYST'],
+      },
     ],
     labelKey: 'groups.catalog',
   },
   {
-    items: [{ href: '/app/admin', labelKey: 'items.staff' }],
+    items: [
+      {
+        href: '/app/admin',
+        labelKey: 'items.staff',
+        // apps/api/src/modules/admins/presentation/graphql/admin.resolver.ts
+        // @Roles(Role.TENANT_OWNER) on `admins`
+        viewRoles: ['TENANT_OWNER'],
+      },
+    ],
     labelKey: 'groups.administration',
   },
 ];
@@ -49,4 +118,23 @@ export function findActiveHref(pathname: string): string | undefined {
       longest === undefined || current.length > longest.length ? current : longest,
     undefined,
   );
+}
+
+// The one landing rule, derived from visibleNavGroups so the sidebar and the
+// `/app` redirect cannot disagree. UX only (multi-tenant spec §5.13).
+export function landingHref(principal: NavPrincipal | null | undefined): string | undefined {
+  if (principal?.scope === 'PLATFORM') return PLATFORM_HOME_HREF;
+  return visibleNavGroups(principal)[0]?.items[0]?.href;
+}
+
+// Scope first, never tenantId (multi-tenant spec §3/§4.1): a platform
+// principal gets no tenant navigation, since the API denies Super Admin
+// every tenant business operation (§4.2). Hiding an item is UX only.
+export function visibleNavGroups(principal: NavPrincipal | null | undefined): NavGroup[] {
+  if (principal?.scope !== 'TENANT') return [];
+  const { role } = principal;
+  return NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => item.viewRoles.includes(role)),
+  })).filter((group) => group.items.length > 0);
 }
