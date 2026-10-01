@@ -82,4 +82,14 @@ describe('web shell regressions', () => {
   it('retires the apps/web role-presentation helper', () => {
     expect(existsSync(resolve(webRoot, 'lib/role-presentation.ts'))).toBe(false);
   });
+
+  // Final-review fix: a previous account's cached currentAdmin must not drive
+  // the cache-first sidebar/user menu after another account logs in on the
+  // same tab (no tenant-nav flash for a Super Admin, plan Review Focus 2).
+  it('clears the Apollo cache on successful login before entering /app', () => {
+    const login = readWebSource('app/login/page.tsx');
+    const handleLogin = /async function handleLogin[\s\S]*?\n {2}\}/.exec(login)?.[0] ?? '';
+
+    expect(handleLogin).toMatch(/await apolloClient\.clearStore\(\);\s*router\.push\('\/app'\)/);
+  });
 });
