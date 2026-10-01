@@ -21,8 +21,8 @@ packages/
 │             LoadingState, EmptyState, ErrorState
 ├── web/      reusable Clensy domain components (components representing a Clensy
 │             business concept), positioned between @clensy/ui and apps/web —
-│             auth/LoginForm, bookings/BookingDataTable and staff/StaffDataTable +
-│             staff/CreateStaffForm. See
+│             auth/LoginForm, bookings/BookingDataTable, staff/StaffDataTable +
+│             staff/CreateStaffForm, and roles/ (shared role identity + labels). See
 │             packages/web/README.md for the boundary rules.
 ├── client/   Apollo Client + graphql-codegen-generated hooks against apps/api's schema
 ├── validation/ Laravel-inspired rule strings, field-error contract, React Hook Form
