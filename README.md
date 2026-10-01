@@ -140,9 +140,9 @@ The same run also seeds a dev `TENANT_OWNER` `AdminUser` of the migration-create
 | Web console | http://localhost:3001 | Next.js — `/login` (public); `/app/*` shell (protected): `/app`, `/app/admin` (staff/roles for the signed-in Tenant Owner's own tenant, Tenant-Owner-only), `/app/customers`, `/app/cleaners`, `/app/cleaners/teams`, `/app/catalog`, `/app/catalog/add-ons`, `/app/bookings`, `/app/jobs` |
 | GraphQL API | http://localhost:3000/graphql | queries/mutations for `bookings`, `admins`, `customers`/`properties`, `cleaners`/`teams`, `catalog` (`services`/`addOns`/`activePricing`), `jobs` (`job`/`jobs`/`createJobFromBooking`/`assignTeamToJob`/`completeChecklistItem`/`completeJob`) — API only, no browser landing page |
 | GraphQL IDE (GraphiQL) | http://localhost:3000/graphiql | separate route, dev-only (see below) |
-| REST API | http://localhost:3000/bookings | full CRUD — `bookings` only, authenticated with the same session cookie, roles and tenant scope as GraphQL; kept for the REST/GraphQL comparison; `admins`/`customers`/`cleaners`/`catalog`/`jobs` are GraphQL-only |
-| REST docs (Swagger UI) | http://localhost:3000/docs | interactive explorer, equivalent to GraphiQL |
-| OpenAPI spec | http://localhost:3000/docs-json | raw JSON |
+| REST API | http://localhost:3000/bookings | full CRUD — `bookings` only, authenticated with the same session cookie, roles and tenant scope as GraphQL; kept for the REST/GraphQL comparison; `admins`/`customers`/`cleaners`/`catalog`/`jobs` are GraphQL-only; every HTTP route is checked by the #91 route guard |
+| REST docs (Swagger UI) | http://localhost:3000/docs | interactive explorer, equivalent to GraphiQL — dev-only (not mounted when NODE_ENV=production) |
+| OpenAPI spec | http://localhost:3000/docs-json | raw JSON — dev-only, with /docs |
 
 ## GraphQL IDE
 

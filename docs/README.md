@@ -100,3 +100,11 @@ These suites are metadata checks that complement, not replace, the per-module tw
 
 - Spec (Accepted): [2026-09-23-multi-tenant-architecture-design.md](superpowers/specs/2026-09-23-multi-tenant-architecture-design.md)
 - Plan (Accepted): [2026-10-01-tenant-aware-audit-security-sweep-plan.md](superpowers/plans/2026-10-01-tenant-aware-audit-security-sweep-plan.md)
+
+## Legacy REST & surface cleanup (#91)
+
+REST `/bookings` stays as the REST/GraphQL comparison surface. It is authenticated with the same session cookie, roles and tenant scope as GraphQL (#85), which resolves the RFC §10 "delete or rebuild" question: kept, authenticated, tenant-scoped. A new e2e guard (`apps/api/test/http-route-authorization.e2e-spec.ts`) checks every controller route on each run. The routes Nest declares must match the routes Express serves exactly. Each route must be listed in an exact classification table. Tenant routes must use `AuthGuard` with GraphQL's own view or write role set, which never includes Super Admin. Every tenant route must return 401 without a session. The only public route is GraphiQL, which is dev-only. The guard covers the controller routes `AppModule` registers. The Swagger routes are covered by their own suite. These are metadata and route-table checks; the two-tenant suites remain the runtime proof of isolation. REST cross-tenant references (another tenant's customer, property, service or team) are now pinned as 404 alongside the GraphQL cases.
+
+Swagger (`/docs`, `/docs-json`, `/docs-yaml`) is now mounted only outside production, the same rule as GraphiQL. In production none of the three is served. Elsewhere they are unchanged and document the same REST paths and operations.
+
+Removed: the unimplemented `apps/worker` placeholder and the empty legacy `packages/ui/src/domain/` directory. Domain composition lives in `@clensy/web`.
