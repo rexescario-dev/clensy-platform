@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -64,5 +64,22 @@ describe('web shell regressions', () => {
     expect(platform).not.toContain('@clensy/client');
     expect(platform).not.toContain('@apollo/client');
     expect(platform).not.toContain('fetch(');
+  });
+
+  it('presents identity through @clensy/web roles and accountIdentity, with no hard-coded copy', () => {
+    const userMenu = readWebSource('components/layout/user-menu.tsx');
+
+    expect(userMenu).toContain('<ClensyI18nProvider');
+    expect(userMenu).toContain("useClensyTranslations('roles')");
+    expect(userMenu).toContain('accountIdentity(data?.currentAdmin)');
+    expect(userMenu).not.toContain('role-presentation');
+    expect(userMenu).not.toMatch(/tenantId/);
+    for (const literal of ["'Sign out'", "'Theme'", "'Light'", 'Open user menu', 'Unable to log out']) {
+      expect(userMenu).not.toContain(literal);
+    }
+  });
+
+  it('retires the apps/web role-presentation helper', () => {
+    expect(existsSync(resolve(webRoot, 'lib/role-presentation.ts'))).toBe(false);
   });
 });

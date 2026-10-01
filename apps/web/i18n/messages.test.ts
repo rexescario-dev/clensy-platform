@@ -17,4 +17,17 @@ describe('getMessages', () => {
       title: 'Platform',
     });
   });
+
+  it('carries the user menu copy in nav.userMenu', () => {
+    expect(getMessages().nav.userMenu).toEqual({
+      loadingIdentity: 'Loading user identity',
+      open: 'Open user menu',
+      scope: { platform: 'Platform account', tenant: 'Organization account' },
+      signingOut: 'Logging out…',
+      signOut: 'Sign out',
+      signOutError: 'Unable to log out. Please try again.',
+      theme: 'Theme',
+      themes: { dark: 'Dark', light: 'Light', system: 'System' },
+    });
+  });
 });
