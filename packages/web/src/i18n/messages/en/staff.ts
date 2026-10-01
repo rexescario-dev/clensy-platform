@@ -1,8 +1,7 @@
 // Default `en` messages for the staff console (StaffDataTable,
 // CreateStaffForm and the admin page's own copy). This is the ONLY copy of
 // these strings' English text; apps/web may layer partial overrides via
-// ClensyI18nProvider. Role labels intentionally duplicate
-// apps/web/lib/role-presentation.ts for now — #89 may consolidate them.
+// ClensyI18nProvider. Role labels live in the shared `roles` namespace.
 export const staff = {
   actions: { disable: 'Disable' },
   columns: { email: 'Email', role: 'Role', status: 'Status' },
@@ -39,13 +38,5 @@ export const staff = {
   },
   roleGroups: { owner: 'Tenant Owner', staff: 'Staff' },
   roleHint: { TENANT_OWNER: 'Can manage staff accounts for this organization.' },
-  roles: {
-    ANALYST: 'Analyst',
-    CUSTOMER_SUPPORT: 'Customer Support',
-    FINANCE: 'Finance',
-    OPS_MANAGER: 'Ops Manager',
-    SCHEDULER: 'Scheduler',
-    TENANT_OWNER: 'Tenant Owner',
-  },
   status: { active: 'Active', disabled: 'Disabled' },
 };

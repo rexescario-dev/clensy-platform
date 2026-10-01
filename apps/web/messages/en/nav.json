@@ -23,5 +23,30 @@
     "collapse": "Collapse sidebar",
     "collapseLabel": "Collapse",
     "mobileTitle": "Primary navigation"
+  },
+  "landing": {
+    "empty": "No areas are available for your account.",
+    "loading": "Loading…"
+  },
+  "platform": {
+    "description": "Platform administration is not available yet.",
+    "title": "Platform"
+  },
+  "userMenu": {
+    "loadingIdentity": "Loading user identity",
+    "open": "Open user menu",
+    "scope": {
+      "platform": "Platform account",
+      "tenant": "Organization account"
+    },
+    "signingOut": "Logging out…",
+    "signOut": "Sign out",
+    "signOutError": "Unable to log out. Please try again.",
+    "theme": "Theme",
+    "themes": {
+      "dark": "Dark",
+      "light": "Light",
+      "system": "System"
+    }
   }
 }

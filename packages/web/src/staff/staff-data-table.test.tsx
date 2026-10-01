@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { isValidElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { StaffDataTable, buildStaffColumns, type StaffMember } from './staff-data-table';
+import { ClensyI18nProvider } from '../i18n/i18n-context';
 
 const t = (key: string) => key;
 const me: StaffMember = { id: 'me', email: 'me@a.test', isActive: true, role: 'TENANT_OWNER' };
@@ -70,5 +71,15 @@ describe('StaffDataTable', () => {
     expect(
       renderToStaticMarkup(<StaffDataTable staff={[]} currentAdminId={me.id} hasError onDisable={() => {}} />),
     ).toContain('Unable to load staff accounts.');
+  });
+
+  it('reads role labels from the shared roles namespace', () => {
+    const html = renderToStaticMarkup(
+      <ClensyI18nProvider overrides={{ roles: { FINANCE: 'Billing', TENANT_OWNER: 'Org Owner' } }}>
+        <StaffDataTable staff={[otherOwner, finance]} currentAdminId={me.id} onDisable={() => {}} />
+      </ClensyI18nProvider>,
+    );
+    expect(html).toContain('Billing');
+    expect(html).toMatch(/data-slot="badge"[^>]*>Org Owner</);
   });
 });

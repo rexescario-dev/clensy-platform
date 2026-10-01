@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CreateStaffForm, type CreateStaffFormValues } from './create-staff-form';
 import * as publicApi from '../index';
+import { ClensyI18nProvider } from '../i18n/i18n-context';
 
 const base: CreateStaffFormValues = { email: '', password: '', role: 'CUSTOMER_SUPPORT' };
 const render = (props: Partial<Parameters<typeof CreateStaffForm>[0]> = {}) =>
@@ -41,5 +42,14 @@ describe('CreateStaffForm', () => {
     expect(publicApi.StaffDataTable).toBeTypeOf('function');
     expect(publicApi.STAFF_ROLE_OPTIONS).toContain('TENANT_OWNER');
     expect(publicApi.STAFF_ERROR_KEYS).toContain('lastTenantOwner');
+  });
+
+  it('reads role option labels from the shared roles namespace', () => {
+    const html = renderToStaticMarkup(
+      <ClensyI18nProvider overrides={{ roles: { FINANCE: 'Billing' } }}>
+        <CreateStaffForm values={base} onChange={() => {}} />
+      </ClensyI18nProvider>,
+    );
+    expect(html).toContain('<option value="FINANCE">Billing</option>');
   });
 });

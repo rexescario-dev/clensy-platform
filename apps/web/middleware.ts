@@ -11,10 +11,11 @@ const SESSION_COOKIE_NAME = 'clensy_admin_session';
 // UX-hint-only gate (spec §4.1): checks ONLY whether the session cookie is
 // present, never its validity. It does not decode the JWT and makes no
 // role decision — an expired, invalid, or disabled-account session still
-// has a present cookie and will pass through here. On `/app/admin`
-// specifically, that case is caught downstream by its `currentAdmin` query
-// (a GraphQL error or missing principal); other `/app/*` routes have no
-// equivalent downstream redirect-on-invalid-session logic yet.
+// has a present cookie and will pass through here. On `/app` (the landing
+// page) and `/app/admin`, that case is caught downstream by their
+// `currentAdmin` query (a GraphQL error or missing principal); other
+// `/app/*` routes have no equivalent downstream redirect-on-invalid-session
+// logic yet.
 //
 // The matcher is a single `/app/:path*` pattern covering every route in
 // the shell — Admin, Customers, Cleaners/Teams, and Catalog/Add-ons all

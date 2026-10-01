@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -30,5 +30,65 @@ describe('web shell regressions', () => {
     expect(globalStyles).toMatch(
       /@layer base\s*\{[\s\S]*button:not\(:disabled\)\s*\{[\s\S]*cursor:\s*pointer/,
     );
+  });
+
+  // No DOM test environment exists in this repo, so the shell's wiring to the
+  // pure visibility rules (lib/nav-groups.test.ts) is pinned at source level.
+  it('renders the sidebar from visibleNavGroups(currentAdmin), not the full NAV_GROUPS list', () => {
+    const sidebar = readWebSource('components/layout/app-sidebar.tsx');
+
+    expect(sidebar).toContain('useCurrentAdminQuery(');
+    expect(sidebar).toContain('visibleNavGroups(data?.currentAdmin)');
+    expect(sidebar).not.toContain('NAV_GROUPS');
+    // Both variants (desktop <nav> and mobile Sheet) must receive the
+    // filtered groups — neither may bypass visibleNavGroups.
+    const usages = sidebar.match(/<SidebarNavigation\b[^>]*\/>/g) ?? [];
+    expect(usages).toHaveLength(2);
+    for (const usage of usages) expect(usage).toContain('groups={groups}');
+    expect(sidebar).not.toMatch(/tenantId/);
+  });
+
+  it('lands /app through landingTarget (decision unit-tested in landing-target.test.ts)', () => {
+    const landing = readWebSource('app/app/page.tsx');
+
+    expect(landing).toContain('landingTarget({ currentAdmin, error, loading })');
+    expect(landing).not.toContain('/app/customers');
+    expect(landing).not.toMatch(/tenantId/);
+  });
+
+  it('keeps the platform placeholder presentational with no API calls', () => {
+    const platform = readWebSource('app/app/platform/page.tsx');
+
+    expect(platform).toContain("t('platform.title')");
+    expect(platform).not.toContain('@clensy/client');
+    expect(platform).not.toContain('@apollo/client');
+    expect(platform).not.toContain('fetch(');
+  });
+
+  it('presents identity through @clensy/web roles and accountIdentity, with no hard-coded copy', () => {
+    const userMenu = readWebSource('components/layout/user-menu.tsx');
+
+    expect(userMenu).toContain('<ClensyI18nProvider');
+    expect(userMenu).toContain("useClensyTranslations('roles')");
+    expect(userMenu).toContain('accountIdentity(data?.currentAdmin)');
+    expect(userMenu).not.toContain('role-presentation');
+    expect(userMenu).not.toMatch(/tenantId/);
+    for (const literal of ["'Sign out'", "'Theme'", "'Light'", 'Open user menu', 'Unable to log out']) {
+      expect(userMenu).not.toContain(literal);
+    }
+  });
+
+  it('retires the apps/web role-presentation helper', () => {
+    expect(existsSync(resolve(webRoot, 'lib/role-presentation.ts'))).toBe(false);
+  });
+
+  // Final-review fix: a previous account's cached currentAdmin must not drive
+  // the cache-first sidebar/user menu after another account logs in on the
+  // same tab (no tenant-nav flash for a Super Admin, plan Review Focus 2).
+  it('clears the Apollo cache on successful login before entering /app', () => {
+    const login = readWebSource('app/login/page.tsx');
+    const handleLogin = /async function handleLogin[\s\S]*?\n {2}\}/.exec(login)?.[0] ?? '';
+
+    expect(handleLogin).toMatch(/await apolloClient\.clearStore\(\);\s*router\.push\('\/app'\)/);
   });
 });

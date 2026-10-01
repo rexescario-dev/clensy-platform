@@ -1,11 +1,13 @@
 'use client';
 
+import { useApolloClient } from '@apollo/client';
 import { LoginForm, type LoginFormValues } from '@clensy/web';
 import { useLoginMutation } from '@clensy/client';
 import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
   const router = useRouter();
+  const apolloClient = useApolloClient();
   const [login] = useLoginMutation();
 
   // Spec §4.5 / §3 (errorMessage spec): on success the API has already set
@@ -20,6 +22,11 @@ export default function LoginPage() {
     if (!result.data?.login.success) {
       throw new Error('Login failed');
     }
+    // Drop any previous account's cached currentAdmin (e.g. a session that
+    // expired mid-tab) so the cache-first shell never renders the new
+    // principal with the old one's nav or role. UX only — the API stays
+    // the authorization boundary.
+    await apolloClient.clearStore();
     router.push('/app');
   }
 
