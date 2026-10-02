@@ -11,6 +11,35 @@
 
 > **For agentic workers:** **M5 Accepted 2026-10-02** (developer review of the Draft, commit `568d025`). **Execution method:** **Native**, inline (superpowers:executing-plans) in the developer's session, with one fresh whole-branch review as the final gate. The Accept is plan acceptance only, not merge, push or PR authorization: implementation stays local through the final review. Steps use checkbox (`- [ ]`) syntax.
 > - **M5 rulings:** the three planning refinements are Accepted: the never-existed control (decision 10), runtime phases not depending on Phase 1b (decision 11), and the own-row-count check for unfiltered lists (decision 10; the count query is read-only and scoped to the attacker's fixture tenant). The fixture code was not run at planning time: Task 4 validates the fixture assumptions first, fixing any misread field name against the entity and never dropping the field. After each of Tasks 5–11 the Phase 1b missing-key count must match the plan (56 → 47 → 39 → 29 → 23 → 3 → 0); an unexpected count is investigated, not worked around.
+>
+> **M6 (2026-10-02): complete.** Tasks 1–13 executed in order (commits `7cacd4f`..`eb773cc` plus the docs commit). Rulings:
+> - The `tsc --noEmit` baseline on `main` is **1** error (`service-read.resolver.spec.ts`), not 2: #109 fixed `test/bookings.e2e-spec.ts`. The gate is "no errors beyond that 1".
+> - `classifyRest` stringifies a non-string, non-array `message` with `JSON.stringify` (lint `no-base-to-string`).
+> - Object keys in the new files follow `contextforge/record-key-order` (id keys first). The rule has no autofix, so they were reordered mechanically; order only.
+> - Task 5 and Tasks 6–10 ended with Phase 1b red by design. The missing-key counts were exactly as planned (56, 47, 39, 29, 23, 3), and every other test passed. Task 11 made the gate fully green.
+> - The README also states that the interim rule is lifted by the #92 merge with the gate passing, not by a local pass (decision 14; the plan's README block had left it out).
+> - Fixture assumptions were validated: every planned entity field type-checked unchanged, and a gate run leaves no test tenant, gate customer or Super Admin behind.
+>
+> **Negative controls (Task 12):** each was a temporary edit, reverted (`git diff --quiet -- apps/api/src apps/api/test`).
+>
+> | Control | Edit | Failed at | First failure |
+> | --- | --- | --- | --- |
+> | 1 | `Query.gateCanary` added and classified TENANT | Phase 1a (1b also; 2–7 not run) | `[inventory] tenant surface vs role matrix: unexpected Query.gateCanary` |
+> | 2 | `ANALYST` removed from customer `VIEW_ROLES` | Phase 2 (3–7 not run) | `[policy] Query.customers (CustomerReadResolver.queryMany): live @Roles … != pinned …` |
+> | 3 | `getCustomer` without the tenant predicate | Phase 5, both directions | `[isolation] Query.customer "target id belongs to the other tenant" … expected null, got OK`, plus the never-existed mismatch. Also caught: `createBooking`, `receiveLaundryOrder` and `POST /bookings` customer references |
+> | 4 | `CustomersService.update` writes before its scoped lookup | Phase 6 only (Phase 5 passed: the 404 matched the control) | `[integrity] victim tenant B: customer_entity changed during cross-tenant calls` |
+>
+> **Verification (2026-10-02):**
+>
+> | Check | Result |
+> | --- | --- |
+> | `pnpm --filter api test:e2e:release-gate` | 11/11 pass (~14 s) |
+> | `pnpm --filter api test:e2e` | 43 suites, 419/419 pass |
+> | `pnpm --filter api test` | 71 suites, 954/954 pass |
+> | `pnpm --filter api lint` | clean, no diff |
+> | `pnpm --filter api exec tsc --noEmit` | only the 1 baseline error |
+> | `pnpm run build` / `lint` / `test` (workspace) | 7/7, 6/6, 9/9 tasks successful |
+> | `git diff --quiet main -- apps/api/src` | unchanged (test-only slice) |
 > - **Order and verification:** execute the tasks in order, test-first as written. Every task ends green on `pnpm --filter api lint` (lint must leave no diff) and the e2e suites it names. `pnpm --filter api exec tsc --noEmit` must report **no errors beyond the 2 present on `main`** (`src/modules/catalog/tests/graphql/service-read.resolver.spec.ts`, `test/bookings.e2e-spec.ts`; deferred in #90). Workspace `build`/`lint`/`test` and the full e2e run happen in Task 13.
 > - **Stop conditions:** this slice is test-only. If the gate finds a real product defect (any `[policy]`, `[authentication]`, `[enforcement]`, `[isolation]` or `[integrity]` failure that is not a mistake in the gate itself), **stop and report it** with the failure output. Do not fix product code in this slice and do not weaken a probe to make it pass. No push or PR as a side effect.
 
