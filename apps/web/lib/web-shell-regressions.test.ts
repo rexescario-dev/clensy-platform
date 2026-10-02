@@ -97,8 +97,25 @@ describe('web shell regressions', () => {
 // `import` declarations whose module specifier is exactly '@clensy/web'.
 const SKIPPED_DIRS = new Set(['node_modules', '.next']);
 
-function parseTsx(fileName: string, text: string) {
-  return ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+const SCANNED_SOURCE = /\.(m|c)?[jt]sx?$/;
+const DECLARATION_FILE = /\.d\.(m|c)?ts$/;
+const TEST_FILE = /\.test\./;
+
+// Filename eligibility only. Directory exclusion (node_modules, .next) belongs
+// to nonTestSources() through SKIPPED_DIRS.
+function isScannedSource(fileName: string) {
+  return SCANNED_SOURCE.test(fileName) && !DECLARATION_FILE.test(fileName) && !TEST_FILE.test(fileName);
+}
+
+function scriptKindFor(fileName: string) {
+  if (fileName.endsWith('.tsx')) return ts.ScriptKind.TSX;
+  if (fileName.endsWith('.jsx')) return ts.ScriptKind.JSX;
+  if (/\.(m|c)?js$/.test(fileName)) return ts.ScriptKind.JS;
+  return ts.ScriptKind.TS;
+}
+
+function parseSource(fileName: string, text: string) {
+  return ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, scriptKindFor(fileName));
 }
 
 function clensyProviderBindings(source: ts.SourceFile) {
@@ -176,7 +193,7 @@ function packageReExportEscapes(declaration: ts.ExportDeclaration) {
 }
 
 function providerUses(fileName: string, text: string) {
-  const source = parseTsx(fileName, text);
+  const source = parseSource(fileName, text);
   const { named, namespaces } = clensyProviderBindings(source);
   const isProviderTag = (tag: ts.JsxTagNameExpression) =>
     ts.isIdentifier(tag)
@@ -212,12 +229,33 @@ function nonTestSources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = resolve(dir, entry.name);
     if (entry.isDirectory()) return SKIPPED_DIRS.has(entry.name) ? [] : nonTestSources(path);
-    const isSource = /\.tsx?$/.test(entry.name) && !entry.name.endsWith('.d.ts');
-    return isSource && !/\.test\.tsx?$/.test(entry.name) ? [path] : [];
+    return isScannedSource(entry.name) ? [path] : [];
   });
 }
 
 describe('app i18n boundary structure', () => {
+  describe('scanned-file selection', () => {
+    it.each([
+      ['page.ts', true],
+      ['page.tsx', true],
+      ['page.js', true],
+      ['page.jsx', true],
+      ['config.mjs', true],
+      ['config.cjs', true],
+      ['module.mts', true],
+      ['module.cts', true],
+      ['types.d.ts', false],
+      ['types.d.mts', false],
+      ['types.d.cts', false],
+      ['page.test.ts', false],
+      ['page.test.jsx', false],
+      ['styles.css', false],
+      ['messages.json', false],
+    ])('scans %s: %s', (fileName, scanned) => {
+      expect(isScannedSource(fileName)).toBe(scanned);
+    });
+  });
+
   describe('provider-use detector', () => {
     const NAMED = "import { ClensyI18nProvider } from '@clensy/web';\n";
     const ALIASED = "import { ClensyI18nProvider as P } from '@clensy/web';\n";
@@ -235,6 +273,10 @@ describe('app i18n boundary structure', () => {
         1,
         0,
       ],
+      ['a .jsx mount', 'fixture.jsx', `${NAMED}const x = <ClensyI18nProvider />;`, 1, 0],
+      ['a .js mount', 'fixture.js', `${NAMED}const x = <ClensyI18nProvider />;`, 1, 0],
+      ['an .mjs mount', 'fixture.mjs', `${NAMED}export const x = <ClensyI18nProvider />;`, 1, 0],
+      ['an escape after a generic arrow in a .ts file', 'fixture.ts', `${ALIASED}export const identity = <T>(value: T) => value;\nexport default P;`, 0, 1],
       ['a same-named import from another module', 'fixture.tsx', "import { ClensyI18nProvider } from './local';\nconst x = <ClensyI18nProvider />;", 0, 0],
       ['an unrelated property access', 'fixture.tsx', 'const Other = { ClensyI18nProvider: () => null };\nconst x = <Other.ClensyI18nProvider />;', 0, 0],
       // Package re-exports (§6.1 Provider escapes item 1).
@@ -297,7 +339,7 @@ describe('app i18n boundary structure', () => {
   });
 
   it('mounts AppI18nProvider in the /app layout, directly around DashboardLayout', () => {
-    const layout = parseTsx('layout.tsx', readWebSource('app/app/layout.tsx'));
+    const layout = parseSource('layout.tsx', readWebSource('app/app/layout.tsx'));
 
     const imported = layout.statements.some(
       (statement) =>
