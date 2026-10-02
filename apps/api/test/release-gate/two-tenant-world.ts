@@ -233,7 +233,7 @@ export class Fixtures {
 
   async job(
     world: TenantWorld,
-    options: { itemsCompleted: boolean },
+    options: { itemsCompleted: boolean; status?: JobStatus },
   ): Promise<{ itemIds: string[]; jobId: string }> {
     const bookingId = await this.booking(world);
     const jobs = this.dataSource.getRepository(CleaningJobEntity);
@@ -243,7 +243,7 @@ export class Fixtures {
         teamId: world.teamId,
         tenantId: world.tenantId,
         scheduledAt: this.future(),
-        status: JobStatus.PENDING,
+        status: options.status ?? JobStatus.PENDING,
       }),
     );
     const checklists = this.dataSource.getRepository(ChecklistEntity);

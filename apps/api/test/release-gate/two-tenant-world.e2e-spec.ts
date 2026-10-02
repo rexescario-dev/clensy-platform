@@ -3,7 +3,8 @@ import { Test } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../../src/app/app.module';
 import type { GateClient } from './client';
-import { buildGateWorld } from './two-tenant-world';
+import { JOB_PROBES } from './probes/jobs';
+import { buildGateWorld, destroyGateWorld } from './two-tenant-world';
 
 // #92 M7 finding: a world build that fails partway must not leave test
 // tenants or an active SUPER_ADMIN in the shared e2e database.
@@ -60,4 +61,32 @@ describe('release-gate two-tenant world (#92)', () => {
       expect(await leftovers()).toEqual(before);
     },
   );
+
+  // Jobs §4.1: CompleteJob is legal only from IN_PROGRESS with every item
+  // complete — the state the API reaches before it. The probe must prepare
+  // exactly that, never an API-unreachable PENDING job.
+  it('prepares completeJob targets as IN_PROGRESS jobs with every item complete', async () => {
+    const client = {
+      login: () => Promise.resolve('session=gate'),
+    } as unknown as GateClient;
+    const world = await buildGateWorld(dataSource, client);
+    try {
+      const probe = JOB_PROBES.find((p) => p.key === 'Mutation.completeJob');
+      const prepared = await probe!.prepare!(world.fixtures, world.a);
+      const [job] = await dataSource.query<
+        { incomplete: number; status: string }[]
+      >(
+        `SELECT j.status::text AS status,
+                count(i.id) FILTER (WHERE NOT i.completed)::int AS incomplete
+         FROM "cleaning_job_entity" j
+         JOIN "checklist_entity" c ON c."jobId" = j.id
+         JOIN "checklist_item_entity" i ON i."checklistId" = c.id
+         WHERE j.id = $1 GROUP BY j.status`,
+        [prepared.jobId],
+      );
+      expect(job).toEqual({ incomplete: 0, status: 'IN_PROGRESS' });
+    } finally {
+      await destroyGateWorld(dataSource, world);
+    }
+  });
 });
