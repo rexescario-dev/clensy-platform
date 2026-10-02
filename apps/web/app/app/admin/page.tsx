@@ -8,7 +8,6 @@ import {
 } from '@clensy/client';
 import { Button, ConfirmDialog, FormDialog, PageHeader } from '@clensy/ui';
 import {
-  ClensyI18nProvider,
   CreateStaffForm,
   StaffDataTable,
   useClensyTranslations,
@@ -16,7 +15,6 @@ import {
   type StaffErrorKey,
   type StaffMember,
 } from '@clensy/web';
-import { useLocale } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { canManageStaff, disableConfirmDescription, staffMutationErrorKey } from '../../../lib/staff-console';
@@ -24,17 +22,10 @@ import { canManageStaff, disableConfirmDescription, staffMutationErrorKey } from
 const EMPTY_FORM: CreateStaffFormValues = { email: '', password: '', role: 'CUSTOMER_SUPPORT' };
 
 // Staff copy (page, table, form, errors) comes from @clensy/web's `staff`
-// namespace, as LoginForm owns its copy; this route only composes, wires
+// namespace, as LoginForm owns its copy, resolved through the app i18n
+// boundary that app/app/layout.tsx mounts; this route only composes, wires
 // GraphQL and routes (multi-tenant spec §4.8).
-export default function AdminPage() {
-  const locale = useLocale();
-  return (
-    <ClensyI18nProvider locale={locale}>
-      <StaffAdminGate />
-    </ClensyI18nProvider>
-  );
-}
-
+//
 // Spec §4.1 (Admin Foundation): `middleware.ts` only checks that the session
 // cookie is present, not that it's still valid — an expired, invalid, or
 // disabled-account session lands here, where the guarded `currentAdmin`
@@ -42,7 +33,7 @@ export default function AdminPage() {
 // back to `/login`. `canManageStaff` is a UX nicety only — the API
 // independently enforces Tenant-Owner-only, same-tenant access on
 // `admins`/`createAdmin`/`disableAdmin` (multi-tenant spec §4.2).
-function StaffAdminGate() {
+export default function AdminPage() {
   const t = useClensyTranslations('staff');
   const router = useRouter();
   const { data, loading, error } = useCurrentAdminQuery({ fetchPolicy: 'network-only' });
