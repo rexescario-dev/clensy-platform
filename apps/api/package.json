@@ -21,6 +21,7 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:e2e:release-gate": "jest --config ./test/jest-e2e.json two-tenant-release-gate",
     "db:seed": "ts-node -r tsconfig-paths/register src/platform/database/seed.ts",
     "typeorm": "TS_NODE_PROJECT=tsconfig.cli.json ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d src/platform/database/data-source.ts",
     "migration:generate": "ts-node scripts/generate-migration.ts",

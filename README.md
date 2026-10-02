@@ -183,4 +183,20 @@ pnpm db:seed  # insert/refresh booking fixtures — see "Seeding fake data" abov
 
 `docker compose up` (see "Setup" above) is the standard way to run `apps/api` and `apps/web` — it covers what `pnpm dev` used to.
 
-Package-specific commands can be run directly, e.g. `pnpm --filter api test:e2e`, `pnpm --filter api migration:generate ...` (see "Database migrations" above).
+Package-specific commands can be run directly, e.g. `pnpm --filter api test:e2e`, `pnpm --filter api test:e2e:release-gate`, `pnpm --filter api migration:generate ...` (see "Database migrations" above).
+
+## Two-tenant release gate
+
+`pnpm --filter api test:e2e:release-gate` runs `apps/api/test/two-tenant-release-gate.e2e-spec.ts` (needs the e2e Postgres, like every e2e suite; it also runs as part of `pnpm --filter api test:e2e`). It is the multi-tenancy release criterion ([#92](https://github.com/rexescario-dev/clensy-platform/issues/92)): it is **not** in CI and is run on demand. It boots the real API against two fresh tenants and checks, in order:
+
+1. **Inventory** — every live GraphQL root field and controller route is classified (`test/helpers/root-operation-inventory.ts`, `test/helpers/http-route-inventory.ts`), and every tenant operation/route has exactly one role-matrix entry and one probe. A new operation fails the gate until it has both.
+2. **Policy** — the pinned role matrix (`test/release-gate/role-matrix.ts`, transcribed from the Accepted specs) equals the live `@Roles()`; `SUPER_ADMIN` is on no tenant operation.
+3. **Authentication** — every tenant operation/route rejects a request with no session.
+4. **Authorization** — each of the 7 roles gets exactly the matrix's answer on its own tenant's data.
+5. **Isolation** — every allowed role's cross-tenant read, write, reference and filter answers as "missing", indistinguishable from an id that never existed.
+6. **Integrity** — those cross-tenant calls changed no row in either tenant and wrote no audit row.
+7. **Symmetry** — 4–6 again with the tenants swapped.
+
+The interim rule "do not provision a second production tenant" (program [#81](https://github.com/rexescario-dev/clensy-platform/issues/81)) is lifted by the #92 PR merging with this gate passing; a local pass alone does not lift it. Before provisioning another production tenant after later changes, run the gate again.
+
+Update `role-matrix.ts` only when an Accepted authorization spec changes. The gate does not cover relation-field role checks ([#106](https://github.com/rexescario-dev/clensy-platform/issues/106), still open), the web UI, or query counts.

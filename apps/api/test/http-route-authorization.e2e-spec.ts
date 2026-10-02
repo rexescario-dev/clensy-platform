@@ -18,6 +18,10 @@ import {
   collectRegisteredRoutes,
   DeclaredRoute,
 } from './helpers/http-surface';
+import {
+  HTTP_ROUTE_CLASSIFICATION as ROUTE_CLASSIFICATION,
+  type RouteClass,
+} from './helpers/http-route-inventory';
 
 // Regression guard for #91 (decision 2; RFC §4.5, §4.2): the HTTP
 // counterpart of #90's root-operation suite. Every Express route Nest
@@ -40,16 +44,8 @@ import {
 // would not appear in either inventory here; prefixes or versions set
 // through module/controller metadata do, and fail closed. A prefix does not
 // change guards or roles, so authorization coverage is unaffected.
-type RouteClass = 'PUBLIC_DEV_ONLY' | 'TENANT_VIEW' | 'TENANT_WRITE';
-
-const ROUTE_CLASSIFICATION: Record<string, RouteClass> = {
-  'DELETE /bookings/:id': 'TENANT_WRITE',
-  'GET /bookings': 'TENANT_VIEW',
-  'GET /bookings/:id': 'TENANT_VIEW',
-  'GET /graphiql': 'PUBLIC_DEV_ONLY',
-  'PATCH /bookings/:id': 'TENANT_WRITE',
-  'POST /bookings': 'TENANT_WRITE',
-};
+// The classification lives in helpers/http-route-inventory.ts, shared with
+// #92's release gate.
 
 describe('HTTP route authorization (#91 guard)', () => {
   let app: INestApplication<App>;
