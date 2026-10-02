@@ -23,6 +23,12 @@ jobs:
 
       - run: pnpm run lint
 
+      # Jest does not type-check (isolatedModules) and `nest build` excludes
+      # tests, so this is the only check of type errors in `apps/api`,
+      # including the audit type contract's @ts-expect-error lines (#90).
+      - name: Type-check apps/api
+        run: pnpm --filter api exec tsc --noEmit
+
   test:
     name: Test
     runs-on: ubuntu-latest
