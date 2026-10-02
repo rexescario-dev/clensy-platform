@@ -48,10 +48,12 @@ function readMethodRef(ctor: {
 describe('Catalog GraphQL collections', () => {
   const reflector = new Reflector();
 
-  describe.each([
+  describe.each<
+    [typeof AddOnReadResolver | typeof ServiceReadResolver, string]
+  >([
     [ServiceReadResolver, 'services'],
     [AddOnReadResolver, 'addOns'],
-  ] as const)('%s queryMany', (ctor) => {
+  ])('%s queryMany', (ctor) => {
     it('is guarded by AuthGuard and the catalog view matrix', () => {
       const method = readMethodRef(ctor);
       const guards = Reflect.getMetadata(GUARDS_METADATA, method) as
