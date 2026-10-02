@@ -40,6 +40,15 @@
 > | `pnpm --filter api exec tsc --noEmit` | only the 1 baseline error |
 > | `pnpm run build` / `lint` / `test` (workspace) | 7/7, 6/6, 9/9 tasks successful |
 > | `git diff --quiet main -- apps/api/src` | unchanged (test-only slice) |
+>
+> **M7 (2026-10-02): Approved for merge** by an independent whole-branch review: 0 Critical, 0 Important, 5 Minor. The reviewer re-sampled the matrix against the module specs, confirmed every id-typed input has a cross-tenant variant, and ran two more negative controls that both turned the gate red: a same-status leak with a different message (caught by the never-existed control) and a child-table write followed by a 404 (caught by Phase 6 on `checklist_item_entity`).
+> - **Fixed (Minor 3, re-graded Important).** A world build that failed partway left its tenants and an active `SUPER_ADMIN` in the shared e2e database, which is the dev database. `buildGateWorld` now records what it creates and removes it on failure. Test-first: `release-gate/two-tenant-world.e2e-spec.ts` (2 cases) went RED→GREEN, and the full e2e suite passes 44 suites, 421/421.
+> - **Deferred minors:**
+>   1. The `excludes` check could also verify in the database that no returned id belongs to another tenant, and that `ids.length == min(totalCount, 100)`.
+>   2. Undeclared-child detection could also follow FKs into the declared child tables and `tenant_entity`.
+>   3. The `completeJob` fixture could be seeded `IN_PROGRESS`, the state the API actually reaches.
+>   4. The RFC "(PR pending)" note is replaced at PR creation.
+> - **Declined to judge, ruled out of scope:** denied-role cross-tenant calls (Phase 4 already pins `FORBIDDEN`), a forged `tenantId` in input (rejected by `forbidNonWhitelisted`), and probing `currentAdmin`/`login`/`logout` (#90's suite owns them).
 > - **Order and verification:** execute the tasks in order, test-first as written. Every task ends green on `pnpm --filter api lint` (lint must leave no diff) and the e2e suites it names. `pnpm --filter api exec tsc --noEmit` must report **no errors beyond the 2 present on `main`** (`src/modules/catalog/tests/graphql/service-read.resolver.spec.ts`, `test/bookings.e2e-spec.ts`; deferred in #90). Workspace `build`/`lint`/`test` and the full e2e run happen in Task 13.
 > - **Stop conditions:** this slice is test-only. If the gate finds a real product defect (any `[policy]`, `[authentication]`, `[enforcement]`, `[isolation]` or `[integrity]` failure that is not a mistake in the gate itself), **stop and report it** with the failure output. Do not fix product code in this slice and do not weaken a probe to make it pass. No push or PR as a side effect.
 
