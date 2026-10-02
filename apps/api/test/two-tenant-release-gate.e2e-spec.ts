@@ -20,17 +20,29 @@ import {
   tenantRootOperationKeys,
 } from './helpers/root-operation-inventory';
 import { GateClient } from './release-gate/client';
+import {
+  attackerAuditCount,
+  CrossTenantTask,
+  GateContext,
+  prepareCrossTenant,
+  runAuthenticationPhase,
+  runCrossTenantPhase,
+  runRolePhase,
+} from './release-gate/engine';
+import { PROBES } from './release-gate/probes';
 import { ROLE_MATRIX } from './release-gate/role-matrix';
 import {
   discoverTenantTables,
   LAZILY_WRITTEN_TABLES,
   snapshotTenant,
+  TenantSnapshot,
   TenantTables,
 } from './release-gate/tenant-snapshot';
 import {
   buildGateWorld,
   destroyGateWorld,
   GateWorld,
+  TenantWorld,
 } from './release-gate/two-tenant-world';
 
 // #92 Two-Tenant Isolation Release Gate (RFC §4.2, §4.3, §4.5; plan
@@ -202,4 +214,112 @@ describe('Two-tenant isolation release gate (#92)', () => {
     expect(tables.owned.length).toBeGreaterThanOrEqual(16);
     passed.add('fixture');
   });
+
+  it('Phase 1b — inventory: exactly one probe per tenant operation and route', () => {
+    const keys = PROBES.map((probe) => probe.key);
+    const failures = [
+      ...sameKeys('probes vs tenant surface', keys, [
+        ...tenantRootOperationKeys(),
+        ...tenantHttpRouteKeys(),
+      ]),
+      ...PROBES.filter(
+        (p) =>
+          (p.crossTenant.length === 0) !== (p.noCrossTenantInput !== undefined),
+      ).map(
+        (p) =>
+          `[inventory] ${p.key}: needs cross-tenant variants or a noCrossTenantInput reason (exactly one)`,
+      ),
+    ];
+    expect(failures).toEqual([]);
+    passed.add('1b');
+  });
+
+  const context = (): GateContext => ({
+    client,
+    dataSource,
+    probes: PROBES,
+    world,
+  });
+
+  it('Phase 3 — authentication: every tenant operation and route rejects a missing session', async () => {
+    requirePassed('1a', '2', 'fixture');
+    expect(await runAuthenticationPhase(context())).toEqual([]);
+    passed.add('3');
+  }, 600_000);
+
+  for (const [label, attackerOf, victimOf, step] of [
+    ['A attacks B', (w: GateWorld) => w.a, (w: GateWorld) => w.b, 'AB'],
+    [
+      'Phase 7 — symmetry: B attacks A',
+      (w: GateWorld) => w.b,
+      (w: GateWorld) => w.a,
+      'BA',
+    ],
+  ] as const) {
+    describe(label, () => {
+      let tasks: CrossTenantTask[] = [];
+      let before:
+        | { attacker: TenantSnapshot; audit: number; victim: TenantSnapshot }
+        | undefined;
+      const attacker = (): TenantWorld => attackerOf(world);
+      const victim = (): TenantWorld => victimOf(world);
+
+      it('Phase 4 — enforcement: 7 roles × every probe on the attacker’s own data', async () => {
+        requirePassed('3');
+        expect(await runRolePhase(context(), attacker())).toEqual([]);
+        passed.add(`4${step}`);
+      }, 600_000);
+
+      it('Phase 5 — isolation: every allowed role × every cross-tenant variant answers as missing', async () => {
+        requirePassed(`4${step}`);
+        tasks = await prepareCrossTenant(context(), attacker(), victim());
+        before = {
+          attacker: await snapshotTenant(
+            dataSource,
+            tables,
+            attacker().tenantId,
+          ),
+          audit: await attackerAuditCount(context(), attacker()),
+          victim: await snapshotTenant(dataSource, tables, victim().tenantId),
+        };
+        expect(
+          await runCrossTenantPhase(context(), attacker(), victim(), tasks),
+        ).toEqual([]);
+        passed.add(`5${step}`);
+      }, 900_000);
+
+      it('Phase 6 — integrity: Phase 5 changed no row in either tenant and wrote no audit row', async () => {
+        requirePassed(`4${step}`);
+        if (!before) throw new Error('not run: Phase 5 took no snapshot');
+        const failures: string[] = [];
+        for (const [who, tenant, snapshot] of [
+          ['attacker', attacker(), before.attacker],
+          ['victim', victim(), before.victim],
+        ] as const) {
+          const after = await snapshotTenant(
+            dataSource,
+            tables,
+            tenant.tenantId,
+          );
+          for (const table of Object.keys(after)) {
+            if (
+              JSON.stringify(after[table]) !== JSON.stringify(snapshot[table])
+            ) {
+              failures.push(
+                `[integrity] ${who} tenant ${tenant.name}: ${table} changed during cross-tenant calls`,
+              );
+            }
+          }
+        }
+        const audit = await attackerAuditCount(context(), attacker());
+        if (audit !== before.audit) {
+          failures.push(
+            `[integrity] ${audit - before.audit} audit row(s) written by tenant ${attacker().name} principals during cross-tenant calls`,
+          );
+        }
+        expect(failures).toEqual([]);
+        passed.add(`6${step}`);
+      }, 120_000);
+    });
+  }
 });
