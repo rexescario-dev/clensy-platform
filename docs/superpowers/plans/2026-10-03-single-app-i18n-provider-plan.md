@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Accepted |
+| M5 decision | **Accepted** — 2026-10-03, at `6bbe267`, by the owner, after one returned pass (Task 2 Step 5 wording, multi-line fixture). Executed natively, task by task: Task 1 → Task 2 → Task 3 → final verification. |
 | Date | 2026-10-03 |
 | Tracking issue | [#115](https://github.com/rexescario-dev/clensy-platform/issues/115) |
 | Scope | `apps/web` (source, tests, ESLint config) and `.github/workflows/ci.yml`. No package changes. |
