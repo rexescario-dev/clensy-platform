@@ -46,6 +46,20 @@ Every `Expected:` line matched, including the planned RED states:
 
 **Not run:** the manual browser smoke test with real API data.
 
+**M8 (2026-10-03): N/A.**
+- Scope: the #115 change set (`apps/web` boundary, overrides module, the three former call sites, tests, CI step).
+- The change is small and already minimal. `AppI18nProvider` is a 5-line wrapper, and the override module is a single constant.
+- The AST helpers live next to the only test that uses them.
+- The three deferred minors would strengthen the tests (more coverage), not restructure existing code, so they are not M8 work.
+- No behaviour-preserving restructuring is worth its risk here.
+
+**M9 (2026-10-03): Complete.** Documentation scope:
+- `apps/web/README.md` § i18n: a new paragraph describing the shipped app i18n boundary. Caused by Tasks 2–3.
+- The spec's Tracking cell: a link to PR #116. Caused by the PR being opened.
+- This section. Caused by the M6–M9 gate outcomes.
+
+`packages/web/README.md` already says that apps/web resolves the locale and passes it to `ClensyI18nProvider`, and that one app-level `roles` override changes a label wherever it is read. Both statements are still accurate, so the package docs are unchanged. Historical plans (#88/#89) are left as the record of their own slices.
+
 **Goal:** Replace `apps/web`'s three per-component `ClensyI18nProvider` mounts with a single app i18n boundary in `/app/layout.tsx`. The boundary is fed by next-intl's locale and a typed override module committed as `{}`.
 
 **Architecture:** `lib/clensy-i18n-overrides.ts` exports `APP_I18N_OVERRIDES: DeepPartial<ClensyMessages> = {}`. `components/layout/app-i18n-provider.tsx` (`'use client'`) renders the only provider mount, with `useLocale()` plus that constant. `app/app/layout.tsx` wraps `DashboardLayout` in it. The user menu, admin page and bookings page drop their own providers.
