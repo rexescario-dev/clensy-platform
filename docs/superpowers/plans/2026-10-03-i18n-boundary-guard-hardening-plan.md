@@ -14,6 +14,49 @@
 | Edit anchors | Every edit is located by the **quoted code**, not by line number. Line numbers are approximate, taken from `main` at `11c2a15`. |
 | Pre-validation | The detector, file-selection and layout logic below was prototyped against TypeScript 5.9.3 (the version `apps/web` resolves) in a throwaway script outside the repo. Every fixture expectation in this plan, including the round-1 additions, matched both with per-extension parsing and with Task 1's TSX-only parsing, and the real `apps/web` tree gave exactly one mount (in `components/layout/app-i18n-provider.tsx`) and zero escapes. |
 
+
+## Gate outcomes
+
+**M6 (2026-10-03): Complete.** Tasks 1–4 were executed natively, in order and test-first:
+- `c833aed`: Task 1
+- `64f3479`: Task 2
+- `4db3d86`: Task 3
+- Task 4 committed nothing.
+
+The planned RED states all occurred:
+- Task 1: 40 failures, `providerUses is not defined`.
+- Task 2: the 15 file-selection cases (`isScannedSource is not defined`) plus the generic-arrow `.ts` row, which received `{ mounts: 0, escapes: 0 }`. The `.js`/`.jsx`/`.mjs` rows already passed, as predicted.
+- Task 3: 10 failures, `wrapsDashboardInBoundary is not defined`.
+
+Every `Expected:` line matched. The final full web suite has 13 files and 175 tests passing, and `tsc --noEmit` and lint exit 0.
+
+Task 4 demonstration: each bypass passes `main`'s guard and fails the amended one.
+
+| Probe | Pre-amendment guard | Amended guard |
+| --- | --- | --- |
+| (a) `.jsx` mount | PASS | FAIL: `has exactly one provider mount…` lists `components/probe-mount.jsx` |
+| (b) re-export barrel | PASS | FAIL: `has no provider escapes…` lists `{ file: 'lib/probe-barrel.ts', count: 1 }` |
+| (c) `DashboardLayout` imported from `app-sidebar` | PASS | FAIL: `mounts AppI18nProvider in the /app layout…` (expected `true`, got `false`) |
+| (d) `.ts` generic arrow + `export default P` | PASS | FAIL: `has no provider escapes…` lists `lib/probe-generic.ts` |
+
+After the probes, `cmp` confirmed `layout.tsx` is byte-identical to the saved copy and the tree was clean. The diff against `main` outside `docs/` is `apps/web/lib/web-shell-regressions.test.ts` only.
+
+Executor rulings:
+1. The Task 3 fixture title `'accepts %s: %s'` became `'checks %s'`. The second `%s` was being filled with the layout source, not the expected boolean, and "accepts" misread the rejected cases. No assertion changed.
+2. Task 4 created its temp directory in the session scratchpad rather than `/tmp`. Behaviour is the same.
+
+Final whole-branch review: one fresh reviewer, independent of the executor. Result: 0 Critical, 0 Important, 5 Minor, ready to merge. The reviewer checked §6.1 rule by rule and found the implementation neither broader nor narrower than the amendment.
+
+**Spec-level gaps for a follow-up** (the code stands, because closing either would broaden the Accepted §6.1, which M5 forbade):
+- A deep import such as `'@clensy/web/src'` bypasses both assertions. §6.1 binds only the exact `'@clensy/web'` specifier, and `packages/web` has no `exports` map.
+- A second `DashboardLayout` outside the boundary still passes the layout check. §6.1 limits only the number of provider elements.
+
+**Deferred minors.** All follow the letter of §6.1 and fail closed:
+- `typeof P.displayName` counts as an escape, while `typeof W.ClensyI18nProvider.displayName` does not.
+- `extends`/`implements W.Foo` and `import('x').W` type positions count as namespace escapes.
+- Member, method, enum and label names spelled like a binding count as escapes.
+- `.mjsx`/`.cjsx`/`.mtsx`/`.ctsx` match the scan regex but are parsed as TS.
+
 **Goal:** Close the three bypasses of the app i18n boundary guard. These are unscanned JavaScript files, provider escapes (re-export barrels and value references), and name-only layout wiring. The fix is to implement the amended spec §6.1 in the existing structural test.
 
 **Architecture:** The guard stays a syntactic, parser-only check in `apps/web/lib/web-shell-regressions.test.ts`.
