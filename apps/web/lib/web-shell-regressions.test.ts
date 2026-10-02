@@ -225,6 +225,50 @@ function providerUses(fileName: string, text: string) {
   return { mounts, escapes };
 }
 
+function namedImportLocal(source: ts.SourceFile, moduleSpecifier: string, importedName: string) {
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    if (statement.moduleSpecifier.text !== moduleSpecifier) continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (!bindings || !ts.isNamedImports(bindings)) continue;
+    const element = bindings.elements.find((candidate) => (candidate.propertyName ?? candidate.name).text === importedName);
+    if (element) return element.name.text;
+  }
+  return undefined;
+}
+
+function jsxTagName(node: ts.Node) {
+  if (ts.isJsxElement(node)) return node.openingElement.tagName;
+  if (ts.isJsxSelfClosingElement(node)) return node.tagName;
+  return undefined;
+}
+
+// §6.1 layout wiring: both tags must be the local names bound by named imports
+// from these exact paths (aliases pass), and the provider element must directly
+// wrap the DashboardLayout element.
+function wrapsDashboardInBoundary(fileName: string, text: string) {
+  const source = parseSource(fileName, text);
+  const provider = namedImportLocal(source, '../../components/layout/app-i18n-provider', 'AppI18nProvider');
+  const dashboard = namedImportLocal(source, '../../components/layout/dashboard-layout', 'DashboardLayout');
+  if (!provider || !dashboard) return false;
+
+  const hasTag = (node: ts.Node, localName: string) => {
+    const tag = jsxTagName(node);
+    return tag !== undefined && ts.isIdentifier(tag) && tag.text === localName;
+  };
+  const boundaries: ts.Node[] = [];
+  const visit = (node: ts.Node) => {
+    if (hasTag(node, provider)) boundaries.push(node);
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+
+  const [boundary] = boundaries;
+  if (boundaries.length !== 1 || !ts.isJsxElement(boundary)) return false;
+  const children = boundary.children.filter((child) => !(ts.isJsxText(child) && child.containsOnlyTriviaWhiteSpaces));
+  return children.length === 1 && hasTag(children[0], dashboard);
+}
+
 function nonTestSources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = resolve(dir, entry.name);
@@ -338,36 +382,44 @@ describe('app i18n boundary structure', () => {
     expect(escapes).toEqual([]);
   });
 
+  describe('layout-wiring check', () => {
+    const PROVIDER = "import { AppI18nProvider } from '../../components/layout/app-i18n-provider';\n";
+    const DASHBOARD = "import { DashboardLayout } from '../../components/layout/dashboard-layout';\n";
+    const WRAPPED =
+      'export default function Layout({ children }) {\n  return (\n    <AppI18nProvider>\n      <DashboardLayout>{children}</DashboardLayout>\n    </AppI18nProvider>\n  );\n}\n';
+    const layoutReturning = (jsx: string) => `export default function Layout({ children }) {\n  return ${jsx};\n}\n`;
+
+    it.each([
+      ['the canonical wiring', `${PROVIDER}${DASHBOARD}${WRAPPED}`, true],
+      [
+        'aliased imports',
+        "import { AppI18nProvider as Boundary } from '../../components/layout/app-i18n-provider';\nimport { DashboardLayout as Shell } from '../../components/layout/dashboard-layout';\n" +
+          layoutReturning('<Boundary><Shell>{children}</Shell></Boundary>'),
+        true,
+      ],
+      ['a wrong provider import path', `import { AppI18nProvider } from './app-i18n-provider';\n${DASHBOARD}${WRAPPED}`, false],
+      ['a wrong DashboardLayout import path', `${PROVIDER}import { DashboardLayout } from '../../components/layout/other-layout';\n${WRAPPED}`, false],
+      ['DashboardLayout not imported', `${PROVIDER}${WRAPPED}`, false],
+      [
+        'an impostor AppI18nProvider tag',
+        "import { AppI18nProvider as Real } from '../../components/layout/app-i18n-provider';\nimport { AppI18nProvider } from './fake';\n" +
+          `${DASHBOARD}${WRAPPED}`,
+        false,
+      ],
+      ['an extra sibling inside the provider', `${PROVIDER}${DASHBOARD}${layoutReturning('<AppI18nProvider><DashboardLayout>{children}</DashboardLayout><div /></AppI18nProvider>')}`, false],
+      ['DashboardLayout not a direct child', `${PROVIDER}${DASHBOARD}${layoutReturning('<AppI18nProvider><div><DashboardLayout>{children}</DashboardLayout></div></AppI18nProvider>')}`, false],
+      [
+        'two provider elements',
+        `${PROVIDER}${DASHBOARD}${layoutReturning('<><AppI18nProvider><DashboardLayout>{children}</DashboardLayout></AppI18nProvider><AppI18nProvider /></>')}`,
+        false,
+      ],
+    ])('checks %s', (_label, source, expected) => {
+      expect(wrapsDashboardInBoundary('layout.tsx', source)).toBe(expected);
+    });
+  });
+
   it('mounts AppI18nProvider in the /app layout, directly around DashboardLayout', () => {
-    const layout = parseSource('layout.tsx', readWebSource('app/app/layout.tsx'));
-
-    const imported = layout.statements.some(
-      (statement) =>
-        ts.isImportDeclaration(statement) &&
-        ts.isStringLiteral(statement.moduleSpecifier) &&
-        statement.moduleSpecifier.text === '../../components/layout/app-i18n-provider' &&
-        statement.importClause?.namedBindings !== undefined &&
-        ts.isNamedImports(statement.importClause.namedBindings) &&
-        statement.importClause.namedBindings.elements.some((element) => element.name.text === 'AppI18nProvider'),
-    );
-    expect(imported).toBe(true);
-
-    const boundaries: ts.JsxElement[] = [];
-    const visit = (node: ts.Node) => {
-      if (ts.isJsxElement(node) && ts.isIdentifier(node.openingElement.tagName) && node.openingElement.tagName.text === 'AppI18nProvider') {
-        boundaries.push(node);
-      }
-      ts.forEachChild(node, visit);
-    };
-    visit(layout);
-    expect(boundaries).toHaveLength(1);
-
-    const children = boundaries[0].children.filter((child) => !(ts.isJsxText(child) && child.containsOnlyTriviaWhiteSpaces));
-    expect(children).toHaveLength(1);
-    const [child] = children;
-    expect(ts.isJsxElement(child) && ts.isIdentifier(child.openingElement.tagName) && child.openingElement.tagName.text).toBe(
-      'DashboardLayout',
-    );
+    expect(wrapsDashboardInBoundary('app/app/layout.tsx', readWebSource('app/app/layout.tsx'))).toBe(true);
   });
 
   // Secondary text guard; the AST check above is the primary one.
