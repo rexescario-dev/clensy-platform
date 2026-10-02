@@ -5,6 +5,8 @@ import { CLEANER_PROBES } from './cleaners';
 import { BOOKING_PROBES } from './bookings';
 import { BOOKING_REST_PROBES } from './bookings-rest';
 import { JOB_PROBES } from './jobs';
+import { LAUNDRY_PROBES } from './laundry';
+import { BILLING_PROBES } from './billing';
 
 // Exactly one probe per tenant GraphQL operation and REST route (Phase 1b).
 export const PROBES: readonly Probe[] = [
@@ -14,4 +16,6 @@ export const PROBES: readonly Probe[] = [
   ...BOOKING_PROBES,
   ...BOOKING_REST_PROBES,
   ...JOB_PROBES,
+  ...LAUNDRY_PROBES,
+  ...BILLING_PROBES,
 ];
