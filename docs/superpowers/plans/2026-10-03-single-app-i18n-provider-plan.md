@@ -11,6 +11,7 @@
 | Implements (Accepted) | [Single App-Level `ClensyI18nProvider` — Design](../specs/2026-10-02-single-app-i18n-provider-design.md), Status **Accepted** (M3, 2026-10-03, `31b713a`) |
 | Relies on (Accepted) | [App Router i18n Architecture](../specs/2026-09-13-web-i18n-architecture-design.md); [`LoginForm` — Self-Translating UI Copy](../specs/2026-09-20-login-form-self-translating-design.md) §2 |
 | Authority | Where this plan and the Accepted spec disagree, the **spec wins** and this plan must be revised. File layout, task grouping, order and test names below are planning decisions, not product semantics. |
+| Edit anchors | Every edit is located by the **quoted code**, not by line number. Any line numbers below are approximate, taken from `main` at `741693e`. |
 
 **Goal:** Replace `apps/web`'s three per-component `ClensyI18nProvider` mounts with a single app i18n boundary in `/app/layout.tsx`. The boundary is fed by next-intl's locale and a typed override module committed as `{}`.
 
@@ -129,6 +130,8 @@ export const APP_I18N_OVERRIDES: DeepPartial<ClensyMessages> = {};
 
 - [ ] **Step 4: Add the `apps/web` type-check to CI**
 
+First confirm the precondition still holds: `grep -n "tsc" .github/workflows/ci.yml` should show only `pnpm --filter api exec tsc --noEmit`, in the `lint` job. If `apps/web` is already type-checked anywhere in CI, skip this step's edit and record that in the M6 report.
+
 In `.github/workflows/ci.yml`, directly after the `Type-check apps/api` step in the `lint` job, add:
 
 ```yaml
@@ -150,6 +153,9 @@ Expected: exit 0. A pre-plan probe on 2026-10-03 confirmed that all three `@ts-e
 Run: `pnpm --filter web lint`
 Expected: exit 0.
 
+Run: `python3 -c "import yaml; steps = yaml.safe_load(open('.github/workflows/ci.yml'))['jobs']['lint']['steps']; print([s.get('name') or s.get('run') or s.get('uses') for s in steps])"`
+Expected: the YAML parses, and the printed `lint` job steps end with `'Type-check apps/api', 'Type-check apps/web'`.
+
 - [ ] **Step 6: Commit**
 
 ```bash
@@ -165,7 +171,7 @@ git commit -m "feat(115): add the typed app i18n override module, committed as {
 - Create: `apps/web/components/layout/app-i18n-provider.tsx`
 - Create: `apps/web/lib/app-i18n-boundary.test.tsx`
 - Modify: `apps/web/app/app/layout.tsx`
-- Modify: `apps/web/components/layout/user-menu.tsx:17-40`
+- Modify: `apps/web/components/layout/user-menu.tsx` (the `@clensy/web` and `next-intl` imports, and the `UserMenu` wrapper / `UserMenuContent` declaration)
 - Modify: `apps/web/eslint.config.mjs` (the `ignores` list of the `no-restricted-imports` block and its comment)
 
 **Interfaces:**
@@ -200,9 +206,10 @@ import { ShellChrome } from '../components/layout/shell-chrome';
 import { UserMenu } from '../components/layout/user-menu';
 import { getMessages } from '../i18n/messages';
 
-// Spec §6.2: Vitest hoists vi.mock above every import, so AppI18nProvider is
-// evaluated against this test-only override and never captures the committed
-// `{}`. The committed module is unchanged (pinned unmocked in
+// Spec §6.2: the overrides module must be mocked before AppI18nProvider is
+// evaluated, or the committed `{}` could be captured. Vitest hoists this
+// vi.mock call ahead of the static imports, which guarantees that ordering.
+// The committed module is unchanged (pinned unmocked in
 // clensy-i18n-overrides.test.ts).
 vi.mock('./clensy-i18n-overrides', () => ({
   APP_I18N_OVERRIDES: { roles: { FINANCE: 'Billing' } },
@@ -242,8 +249,10 @@ describe('app i18n boundary', () => {
         <UserMenu />
       </ShellChrome>,
     );
-    expect(html).toContain('Billing');
-    expect(html).not.toContain('Finance');
+    // The role label renders as the text of an element (the trigger's label
+    // span); match it as element text, not as a bare substring.
+    expect(html).toMatch(/>Billing<\/span>/);
+    expect(html).not.toMatch(/>Finance</);
   });
 
   it('applies the same override in the staff table', () => {
@@ -254,8 +263,8 @@ describe('app i18n boundary', () => {
         onDisable={() => {}}
       />,
     );
-    expect(html).toContain('Billing');
-    expect(html).not.toContain('Finance');
+    expect(html).toMatch(/>Billing</);
+    expect(html).not.toMatch(/>Finance</);
   });
 
   it('applies the same override in the create-staff form and keeps sibling defaults', () => {
@@ -272,6 +281,8 @@ describe('app i18n boundary', () => {
   });
 });
 ```
+
+Mock ordering is the requirement; the mechanism is flexible. If this file's mocks ever need shared state, use `vi.hoisted`. If static imports ever stop being enough, switch to `const { AppI18nProvider } = await import('../components/layout/app-i18n-provider')` inside the tests. Either way, the overrides module must be mocked before `AppI18nProvider` is evaluated.
 
 - [ ] **Step 3: Run the test and confirm it fails**
 
@@ -310,14 +321,15 @@ export function AppI18nProvider({ children }: { children: ReactNode }) {
 
 Run: `pnpm --filter web exec vitest run lib/app-i18n-boundary.test.tsx`
 Expected:
+- The test mounts `AppI18nProvider` directly. It does not depend on the route layout, which is still unchanged until Step 7.
 - The staff table, create-staff form and locale cases PASS.
-- `applies the app-wide role override in the user menu` FAILS: the HTML contains `Finance`. `UserMenu`'s own inner provider hides the boundary's override. This is the drift problem #115 describes; a pre-plan probe on 2026-10-03 confirmed it.
+- `applies the app-wide role override in the user menu` FAILS: the user menu renders `Finance`. `UserMenu`'s own nested provider overrides the outer test boundary. This is the drift problem #115 describes; a pre-plan probe on 2026-10-03 confirmed it.
 
 - [ ] **Step 6: Remove the user menu's own provider**
 
 In `apps/web/components/layout/user-menu.tsx`:
 
-Change line 17 from
+Change the `@clensy/web` import from
 ```tsx
 import { ClensyI18nProvider, useClensyTranslations } from '@clensy/web';
 ```
@@ -326,7 +338,7 @@ to
 import { useClensyTranslations } from '@clensy/web';
 ```
 
-Change line 19 from
+Change the `next-intl` import from
 ```tsx
 import { useLocale, useTranslations } from 'next-intl';
 ```
@@ -335,7 +347,7 @@ to
 import { useTranslations } from 'next-intl';
 ```
 
-Replace lines 28–40 (the comment, the `UserMenu` wrapper and the `UserMenuContent` declaration):
+Replace the comment, the `UserMenu` wrapper and the `UserMenuContent` declaration:
 ```tsx
 // Role labels come from @clensy/web's shared `roles` namespace (the same
 // labels as the staff console); the menu's own copy from apps/web's
@@ -423,9 +435,9 @@ git commit -m "feat(115): mount the app i18n boundary in /app and drop the user 
 ### Task 3: Remove the remaining mounts and add the structural guard (spec §4.4, §4.5, §6.1)
 
 **Files:**
-- Modify: `apps/web/lib/web-shell-regressions.test.ts`: the imports (lines 1–3), the `presents identity…` case (line 71), and a new `describe` block at the end of the file
-- Modify: `apps/web/app/app/admin/page.tsx:10-45`
-- Modify: `apps/web/app/app/bookings/page.tsx`: lines 29–30, line 72 and lines 191–229
+- Modify: `apps/web/lib/web-shell-regressions.test.ts`: the `node:fs` / `node:path` / `vitest` imports, the `presents identity…` case, and a new `describe` block at the end of the file
+- Modify: `apps/web/app/app/admin/page.tsx` (the `@clensy/web` and `next-intl` imports, the wrapper `AdminPage`, and the `StaffAdminGate` declaration)
+- Modify: `apps/web/app/app/bookings/page.tsx` (the `@clensy/web` and `next-intl` imports, the `useLocale()` call in `BookingsPageContent`, and the wrapper around `BookingDataTable`)
 
 **Interfaces:**
 - Consumes: `AppI18nProvider` and its path `components/layout/app-i18n-provider` (Task 2)
@@ -435,7 +447,7 @@ git commit -m "feat(115): mount the app i18n boundary in /app and drop the user 
 
 In `apps/web/lib/web-shell-regressions.test.ts`:
 
-Replace lines 1–3
+Replace the three import lines at the top of the file
 ```ts
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -518,7 +530,11 @@ describe('app i18n boundary structure', () => {
       ['a named import', "import { ClensyI18nProvider } from '@clensy/web';\nconst x = <ClensyI18nProvider>a</ClensyI18nProvider>;", 1],
       ['an aliased import', "import { ClensyI18nProvider as P } from '@clensy/web';\nconst x = <P />;", 1],
       ['a namespace import', "import * as W from '@clensy/web';\nconst x = <W.ClensyI18nProvider>a</W.ClensyI18nProvider>;", 1],
-      ['a multi-line tag', "import { ClensyI18nProvider } from '@clensy/web';\nconst x = <\n  ClensyI18nProvider\n  locale=\"en\"\n>a</ClensyI18nProvider>;", 1],
+      [
+        'a multi-line opening element',
+        "import { ClensyI18nProvider } from '@clensy/web';\nconst x = (\n  <ClensyI18nProvider\n    locale=\"en\"\n  >\n    a\n  </ClensyI18nProvider>\n);",
+        1,
+      ],
       ['a same-named import from another module', "import { ClensyI18nProvider } from './local';\nconst x = <ClensyI18nProvider />;", 0],
       ['an unrelated property access', "const Other = { ClensyI18nProvider: () => null };\nconst x = <Other.ClensyI18nProvider />;", 0],
       ['an import that is never rendered', "import { ClensyI18nProvider } from '@clensy/web';\nexport { ClensyI18nProvider };", 0],
@@ -590,14 +606,14 @@ Expected:
 
 In `apps/web/app/app/admin/page.tsx`:
 
-In the `@clensy/web` import (lines 10–18), delete the line `  ClensyI18nProvider,`.
+In the multi-line `@clensy/web` import, delete the line `  ClensyI18nProvider,`.
 
-Delete line 19:
+Delete the `next-intl` import:
 ```tsx
 import { useLocale } from 'next-intl';
 ```
 
-Replace lines 26–45 (the comment and wrapper `AdminPage`, then the `StaffAdminGate` comment and declaration):
+Replace the comment and wrapper `AdminPage`, then the `StaffAdminGate` comment and declaration:
 ```tsx
 // Staff copy (page, table, form, errors) comes from @clensy/web's `staff`
 // namespace, as LoginForm owns its copy; this route only composes, wires
@@ -643,7 +659,7 @@ The body of the former `StaffAdminGate` and `StaffConsole` stay unchanged.
 
 In `apps/web/app/app/bookings/page.tsx`:
 
-Change line 29 from
+Change the `@clensy/web` import from
 ```tsx
 import { BookingDataTable, ClensyI18nProvider, type Booking } from '@clensy/web';
 ```
@@ -652,9 +668,9 @@ to
 import { BookingDataTable, type Booking } from '@clensy/web';
 ```
 
-Delete line 30 (`import { useLocale } from 'next-intl';`) and line 72 (`  const locale = useLocale();`). Before deleting, run `grep -n "locale\|next-intl" apps/web/app/app/bookings/page.tsx`. It should show only lines 30, 72 and 191; if anything else uses them, keep the import and report it.
+Delete `import { useLocale } from 'next-intl';` and, in `BookingsPageContent`, `  const locale = useLocale();`. Before deleting, run `grep -n "locale\|next-intl" apps/web/app/app/bookings/page.tsx`. It should show only those two lines and the `<ClensyI18nProvider locale={locale}>` wrapper (about lines 30, 72 and 191 on `741693e`). If anything else uses them, keep the import and report it.
 
-Replace the wrapper around `BookingDataTable` (lines 191–229):
+Replace the wrapper around `BookingDataTable`:
 ```tsx
       <ClensyI18nProvider locale={locale}>
         <BookingDataTable
@@ -691,8 +707,8 @@ git commit -m "feat(115): remove the admin and bookings providers and pin the si
 - [ ] `pnpm run lint`: exit 0 across the monorepo.
 - [ ] `pnpm run test`: exit 0 across the monorepo. `@clensy/web` package tests are unchanged and pass (spec §6.4).
 - [ ] `pnpm --filter web exec tsc --noEmit` and `pnpm --filter api exec tsc --noEmit`: both exit 0, the same as the CI lint job.
-- [ ] `git diff main --stat -- packages/`: empty. No `@clensy/web` or `@clensy/ui` change (§4.5 item 8).
-- [ ] `git diff main -- '**/messages/**'`: empty. No translation content change.
+- [ ] `git diff main --name-only -- packages/`: no output. No `@clensy/web` or `@clensy/ui` change (§4.5 item 8).
+- [ ] `git diff main --name-only -- apps/web/messages/ packages/web/src/i18n/messages/`: no output. No translation content change. (The `packages/` check above already covers the package catalog; this names both catalogs explicitly.)
 - [ ] Manual smoke test, if the dev stack is available (`pnpm --filter web dev`): `/app` shows the role label in the user menu; `/app/admin` shows staff roles; `/app/bookings` renders its table; `/login` renders unchanged.
 
 ## Traceability
@@ -721,4 +737,3 @@ git commit -m "feat(115): remove the admin and bookings providers and pin the si
 ## Execution risks (operational only)
 
 - `.github/workflows/ci.yml` gains a `Type-check apps/web` step. Spec §6.3 requires the type cases to run "under `apps/web`'s `tsc` in CI", but CI type-checks only `apps/api` today, so this step is how the spec requirement is met, not new scope. `apps/web` type-checks cleanly on `main` as of 2026-10-03 (exit 0), so the step should not surface unrelated failures.
-- The line numbers above are from `main` at `741693e`. If they have shifted, match on the quoted code, not the numbers.
