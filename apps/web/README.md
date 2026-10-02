@@ -28,6 +28,12 @@ Full application shell (sidebar/header/user menu/logout) mounted once for every 
 
 **Catalogs** live at `apps/web/messages/en/*.json`, one file per namespace. Current namespaces: `common` (empty for now), `nav` (sidebar, plus the shell's `userMenu`, `landing` and `platform` copy), `validation`. Role labels are not here: they come from `@clensy/web`'s shared `roles` namespace. `apps/web/i18n/messages.ts` merges them; `apps/web/i18n/request.ts` is the next-intl plugin/runtime entry point that resolves the locale (always `en`) and calls it. (An `auth` namespace previously lived here for `LoginForm`'s copy — retired once `LoginForm` became self-translating via `@clensy/web`'s own i18n context; see [the LoginForm self-translating spec](../../docs/superpowers/specs/2026-09-20-login-form-self-translating-design.md).)
 
+**`@clensy/web` copy and app-wide overrides.** `@clensy/web`'s components translate their own copy. Every route under `/app/*` resolves that copy through one **app i18n boundary**: `AppI18nProvider` (`components/layout/app-i18n-provider.tsx`), which `app/app/layout.tsx` mounts around `DashboardLayout` ([single app i18n provider spec](../../docs/superpowers/specs/2026-10-02-single-app-i18n-provider-design.md), #115).
+- **Locale:** comes from next-intl's `useLocale()`.
+- **Overrides:** application-owned overrides come only from `APP_I18N_OVERRIDES` in `lib/clensy-i18n-overrides.ts`, typed `DeepPartial<ClensyMessages>` and committed as `{}`.
+- **No local providers:** a page or component that renders `@clensy/web` components relies on this boundary and MUST NOT mount its own `ClensyI18nProvider`. `lib/web-shell-regressions.test.ts` fails if a second mount appears.
+- **`/login`** stays outside the boundary and uses `@clensy/web`'s package defaults.
+
 **Adding a key:** add it to the right namespace's JSON file (or a new namespace file, if you also add it to `i18n/messages.ts`'s merge), then consume it:
 
 ```tsx

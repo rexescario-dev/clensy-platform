@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { AppI18nProvider } from '../../components/layout/app-i18n-provider';
 import { DashboardLayout } from '../../components/layout/dashboard-layout';
 
 // The only layout file for the entire `/app/*` tree (Task 5 brief, Step 6).
@@ -15,6 +16,15 @@ import { DashboardLayout } from '../../components/layout/dashboard-layout';
 // inside `{children}` here, not inside the persistent `AppHeader` component.
 // `AppHeader` owns only the user menu and the mobile nav toggle. This is a
 // plan-level implementation decision, not a spec-level behavior change.
+//
+// `AppI18nProvider` is the app i18n boundary (single app i18n provider spec
+// §4.3): the one ClensyI18nProvider for all of `/app`, deliberately wrapping
+// DashboardLayout (which itself consumes nothing) so the header's user menu
+// and every page share it. `/login` stays outside it.
 export default function AppLayout({ children }: { children: ReactNode }) {
-  return <DashboardLayout>{children}</DashboardLayout>;
+  return (
+    <AppI18nProvider>
+      <DashboardLayout>{children}</DashboardLayout>
+    </AppI18nProvider>
+  );
 }

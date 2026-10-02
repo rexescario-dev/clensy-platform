@@ -26,8 +26,7 @@ import {
   PageHeader,
   useToast,
 } from '@clensy/ui';
-import { BookingDataTable, ClensyI18nProvider, type Booking } from '@clensy/web';
-import { useLocale } from 'next-intl';
+import { BookingDataTable, type Booking } from '@clensy/web';
 import { type ChangeEvent, type FormEvent, Suspense, useState } from 'react';
 import { resolveBookingNavigationPagination } from '../../../lib/booking-navigation-pagination';
 import { formatMinorUnits } from '../../../lib/format-price';
@@ -69,7 +68,6 @@ export default function BookingsPage() {
 }
 
 function BookingsPageContent() {
-  const locale = useLocale();
   const { state: tableState, setState: setTableState } = useBookingTableUrlState();
   const sortingVariable: BookingSort[] = [
     { field: tableState.sortBy, direction: tableState.sortOrder === 'asc' ? 'ASC' : 'DESC' },
@@ -188,45 +186,43 @@ function BookingsPageContent() {
         }
       />
 
-      <ClensyI18nProvider locale={locale}>
-        <BookingDataTable
-          bookings={rows}
-          formatPrice={formatMinorUnits}
-          loading={initialLoading}
-          refreshing={refreshing}
-          hasError={Boolean(error)}
-          onRowClick={(booking) => openDetail(booking.id)}
-          sort={{ key: tableState.sortBy, direction: tableState.sortOrder }}
-          onSortChange={(next) =>
-            setTableState((current) => ({
-              ...current,
-              // Sort-cycling-to-none resolution (spec §4.6, Post-Accept
-              // correction): DataTable.sort is single-valued, so cycling
-              // ANY sortable column back to its unsorted state resolves to
-              // the table's one canonical default (scheduledAt desc), not
-              // to "no sort" — nestjs-query always needs a deterministic
-              // order, and this table had no sort UI (hence this exact
-              // default) before #65 existed.
-              sortBy: next?.key ?? 'scheduledAt',
-              sortOrder: next?.direction ?? 'desc',
-              offset: 0, // reset rule (spec §4.6, §8): sort change always resets offset
-            }))
-          }
-          pagination={{
-            hasNextPage: navigationPagination.hasNextPage,
-            hasPreviousPage: navigationPagination.hasPreviousPage,
-            mode: 'navigation',
-            onNext: () => setTableState((current) => ({ ...current, offset: current.offset + current.limit })),
-            onPageSizeChange: (limit) =>
-              setTableState((current) => ({ ...current, limit: limit as BookingTableUrlState['limit'], offset: 0 })), // reset rule: limit change resets offset
-            onPrevious: () =>
-              setTableState((current) => ({ ...current, offset: Math.max(0, current.offset - current.limit) })),
-            pageSize: tableState.limit,
-            pageSizeOptions: [...BOOKING_PAGE_SIZES], // single source of truth (#65 finding 3) — never an independently-maintained literal
-            totalCount: effectiveData?.bookings.totalCount,
-          }}
-        />
-      </ClensyI18nProvider>
+      <BookingDataTable
+        bookings={rows}
+        formatPrice={formatMinorUnits}
+        loading={initialLoading}
+        refreshing={refreshing}
+        hasError={Boolean(error)}
+        onRowClick={(booking) => openDetail(booking.id)}
+        sort={{ key: tableState.sortBy, direction: tableState.sortOrder }}
+        onSortChange={(next) =>
+          setTableState((current) => ({
+            ...current,
+            // Sort-cycling-to-none resolution (spec §4.6, Post-Accept
+            // correction): DataTable.sort is single-valued, so cycling
+            // ANY sortable column back to its unsorted state resolves to
+            // the table's one canonical default (scheduledAt desc), not
+            // to "no sort" — nestjs-query always needs a deterministic
+            // order, and this table had no sort UI (hence this exact
+            // default) before #65 existed.
+            sortBy: next?.key ?? 'scheduledAt',
+            sortOrder: next?.direction ?? 'desc',
+            offset: 0, // reset rule (spec §4.6, §8): sort change always resets offset
+          }))
+        }
+        pagination={{
+          hasNextPage: navigationPagination.hasNextPage,
+          hasPreviousPage: navigationPagination.hasPreviousPage,
+          mode: 'navigation',
+          onNext: () => setTableState((current) => ({ ...current, offset: current.offset + current.limit })),
+          onPageSizeChange: (limit) =>
+            setTableState((current) => ({ ...current, limit: limit as BookingTableUrlState['limit'], offset: 0 })), // reset rule: limit change resets offset
+          onPrevious: () =>
+            setTableState((current) => ({ ...current, offset: Math.max(0, current.offset - current.limit) })),
+          pageSize: tableState.limit,
+          pageSizeOptions: [...BOOKING_PAGE_SIZES], // single source of truth (#65 finding 3) — never an independently-maintained literal
+          totalCount: effectiveData?.bookings.totalCount,
+        }}
+      />
 
       <FormDialog
         open={formOpen}

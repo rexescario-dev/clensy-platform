@@ -29,6 +29,12 @@ jobs:
       - name: Type-check apps/api
         run: pnpm --filter api exec tsc --noEmit
 
+      # Vitest does not type-check, and CI does not run `next build`, so this
+      # is the only check of type errors in `apps/web`, including the
+      # override type contract's @ts-expect-error lines (#115).
+      - name: Type-check apps/web
+        run: pnpm --filter web exec tsc --noEmit
+
   test:
     name: Test
     runs-on: ubuntu-latest
