@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { Role } from '../../src/platform/auth/domain/role';
 import type { GateClient } from './client';
 import { describeOutcome, normalizeOutcome, Outcome } from './outcome';
+import { LIST_PAGE_LIMIT } from './probe';
 import type {
   CrossTenantVariant,
   MissingForm,
@@ -64,11 +65,11 @@ async function rowTenant(
 }
 
 async function ownCount(
-  ctx: GateContext,
+  dataSource: DataSource,
   table: string,
   tenantId: string,
 ): Promise<number> {
-  const rows = await ctx.dataSource.query(
+  const rows = await dataSource.query(
     `SELECT count(*)::int AS count FROM "${table}" WHERE "tenantId"::text = $1`,
     [tenantId],
   );
@@ -133,19 +134,55 @@ async function matchesMissing(
         outcome.totalCount === 0
         ? null
         : `expected an empty connection, got ${describeOutcome(outcome)}`;
-    case 'excludes': {
-      if (outcome.kind !== 'OK')
-        return `expected OK, got ${describeOutcome(outcome)}`;
-      const leaked = outcome.ids.filter((id) => foreign.includes(id));
-      if (leaked.length > 0)
-        return `foreign id(s) returned: ${leaked.join(', ')}`;
-      const expected = await ownCount(ctx, missing.table, attacker.tenantId);
-      const count = outcome.totalCount ?? outcome.ids.length;
-      return count === expected
-        ? null
-        : `count ${count} != attacker's own ${missing.table} rows ${expected}`;
-    }
+    case 'excludes':
+      return checkUnfilteredList(ctx.dataSource, {
+        tenantId: attacker.tenantId,
+        foreign,
+        outcome,
+        table: missing.table,
+      });
   }
+}
+
+// Unfiltered list (`excludes`, plan decision 10, hardened after #92 M7):
+// none of the declared victim ids; every returned id is a row of the
+// caller's own tenant in the database; a connection page is as full as its
+// totalCount allows (the gate requests 100); and the count equals the
+// caller's own row count.
+export async function checkUnfilteredList(
+  dataSource: DataSource,
+  check: {
+    foreign: readonly string[];
+    outcome: Outcome;
+    table: string;
+    tenantId: string;
+  },
+): Promise<string | null> {
+  const { foreign, outcome, table, tenantId } = check;
+  if (outcome.kind !== 'OK')
+    return `expected OK, got ${describeOutcome(outcome)}`;
+  const leaked = outcome.ids.filter((id) => foreign.includes(id));
+  if (leaked.length > 0) return `foreign id(s) returned: ${leaked.join(', ')}`;
+  const ownedRows = await dataSource.query<{ id: string }[]>(
+    `SELECT id::text AS id FROM "${table}" WHERE id::text = ANY($1) AND "tenantId"::text = $2`,
+    [outcome.ids, tenantId],
+  );
+  const owned = new Set(ownedRows.map((row) => row.id));
+  const notOwn = outcome.ids.filter((id) => !owned.has(id));
+  if (notOwn.length > 0) {
+    return `returned id(s) not in the caller's own ${table} rows: ${notOwn.join(', ')}`;
+  }
+  if (
+    outcome.totalCount !== null &&
+    outcome.ids.length !== Math.min(outcome.totalCount, LIST_PAGE_LIMIT)
+  ) {
+    return `page has ${outcome.ids.length} row(s), expected min(totalCount ${outcome.totalCount}, ${LIST_PAGE_LIMIT})`;
+  }
+  const expected = await ownCount(dataSource, table, tenantId);
+  const count = outcome.totalCount ?? outcome.ids.length;
+  return count === expected
+    ? null
+    : `count ${count} != caller's own ${table} rows ${expected}`;
 }
 
 export async function runAuthenticationPhase(

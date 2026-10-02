@@ -1,4 +1,4 @@
-import { gqlCall, MissingForm, Probe } from '../probe';
+import { gqlCall, LIST_PAGE_LIMIT, MissingForm, Probe } from '../probe';
 import type { TenantWorld } from '../two-tenant-world';
 
 // get-by-id: one target variant (RFC §4.9 example 1).
@@ -37,7 +37,7 @@ export function connectionProbe(options: {
   table: string;
 }): Probe {
   const document = `query Gate($filter: ${options.filterType}!) {
-    ${options.field}(filter: $filter, paging: { limit: 100 }, sorting: []) { totalCount nodes { id } }
+    ${options.field}(filter: $filter, paging: { limit: ${LIST_PAGE_LIMIT} }, sorting: []) { totalCount nodes { id } }
   }`;
   return {
     crossTenant: [

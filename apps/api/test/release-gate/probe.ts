@@ -3,6 +3,10 @@ import type { Fixtures, TenantWorld } from './two-tenant-world';
 // #92 probe contract (decision 9). One probe per tenant GraphQL operation
 // or REST route; the gate's Phase 1b requires probe keys to equal the
 // tenant inventory exactly.
+// Page size every connection probe requests; the unfiltered-list check
+// requires a page as full as min(totalCount, LIST_PAGE_LIMIT).
+export const LIST_PAGE_LIMIT = 100;
+
 export type Call =
   | {
       body?: Record<string, unknown>;
