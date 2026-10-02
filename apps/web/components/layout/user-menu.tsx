@@ -14,9 +14,9 @@ import {
   DropdownMenuTrigger,
   Skeleton,
 } from '@clensy/ui';
-import { ClensyI18nProvider, useClensyTranslations } from '@clensy/web';
+import { useClensyTranslations } from '@clensy/web';
 import { Check, ChevronDown } from 'lucide-react';
-import { useLocale, useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
@@ -26,18 +26,10 @@ import { useShellTheme } from './shell-chrome';
 const THEME_OPTIONS = ['light', 'dark', 'system'] as const;
 
 // Role labels come from @clensy/web's shared `roles` namespace (the same
-// labels as the staff console); the menu's own copy from apps/web's
+// labels as the staff console), resolved through the app i18n boundary that
+// app/app/layout.tsx mounts; the menu's own copy from apps/web's
 // `nav.userMenu`.
 export function UserMenu() {
-  const locale = useLocale();
-  return (
-    <ClensyI18nProvider locale={locale}>
-      <UserMenuContent />
-    </ClensyI18nProvider>
-  );
-}
-
-function UserMenuContent() {
   const t = useTranslations('nav');
   const tRoles = useClensyTranslations('roles');
   const apolloClient = useApolloClient();

@@ -14,11 +14,11 @@ export default tseslint.config(
   },
   {
     files: ['**/*.{ts,tsx}'],
-    // `lib/i18n-rendering.test.tsx` is the one deliberate exception outside
-    // `i18n/**`: it exercises the real getMessages() -> NextIntlClientProvider
-    // -> useTranslations() path (spec §6) and must import getMessages directly
-    // to do so.
-    ignores: ['i18n/**', 'lib/i18n-rendering.test.tsx'],
+    // `lib/i18n-rendering.test.tsx` and `lib/app-i18n-boundary.test.tsx` are
+    // the deliberate exceptions outside `i18n/**`: they render through the
+    // real getMessages() -> NextIntlClientProvider path (i18n spec §6; single
+    // app i18n provider spec §6.2) and must import getMessages directly.
+    ignores: ['i18n/**', 'lib/i18n-rendering.test.tsx', 'lib/app-i18n-boundary.test.tsx'],
     rules: {
       'no-restricted-imports': [
         'error',
