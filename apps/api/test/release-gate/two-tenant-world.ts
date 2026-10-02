@@ -349,13 +349,24 @@ export class Fixtures {
   }
 }
 
+// What a build has created so far, recorded as it happens, so a build that
+// fails partway can still remove it (M7 finding: no leaked tenants or
+// SUPER_ADMIN in the shared e2e database).
+interface Created {
+  actorIds: string[];
+  superAdminId: string | null;
+  tenantIds: string[];
+}
+
 async function buildTenantWorld(
   name: 'A' | 'B',
   dataSource: DataSource,
   fixtures: Fixtures,
   client: GateClient,
+  created: Created,
 ): Promise<TenantWorld> {
   const tenantId = await createTestTenant(dataSource);
+  created.tenantIds.push(tenantId);
   const principals = {} as Record<Role, SeededAdmin>;
   const cookies = {} as Record<Role, string>;
   for (const role of TENANT_ROLES) {
@@ -364,6 +375,7 @@ async function buildTenantWorld(
       role as Exclude<Role, Role.SUPER_ADMIN>,
       tenantId,
     );
+    created.actorIds.push(principals[role].id);
     cookies[role] = await client.login(
       principals[role].email,
       principals[role].password,
@@ -412,14 +424,53 @@ export async function buildGateWorld(
 ): Promise<GateWorld> {
   const run = randomUUID();
   const fixtures = new Fixtures(dataSource, run);
-  const a = await buildTenantWorld('A', dataSource, fixtures, client);
-  const b = await buildTenantWorld('B', dataSource, fixtures, client);
-  const superAdmin = await seedSuperAdmin(dataSource);
-  const superAdminCookie = await client.login(
-    superAdmin.email,
-    superAdmin.password,
+  const created: Created = { actorIds: [], superAdminId: null, tenantIds: [] };
+  try {
+    const a = await buildTenantWorld(
+      'A',
+      dataSource,
+      fixtures,
+      client,
+      created,
+    );
+    const b = await buildTenantWorld(
+      'B',
+      dataSource,
+      fixtures,
+      client,
+      created,
+    );
+    const superAdmin = await seedSuperAdmin(dataSource);
+    created.superAdminId = superAdmin.id;
+    const superAdminCookie = await client.login(
+      superAdmin.email,
+      superAdmin.password,
+    );
+    return { a, b, fixtures, run, superAdmin, superAdminCookie };
+  } catch (error) {
+    await removeCreated(dataSource, created);
+    throw error;
+  }
+}
+
+async function removeCreated(
+  dataSource: DataSource,
+  created: Created,
+): Promise<void> {
+  const actorIds = [
+    ...created.actorIds,
+    ...(created.superAdminId ? [created.superAdminId] : []),
+  ];
+  await dataSource.query(
+    `DELETE FROM "audit_event_entity" WHERE "actorId" = ANY($1) OR "tenantId" = ANY($2)`,
+    [actorIds, created.tenantIds],
   );
-  return { a, b, fixtures, run, superAdmin, superAdminCookie };
+  await removeTestTenants(dataSource, created.tenantIds);
+  if (created.superAdminId) {
+    await dataSource
+      .getRepository(AdminUserEntity)
+      .delete({ id: created.superAdminId });
+  }
 }
 
 // Audit rows of every seeded principal (logins, role-phase writes), then
@@ -430,18 +481,9 @@ export async function destroyGateWorld(
   world: GateWorld | undefined,
 ): Promise<void> {
   if (!world) return;
-  const actorIds = [
-    ...world.a.adminIds,
-    ...world.b.adminIds,
-    world.superAdmin.id,
-  ];
-  const tenantIds = [world.a.tenantId, world.b.tenantId];
-  await dataSource.query(
-    `DELETE FROM "audit_event_entity" WHERE "actorId" = ANY($1) OR "tenantId" = ANY($2)`,
-    [actorIds, tenantIds],
-  );
-  await removeTestTenants(dataSource, tenantIds);
-  await dataSource
-    .getRepository(AdminUserEntity)
-    .delete({ id: world.superAdmin.id });
+  await removeCreated(dataSource, {
+    actorIds: [...world.a.adminIds, ...world.b.adminIds],
+    superAdminId: world.superAdmin.id,
+    tenantIds: [world.a.tenantId, world.b.tenantId],
+  });
 }
