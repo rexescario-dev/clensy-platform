@@ -3,6 +3,7 @@ import { DiscoveryModule } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
 import { App } from 'supertest/types';
+import { DataSource } from 'typeorm';
 import { AppModule } from '../src/app/app.module';
 import { Role } from '../src/platform/auth/domain/role';
 import { AuthGuard } from '../src/platform/auth/guards/auth.guard';
@@ -18,7 +19,19 @@ import {
   rootOperationKey,
   tenantRootOperationKeys,
 } from './helpers/root-operation-inventory';
+import { GateClient } from './release-gate/client';
 import { ROLE_MATRIX } from './release-gate/role-matrix';
+import {
+  discoverTenantTables,
+  LAZILY_WRITTEN_TABLES,
+  snapshotTenant,
+  TenantTables,
+} from './release-gate/tenant-snapshot';
+import {
+  buildGateWorld,
+  destroyGateWorld,
+  GateWorld,
+} from './release-gate/two-tenant-world';
 
 // #92 Two-Tenant Isolation Release Gate (RFC §4.2, §4.3, §4.5; plan
 // decisions 4–12). The final multi-tenancy release criterion: merging #92
@@ -31,6 +44,10 @@ import { ROLE_MATRIX } from './release-gate/role-matrix';
 // relation-field RBAC (#106), UI, query counts.
 describe('Two-tenant isolation release gate (#92)', () => {
   let app: INestApplication<App>;
+  let dataSource: DataSource;
+  let client: GateClient;
+  let world: GateWorld;
+  let tables: TenantTables;
   const passed = new Set<string>();
 
   function requirePassed(...phases: string[]): void {
@@ -70,10 +87,18 @@ describe('Two-tenant isolation release gate (#92)', () => {
     app.use(cookieParser());
     applyPlatformPipes(app);
     await app.init();
+    dataSource = moduleFixture.get(DataSource);
+    client = new GateClient(app);
+    world = await buildGateWorld(dataSource, client);
+    tables = await discoverTenantTables(dataSource);
   }, 120_000);
 
   afterAll(async () => {
-    await app?.close();
+    try {
+      if (dataSource) await destroyGateWorld(dataSource, world);
+    } finally {
+      await app?.close();
+    }
   });
 
   it('Phase 1a — inventory: live surfaces = classification; tenant classification = role matrix', () => {
@@ -152,5 +177,29 @@ describe('Two-tenant isolation release gate (#92)', () => {
     }
     expect(failures).toEqual([]);
     passed.add('2');
+  });
+
+  it('Fixture — both worlds populate every tenant-owned and child table; no undeclared child table', async () => {
+    const failures = tables.undeclaredChildren.map(
+      (table) =>
+        `[inventory] ${table} references a tenant-owned table but has no tenantId and is not declared in CHILD_TABLES`,
+    );
+    for (const tenant of [world.a, world.b]) {
+      const snapshot = await snapshotTenant(
+        dataSource,
+        tables,
+        tenant.tenantId,
+      );
+      for (const [table, rows] of Object.entries(snapshot)) {
+        if (rows.length === 0 && !(table in LAZILY_WRITTEN_TABLES)) {
+          failures.push(
+            `[inventory] tenant ${tenant.name}: fixture world has no ${table} row`,
+          );
+        }
+      }
+    }
+    expect(failures).toEqual([]);
+    expect(tables.owned.length).toBeGreaterThanOrEqual(16);
+    passed.add('fixture');
   });
 });
