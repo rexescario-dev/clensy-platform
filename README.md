@@ -187,13 +187,13 @@ Package-specific commands can be run directly, e.g. `pnpm --filter api test:e2e`
 
 ## Two-tenant release gate
 
-`pnpm --filter api test:e2e:release-gate` runs `apps/api/test/two-tenant-release-gate.e2e-spec.ts` (needs the e2e Postgres, like every e2e suite; it also runs as part of `pnpm --filter api test:e2e`). It is the multi-tenancy release criterion ([#92](https://github.com/rexescario-dev/clensy-platform/issues/92)): it is **not** in CI and is run on demand. It boots the real API against two fresh tenants and checks, in order:
+`pnpm --filter api test:e2e:release-gate` runs `apps/api/test/two-tenant-release-gate.e2e-spec.ts` (needs the e2e Postgres, like every e2e suite; it also runs as part of `pnpm --filter api test:e2e`). It is the multi-tenancy release criterion ([#92](https://github.com/rexescario-dev/clensy-platform/issues/92)). CI runs it as the **Release gate** job on every pull request and push to `main`, against a fresh Postgres service after `pnpm --filter api migration:run`; it can also be run on demand. It boots the real API against two fresh tenants and checks, in order:
 
 1. **Inventory** — every live GraphQL root field and controller route is classified (`test/helpers/root-operation-inventory.ts`, `test/helpers/http-route-inventory.ts`), and every tenant operation/route has exactly one role-matrix entry and one probe. A new operation fails the gate until it has both.
 2. **Policy** — the pinned role matrix (`test/release-gate/role-matrix.ts`, transcribed from the Accepted specs) equals the live `@Roles()`; `SUPER_ADMIN` is on no tenant operation.
 3. **Authentication** — every tenant operation/route rejects a request with no session.
 4. **Authorization** — each of the 7 roles gets exactly the matrix's answer on its own tenant's data.
-5. **Isolation** — every allowed role's cross-tenant read, write, reference and filter answers as "missing", indistinguishable from an id that never existed.
+5. **Isolation** — every allowed role's cross-tenant read, write, reference and filter answers as "missing", indistinguishable from an id that never existed; unfiltered lists return only the caller's own rows, counted against the database.
 6. **Integrity** — those cross-tenant calls changed no row in either tenant and wrote no audit row.
 7. **Symmetry** — 4–6 again with the tenants swapped.
 
