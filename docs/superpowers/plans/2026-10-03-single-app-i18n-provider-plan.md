@@ -60,6 +60,26 @@ Every `Expected:` line matched, including the planned RED states:
 
 `packages/web/README.md` already says that apps/web resolves the locale and passes it to `ClensyI18nProvider`, and that one app-level `roles` override changes a label wherever it is read. Both statements are still accurate, so the package docs are unchanged. Historical plans (#88/#89) are left as the record of their own slices.
 
+**M10 (2026-10-03): Accepted (workflow validated).** Subject: the installed workflow prompt library (`docs/workflows/`, generic 1.2.0), validated against `docs/workflows/specs/agent-workflow-design.md` §2.10. This slice ran the whole workflow on #115 from start to finish.
+
+Asset inventory:
+- `prompts/`: `specification` M2, `design-review` M3, `implementation-planning` M4, `plan-review` M5, `implementation-execution` M6, `code-review` M7, `refactoring` M8, `documentation-execution` M9, `workflow-validation` M10.
+- `conventions/`: `prompt-library` M1, `reporting-conventions` (§2.11).
+- `specs/agent-workflow-design.md`: the governing contract.
+
+Checks:
+- Each prompt cites the governing contract and declares exactly one stage. There are no orphan assets.
+- Every link in the README stage map and between prompts resolves.
+- The M5→M6 hard prerequisite is stated in both the process spec (§2.5) and the M6 prompt.
+- The provider rule (`prompt-library.md` §12) is present and was honoured: GitHub for the issue, the branch and the PR.
+
+Blocking findings: none. The full M2→M9 path was executed for #115 using only these assets.
+
+Non-blocking observations:
+1. M10's output ("validation report, path recorded") has no conventional location, and the managed `docs/workflows/**` tree must not be edited. This report is therefore kept in the slice plan, the same place M7 outcomes are recorded.
+2. `code-review.md` does not say whether the M7 reviewer must be independent of the M6 implementer. Here the M7 record was written by the implementer, based on an independent whole-branch review.
+3. The merge in §2.12 closeout and M10 in §2.6 have no stated order between them. This slice ran M10 before the human-authorized merge.
+
 **Goal:** Replace `apps/web`'s three per-component `ClensyI18nProvider` mounts with a single app i18n boundary in `/app/layout.tsx`. The boundary is fed by next-intl's locale and a typed override module committed as `{}`.
 
 **Architecture:** `lib/clensy-i18n-overrides.ts` exports `APP_I18N_OVERRIDES: DeepPartial<ClensyMessages> = {}`. `components/layout/app-i18n-provider.tsx` (`'use client'`) renders the only provider mount, with `useLocale()` plus that constant. `app/app/layout.tsx` wraps `DashboardLayout` in it. The user menu, admin page and bookings page drop their own providers.
