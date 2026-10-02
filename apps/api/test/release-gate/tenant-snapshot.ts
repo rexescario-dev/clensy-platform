@@ -52,20 +52,34 @@ export async function discoverTenantTables(
        ORDER BY table_name`,
     )
   ).map((row) => row.table_name);
-  const referencing = await dataSource.query(
+  // Every FK edge in the schema, followed transitively from the
+  // tenant-owned tables and tenant_entity: a table without tenantId that is
+  // reachable — directly, through a declared child, or by any column into
+  // tenant_entity — must be a declared child, or Phase 6 cannot snapshot it.
+  const edges = await dataSource.query<{ child: string; parent: string }[]>(
     `SELECT DISTINCT conrelid::regclass::text AS child, confrelid::regclass::text AS parent
-     FROM pg_constraint
-     WHERE contype = 'f'
-       AND confrelid::regclass::text = ANY($1)
-       AND NOT (conrelid::regclass::text = ANY($1))`,
-    [owned],
+     FROM pg_constraint WHERE contype = 'f'`,
   );
-  const undeclaredChildren = referencing
-    .filter(
-      ({ child, parent }) =>
-        !CHILD_TABLES.some((c) => c.table === child && c.parent === parent),
-    )
-    .map(({ child, parent }) => `${child} → ${parent}`);
+  const reached = new Set<string>([...owned, 'tenant_entity']);
+  const seen = new Set<string>();
+  const undeclaredChildren: string[] = [];
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const { child, parent } of edges) {
+      const edge = `${child} → ${parent}`;
+      if (!reached.has(parent) || owned.includes(child) || seen.has(edge)) {
+        continue;
+      }
+      seen.add(edge);
+      if (!CHILD_TABLES.some((c) => c.table === child && c.parent === parent)) {
+        undeclaredChildren.push(edge);
+      }
+      if (!reached.has(child)) {
+        reached.add(child);
+        grew = true;
+      }
+    }
+  }
   return { children: CHILD_TABLES, owned, undeclaredChildren };
 }
 
