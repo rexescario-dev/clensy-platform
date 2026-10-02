@@ -14,6 +14,38 @@
 | Authority | Where this plan and the Accepted spec disagree, the **spec wins** and this plan must be revised. File layout, task grouping, order and test names below are planning decisions, not product semantics. |
 | Edit anchors | Every edit is located by the **quoted code**, not by line number. Any line numbers below are approximate, taken from `main` at `741693e`. |
 
+## Gate outcomes
+
+**M6 (2026-10-03): Complete.** Tasks 1–3 executed in order, test-first, with no rulings needed:
+- `8693556`: Task 1
+- `5ffb33a`: Task 2
+- `fd8a98a`: Task 3
+
+Every `Expected:` line matched, including the planned RED states:
+- Task 1: the module was missing.
+- Task 2: the wrapper was missing, then only the user-menu case failed.
+- Task 3: the admin and bookings mounts were reported.
+
+**M7 (2026-10-03): Approved for merge.** Basis:
+- PR [#116](https://github.com/rexescario-dev/clensy-platform/pull/116), CI run [37037099101](https://github.com/rexescario-dev/clensy-platform/actions/runs/37037099101): Lint (including the new `Type-check apps/web` step), Test and Release gate all passed.
+- An independent whole-branch review found 0 Critical, 0 Important and 3 Minor. The reviewer:
+  - ran `next build` on a clean checkout (16/16 routes prerendered);
+  - checked server-side rendering with `next start` + curl: `/app/admin` renders `staff` copy through the boundary, and `/login` is unchanged;
+  - confirmed with deliberate code changes that each test fails when it should: removing the locale prop fails the locale test, removing the overrides prop fails all three override tests, deleting an `@ts-expect-error` fails tsc (TS2353), and adding a second mount fails the single-mount guard.
+- Plan conformance: Tasks 1–3 ✓, nothing deferred or missing, no extra changes. Spec conformance: §4.1–§4.5 and §6.1–§6.3 ✓. No changes under `packages/` or the catalogs.
+
+**Deferred minors** (each within spec §6.1, which defines the guard as syntactic over `.ts`/`.tsx`):
+1. The guard skips `.js`/`.jsx` files, although `allowJs` is on.
+2. A re-export barrel of `ClensyI18nProvider` from `@clensy/web` bypasses the syntactic guard.
+3. The layout-wiring test identifies `DashboardLayout` by its tag name, not by its import path.
+
+**Declined to judge, ruled out of scope:**
+- `React.createElement` or reassigned-variable mounts (outside §6.1's definition of a mount).
+- Tenant-sourced overrides and a second locale (§7, §8).
+- The bookings page's hard-coded copy (§2).
+
+**Not run:** the manual browser smoke test with real API data.
+
 **Goal:** Replace `apps/web`'s three per-component `ClensyI18nProvider` mounts with a single app i18n boundary in `/app/layout.tsx`. The boundary is fed by next-intl's locale and a typed override module committed as `{}`.
 
 **Architecture:** `lib/clensy-i18n-overrides.ts` exports `APP_I18N_OVERRIDES: DeepPartial<ClensyMessages> = {}`. `components/layout/app-i18n-provider.tsx` (`'use client'`) renders the only provider mount, with `useLocale()` plus that constant. `app/app/layout.tsx` wraps `DashboardLayout` in it. The user menu, admin page and bookings page drop their own providers.
