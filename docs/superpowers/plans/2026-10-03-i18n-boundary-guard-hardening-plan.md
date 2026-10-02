@@ -4,14 +4,15 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Draft (revised after M5 round 1) |
+| M5 decision | **Changes Requested** — 2026-10-03, round 1, by the owner. Two blockers, both applied: (1) nested qualified namespace type names are now pinned (`W.Foo.Bar`, `W.ClensyMessages.Foo`, `W.Foo<string>`, `typeof W.ClensyI18nProvider.displayName`, `typeof W`, plus `import X = W.Foo.Bar` as an escape), and `isNamespaceTypePosition` is rewritten so its comment and branches follow the §6.1 item 3 wording; (2) explicit zero-escape fixtures show that the provider's own named, aliased, namespace and mixed `@clensy/web` import declarations are exempt, while an other-module import with the same local name still fails closed. Non-blocking refinements also applied: Task 2's red/green wording for the JS/JSX rows, the filename-versus-directory split between `isScannedSource()` and `nonTestSources()`, Task 4 cleanup that restores the exact original `layout.tsx` instead of running `git checkout`, and Task 4 marked as demonstrative. |
 | Date | 2026-10-03 |
 | Tracking issue | [#117](https://github.com/rexescario-dev/clensy-platform/issues/117), deferred from #115 / PR #116 (M7 Minor 1–3) |
 | Scope | `apps/web/lib/web-shell-regressions.test.ts` only. No production code, package, CI or catalog change. |
 | Implements (Accepted) | [Single App-Level `ClensyI18nProvider` — Design](../specs/2026-10-02-single-app-i18n-provider-design.md) §3 (**provider escape**) and §6.1 as amended by #117. Status **Accepted** (M3, 2026-10-03, amendment at `9a23c98`). |
 | Authority | Where this plan and the Accepted spec disagree, the **spec wins** and this plan must be revised. Helper names, file layout, task grouping, order and test names below are planning decisions, not product semantics. |
 | Edit anchors | Every edit is located by the **quoted code**, not by line number. Line numbers are approximate, taken from `main` at `11c2a15`. |
-| Pre-validation | The detector, file-selection and layout logic below was prototyped against TypeScript 5.9.3 (the version `apps/web` resolves) in a throwaway script outside the repo. Every fixture expectation in this plan matched, and the real `apps/web` tree gave exactly one mount (in `components/layout/app-i18n-provider.tsx`) and zero escapes. |
+| Pre-validation | The detector, file-selection and layout logic below was prototyped against TypeScript 5.9.3 (the version `apps/web` resolves) in a throwaway script outside the repo. Every fixture expectation in this plan, including the round-1 additions, matched both with per-extension parsing and with Task 1's TSX-only parsing, and the real `apps/web` tree gave exactly one mount (in `components/layout/app-i18n-provider.tsx`) and zero escapes. |
 
 **Goal:** Close the three bypasses of the app i18n boundary guard. These are unscanned JavaScript files, provider escapes (re-export barrels and value references), and name-only layout wiring. The fix is to implement the amended spec §6.1 in the existing structural test.
 
@@ -48,7 +49,7 @@ Failure modes the amended §6.1 implies that a naïve implementation could miss,
 1. **The real boundary file reports an escape.** `app-i18n-provider.tsx` has an import specifier and a JSX opening and closing tag. Counting any of them as an escape would make the zero-escape assertion unsatisfiable. Pinned in Task 1 by the closing-tag fixtures and the tree-wide zero-escape test.
 2. **Allowed spellings get counted as escapes**: `typeof P`, `typeof W.ClensyI18nProvider`, `W.SomeType`, `obj.P`, `{ P: 1 }`, `<div P="1" />`, and `export { Button } from '@clensy/web'` (a re-export of a different component). Pinned in Task 1 with one zero-escape fixture each.
 3. **A `.ts` file parsed as TSX hides an escape.** Today every file is parsed as TSX. In TSX, an old-style generic arrow (`<T>(value: T) => value`) is read as a JSX element and swallows the rest of the file, so a later `export default P` is never seen. This was confirmed against TypeScript 5.9.3. Pinned in Task 2 with a `fixture.ts` row that currently reports 0 escapes and must report 1.
-4. **Namespace escapes are too lenient.** `W.foo`, `<W.Button />` and `import X = W.ClensyI18nProvider` are escapes, even though they look like property access or a type name. Pinned in Task 1.
+4. **Namespace exemptions drift from §6.1 item 3.** `W.foo`, `<W.Button />`, `import X = W.ClensyI18nProvider` and `import X = W.Foo.Bar` are escapes, even though they look like property access or a type name. Nested qualified type names (`W.Foo.Bar`, `W.ClensyMessages.Foo`) and nested `typeof` queries are exempt, because `W` is still the leftmost name of a qualified type name or inside a type query. Pinned in Task 1.
 5. **The layout check accepts a near-miss**: an extra sibling inside the provider, a `DashboardLayout` nested one level deeper, a second provider element, or an impostor `AppI18nProvider` from another module. Pinned in Task 3.
 
 **Not covered, by spec definition:** `require('@clensy/web')` and dynamic `import('@clensy/web')`. §6.1 limits bindings to `import` declarations, so neither form creates a binding, and this plan does not add one. Closing that gap would need a spec change, not a plan change.
@@ -104,6 +105,12 @@ Replace the whole `describe('provider-mount detector', …)` block, from `  desc
       ['a package star re-export', 'fixture.ts', "export * from '@clensy/web';", 0, 1],
       ['a package namespace re-export', 'fixture.ts', "export * as W from '@clensy/web';", 0, 1],
       ['a package re-export of another component', 'fixture.ts', "export { Button } from '@clensy/web';", 0, 0],
+      // The provider's own import declarations are exempt (items 2 and 3).
+      ['a named provider import on its own', 'fixture.ts', NAMED, 0, 0],
+      ['an aliased provider import on its own', 'fixture.ts', ALIASED, 0, 0],
+      ['a namespace import on its own', 'fixture.ts', NAMESPACE, 0, 0],
+      ['an aliased provider import beside another component', 'fixture.ts', "import { ClensyI18nProvider as P, Button } from '@clensy/web';\n", 0, 0],
+      ['an other-module import with the same local name (fails closed)', 'fixture.ts', `${ALIASED}import { P } from './other';\n`, 0, 1],
       // Named-binding occurrences (item 2).
       ['an import that is never rendered', 'fixture.tsx', `${NAMED}export { ClensyI18nProvider };`, 0, 1],
       ['a default export of the binding', 'fixture.ts', `${ALIASED}export default P;`, 0, 1],
@@ -122,6 +129,12 @@ Replace the whole `describe('provider-mount detector', …)` block, from `  desc
       ['a namespace import-equals', 'fixture.ts', `${NAMESPACE}import X = W.ClensyI18nProvider;`, 0, 1],
       ['a namespace typeof type query', 'fixture.ts', `${NAMESPACE}type T = typeof W.ClensyI18nProvider;`, 0, 0],
       ['a namespace qualified type name', 'fixture.ts', `${NAMESPACE}type T = W.ClensyMessages;`, 0, 0],
+      ['a nested namespace qualified type name', 'fixture.ts', `${NAMESPACE}type T = W.Foo.Bar;`, 0, 0],
+      ['a member of a namespace qualified type name', 'fixture.ts', `${NAMESPACE}type T = W.ClensyMessages.Foo;`, 0, 0],
+      ['a namespace qualified type name with type arguments', 'fixture.ts', `${NAMESPACE}type T = W.Foo<string>;`, 0, 0],
+      ['a nested namespace typeof type query', 'fixture.ts', `${NAMESPACE}type T = typeof W.ClensyI18nProvider.displayName;`, 0, 0],
+      ['a bare namespace typeof type query', 'fixture.ts', `${NAMESPACE}type T = typeof W;`, 0, 0],
+      ['a nested namespace import-equals', 'fixture.ts', `${NAMESPACE}import X = W.Foo.Bar;`, 0, 1],
     ])('counts %s correctly', (_label, fileName, source, mounts, escapes) => {
       expect(providerUses(fileName, source)).toEqual({ mounts, escapes });
     });
@@ -210,12 +223,20 @@ function isNamespaceMountTag(identifier: ts.Identifier) {
   );
 }
 
-// `typeof W.X`, or the left side of a qualified type name (`W.SomeType`).
-// `import X = W.Y` is a qualified name too, but not a type position.
+// §6.1 item 3 type positions for a namespace binding W:
+// - inside a `typeof` type query: `typeof W`, `typeof W.ClensyI18nProvider`,
+//   `typeof W.ClensyI18nProvider.displayName`;
+// - the left side of a qualified type name: `W.SomeType`, `W.Foo.Bar`.
+// `W.Foo.Bar` parses as QualifiedName(QualifiedName(W, Foo), Bar), so W is the
+// leftmost name of the entity name, and what decides the position is that
+// entity name's parent. `import X = W.Foo` is a qualified name whose parent is
+// an import-equals declaration, so it is not a type position and stays an escape.
 function isNamespaceTypePosition(identifier: ts.Identifier) {
-  let node: ts.Node = identifier;
-  while (ts.isQualifiedName(node.parent) && node.parent.left === node) node = node.parent;
-  return ts.isTypeQueryNode(node.parent) || (node !== identifier && ts.isTypeReferenceNode(node.parent));
+  let entityName: ts.Node = identifier;
+  while (ts.isQualifiedName(entityName.parent) && entityName.parent.left === entityName) entityName = entityName.parent;
+  const isQualified = entityName !== identifier;
+  if (ts.isTypeQueryNode(entityName.parent)) return true;
+  return isQualified && ts.isTypeReferenceNode(entityName.parent);
 }
 
 function packageReExportEscapes(declaration: ts.ExportDeclaration) {
@@ -238,7 +259,11 @@ function providerUses(fileName: string, text: string) {
   let escapes = 0;
   const visit = (node: ts.Node) => {
     if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && isClensyWebSpecifier(node.moduleSpecifier)) {
-      // The binding's own import specifier is exempt; a package re-export is always an escape.
+      // Only declarations whose specifier is exactly '@clensy/web' are skipped:
+      // the provider's own import specifiers are exempt (pinned by the
+      // import-only fixtures), and a package re-export is always an escape.
+      // Every other import or export declaration is still walked, so a
+      // same-spelled binding from another module fails closed.
       if (ts.isExportDeclaration(node)) escapes += packageReExportEscapes(node);
       return;
     }
@@ -281,6 +306,8 @@ Implements §6.1 **Scanned files**.
 **Interfaces:**
 - Consumes: `providerUses` (Task 1).
 - Produces: `isScannedSource(fileName: string): boolean` and `parseSource(fileName: string, text: string): ts.SourceFile`. `parseSource` replaces `parseTsx`, and Task 3 uses it.
+
+**Responsibility split (planning decision):** `isScannedSource()` decides only whether a *file name* is eligible: the extension set, declaration files and test files. `nonTestSources()` keeps sole responsibility for directory exclusion through the existing `SKIPPED_DIRS` (`node_modules`, `.next`). That set is unchanged, so the selection table below tests base names only, and `isScannedSource()` is never given a directory path.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -325,7 +352,7 @@ Run: `pnpm --filter web exec vitest run lib/web-shell-regressions.test.ts`
 Expected: FAIL.
 - Every `scanned-file selection` case fails with `ReferenceError: isScannedSource is not defined`.
 - `counts an escape after a generic arrow in a .ts file correctly` fails with received `{ mounts: 0, escapes: 0 }`, because the `.ts` file is parsed as TSX (Review Focus 3).
-- The three new mount rows already pass, since TSX parsing accepts JSX. Their job is to pin the `JS`/`JSX` script kinds once Step 3 lands.
+- The `.jsx`, `.js` and `.mjs` mount rows may already pass, because before Step 3 every file is forced through TSX, which accepts JSX. They are not red tests for this task. They are regression fixtures for the per-extension `ScriptKind` once Step 3 lands. The generic-arrow `.ts` row is the red test that shows the parser change matters.
 
 - [ ] **Step 3: Implement file selection and per-extension parsing**
 
@@ -344,6 +371,8 @@ const SCANNED_SOURCE = /\.(m|c)?[jt]sx?$/;
 const DECLARATION_FILE = /\.d\.(m|c)?ts$/;
 const TEST_FILE = /\.test\./;
 
+// Filename eligibility only. Directory exclusion (node_modules, .next) belongs
+// to nonTestSources() through SKIPPED_DIRS.
 function isScannedSource(fileName: string) {
   return SCANNED_SOURCE.test(fileName) && !DECLARATION_FILE.test(fileName) && !TEST_FILE.test(fileName);
 }
@@ -531,7 +560,7 @@ git commit -m "test(117): bind the layout wiring check to the boundary and Dashb
 
 ### Task 4: Full verification and before/after demonstration
 
-Implements the §6.1 **Fixtures** requirement that each closed bypass fails against the amended guard and passes the pre-amendment one, using the three bypasses from #117 plus Review Focus 3. **No files are committed in this task.** Every probe file is temporary and deleted in Step 4.
+This task is a **demonstration**. It shows that each bypass from #117, plus Review Focus 3, passes the pre-amendment guard and fails the amended one. It is not the acceptance criterion: that is the Accepted §6.1 behaviour, pinned by the inline fixtures in Tasks 1–3. **No files are committed in this task.** Every probe file is temporary and removed in Step 4, and `layout.tsx` is restored byte-for-byte from a saved copy, never with `git checkout`.
 
 **Files:**
 - Temporary only (deleted in Step 4): `apps/web/lib/pre-117-guard.test.ts`, `apps/web/components/probe-mount.jsx`, `apps/web/lib/probe-barrel.ts`, `apps/web/components/probe-barrel-user.tsx`, `apps/web/lib/probe-generic.ts`
@@ -541,7 +570,13 @@ Implements the §6.1 **Fixtures** requirement that each closed bypass fails agai
 Run: `pnpm --filter web test && pnpm --filter web exec tsc --noEmit && pnpm --filter web lint`
 Expected: all pass, exit 0.
 
-- [ ] **Step 2: Set up the pre-amendment guard**
+- [ ] **Step 2: Set up the pre-amendment guard and save the layout**
+
+Run: `git status --short && ls apps/web/lib/pre-117-guard.test.ts apps/web/components/probe-mount.jsx apps/web/lib/probe-barrel.ts apps/web/components/probe-barrel-user.tsx apps/web/lib/probe-generic.ts 2>&1 | grep -v 'No such file'`
+Expected: no output. The tree is clean and no probe path exists yet. If anything is printed, stop and report it. Do not overwrite or delete it.
+
+Run: `PROBE_DIR=$(mktemp -d) && cp apps/web/app/app/layout.tsx "$PROBE_DIR/layout.tsx.orig" && echo "$PROBE_DIR"`
+Note the printed directory; it is used as `$PROBE_DIR` below. Shell variables do not persist between separate tool calls, so substitute the literal path.
 
 Run: `git show main:apps/web/lib/web-shell-regressions.test.ts > apps/web/lib/pre-117-guard.test.ts`
 
@@ -553,7 +588,7 @@ For each probe below:
 1. Create the probe files.
 2. Run: `pnpm --filter web exec vitest run lib/pre-117-guard.test.ts -t "app i18n boundary structure"` and record the result.
 3. Run: `pnpm --filter web exec vitest run lib/web-shell-regressions.test.ts -t "app i18n boundary structure"` and record the result.
-4. Remove the probe files (or restore `layout.tsx` with `git checkout apps/web/app/app/layout.tsx`).
+4. Remove only that probe's own files with `rm` on their exact paths. For probe (c), restore the layout with `cp "$PROBE_DIR/layout.tsx.orig" apps/web/app/app/layout.tsx`.
 
 | Probe | Files | Pre-amendment guard | Amended guard |
 | --- | --- | --- | --- |
@@ -562,12 +597,12 @@ For each probe below:
 | (c) Name-only layout wiring (#117 item 3) | In `app/app/layout.tsx`, change the `DashboardLayout` import path to `'../../components/layout/app-sidebar'` (a file that exists, so only the guard can catch it) | PASS | FAIL: `mounts AppI18nProvider in the /app layout…` (expected `true`, got `false`) |
 | (d) `.ts` generic arrow hides an escape (Review Focus 3) | `lib/probe-generic.ts`: `import { ClensyI18nProvider as P } from '@clensy/web';\nexport const identity = <T>(value: T) => value;\nexport default P;` | PASS | FAIL: `has no provider escapes…` lists `lib/probe-generic.ts` |
 
-If any cell differs from the table, stop and report it. Do not adjust a fixture or the guard to make it match.
+If any cell differs from the table, stop and report it. Do not change a fixture, the guard or the implementation just to reproduce the table. The table is demonstrative; the Accepted §6.1 is normative.
 
 - [ ] **Step 4: Clean up and confirm the tree**
 
-Run: `rm -f apps/web/lib/pre-117-guard.test.ts apps/web/components/probe-mount.jsx apps/web/lib/probe-barrel.ts apps/web/components/probe-barrel-user.tsx apps/web/lib/probe-generic.ts && git checkout apps/web/app/app/layout.tsx && git status --short`
-Expected: no output (clean tree).
+Run: `rm -f apps/web/lib/pre-117-guard.test.ts apps/web/components/probe-mount.jsx apps/web/lib/probe-barrel.ts apps/web/components/probe-barrel-user.tsx apps/web/lib/probe-generic.ts && cmp "$PROBE_DIR/layout.tsx.orig" apps/web/app/app/layout.tsx && rm -r "$PROBE_DIR" && git status --short`
+Expected: no output. `cmp` confirms the layout is byte-identical to the saved copy, and the tree is clean. If `cmp` reports a difference, restore with `cp "$PROBE_DIR/layout.tsx.orig" apps/web/app/app/layout.tsx` and re-run.
 
 Run: `git diff --stat main -- apps packages .github`
 Expected: only `apps/web/lib/web-shell-regressions.test.ts` changed (no production code, §6.1 / #117 acceptance).
@@ -589,7 +624,8 @@ Paste the filled-in Step 3 table into the M6 Slice Completion Report and the PR 
 | Provider mounts; exactly one, in `app-i18n-provider.tsx` | 1 (mount rows, tree test now reading `.mounts`) |
 | Escape item 1, package re-exports | 1 (four re-export rows plus one non-provider re-export row) |
 | Escape item 2, named-binding occurrences and exemptions | 1 (value, default, shorthand, `createElement`, `typeof`, non-reference rows) |
-| Escape item 3, namespace occurrences and exemptions | 1 (value, element access, `W.foo`, `<W.Button />`, bare `W`, import-equals, `typeof`, qualified-type rows) |
+| Escape item 3, namespace occurrences and exemptions | 1 (value, element access, `W.foo`, `<W.Button />`, bare `W`, import-equals including nested, `typeof` including nested and bare, qualified-type rows including nested and with type arguments) |
+| Exempt import specifiers (items 2 and 3) | 1 (the named, aliased, namespace and mixed import-only rows; the other-module same-name row fails closed) |
 | No scope analysis; shadowing fails closed | 1 (`a shadowing local` row expects 2) |
 | Zero escapes anywhere, an independent assertion | 1 (`has no provider escapes anywhere in apps/web`) |
 | Layout wiring bound to imports, aliases pass, direct wrap | 3 |
