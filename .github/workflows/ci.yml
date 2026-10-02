@@ -39,3 +39,45 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - run: pnpm run test
+
+  release-gate:
+    # #92 two-tenant isolation release gate against a fresh, migrated
+    # database. Credentials are throwaway values for this job's own service
+    # container; no secret is needed (tests use the built-in JWT fallback).
+    name: Release gate
+    runs-on: ubuntu-latest
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USERNAME: clensy
+      DB_PASSWORD: clensy_ci
+      DB_NAME: clensy
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: clensy
+          POSTGRES_PASSWORD: clensy_ci
+          POSTGRES_DB: clensy
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U clensy -d clensy"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --filter api migration:run
+
+      - run: pnpm --filter api test:e2e:release-gate

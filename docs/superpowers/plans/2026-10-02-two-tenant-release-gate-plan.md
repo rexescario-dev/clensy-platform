@@ -49,6 +49,13 @@
 >   3. The `completeJob` fixture could be seeded `IN_PROGRESS`, the state the API actually reaches.
 >   4. The RFC "(PR pending)" note is replaced at PR creation.
 > - **Declined to judge, ruled out of scope:** denied-role cross-tenant calls (Phase 4 already pins `FORBIDDEN`), a forged `tenantId` in input (rejected by `forbidNonWhitelisted`), and probing `currentAdmin`/`login`/`logout` (#90's suite owns them).
+>
+> **Follow-up (2026-10-02, developer-approved, branch `feat/92-release-gate-hardening`):** deferred minors 1–3 are resolved, each test-first:
+> 1. The unfiltered-list check requires every returned id to be a row of the caller's own tenant in the database, and a connection page of `min(totalCount, 100)` rows (`release-gate/engine.e2e-spec.ts`).
+> 2. Undeclared-child detection follows foreign keys transitively, through declared children and into `tenant_entity` by any column (`release-gate/tenant-snapshot.e2e-spec.ts`).
+> 3. `completeJob` targets are `IN_PROGRESS` jobs with every item complete (`release-gate/two-tenant-world.e2e-spec.ts`).
+>
+> The gate also runs in CI as the **Release gate** job: a fresh `postgres:16-alpine` service, `migration:run`, then the gate, with no secrets. Decision 13 ("not in CI") is superseded by this developer decision.
 > - **Order and verification:** execute the tasks in order, test-first as written. Every task ends green on `pnpm --filter api lint` (lint must leave no diff) and the e2e suites it names. `pnpm --filter api exec tsc --noEmit` must report **no errors beyond the 2 present on `main`** (`src/modules/catalog/tests/graphql/service-read.resolver.spec.ts`, `test/bookings.e2e-spec.ts`; deferred in #90). Workspace `build`/`lint`/`test` and the full e2e run happen in Task 13.
 > - **Stop conditions:** this slice is test-only. If the gate finds a real product defect (any `[policy]`, `[authentication]`, `[enforcement]`, `[isolation]` or `[integrity]` failure that is not a mistake in the gate itself), **stop and report it** with the failure output. Do not fix product code in this slice and do not weaken a probe to make it pass. No push or PR as a side effect.
 
