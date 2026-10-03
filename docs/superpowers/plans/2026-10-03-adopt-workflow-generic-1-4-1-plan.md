@@ -95,8 +95,6 @@ Then read two diffs:
 - `git diff workflow.yaml`: inventory only (package versions, asset versions and digests, installation metadata).
 - `git diff .claude/skills/workflow/SKILL.md`: only the Accepted-spec routing clause ` or amending it (M2, then M3)`.
 
-The older wording follows; read it as the same check.
-Expected: exactly these modified paths — `.claude/skills/workflow/SKILL.md`, `docs/workflows/prompts/{code-review,design-review,implementation-execution,implementation-planning,plan-review,refactoring,specification,workflow-validation}.md`, `docs/workflows/specs/agent-workflow-design.md`, `workflow.yaml`; **no** diff for `documentation-execution.md`. Read the `SKILL.md` diff: only the Accepted-spec routing clause ` or amending it (M2, then M3)`.
 
 - [ ] **Step 7: Clensy checks.** Run: `pnpm run lint && pnpm run test`
 Expected: both exit 0.
