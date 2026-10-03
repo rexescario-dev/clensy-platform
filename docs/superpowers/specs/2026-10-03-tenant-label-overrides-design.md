@@ -2,8 +2,9 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Draft (revised after the first M3 pass) |
 | Date | 2026-10-03 |
+| M3 history | First pass (2026-10-03) returned eleven clarifications without reopening the design, all applied: read-path ownership (§4.2, §4.7 item 3), the meaning of *object* (§4.2), log-once structural logging (§4.2), `locale` as a catalog identifier (§4.3), Apollo loading and cached-data behavior (§4.4, §4.5), the session-transition term and step order (§3, §4.5, §4.7 item 9), an explicit cross-identity isolation test (§6.2), scoped acceptance wording (§9), migration `NULL` and `down()` assertions (§6.1), a same-function `deepMerge` export test (§6.2), and a pinned `deepMerge` argument order (§4.5, §6.2). |
 | Document kind | Architecture RFC |
 | Tracking issue | [#118](https://github.com/rexescario-dev/clensy-platform/issues/118) — deferred from #115 ([single app i18n provider spec](2026-10-02-single-app-i18n-provider-design.md) §8). |
 | Depends on (Accepted) | [Single App-Level `ClensyI18nProvider`](2026-10-02-single-app-i18n-provider-design.md) — the app i18n boundary, its one mount in `/app`, and `/login` outside it. This spec **amends** its §4.5 items 5, 6, 8 and 9 (§4.6 here) and fulfils its §8 deferral. Everything else in it stays as written. [Multi-Tenant Architecture](2026-09-23-multi-tenant-architecture-design.md) — tenant context comes only from the authenticated principal, each tenant user belongs to exactly one tenant, there is no tenant switching, and Super Admin has no tenant. This spec **relies upon** it unchanged and adds no tenant lookup. [App Router i18n Architecture (next-intl)](2026-09-13-web-i18n-architecture-design.md) — next-intl's `useLocale()` is `apps/web`'s only locale source. This spec **relies upon** it unchanged. [Reusable-Component `errorMessage` API](2026-09-20-component-error-message-api-design.md) — the provider's `locale` + `overrides` contract. **Relies upon**, unchanged. |
@@ -59,7 +60,7 @@ Only the `roles` namespace and only the `en` locale are supported. Values are po
 - **Relabelable role**: a `Role` value a tenant may override. It is every `Role` value except `SUPER_ADMIN` (§4.2).
 - **Tenant layer**: the `DeepPartial<ClensyMessages>` value that `AppI18nProvider` builds from `currentAdmin.tenantLabelOverrides` (§4.4).
 - **Static app layer**: `APP_I18N_OVERRIDES`, unchanged from the single app i18n provider spec §4.1.
-- **Session-ending path**: any code path that ends an authenticated session in the browser, or starts a new one in its place. Today these are logout in the user menu and login on `/login`.
+- **Session-transition path**: a browser code path that ends the current authenticated session or establishes a new one. Today these are logout in the user menu and login on `/login`.
 
 Reuses **app i18n boundary**, **provider**, **provider mount** and **application-owned override** as defined in the single app i18n provider spec §3.
 
@@ -81,7 +82,15 @@ Reuses **app i18n boundary**, **provider**, **provider mount** and **application
 
 ### 4.2 Read-time validator (`apps/api`, `modules/admins`)
 
-A pure domain function takes the raw column value and the tenant id. It returns either the valid role labels or "none", and it logs each value it drops.
+A pure domain function takes the raw column value and the tenant id. It returns either the valid role labels or "none", and it logs each node or leaf it rejects.
+
+**Ownership of the read path.**
+
+- One application-service method in `modules/admins` is the **only** application code that reads `TenantEntity.labelOverrides`. It loads the column for a given tenant id and passes the raw value through the validator before returning anything.
+- The GraphQL layer (§4.3) calls that method and maps its result. The resolver MUST NOT read the column or `TenantEntity` directly.
+- `TenantEntity.labelOverrides` MUST NOT be exposed or consumed anywhere else. Any future application read of the column MUST go through the validator before its value is interpreted or returned.
+
+**Object.** In this section, an *object* is a non-null, non-array JSON object with string keys. `null`, arrays, strings, numbers and booleans are not objects. The validator MUST test for this meaning explicitly and MUST NOT rely on `typeof value === 'object'` alone, which is also true of `null` and arrays.
 
 **Relabelable roles.** The allowlist is derived from the `Role` enum by removing `SUPER_ADMIN`. The six role names MUST NOT be written out a second time in the validation logic. `SUPER_ADMIN` is excluded because it is a platform identity, not tenant staff (multi-tenant spec §4.1), so tenant-owned data MUST NOT be able to relabel it.
 
@@ -106,7 +115,12 @@ Arbitrary keys MUST NOT be preserved just because the column is `jsonb`.
 
 **Result.** If at least one leaf is kept, the result is the kept role labels. If none is kept, or the column is `NULL`, the result is "none".
 
-**Logging.** Each drop is logged at warning level with the tenant id, the key path (e.g. `en.roles.FINANCE`) and a reason (e.g. `unknown-key`, `not-a-string`, `too-long`). The log MUST NOT contain the stored value.
+**Logging.**
+
+- Each rejected structural node or leaf is logged **once**, at warning level, at the point where it is rejected. The validator does not descend into a rejected node, so nothing beneath it is logged. For example, a `roles` value that is an array of 100 items produces one `en.roles` warning, not 100.
+- Each warning carries the tenant id, the path of the rejected node or leaf, and a reason. The path is the rejected node's own path (e.g. `en.roles` for a non-object `roles`, `fr` for an unknown locale, `en.roles.FINANCE` for a bad leaf), never an invented child path. A non-object top level uses the path `$`. Reasons include `not-an-object`, `unknown-key`, `not-a-string`, `blank`, `too-long` and `control-character`.
+- The log MUST NOT contain the stored value.
+- A `NULL` column is "no overrides", not a rejection, and is not logged.
 
 **Failure isolation.** A dropped value never makes the `currentAdmin` query fail. The affected key falls back to the package default on the client (§4.5).
 
@@ -137,10 +151,10 @@ type RoleLabelOverrides {
 
 Resolution rules:
 
-- **Principal only.** The field takes no arguments. It is resolved from the authenticated principal's `tenantId` and from nothing else. No request input can select another tenant.
+- **Principal only.** The field takes no arguments. It is resolved from the authenticated principal's `tenantId` and from nothing else, through the service method of §4.2. No request input can select another tenant. It is a field resolver, so the tenant row is read only when an operation selects this field.
 - **Platform scope.** For `scope = PLATFORM`, the field is `null`: a Super Admin has no tenant-owned override context.
 - **Tenant scope.** The field is `null` when the validator returns "none". Otherwise it is `{ locale: "en", roles }`, where each relabelable role is its kept, trimmed value or `null`. A tenant whose stored values are all invalid or unset is intentionally indistinguishable from one with no overrides. The dropped values are visible only in the server log.
-- **Locale.** `locale` is always `"en"`, the only supported locale. The field does not take or infer a request locale (§8).
+- **Locale.** `locale` identifies the catalog that the returned overrides belong to. It is a statement by the server about the data, not the result of negotiation. It is always `"en"` in this version, the only supported locale. The field does not take, infer or negotiate a request locale (§8).
 - **Field set.** `RoleLabelOverrides` MUST have exactly one field per relabelable role. Code-first NestJS needs these fields declared explicitly, so a test asserts that the two sets are equal (§6.1).
 - **No root operation.** No query or mutation is added, so the root-operation inventory (`apps/api/test/helpers/root-operation-inventory.ts`) does not change.
 
@@ -150,7 +164,8 @@ Resolution rules:
 
 A pure function, conceptually `tenantLabelOverrides(currentAdmin, locale): DeepPartial<ClensyMessages>`:
 
-- It returns `{}` when `currentAdmin` is absent or `currentAdmin.tenantLabelOverrides` is `null`.
+- **Input is data only.** It receives the query's `currentAdmin` data, never the query's `loading` or `error` flags. Those flags do not independently change its result.
+- It returns `{}` when `currentAdmin` is absent (`undefined` or `null`) or `currentAdmin.tenantLabelOverrides` is `null`.
 - It returns `{}` when `tenantLabelOverrides.locale` is not equal to the `locale` argument, which is next-intl's `useLocale()`. This is the client-side half of the rule that an override never applies to a different locale's catalog.
 - Otherwise it returns `{ roles: { … } }`, containing only the non-`null` role entries. A `null` MUST NOT be forwarded, because `deepMerge` would replace the package default with `null`.
 - It does **not** revalidate values. The API is authoritative for validation; the mapper only maps.
@@ -163,11 +178,18 @@ A pure function, conceptually `tenantLabelOverrides(currentAdmin, locale): DeepP
   2. reads `currentAdmin` with `useCurrentAdminQuery()` from `@clensy/client`, sharing the existing Apollo cache entry;
   3. builds the tenant layer with the mapper (§4.4);
   4. passes `overrides={deepMerge(APP_I18N_OVERRIDES, tenantLayer)}` to the provider, memoized on `[currentAdmin.tenantLabelOverrides, locale]`. A stable reference keeps the provider's own `useMemo` from recomputing on unrelated re-renders.
-- **Precedence:** tenant layer > static app layer > package default.
-- **Loading, error, `null`.** While `currentAdmin` is loading, has errored, or carries `tenantLabelOverrides: null`, the tenant layer is `{}`. The effective messages are then the same as before this spec. `AppI18nProvider` MAY render its children while `currentAdmin` is loading, and it MUST NOT block rendering of `/app` on that query.
+- **Precedence:** tenant layer > static app layer > package default. Layering is package defaults → `APP_I18N_OVERRIDES` → tenant layer. `deepMerge`'s second argument wins, so the argument order MUST be `deepMerge(APP_I18N_OVERRIDES, tenantLayer)`. Reversing it would let the static layer override tenant values. A test pins this (§6.2).
+- **Loading, error, cached data.** The tenant layer is derived only from the `currentAdmin` data the query returns (§4.4):
+  - No usable data (first load in flight, an error with no data, or `currentAdmin: null`): the tenant layer is `{}`, and the effective messages are the same as before this spec.
+  - Cached `currentAdmin` data present while a network request is in flight (e.g. a `network-only` refresh on the landing or admin page): the cached data is eligible to produce the tenant layer, and `loading` does not force `{}`. The cache was cleared at the last session transition (below), so cached data always belongs to the current session.
+  - `AppI18nProvider` MAY render its children while `currentAdmin` is loading, and it MUST NOT block rendering of `/app` on that query.
 - **Observed consequence, not a provider property.** Today no role label visibly changes from a default to a tenant value. This follows from how the existing consumers already behave: the user menu shows a skeleton until `currentAdmin` resolves, the admin page renders the staff table and form only after its own `currentAdmin` query resolves, and the bookings page shows no role labels. A future consumer that renders role labels before `currentAdmin` resolves may briefly show the default. This spec does not forbid that.
 - **Session isolation.**
-  - Every session-ending path MUST call `apolloClient.clearStore()` before it navigates. Both current paths already do.
+  - Every session-transition path MUST run these steps in this order:
+    1. End or establish the session on the server, and confirm success: the logout mutation returned `true`, or the login mutation returned `login.success`.
+    2. Call `apolloClient.clearStore()`.
+    3. Navigate (to `/login` after logout, or into `/app` after login).
+  - If step 1 fails, the path MUST NOT navigate as though the transition succeeded. Both current paths already follow this order: logout in `user-menu.tsx` (`logout()`, check the result, `clearStore()`, `router.replace('/login')`) and login in `login/page.tsx` (`login()`, check `login.success`, `clearStore()`, `router.push('/app')`).
   - `/login` is outside `/app`, so the boundary unmounts between sessions, and the next `/app` mount reads a fresh `currentAdmin`.
   - An expired or invalid session makes `currentAdmin` fail, so the tenant layer is `{}`.
   - The provider keeps no tenant state of its own. The effective overrides are derived only from the current query result.
@@ -187,13 +209,13 @@ The same section's §4.1 sentence "No runtime, build-time, or environment-depend
 
 1. Tenant label overrides MUST be resolved only from the authenticated principal's `tenantId`. The field MUST take no arguments, and no other code path MAY read another tenant's `labelOverrides`.
 2. A `PLATFORM`-scope principal MUST receive `tenantLabelOverrides: null`.
-3. Every read of `labelOverrides` MUST pass through the validator (§4.2). No unvalidated value MAY reach a GraphQL response.
+3. The §4.2 service method MUST be the only application code that reads `TenantEntity.labelOverrides`, and it MUST pass every value through the validator before interpreting or returning it. No unvalidated value MAY reach a GraphQL response.
 4. Only `en` → `roles` → relabelable role → bounded string is interpreted. Everything else MUST be dropped, not preserved.
 5. The relabelable roles MUST be derived from `Role` minus `SUPER_ADMIN`, and `RoleLabelOverrides`' fields MUST equal that set.
-6. Drop logs MUST NOT contain the stored value.
+6. Each rejected node or leaf MUST be logged once, at its own path, and the log MUST NOT contain the stored value.
 7. The web MUST apply the tenant layer only when its `locale` equals next-intl's locale, and MUST never forward `null` role values.
-8. Precedence MUST be tenant layer > static app layer > package default, composed with `@clensy/web`'s `deepMerge`.
-9. Every session-ending path MUST call `apolloClient.clearStore()`.
+8. Precedence MUST be tenant layer > static app layer > package default, composed as `deepMerge(APP_I18N_OVERRIDES, tenantLayer)` with `@clensy/web`'s exported `deepMerge`. The tenant layer MUST be derived from `currentAdmin` data only, not from the query's `loading` or `error` flags.
+9. Every session-transition path MUST, in order, complete and confirm the server-side session change, call `apolloClient.clearStore()`, and only then navigate.
 10. The amended single app i18n provider spec §4.5 (§4.6 here) holds. In particular, there is still exactly one provider mount, and `/login` stays outside the boundary.
 
 ## 5. Rationale
@@ -210,7 +232,7 @@ The same section's §4.1 sentence "No runtime, build-time, or environment-depend
 
 **Why export `deepMerge` instead of merging locally?** `deepMerge` already defines how overrides combine with defaults. A second implementation in `apps/web` could drift from it, for example on `null`, arrays or nested objects. The mapper already removes `null`, so no tenant-specific merge semantics are needed.
 
-**Why `clearStore()` as the isolation mechanism?** The multi-tenant RFC forbids tenant switching, so a different tenant can appear in the same browser only after a session-ending path. Both current paths already clear the Apollo store, and `/login` unmounts the boundary. Making that a MUST, with a regression guard, protects it without adding cache machinery.
+**Why `clearStore()` as the isolation mechanism?** The multi-tenant RFC forbids tenant switching, so a different tenant can appear in the same browser only after a session-transition path. Both current paths already clear the Apollo store, and `/login` unmounts the boundary. Making that a MUST, with a regression guard, protects it without adding cache machinery.
 
 ## 6. Testing
 
@@ -225,9 +247,11 @@ The same section's §4.1 sentence "No runtime, build-time, or environment-depend
   - non-string values are dropped;
   - unknown role keys and `SUPER_ADMIN` are dropped;
   - unknown namespaces and non-`en` locales are dropped;
-  - a non-object at the top level, at `en` and at `roles` is dropped;
+  - `null`, an array and a scalar are each rejected as non-objects, at the top level, at `en` and at `roles`;
   - an all-invalid input and a `NULL` input both return "none";
-  - each drop is logged with tenant id, path and reason, and the log output does not contain the dropped value.
+  - each rejection is logged once with tenant id, its own path and a reason, and the log output does not contain the dropped value;
+  - a `roles` array of many items produces exactly one `en.roles` warning, and nothing beneath a rejected node is logged;
+  - a `NULL` input logs nothing.
 - **Drift tests:**
   - the derived relabelable-role set equals `Role` minus `SUPER_ADMIN`;
   - `RoleLabelOverrides`' declared field set equals the relabelable-role set.
@@ -240,7 +264,7 @@ The same section's §4.1 sentence "No runtime, build-time, or environment-depend
   - In every case above, the query succeeds.
   - Schema introspection shows that `CurrentAdmin.tenantLabelOverrides` takes no arguments.
   - The root-operation inventory is unchanged.
-- **Migration:** adds only the nullable column and writes no data.
+- **Migration:** adds only the nullable column and writes no data. Existing tenant rows have `labelOverrides IS NULL` afterwards. Following the repository's convention (26 of 27 existing migrations), it implements `down()`, which drops the column.
 
 ### 6.2 Web
 
@@ -253,14 +277,19 @@ The same section's §4.1 sentence "No runtime, build-time, or environment-depend
   - "Billing" appears in `UserMenu`, `StaffDataTable` and `CreateStaffForm`.
   - The package default for `FINANCE` appears in none of them.
   - Sibling roles keep their package defaults.
-  - With a mocked `APP_I18N_OVERRIDES` also setting `FINANCE`, the tenant value wins.
+  - With a mocked `APP_I18N_OVERRIDES` also setting `FINANCE`, the tenant value wins. This pins the `deepMerge` argument order.
   - With `tenantLabelOverrides: null`, the package defaults render.
-- **Isolation test:** render the boundary with tenant A's `currentAdmin`, then re-render with tenant B's, then with `null`. No label from A appears after the switch. This proves the provider keeps no tenant state of its own.
+- **Isolation test.** One mounted boundary with the query result changed between steps. This proves the provider derives overrides from the current identity and retains nothing:
+  1. Query result is tenant A with `FINANCE: 'Billing'`: "Billing" renders.
+  2. Query result changes to tenant B with a different `FINANCE` value, or none: A's "Billing" is gone, and B's value or the package default renders.
+  3. Query result changes to `currentAdmin: null`: the package default is restored.
+  4. Tenant B with no tenant overrides and a mocked `APP_I18N_OVERRIDES` setting `FINANCE`: the static app value renders. An empty tenant layer still leaves the static layer in effect.
+- **Cached data while loading:** a mocked query returning `loading: true` together with cached `currentAdmin` data produces the tenant layer from that data (§4.5).
 - **Structural guard** (`apps/web/lib/web-shell-regressions.test.ts`):
   - the single app i18n provider spec §6.1 assertions (one mount, zero escapes, layout wiring) are unchanged and still pass;
-  - a source assertion that both session-ending paths (`components/layout/user-menu.tsx`, `app/login/page.tsx`) call `clearStore()`;
+  - a source assertion that, in both session-transition paths (`components/layout/user-menu.tsx`, `app/login/page.tsx`), `clearStore()` comes after the session mutation's success check and before the router navigation;
   - `AppI18nProvider` still accepts only `children`.
-- **Package:** a test that `@clensy/web`'s index exports `deepMerge`. Its behavior tests already exist and are unchanged.
+- **Package:** a test that imports `deepMerge` from `@clensy/web`'s package root and asserts it is the same function (`toBe`) as the one in `i18n/deep-merge.ts`, not a wrapper. Its behavior tests already exist and are unchanged.
 
 ### 6.3 Unchanged
 
@@ -283,11 +312,11 @@ The same section's §4.1 sentence "No runtime, build-time, or environment-depend
 
 ## 9. Acceptance criteria (for this specification)
 
-- Names one storage location, one accepted stored shape, one validator with exact leaf rules (trimming, code-point length, control characters), and one GraphQL field with its null cases (§4.1–§4.3). These are precise enough that M4 does not need to invent any of them.
+- Names one storage location, one accepted stored shape, one owner of the read path, one validator with exact object, leaf (trimming, code-point length, control characters) and logging rules, and one GraphQL field with its null cases (§4.1–§4.3). These are precise enough that M4 does not need to invent any of them.
 - States that the field resolves only from the principal's tenant, takes no arguments, and returns `null` for Super Admin (§4.3, §4.7 items 1–2).
 - Derives the relabelable roles from `Role` minus `SUPER_ADMIN`, with drift tests (§4.2, §6.1).
-- Defines the web mapper, the precedence, the loading and failure fallback, and session isolation. It states that "no flicker" is a consequence of how consumers behave, not a property of the provider (§4.4, §4.5).
+- Defines the web mapper as data-only, the precedence and `deepMerge` argument order, the loading, error and cached-data behavior, and the ordered session-transition steps. It states that "no flicker" is a consequence of how consumers behave, not a property of the provider (§4.4, §4.5).
 - Explicitly replaces items 5, 6, 8 and 9 of the single app i18n provider spec §4.5, narrows its §4.1 runtime-selection sentence, and keeps the one-mount boundary and `/login` outside it (§4.6).
 - Defines API, web and structural tests that prove tenant isolation, validation and the boundary (§6).
 - Keeps the write path, further namespaces and locale negotiation out of scope with explicit deferrals (§7, §8).
-- Covers #118's acceptance bullets: one tenant override applies everywhere the label is read (user menu, staff table, create-staff form) and never leaks to another tenant. It also covers the issue's four decisions: data source, loading and fallback, validation, and cache invalidation.
+- Covers #118's acceptance bullets. A tenant override is available through the app i18n boundary, so existing role-label consumers under `/app` resolve the same tenant-specific value; the behavioral test covers `UserMenu`, `StaffDataTable` and `CreateStaffForm`. The override never leaks to another tenant. It also covers the issue's four decisions: data source, loading and fallback, validation, and cache invalidation.
