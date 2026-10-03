@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Accepted |
+| M5 decision | **Accepted** — 2026-10-03, by the owner, with two minor edits, both applied. (1) `passesThroughClensyWebLink` declares its `: boolean` return type. (2) Task 2 names its reference "`main` guard (pre-#122 amendment)" instead of "#120 guard", because the copy comes from `git show main:…`. Wording: Review Focus 5 now reads "The real tree must remain clean." To be executed natively. Carried-forward discipline: if the real repository contradicts a stated precondition or expected RED/GREEN state, stop and report rather than adapting the implementation. |
 | Date | 2026-10-03 |
 | Tracking issue | [#122](https://github.com/rexescario-dev/clensy-platform/issues/122), the #120 / PR #121 final-review follow-up |
 | Scope | `apps/web/lib/web-shell-regressions.test.ts` only. No production code, package, CI or catalog change. |
@@ -44,7 +45,7 @@ Failure modes item 3 implies that a naïve implementation could miss, most likel
 2. **The bare specifier is matched.** Matching on the raw specifier text, instead of on the computed target, would flag `'node_modules/@clensy/web'`. Pinned in Task 1 by the bare row, which must report `[]`.
 3. **Only the top-level layout is matched.** Anchoring the check to `apps/web/node_modules` would miss `some/node_modules/@clensy/web`. Pinned in Task 1 by the nested rows.
 4. **Load calls bypass item 3.** `require('../../node_modules/@clensy/web')` must be a violation through the existing specifier forms. Pinned in Task 1.
-5. **The real tree regresses.** `eslint.config.mjs` contains the string `'node_modules/**'`, but only as an ignore glob, not a module specifier. The tree test must stay `[]`. Pinned by Task 1 Step 4.
+5. **The real tree must remain clean.** `eslint.config.mjs` contains the string `'node_modules/**'`, but only as an ignore glob, not a module specifier. The tree test must stay `[]`. Pinned by Task 1 Step 4.
 
 ## File Map
 
@@ -113,7 +114,7 @@ Directly after the closing `}` of `function isInsidePackagesWeb(target: string) 
 // symlink resolution: apps/web/node_modules/@clensy/web links to packages/web,
 // but the segment sequence is forbidden as written. Whole segments, so
 // `@clensy/webkit`, `@clensy/web-extra` and `my_node_modules` do not match.
-function passesThroughClensyWebLink(target: string) {
+function passesThroughClensyWebLink(target: string): boolean {
   const segments = target.split(sep);
   return segments.some(
     (segment, index) => segment === 'node_modules' && segments[index + 1] === '@clensy' && segments[index + 2] === 'web',
@@ -170,7 +171,7 @@ Implements spec "Demonstration (#122)". This task is a **demonstration**: the Ac
 Run: `pnpm --filter web test && pnpm --filter web exec tsc --noEmit && pnpm --filter web lint`
 Expected: all pass, exit 0.
 
-- [ ] **Step 2: Set up the #120 guard and the probe directory**
+- [ ] **Step 2: Set up the `main` guard (pre-#122 amendment) and the probe directory**
 
 Run: `git status --short && ls apps/web/lib/pre-122-guard.test.ts apps/web/app/app/probe-link.tsx apps/web/app/app/probe-link-src.tsx apps/web/app/app/probe-lookalikes.ts 2>&1 | grep -v 'No such file'`
 Expected: no output. If anything is printed, stop and report it. Do not overwrite or delete it.
@@ -179,6 +180,8 @@ Run: `PROBE_DIR=$(mktemp -d) && echo "$PROBE_DIR"`
 **Record the printed path.** Shell variables do not persist between executor calls, so the shell variable MUST NOT be used after this command. In every later step, `<PROBE_DIR>` means this recorded literal path and MUST be substituted before the command runs. An executor whose session provides a scratchpad directory may create the directory there instead (`mktemp -d -p <that directory>`).
 
 Run: `git show main:apps/web/lib/web-shell-regressions.test.ts > apps/web/lib/pre-122-guard.test.ts`
+
+This copy is `main`'s current guard, which is the **pre-#122-amendment** reference. The demonstration compares it with the amended guard; it does not assume `main` is any particular earlier slice's implementation.
 
 - [ ] **Step 3: Probe against both guards**
 
@@ -190,7 +193,7 @@ For each probe below:
 
 Run each guard command on its own, so one command's exit status cannot skip the next (lesson from #120 Task 4).
 
-| Spec point | Probe | Content | #120 guard | Amended guard |
+| Spec point | Probe | Content | `main` guard (pre-#122 amendment) | Amended guard |
 | --- | --- | --- | --- | --- |
 | 1–2 | (a) The exact #122 mount | `app/app/probe-link.tsx`: `import { ClensyI18nProvider as P } from '../../node_modules/@clensy/web';\nexport const Probe = () => <P locale="en">x</P>;` | PASS (not reported) | FAIL: `has no package boundary violations…` lists `{ file: 'app/app/probe-link.tsx', specifiers: ['../../node_modules/@clensy/web'] }` |
 | 3 | (b) The `/src` form | `app/app/probe-link-src.tsx`: `import { ClensyI18nProvider as P } from '../../node_modules/@clensy/web/src';\nexport const Probe = () => <P locale="en">x</P>;` | PASS | FAIL: boundary lists `app/app/probe-link-src.tsx` with `'../../node_modules/@clensy/web/src'` |
