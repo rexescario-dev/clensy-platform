@@ -340,6 +340,18 @@ function isInsidePackagesWeb(target: string) {
   return fromPackage === '' || (!isAbsolute(fromPackage) && fromPackage.split(sep)[0] !== '..');
 }
 
+// §6.1 package boundary item 3 (#122): the consecutive whole segments
+// node_modules / @clensy / web, in any node_modules at any depth. There is no
+// symlink resolution: apps/web/node_modules/@clensy/web links to packages/web,
+// but the segment sequence is forbidden as written. Whole segments, so
+// `@clensy/webkit`, `@clensy/web-extra` and `my_node_modules` do not match.
+function passesThroughClensyWebLink(target: string): boolean {
+  const segments = target.split(sep);
+  return segments.some(
+    (segment, index) => segment === 'node_modules' && segments[index + 1] === '@clensy' && segments[index + 2] === 'web',
+  );
+}
+
 // Relative specifiers resolve against the importing file's directory, absolute
 // ones as is, and `@/…` against the apps/web root (tsconfig paths "@/*": ["./*"]).
 // Bare package names have no path target.
@@ -355,7 +367,7 @@ function specifierTarget(fileName: string, specifier: string) {
 function isBoundaryViolation(fileName: string, specifier: string) {
   if (specifier.startsWith('@clensy/web/')) return true;
   const target = specifierTarget(fileName, specifier);
-  return target !== undefined && isInsidePackagesWeb(target);
+  return target !== undefined && (isInsidePackagesWeb(target) || passesThroughClensyWebLink(target));
 }
 
 // Every module-specifier form the parser exposes, by AST node:
@@ -515,6 +527,14 @@ describe('app i18n boundary structure', () => {
       ['a relative path to the packages/web directory itself', "import X from '../../../../packages/web';", ['../../../../packages/web']],
       ['an absolute path into packages/web', `import { X } from ${INTO_PACKAGE};`, [JSON.parse(INTO_PACKAGE)]],
       ['an @/ path into packages/web', "import { X } from '@/../../packages/web/src';", ['@/../../packages/web/src']],
+      // Paths through a node_modules/@clensy/web link (item 3, #122). The
+      // fixture is at apps/web/app/app, so `../../node_modules` is apps/web's.
+      ['the node_modules/@clensy/web link', "import { ClensyI18nProvider as P } from '../../node_modules/@clensy/web';", ['../../node_modules/@clensy/web']],
+      ['a path beneath the node_modules/@clensy/web link', "import x from '../../node_modules/@clensy/web/src';", ['../../node_modules/@clensy/web/src']],
+      ['a nested node_modules/@clensy/web link', "import x from '../../some/node_modules/@clensy/web';", ['../../some/node_modules/@clensy/web']],
+      ['a path beneath a nested link', "import x from '../../some/node_modules/@clensy/web/src/i18n';", ['../../some/node_modules/@clensy/web/src/i18n']],
+      ['an @/ path to the link', "import x from '@/node_modules/@clensy/web';", ['@/node_modules/@clensy/web']],
+      ['a require of the link', "const m = require('../../node_modules/@clensy/web');", ['../../node_modules/@clensy/web']],
       ['two violations in one file', "import a from '@clensy/web/a';\nimport b from '@clensy/web/b';", ['@clensy/web/a', '@clensy/web/b']],
       // Allowed.
       ['the bare package', "import { ClensyI18nProvider } from '@clensy/web';\nconst m = require('@clensy/web');", []],
@@ -523,6 +543,11 @@ describe('app i18n boundary structure', () => {
       ['a packages/webby lookalike', "import x from '../../../../packages/webby/src';", []],
       ['a packages-web file name', "import x from './packages-web';", []],
       ['another scoped package', "import { Button } from '@clensy/ui';\nimport x from '@clensy/webkit/y';", []],
+      ['a node_modules/@clensy/webkit lookalike', "import x from '../../node_modules/@clensy/webkit';", []],
+      ['a node_modules/@clensy/web-extra lookalike', "import x from '../../node_modules/@clensy/web-extra/src';", []],
+      ['another package under node_modules/@clensy', "import x from '../../node_modules/@clensy/ui';", []],
+      ['a my_node_modules lookalike', "import x from '../../my_node_modules/@clensy/web';", []],
+      ['the bare node_modules/@clensy/web specifier', "import x from 'node_modules/@clensy/web';", []],
       ['a non-literal load (an escape, not a violation)', 'const m = await import(name);', []],
     ])('reports %s', (_label, source, expected) => {
       expect(boundaryViolations(FIXTURE, source)).toEqual(expected);
