@@ -74,7 +74,7 @@ Final whole-branch review: one fresh reviewer, independent of the executor. Resu
 **M8 (2026-10-03): N/A.**
 - Scope: the #120 change set, `apps/web/lib/web-shell-regressions.test.ts`.
 - The three new checks are independent and each does one thing: `loadCallEscapes`, `boundaryViolations` (with `moduleSpecifierOf`, `specifierTarget`, `isInsidePackagesWeb` and `isBoundaryViolation`), and `dashboardShellElements`. Each is pinned by inline fixtures and its own tree test.
-- `dashboardShellElements` and `#117`'s `namedImportLocal` both read named imports, but with different semantics: imports from any module versus one exact path. Merging them would add a parameterised abstraction for no gain.
+- `dashboardShellElements` and #117's `namedImportLocal` both read named imports, but with different semantics: imports from any module versus one exact path. Merging them would add a parameterised abstraction for no gain.
 - As at #115 and #117, the helpers stay next to their only test. Moving them into `lib/` would put them in the tree the guard scans.
 - No behaviour-preserving restructuring is worth its risk.
 
@@ -94,6 +94,27 @@ Final whole-branch review: one fresh reviewer, independent of the executor. Resu
   - Status consistency: the #120 amendment and this plan are both Accepted, and the PR is open and green.
   - Terminology: "provider escape", "package boundary" and "app i18n boundary" are used as defined in spec §3.
   - No heading changes. No contradictory sections remain; the README's former "covers only…" claim is removed. No code or contract edits.
+
+**M10 (2026-10-03): Accepted (workflow validated).** Subject: the installed workflow prompt library (`docs/workflows/`, generic 1.2.0), validated against `docs/workflows/specs/agent-workflow-design.md` §2.10. This slice ran the workflow on #120 from M2 to M9.
+
+Asset inventory: unchanged from #117. There are nine prompts (M2–M10), `conventions/` (`prompt-library` M1, `reporting-conventions` §2.11) and the governing `specs/agent-workflow-design.md`.
+
+Checks:
+- All 9 prompts cite the governing contract. There are no orphan assets.
+- Every relative link under `docs/workflows/` resolves (scripted scan).
+- The M5→M6 hard prerequisite (§2.5) was honoured: plan Accept `0a1cedf` is an ancestor of the first implementation commit `eac1710`.
+- The provider rule (`prompt-library.md` §12) was honoured: GitHub for the issue, the branch and the PR.
+- Slice Completion Reports were emitted at M6 and at M7–M9.
+
+Blocking findings: none.
+
+Non-blocking observations:
+1. **Plan pre-validation versus M6 "Expected" lines.** The M4 prompt does not say which checks a plan's pre-validation must cover. This plan was pre-validated with Vitest and tsc but not ESLint, so a lint-only deviation surfaced at M6 and was resolved by an executor ruling, which the reviewer accepted. A future M4 pre-validation would be stronger if it ran every command the plan's `Expected:` lines name.
+2. **Carried forward from #117:**
+   - The amendment of an already-Accepted spec has no written procedure; this slice again followed the in-place Draft→Accepted amendment precedent.
+   - M10 has no conventional report location.
+   - M7 reviewer independence is unspecified.
+   - The order of the §2.12 merge and M10 is unstated. This slice again ran M10 before the human-authorized merge.
 
 **Goal:** Close the three bypasses left by #117: deep or `packages/web` module specifiers, package load calls (`require`, `import()` and import-equals), and a second `DashboardLayout` shell. This implements the #120 amendment of spec §6.1 in the existing structural test.
 
