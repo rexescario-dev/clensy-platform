@@ -15,6 +15,42 @@
 | Edit anchors | Every edit is located by the **quoted code**, not by line number. Line numbers are approximate, taken from `main` at `8d70e1b`. |
 | Pre-validation | The helper code and every fixture expectation below were extracted from this plan's text, type-checked in strict mode, and run against TypeScript 5.9.3 in a throwaway harness outside the repo. All matched. On the real `apps/web` tree the new rules find 0 package boundary violations, 0 load-call escapes and exactly one dashboard shell element (`app/app/layout.tsx`). |
 
+
+## Gate outcomes
+
+**M6 (2026-10-03): Complete.** Tasks 1–4 were executed natively, in order and test-first:
+- `eac1710`: Task 1
+- `abec32c`: Task 2
+- `ec603cf`: Task 3
+- Task 4 committed nothing.
+
+The planned RED states all occurred:
+- Task 1: exactly the 8 planned rows received `{ escapes: 0 }` instead of 1.
+- Task 2: the 21 boundary cases and the tree test failed with `boundaryViolations is not defined`.
+- Task 3: the 8 shell cases and the tree test failed with `dashboardShellElements is not defined`. The characterisation row passed, as planned.
+
+The `isLoadCall` AST pin rows pass. The final full web suite has 13 files and 219 tests passing, and `tsc --noEmit` and lint exit 0.
+
+Task 4 demonstration: each bypass passes the #117 guard (on `main`) and fails the amended one.
+
+| Probe | #117 guard | Amended guard |
+| --- | --- | --- |
+| (a) deep `@clensy/web/src` mount | PASS | FAIL: `has no package boundary violations…` lists `{ file: 'components/probe-deep.tsx', specifiers: ['@clensy/web/src'] }` |
+| (b) `../../../packages/web/src` import | PASS | FAIL: boundary lists `components/probe-relative.tsx` |
+| (c) `import('@clensy/web')` | PASS | FAIL: `has no provider escapes…` lists `{ file: 'lib/probe-load.ts', count: 1 }` |
+| (d) a second shell in another file | PASS | FAIL: the shell test also lists `components/probe-shell.tsx` |
+| (e) a conditional-branch shell in the layout | PASS | FAIL: the shell test reports `app/app/layout.tsx` with count 2; layout wiring still passes |
+
+Every probe was removed only after `cmp` against its reference copy, and the `main` guard copy only after `cmp` against `git show main:…`. The layout is byte-identical. The diff against `main` outside `docs/` is the test file only.
+
+Executor rulings:
+1. **Task 1:** the plan's return type `ts.StringLiteral | ts.NoSubstitutionTemplateLiteral` failed the repo's `@typescript-eslint/sort-type-constituents` lint rule. The plan's pre-validation ran Vitest and tsc, but not ESLint. It was reordered to `ts.NoSubstitutionTemplateLiteral | ts.StringLiteral`, which is the identical type, so no semantics or fixtures changed. The final reviewer accepted this ruling.
+2. **Task 4:** the first probe pass chained the guard runs with `&&`, and a `grep` exit status skipped the amended run for probes (a) and (b). That was a harness bug, not a guard result. Both probes were `cmp`-verified, removed and re-run; the table shows the re-run.
+
+Final whole-branch review: one fresh reviewer, independent of the executor. Result: 0 Critical, 0 Important, 2 Minor, ready to merge. The reviewer ran about 60 extra probes outside the repo and found the implementation neither broader nor narrower than the amended §6.1.
+
+**Spec-level gap for a follow-up** (the code stands, because closing it would broaden the Accepted §6.1, which M3 and M5 forbid): `'../../node_modules/@clensy/web'`, a pnpm symlink to `packages/web`, gets past the provider and boundary checks. §6.1 computes targets with plain path arithmetic against `<repo>/packages/web`, with no file-system lookup. The reviewer suggested this amendment: treat a relative, absolute or `@/` target that has a `node_modules` segment followed by `@clensy/web` as a violation.
+
 **Goal:** Close the three bypasses left by #117: deep or `packages/web` module specifiers, package load calls (`require`, `import()` and import-equals), and a second `DashboardLayout` shell. This implements the #120 amendment of spec §6.1 in the existing structural test.
 
 **Architecture:** Three independent, syntactic checks sit beside the #117 helpers.
