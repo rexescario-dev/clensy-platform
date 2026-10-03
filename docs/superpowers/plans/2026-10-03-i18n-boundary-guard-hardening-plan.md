@@ -57,6 +57,24 @@ Final whole-branch review: one fresh reviewer, independent of the executor. Resu
 - Member, method, enum and label names spelled like a binding count as escapes.
 - `.mjsx`/`.cjsx`/`.mtsx`/`.ctsx` match the scan regex but are parsed as TS.
 
+**M7 (2026-10-03): Approved for merge.**
+- Subject: PR [#119](https://github.com/rexescario-dev/clensy-platform/pull/119), head `2e5306c`. It carries the §6.1 amendment, this Accepted plan and the M6 change set, as process spec §2.8 requires.
+- M6 gate: implementation started only after M5 Accept. Plan Accept is `bbab9dc`, and the first implementation commit, `c833aed`, follows it.
+- Plan tasks: Task 1 ✓, Task 2 ✓, Task 3 ✓, Task 4 ✓ (demonstration recorded under M6; nothing committed). Nothing is deferred or missing, and there is no incremental delivery.
+- Spec conformance:
+  - §3 "provider escape" ✓.
+  - §6.1 rule by rule ✓: parser only; scanned extensions, exclusions and `ScriptKind`; exact `'@clensy/web'` bindings; mounts; escape items 1–3 and their exemptions; non-reference names; no scope analysis; one-mount and zero-escape assertions; binding-aware layout wiring; fixtures; secondary text guard unchanged.
+  - The independent reviewer found the implementation neither broader nor narrower than the amendment, which honours the M5 "do not broaden" constraint.
+- Scope: the only non-docs file changed is `apps/web/lib/web-shell-regressions.test.ts`. There are no production, package, CI or dependency changes, and no drive-by edits.
+- Verification evidence:
+  - CI run [37042020082](https://github.com/rexescario-dev/clensy-platform/actions/runs/37042020082) on `2e5306c`: Lint, Test and Release gate all passed.
+  - Locally, `pnpm --filter web test` passed (13 files, 175 tests), and `pnpm --filter web exec tsc --noEmit` and `pnpm --filter web lint` exited 0.
+  - TDD RED→GREEN evidence for Tasks 1–3 is in the M6 record above.
+  - The independent reviewer re-ran the suite (82/82 in the guard file, 175 overall) and about 45 extra probes outside the repo.
+- Blocking findings: none.
+- Non-blocking observations (these do not affect the merge decision): the spec-level follow-ups and the four deferred minors recorded under M6. The executor's two rulings, the Task 3 title and the scratchpad temp directory, are cosmetic, and the reviewer agreed with both.
+- This record was written by the implementer, based on the independent whole-branch review and the CI evidence. That is the same arrangement as #115's non-blocking observation 2. Merge per human/project norms.
+
 **Goal:** Close the three bypasses of the app i18n boundary guard. These are unscanned JavaScript files, provider escapes (re-export barrels and value references), and name-only layout wiring. The fix is to implement the amended spec §6.1 in the existing structural test.
 
 **Architecture:** The guard stays a syntactic, parser-only check in `apps/web/lib/web-shell-regressions.test.ts`.
