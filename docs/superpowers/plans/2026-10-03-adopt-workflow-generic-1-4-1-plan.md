@@ -48,6 +48,50 @@ There was no TDD (installer-managed files; M6 rule 4).
 
 Deferred minor: the M5 decision cell is long (wording only).
 
+**M7 (2026-10-03): Approved for merge.**
+- Subject: PR [#127](https://github.com/rexescario-dev/clensy-platform/pull/127), head `46c038b`. It carries this Accepted plan (plus its M5 revision) and the M6 change set (§2.8).
+- M6 gate: the plan's M5 Accept `ba86045` precedes the installer commit `0d147ef`.
+- Plan conformance: Steps 1–9 ✓. The Step 6 deviation was resolved by the owner's M5 revision (`8b9be74`) **before** the commit, under the stop-and-report rule. No other deviations.
+- Upstream conformance: the content is byte-identical to `context-forge` `origin/master` `cc20395` for all 14 managed files, and all 26 inventory digests match the committed files (independent review).
+- Scope: only the 11 installer-managed paths and this plan. No product code. No hand edits to managed files or `workflow.yaml`.
+- Verification evidence:
+  - CI run [37131001257](https://github.com/rexescario-dev/clensy-platform/actions/runs/37131001257) on `46c038b`: Lint, Test and Release gate passed.
+  - Locally: `doctor` ok, `exact-scope-ok`, `pnpm run lint` and `pnpm run test` exit 0.
+- **Reviewer independence (newly adopted M7 rule):** the implementer wrote this record, citing the independent fresh-context review under M6 (0 Critical, 1 Important (fixed), 4 Minor (3 fixed, 1 deferred)).
+- Blocking findings: none. Merge per human/project norms.
+
+**M8 (2026-10-03): N/A.** Installer output only; nothing to refactor.
+
+**M9 (2026-10-03): Complete.** Documentation scope: this plan only.
+- No clensy documentation outside `docs/workflows/**` mentions the installed workflow version. `docs/workflows/**` itself is installer-managed and must not be hand-edited.
+- Content update: this Gate outcomes section, caused by the M6–M10 gates.
+- Verification: the links in this plan resolve, and its status matches reality (plan Accepted with an M5 revision; PR open and green).
+
+**M10 (2026-10-03): Accepted (workflow validated).** Subject: clensy-platform's **newly installed** workflow (`generic` 1.4.1, `claude` 0.2.0), against `docs/workflows/specs/agent-workflow-design.md` §2.10. The report is recorded here, per the adopted M10 rule (the slice plan's Gate outcomes).
+
+Checks:
+- 9 prompts, all citing the governing contract. No orphan assets.
+- Every relative link under `docs/workflows/` resolves (scripted scan).
+- The adopted rules are present and line up:
+  - §2.6/§2.12: M10 (when in scope) before closeout;
+  - "Gate outcomes" in M4 and M10;
+  - characterization evidence in M6, M8 and M7;
+  - the slice-local amendment path in M2 and M3, and in `.claude/skills/workflow/SKILL.md`.
+- The installed workflow contains no Context Forge issue ids or repository identity (the scan is clean).
+- `workflow.providers` (github) is honoured, per the adapter's new rule 6.
+
+Blocking findings: none.
+
+Non-blocking observations:
+- This slice is the first run under the adopted rules. It used:
+  - the stop-and-report rule, at Step 6;
+  - an honest **Partial** pre-validation label;
+  - M7 reviewer independence;
+  - the M10 report location.
+
+  All of these worked as written.
+- Upstream note, recorded for the owner: `claude` 0.1.0's content changed (`2a367bc`) without a version bump. That is the same class of gap as the earlier in-place `generic` 1.2.0 edit (`6f7e599`). A catalog check that "content changed implies version changed" would prevent it, as a future context-forge item.
+
 **Goal:** Bring clensy-platform's installed Context Forge workflow to the current catalog — `generic` 1.2.0 → **1.4.1**, `claude` 0.1.0 → **0.2.0** — through the supported installer, with `doctor` ok and no drift.
 
 **Operation choice — Replace, not Update (decided by measurement):** the only drift is `docs/workflows/prompts/documentation-execution.md`, clensy's deliberate local fix (`e2dac80`) of the leaked `W1-10` id. Upstream `generic` 1.4.1 adopted **exactly** that wording, so the on-disk file is byte-identical to the 1.4.1 published file. Replace therefore rewrites identical bytes and refreshes the inventory digest (clean doctor), while Update would skip it and leave a permanent DRIFT warning. **Safety gate (Step 3):** Replace is only used if that byte-identity holds; otherwise stop.
