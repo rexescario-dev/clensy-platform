@@ -5,7 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Status | Accepted |
-| M5 decision | **Accepted** — 2026-10-03, by the owner; Native execution. Two execution clarifications applied: Step 2 states that the fetch only refreshes the remote-tracking ref (all installer/build work happens inside the detached scratch worktree) and verifies the detached SHA; Step 6 makes the changed-path set an exact machine assertion. `written: 26` is an installer-level count — the Git diff is the authoritative evidence for repository scope. |
+| M5 decision | **Accepted** — 2026-10-03, by the owner; Native execution. Two execution clarifications applied: Step 2 states that the fetch only refreshes the remote-tracking ref (all installer/build work happens inside the detached scratch worktree) and verifies the detached SHA; Step 6 makes the changed-path set an exact machine assertion. `written: 26` is an installer-level count — the Git diff is the authoritative evidence for repository scope. **M5 revision (2026-10-03, during M6, owner decision (a)):** Step 6's `SKILL.md` expectation was too narrow. The real diff also carries the published `claude` 0.1.0 reinforcement from upstream `2a367bc`, now accepted as expected published content (see Step 6). *Pre-validation gap:* pre-validation checked changed-path counts and installer and doctor results, but did not inspect the actual `SKILL.md` content diff. So the Step 6 expectation wrongly narrowed that diff to the #103 routing clause. |
 | Date | 2026-10-03 |
 | Tracking issue | [#126](https://github.com/rexescario-dev/clensy-platform/issues/126) |
 | Branch | `feat/126-adopt-workflow-generic-1-4-1` (off `main` `bb358d3`) |
@@ -93,7 +93,11 @@ Expected: `exact-scope-ok`, which proves all of the following:
 
 Then read two diffs:
 - `git diff workflow.yaml`: inventory only (package versions, asset versions and digests, installation metadata).
-- `git diff .claude/skills/workflow/SKILL.md`: only the Accepted-spec routing clause ` or amending it (M2, then M3)`.
+- `git diff .claude/skills/workflow/SKILL.md` *(revised at M5, owner decision (a))* contains exactly:
+  1. the accepted #103 routing clause ` or amending it (M2, then M3)`;
+  2. the published `claude` 0.1.0 reinforcement introduced upstream by `2a367bc` (2026-09-06, "reinforce Claude activation"): Rule 4's "installer-managed operational state (packages, inventory, `providers`)" wording, Rule 6's `workflow.providers` routing requirement, and Rule 7's Slice Completion Report requirement.
+
+  Those three lines are **published adapter content**, not new clensy semantics or #126 changes. They were absent from clensy's previously installed `claude` 0.1.0 copy because that copy predates the upstream content change (a version that changed content without a bump). #126 makes no design decision about providers or Slice Completion Reports; it adopts published content.
 
 
 - [ ] **Step 7: Clensy checks.** Run: `pnpm run lint && pnpm run test`
