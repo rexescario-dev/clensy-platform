@@ -2034,3 +2034,28 @@ git commit -m "test(118): pin session-transition order and the two-layer provide
 ## Gate outcomes
 
 *(Appended after M5. M6–M10 records are added here as they arrive.)*
+
+**M6 (2026-10-04): Complete.** Tasks 1–9 executed natively in the #118 worktree, in order, test-first:
+
+| Task | Commit | RED observed | GREEN |
+| --- | --- | --- | --- |
+| 1 Validator | `e00aaf7` | module missing | 27 unit cases |
+| 2 Column + migration | `281287e` | migration module missing | migration e2e 1/1 |
+| 3 Service + field | `efb483d` | resolver module missing; e2e 8/8 `Cannot query field` | unit 6/6 (+ `admin.resolver` characterization), e2e 8/8 |
+| 4 Release-gate Phase 8 | `18ff4d5` | resolver unregistered → `[isolation] … got undefined` (file restored byte for byte) | gate 12/12 |
+| 5 Client codegen | `8a3b3bf` | n/a (generated code) | client build, web tsc |
+| 6 `deepMerge` export | `d3a824b` | `expected undefined to be [Function deepMerge]` | 4/4 |
+| 7 Mapper | `ec25ae9` | module missing | 4/4 |
+| 8 Provider | `ab3bcf1` | 4 tenant-value cases failed (incl. `'Finance\|Scheduler'` vs `'Billing\|Dispatch'`) | 12/12; stale-memo mutation fails the isolation test |
+| 9 Structural guards | `659a699` | characterization: 4 mutations each fail (logout order, login order, `deepMerge` order, `network-only`) | 177/177 |
+
+Rulings (deviations from the plan text, none changing product semantics):
+- Jest path patterns: the worktree directory name contains `tenant-label-overrides`, and Jest matches against absolute paths, so the bare pattern selected every suite. Directory-qualified patterns (`domain/tenant-label-overrides`) were used.
+- `apps/api/src/schema.gql` is git-ignored (a boot-time artifact). It regenerated with the new field and is not committed.
+- `jsdom` is pinned to `^29.1.1`, not the latest 30.x. jsdom 30 requires Node ≥ 22.22, and the repository and CI run Node 20.
+- The isolation test renders a fresh element per step. Re-rendering one identical element object let React skip the subtree. A stale-memo mutation proves the fixed test detects retained state.
+- The two new boundary tests were added to `apps/web/eslint.config.mjs`'s named `getMessages()` exception list, following the existing precedent for boundary tests.
+- The RED-check backups were kept in the plan's git-ignored workspace instead of `mktemp` + `rm`, with the same byte-for-byte restore.
+- Lint-only reorders (`record-key-order`) and Prettier wrapping in test files.
+
+Final verification: `pnpm run lint`, `tsc --noEmit` for `apps/api` and `apps/web`, `@clensy/client` and `@clensy/web` builds, and `pnpm run test` all passed (9/9 turbo tasks; API 987 unit tests). The e2e suites `add-tenant-label-overrides` (1/1), `tenant-label-overrides.e2e` (8/8), `admin-foundation` (5/5, characterization) and `two-tenant-release-gate` (12/12) passed.
