@@ -11,7 +11,42 @@
 | Branch | `feat/126-adopt-workflow-generic-1-4-1` (off `main` `bb358d3`) |
 | Governed by (Accepted, upstream) | No clensy-side spec: the adoption adds no clensy semantics (owner decision). The behaviour adopted is defined upstream in `rexescario-dev/context-forge`: Workflow Process Gaps design + #103 slice-local amendment (`generic` 1.3.0/1.4.0, `claude` 0.2.0; PRs #102, #104), and the Workflow Package Management §10.3/§10.4 installed-set amendment plus `generic` 1.4.1 (PR #106, merge `cc20395`). |
 | Authority | Upstream Accepted specs define the content; this plan only sequences the supported installer operation. |
-| Pre-validation | **Full** — every `Expected:` command was run on throwaway detached copies of clensy `main` with the installer built from a clean detached Context Forge checkout of `origin/master` `cc20395` (`ci-packages.sh` exit 0, 972 tests). **Update vs Replace measured on two copies:** both reach `generic` 1.4.1 / `claude` 0.2.0 and change the same 11 paths; Update leaves a DRIFT warning (M9 skipped, inventory still records 1.2.0), Replace yields doctor ok with no warnings and the M9 file **byte-identical** (no diff) — only `workflow.yaml`'s M9 inventory entry differs between the two. On the replaced copy: `pnpm install --frozen-lockfile`, `pnpm run lint`, `pnpm run test` all exit 0. |
+| Pre-validation | **Partial** *(relabelled at M6 under the adopted 1.4.1 pre-validation rule)*. The Step 6 `SKILL.md` content diff was **not** inspected before M5 (see the M5 revision); otherwise every `Expected:` command was run on throwaway detached copies of clensy `main` with the installer built from a clean detached Context Forge checkout of `origin/master` `cc20395` (`ci-packages.sh` exit 0, 972 tests). **Update vs Replace measured on two copies:** both reach `generic` 1.4.1 / `claude` 0.2.0 and change the same 11 paths; Update leaves a DRIFT warning (M9 skipped, inventory still records 1.2.0), Replace yields doctor ok with no warnings and the M9 file **byte-identical** (no diff) — only `workflow.yaml`'s M9 inventory entry differs between the two. On the replaced copy: `pnpm install --frozen-lockfile`, `pnpm run lint`, `pnpm run test` all exit 0. |
+
+
+## Gate outcomes
+
+**M6 (2026-10-03): Complete.** Task 1, Steps 1–9, executed natively. Commit `0d147ef` holds the installer output; the plan commits are separate.
+
+| Step | Evidence |
+| --- | --- |
+| 1 | branch `feat/126-adopt-workflow-generic-1-4-1`, clean tree |
+| 2 | detached Context Forge checkout at `cc20395`; `generic` 1.4.1, `claude` 0.2.0; `ci-packages.sh` exit 0 (972 tests). Only the remote-tracking ref was fetched into the owner's checkout |
+| 3 | doctor before: exit 1. Findings: `warning:DRIFT:docs/workflows/prompts/documentation-execution.md`, 2 × `error:PACKAGE_VERSION_UNAVAILABLE`, `info:PROVIDERS_CONFIGURED`. **Safety gate:** `cmp` of the local M9 file against the published 1.4.1 file is byte-identical, so Replace is allowed |
+| 4 | `replace`: written 26 (installer-level count), skipped none; packages `generic` 1.4.1, `claude` 0.2.0, others unchanged; policy step empty |
+| 5 | doctor after: exit 0, ok, findings `info:PROVIDERS_CONFIGURED` only |
+| 6 | `exact-scope-ok`: exactly the 11 expected paths, and no diff on `documentation-execution.md`. `workflow.yaml` is inventory only (versions, digests, `installedAt`). `SKILL.md`: **expectation mismatch → stopped → owner decision (a) → M5 revision** (`8b9be74`). A line-level check then confirmed exactly 4 added and 2 replaced lines: the #103 routing clause plus the `2a367bc` rules 4, 6 and 7 |
+| 7 | `pnpm run lint` exit 0; `pnpm run test` exit 0 (validation 6, ui 7, @clensy/web 8, web 13 test files, plus api) |
+| 8 | commit `0d147ef` |
+| 9 | scratch checkout removed; `/home/rex/Project/ContextForge` untouched |
+
+There was no TDD (installer-managed files; M6 rule 4).
+
+**Final review:** a fresh, independent agent context (M7 rule 4). Result: 0 Critical, 1 Important, 4 Minor. It verified:
+- all 14 managed files are byte-identical to `origin/master` at `cc20395`;
+- all 26 `workflow.yaml` digests equal the sha256 of the committed files;
+- the scope is exactly the 11 managed paths plus this plan;
+- the M9 blob is unchanged, and only its inventory digest refreshed (`8a2646db…` → `73ff6c63…`);
+- the `2a367bc` provenance holds;
+- the new text references no Context Forge internals.
+
+**Fix pass**, all in this plan:
+- **Important:** this Gate outcomes / M6 record was missing.
+- **Minor, fixed:** pre-validation relabelled **Partial**, as the adopted rule requires.
+- **Minor, fixed:** the stale "someone's WIP" description.
+- **Minor, fixed:** a clause on the 09-24 `installedAt`.
+
+Deferred minor: the M5 decision cell is long (wording only).
 
 **Goal:** Bring clensy-platform's installed Context Forge workflow to the current catalog — `generic` 1.2.0 → **1.4.1**, `claude` 0.1.0 → **0.2.0** — through the supported installer, with `doctor` ok and no drift.
 
@@ -21,7 +56,7 @@
 
 ## Global Constraints
 
-- Run the installer **only** from a fresh detached Context Forge checkout of `origin/master` (`cc20395` or later) — never from `/home/rex/Project/ContextForge` (its working tree is someone's `feat/catalog-policy-profile` WIP).
+- Run the installer **only** from a fresh detached Context Forge checkout of `origin/master` (`cc20395` or later) — never from `/home/rex/Project/ContextForge` (the owner's own checkout, which is on `feat/catalog-policy-profile` with uncommitted local changes, so it must not be used as the installer source).
 - Only installer-managed paths may change: `docs/workflows/**`, `.claude/skills/workflow/SKILL.md`, `workflow.yaml`. No product code, no hand edits to managed files or `workflow.yaml`.
 - No TDD applies (installer-managed documentation; M6 rule 4) — verification is `doctor`, the reviewed diff, and clensy's lint/test suites.
 - Commits carry **no** `Co-Authored-By` trailer and no "Generated with" line.
@@ -97,7 +132,7 @@ Then read two diffs:
   1. the accepted #103 routing clause ` or amending it (M2, then M3)`;
   2. the published `claude` 0.1.0 reinforcement introduced upstream by `2a367bc` (2026-09-06, "reinforce Claude activation"): Rule 4's "installer-managed operational state (packages, inventory, `providers`)" wording, Rule 6's `workflow.providers` routing requirement, and Rule 7's Slice Completion Report requirement.
 
-  Those three lines are **published adapter content**, not new clensy semantics or #126 changes. They were absent from clensy's previously installed `claude` 0.1.0 copy because that copy predates the upstream content change (a version that changed content without a bump). #126 makes no design decision about providers or Slice Completion Reports; it adopts published content.
+  Those three lines are **published adapter content**, not new clensy semantics or #126 changes. They were absent from clensy's previously installed `claude` 0.1.0 copy because that copy (installed 2026-08-14, `192fa19`) predates the upstream content change (a version that changed content without a bump). The later 2026-09-24 installer run (`installedAt` in `workflow.yaml`) did not rewrite the unchanged-version `claude` asset. #126 makes no design decision about providers or Slice Completion Reports; it adopts published content.
 
 
 - [ ] **Step 7: Clensy checks.** Run: `pnpm run lint && pnpm run test`
