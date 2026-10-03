@@ -304,6 +304,32 @@ function wrapsDashboardInBoundary(fileName: string, text: string) {
   return children.length === 1 && hasTag(children[0], dashboard);
 }
 
+// §6.1 dashboard shell (#120). Recognition: a JSX opening or self-closing
+// element whose tag name is literally DashboardLayout, or a local name bound by
+// a named import whose imported name is DashboardLayout, from any module (no
+// module resolution). DashboardLayout gets no escape rules.
+function dashboardShellElements(fileName: string, text: string) {
+  const source = parseSource(fileName, text);
+  const names = new Set(['DashboardLayout']);
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement)) continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (!bindings || !ts.isNamedImports(bindings)) continue;
+    for (const element of bindings.elements) {
+      if ((element.propertyName ?? element.name).text === 'DashboardLayout') names.add(element.name.text);
+    }
+  }
+  let count = 0;
+  const visit = (node: ts.Node) => {
+    if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && ts.isIdentifier(node.tagName) && names.has(node.tagName.text)) {
+      count += 1;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return count;
+}
+
 // §6.1 package boundary (#120): plain path arithmetic only. No module
 // resolution, file-system lookup, extension or index probing, or package.json.
 const packagesWebRoot = resolve(webRoot, '../../packages/web');
@@ -562,6 +588,11 @@ describe('app i18n boundary structure', () => {
         `${PROVIDER}${DASHBOARD}${layoutReturning('<><AppI18nProvider><DashboardLayout>{children}</DashboardLayout></AppI18nProvider><AppI18nProvider /></>')}`,
         false,
       ],
+      [
+        'a second shell in a conditional branch (caught by the dashboard-shell invariant, not here)',
+        `${PROVIDER}${DASHBOARD}${layoutReturning('cond ? <DashboardLayout>{children}</DashboardLayout> : <AppI18nProvider><DashboardLayout>{children}</DashboardLayout></AppI18nProvider>')}`,
+        true,
+      ],
     ])('checks %s', (_label, source, expected) => {
       expect(wrapsDashboardInBoundary('layout.tsx', source)).toBe(expected);
     });
@@ -569,6 +600,44 @@ describe('app i18n boundary structure', () => {
 
   it('mounts AppI18nProvider in the /app layout, directly around DashboardLayout', () => {
     expect(wrapsDashboardInBoundary('app/app/layout.tsx', readWebSource('app/app/layout.tsx'))).toBe(true);
+  });
+
+  describe('dashboard-shell recognition', () => {
+    const PROVIDER = "import { AppI18nProvider } from '../../components/layout/app-i18n-provider';\n";
+    const DASHBOARD = "import { DashboardLayout } from '../../components/layout/dashboard-layout';\n";
+    const layoutReturning = (jsx: string) => `export default function Layout({ children }) {\n  return ${jsx};\n}\n`;
+
+    it.each([
+      ['the canonical layout', `${PROVIDER}${DASHBOARD}${layoutReturning('<AppI18nProvider><DashboardLayout>{children}</DashboardLayout></AppI18nProvider>')}`, 1],
+      [
+        'a sibling shell outside the provider',
+        `${PROVIDER}${DASHBOARD}${layoutReturning('<><AppI18nProvider><DashboardLayout>{children}</DashboardLayout></AppI18nProvider><DashboardLayout /></>')}`,
+        2,
+      ],
+      [
+        'a shell in a conditional branch',
+        `${PROVIDER}${DASHBOARD}${layoutReturning('cond ? <DashboardLayout>{children}</DashboardLayout> : <AppI18nProvider><DashboardLayout>{children}</DashboardLayout></AppI18nProvider>')}`,
+        2,
+      ],
+      ['a shell in another file', "import { DashboardLayout } from '../components/layout/dashboard-layout';\nexport default function Page() {\n  return <DashboardLayout>x</DashboardLayout>;\n}\n", 1],
+      ['an aliased import from any module', "import { DashboardLayout as Shell } from './somewhere';\nexport const Page = () => <Shell />;\n", 1],
+      ['a literal DashboardLayout tag without an import', 'export const Page = () => <DashboardLayout />;\n', 1],
+      ['a property-access tag', "import * as Ui from './ui';\nexport const Page = () => <Ui.DashboardLayout />;\n", 0],
+      ['a same-spelled attribute and an unrelated import', "import { DashboardLayoutProps } from './types';\nexport const Page = () => <div DashboardLayout=\"x\" />;\n", 0],
+    ])('counts %s', (_label, source, expected) => {
+      expect(dashboardShellElements('fixture.tsx', source)).toBe(expected);
+    });
+  });
+
+  // §6.1 dashboard shell (#120): exactly one recognised element across apps/web,
+  // in the /app layout. With the layout-wiring test above, it is the provider's
+  // direct child.
+  it('renders exactly one DashboardLayout shell in apps/web, in the /app layout', () => {
+    const shells = nonTestSources(webRoot)
+      .map((path) => ({ file: relative(webRoot, path), count: dashboardShellElements(path, readFileSync(path, 'utf8')) }))
+      .filter(({ count }) => count > 0);
+
+    expect(shells).toEqual([{ file: 'app/app/layout.tsx', count: 1 }]);
   });
 
   // Secondary text guard; the AST check above is the primary one.
