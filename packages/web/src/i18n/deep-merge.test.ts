@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import * as publicApi from '../index';
 import { deepMerge } from './deep-merge';
 
 describe('deepMerge', () => {
+  it('is exported from the package entry as the same function, not a wrapper', () => {
+    expect(publicApi.deepMerge).toBe(deepMerge);
+  });
+
   it('returns base unchanged when override is undefined', () => {
     const base = { a: 1, b: { c: 2 } };
     expect(deepMerge(base, undefined)).toEqual(base);
