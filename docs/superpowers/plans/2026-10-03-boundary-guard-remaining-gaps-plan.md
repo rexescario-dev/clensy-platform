@@ -51,6 +51,26 @@ Final whole-branch review: one fresh reviewer, independent of the executor. Resu
 
 **Spec-level gap for a follow-up** (the code stands, because closing it would broaden the Accepted §6.1, which M3 and M5 forbid): `'../../node_modules/@clensy/web'`, a pnpm symlink to `packages/web`, gets past the provider and boundary checks. §6.1 computes targets with plain path arithmetic against `<repo>/packages/web`, with no file-system lookup. The reviewer suggested this amendment: treat a relative, absolute or `@/` target that has a `node_modules` segment followed by `@clensy/web` as a violation.
 
+**M7 (2026-10-03): Approved for merge.**
+- Subject: PR [#121](https://github.com/rexescario-dev/clensy-platform/pull/121), head `3b7cad8`. It carries the #120 §6.1 amendment, this Accepted plan and the M6 change set, as process spec §2.8 requires.
+- M6 gate: implementation started only after M5 Accept. Plan Accept is `0a1cedf`, and the first implementation commit, `eac1710`, follows it.
+- Plan tasks: Task 1 ✓, Task 2 ✓, Task 3 ✓, Task 4 ✓ (demonstration recorded under M6; nothing committed). Nothing is deferred or missing, and there is no incremental delivery.
+- Spec conformance:
+  - §3 terms ✓ ("package boundary violation", "dashboard shell element").
+  - §6.1 as amended by #120 ✓: escape item 4 (exact-package `require`/`import()`/import-equals, plus non-literal or missing specifiers); package boundary (every specifier form, deep `@clensy/web/…`, relative, absolute and `@/` targets by path arithmetic, segment-wise containment, bare package and lookalikes allowed, zero-violation assertion); dashboard shell (recognition, tree-wide count of one in `app/app/layout.tsx`, placement via the unchanged layout wiring); and the #120 fixture list.
+  - The #117 behaviour is unchanged.
+  - The independent reviewer found nothing broader or narrower than the amendment, which honours the M3 constraint.
+- Scope: the only non-docs file changed is `apps/web/lib/web-shell-regressions.test.ts`. There are no production, package (`exports` map), CI or dependency changes.
+- Plan deviation: one, the Task 1 union reorder required by lint. It is the identical type, it is recorded under M6, the reviewer accepted it, and it is disclosed in the PR description.
+- Verification evidence:
+  - CI run [37092218743](https://github.com/rexescario-dev/clensy-platform/actions/runs/37092218743) on `3b7cad8`: Lint, Test and Release gate all passed.
+  - Locally, `pnpm --filter web test` passed (13 files, 219 tests), and tsc and lint exited 0.
+  - TDD RED→GREEN evidence for Tasks 1–3 and the five before/after probes are in the M6 record.
+  - The independent reviewer re-ran the guard (126/126) and lint, and ran about 60 extra probes outside the repo.
+- Blocking findings: none.
+- Non-blocking observation: the `node_modules/@clensy/web` symlink path is a spec-level gap for a follow-up (see M6). It does not affect the merge decision.
+- This record was written by the implementer, based on the independent whole-branch review and the CI evidence (as for #117). Merge per human/project norms.
+
 **Goal:** Close the three bypasses left by #117: deep or `packages/web` module specifiers, package load calls (`require`, `import()` and import-equals), and a second `DashboardLayout` shell. This implements the #120 amendment of spec §6.1 in the existing structural test.
 
 **Architecture:** Three independent, syntactic checks sit beside the #117 helpers.
