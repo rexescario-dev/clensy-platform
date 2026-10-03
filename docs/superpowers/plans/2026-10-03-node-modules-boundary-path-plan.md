@@ -38,6 +38,33 @@ Final whole-branch review: one fresh reviewer, independent of the executor. Resu
 
 **Deferred minor:** spec §6.1 item 3's sentence "a mount reached through such a path still counts no provider mount" has no provider-detector fixture. It is not required by "Fixtures (#122)", and its behaviour is correct today (0 mounts, 0 escapes, 1 boundary violation). Pinning it would be optional hardening.
 
+**M7 (2026-10-03): Approved for merge.**
+- Subject: PR [#123](https://github.com/rexescario-dev/clensy-platform/pull/123), head `3807ba0`. It carries the #122 §6.1 amendment, this Accepted plan and the M6 change set (§2.8).
+- M6 gate: plan Accept `77a16b7` precedes the implementation commit `2b0f73b`.
+- Plan tasks: Task 1 ✓, Task 2 ✓ (demonstration recorded under M6; nothing committed). Nothing is deferred or missing.
+- Spec conformance: §6.1 package boundary item 3 ✓, with the segment rule, whole-segment matching, computed targets only, no symlink resolution, and load calls inherited. "Fixtures (#122)" and "Demonstration (#122)" points 1–4 ✓. The #117 and #120 code is byte-identical (confirmed by the independent reviewer).
+- Scope: the only non-docs file changed is the test file. There are no plan deviations and no executor rulings.
+- Verification evidence:
+  - CI run [37095249116](https://github.com/rexescario-dev/clensy-platform/actions/runs/37095249116) on `3807ba0`: Lint, Test and Release gate all passed.
+  - Locally, 13 files and 230 tests pass, and tsc and lint exit 0. The RED→GREEN evidence is in the M6 record.
+  - The independent reviewer re-ran the guard (137/137), tsc and lint.
+- Blocking findings: none.
+- Non-blocking observation: the optional provider-detector fixture recorded under M6.
+- This record was written by the implementer, based on the independent whole-branch review and CI. Merge per human/project norms.
+
+**M8 (2026-10-03): N/A.**
+- The change is one 6-line predicate and one extra disjunct, beside its sibling `isInsidePackagesWeb`, and every row of its fixtures is pinned.
+- There is nothing worth restructuring.
+
+**M9 (2026-10-03): Complete.** Documentation scope: `apps/web/README.md` § i18n, the spec's Tracking cell, and this section.
+- Content updates:
+  - `apps/web/README.md`, "Public entry point only": it now names the `node_modules/@clensy/web` path, and anything beneath it, as a failure. Caused by Task 1 and §6.1 package boundary item 3.
+  - The spec's Tracking cell links PR #123. Caused by the PR being opened.
+  - This section. Caused by the M7–M9 gate outcomes.
+- Editorial changes: none.
+- Unchanged: `packages/web/README.md`, `docs/README.md` (no index entries for these slices) and the earlier slice plans.
+- Verification: the links resolve; status is consistent (the #122 amendment and this plan are Accepted, and the PR is open and green); the terminology matches spec §3; there are no heading changes and no contradictory sections.
+
 **Goal:** Close #122's bypass, where `'../../node_modules/@clensy/web'` reaches `packages/web` through pnpm's workspace symlink. A computed target that contains the whole segments `node_modules`, `@clensy`, `web` becomes a package boundary violation.
 
 **Architecture:** One new pure predicate, `passesThroughClensyWebLink(target)`, joins the existing `isInsidePackagesWeb(target)` inside `isBoundaryViolation`. Both run only on the target `specifierTarget` computes, which is `undefined` for bare specifiers. So every specifier form, the literal-only handling and the tree-wide zero-violation assertion from #120 apply unchanged.
