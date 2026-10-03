@@ -55,6 +55,33 @@ After the fix, the full web suite has 13 files and 268 tests passing, and tsc an
 - No row documents that the qualified-name right-hand exemption also applies in import-equals (`import X = A.P` gives 0). The behaviour is correct, and the spec rule is general.
 - A missing blank line between `isTypeOnlyHeritageName` and `packageReExportEscapes` (style; lint passes).
 
+**M7 (2026-10-03): Approved for merge.**
+- Subject: PR [#125](https://github.com/rexescario-dev/clensy-platform/pull/125), head `cc9f846`. It carries the #124 §6.1 amendment, this Accepted plan and the M6 change set (§2.8).
+- M6 gate: plan Accept `2429b8b` precedes the first implementation commit `449ac39`.
+- Plan tasks: Tasks 1–4 ✓. The final-review fix pass (`1fe9939`) is recorded and justified under M6, and only adds fixture rows the spec and M3 require.
+- Spec conformance: §6.1 as amended by #124 ✓ (ScriptKind; item 2 leftmost `typeof`; item 3 type-only heritage with class `extends` never exempt; the non-reference positions as exact name nodes; "Fixtures (#124)" complete, including the setter row). The independent reviewer found no false exemption across about 90 adversarial probes, and nothing broader or narrower than the amendment.
+- Scope: the only non-docs file changed is the test file. There are no production or package changes.
+- Verification evidence:
+  - CI run [37097551883](https://github.com/rexescario-dev/clensy-platform/actions/runs/37097551883) on `cc9f846`: Lint, Test and Release gate all passed.
+  - Locally, 13 files and 268 tests pass, and tsc and lint exit 0.
+  - The per-task RED/GREEN evidence and the fix-pass mutation evidence are in the M6 record.
+- Blocking findings: none.
+- Non-blocking: the two deferred minors under M6.
+- This record was written by the implementer, based on the independent review and CI. Merge per human/project norms.
+
+**M8 (2026-10-03): N/A.**
+- The predicates are small, exact-position checks beside their #117 siblings, and each is pinned on both sides.
+- The deferred blank-line nit is cosmetic and not worth a separate refactor commit.
+
+**M9 (2026-10-03): Complete.** Documentation scope: `apps/web/README.md` § i18n, the spec's Tracking cell, and this section.
+- Content updates:
+  - `apps/web/README.md`, "No local providers": the escape sentence ("any use … other than as a JSX tag or in `typeof`") now also names the #124 type-only and declaration-name exemptions, and says that class `extends` and value uses are still escapes. Caused by Tasks 2–3 and the §6.1 #124 amendment.
+  - The spec's Tracking cell links PR #125. Caused by the PR being opened.
+  - This section. Caused by the M7–M9 gate outcomes.
+- Editorial changes: none.
+- Unchanged: `packages/web/README.md`, `docs/README.md` and earlier slice plans.
+- Verification: links resolve; status is consistent (amendment and plan Accepted, PR open and green); terminology follows §3; no heading changes, no contradictions.
+
 **Goal:** Remove the five #117-deferred false positives from the provider-escape detector, without exempting any position that can load or mount the provider. Also pin the #122 `node_modules` interaction.
 
 **Architecture:** Every change is a narrower predicate at one exact syntax position:
