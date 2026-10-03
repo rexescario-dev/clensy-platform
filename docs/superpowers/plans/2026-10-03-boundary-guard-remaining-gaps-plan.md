@@ -5,7 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Status | Draft (revised after M5 round 1) |
-| M5 decision | **Changes Requested** — 2026-10-03, round 1, by the owner. Two fixes, both applied. (1) Task 4 no longer relies on `$PROBE_DIR` surviving between executor calls: Step 2 records the printed temporary directory, and every later command, including the `cmp` recovery, uses that recorded literal path, written `<PROBE_DIR>`. (2) `moduleSpecifierOf()`'s comment now ties each accepted syntax to its AST node: `ImportDeclaration` covers both normal and `import type` declarations, and `ImportTypeNode` covers type-position `import('…')`. The implementation is unchanged. Step 4 also restates the stop-don't-delete rule for unexpected probe content. |
+| M5 decision | **Changes Requested** — 2026-10-03, round 2, by the owner. Three minor fixes, all applied. (1) `isLoadCall` is pinned to TypeScript 5.9.3's AST: dynamic `import(…)` is a `CallExpression` whose `expression` has kind `SyntaxKind.ImportKeyword`, and `require(…)` has an `Identifier` callee spelled `require`. Task 1 Step 3 states this, and the existing executed fixture rows (`import('@clensy/web')` → 1, `require('@clensy/web')` → 1, `require.resolve('@clensy/web')` → 0) are named in Step 4 as the pins. (2) The Task 3 fixture `an unimported literal tag (fails closed)` is renamed `a literal DashboardLayout tag without an import`, because literal spelling is recognised by rule, not by failing closed. The traceability row now states the literal-versus-binding distinction. (3) Task 4 deletes nothing it has not verified: each probe is written to `<PROBE_DIR>` first and copied into place, and it is removed only after `cmp` matches that copy. The `main` guard copy is removed only after `cmp` against `git show main:…`; a mismatch means stop and report. **Round 1 (Changes Requested):** Two fixes, both applied. (1) Task 4 no longer relies on `$PROBE_DIR` surviving between executor calls: Step 2 records the printed temporary directory, and every later command, including the `cmp` recovery, uses that recorded literal path, written `<PROBE_DIR>`. (2) `moduleSpecifierOf()`'s comment now ties each accepted syntax to its AST node: `ImportDeclaration` covers both normal and `import type` declarations, and `ImportTypeNode` covers type-position `import('…')`. The implementation is unchanged. Step 4 also restates the stop-don't-delete rule for unexpected probe content. |
 | Date | 2026-10-03 |
 | Tracking issue | [#120](https://github.com/rexescario-dev/clensy-platform/issues/120), the #117 / PR #119 final-review follow-ups |
 | Scope | `apps/web/lib/web-shell-regressions.test.ts` only. No production code, package (no `exports` map), CI or catalog change. |
@@ -134,7 +134,9 @@ function isLiteralSpecifier(node: ts.Node | undefined): node is ts.StringLiteral
 }
 
 // A `require(…)` call (callee spelled `require`, no scope analysis) or a
-// dynamic `import(…)` call. `require.resolve(…)` is a property call, not a load.
+// dynamic `import(…)` call. In the TypeScript 5.9 AST, `import(…)` is a
+// CallExpression whose `expression` has kind SyntaxKind.ImportKeyword.
+// `require.resolve(…)` has a PropertyAccessExpression callee, so it is not a load.
 function isLoadCall(node: ts.Node): node is ts.CallExpression {
   return (
     ts.isCallExpression(node) &&
@@ -160,6 +162,8 @@ function loadCallEscapes(node: ts.Node) {
 }
 ```
 
+`isLoadCall` MUST recognise TypeScript 5.9.3's AST form of dynamic `import(…)` (a `CallExpression` whose `expression.kind` is `ts.SyntaxKind.ImportKeyword`), as well as an identifier-spelled `require(…)` callee. `require.resolve(…)` MUST stay excluded, because its callee is a `PropertyAccessExpression`. Step 4's executed fixture rows pin all three.
+
 In `providerUses`, replace:
 
 ```ts
@@ -176,7 +180,12 @@ with:
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `pnpm --filter web exec vitest run lib/web-shell-regressions.test.ts`
-Expected: PASS, all tests. `has no provider escapes anywhere in apps/web` still passes, because no scanned file uses `require` or `import()`.
+Expected: PASS, all tests. The AST pins for `isLoadCall` are these executed rows:
+- `counts a dynamic import of the package correctly`: `{ mounts: 0, escapes: 1 }`;
+- `counts a require of the package correctly`: `{ mounts: 0, escapes: 1 }`;
+- `counts require.resolve of the package correctly`: `{ mounts: 0, escapes: 0 }`.
+
+`has no provider escapes anywhere in apps/web` still passes, because no scanned file uses `require` or `import()`.
 
 Run: `pnpm --filter web exec tsc --noEmit && pnpm --filter web lint`
 Expected: both exit 0.
@@ -402,7 +411,7 @@ Directly after the whole `it('mounts AppI18nProvider in the /app layout, directl
       ],
       ['a shell in another file', "import { DashboardLayout } from '../components/layout/dashboard-layout';\nexport default function Page() {\n  return <DashboardLayout>x</DashboardLayout>;\n}\n", 1],
       ['an aliased import from any module', "import { DashboardLayout as Shell } from './somewhere';\nexport const Page = () => <Shell />;\n", 1],
-      ['an unimported literal tag (fails closed)', 'export const Page = () => <DashboardLayout />;\n', 1],
+      ['a literal DashboardLayout tag without an import', 'export const Page = () => <DashboardLayout />;\n', 1],
       ['a property-access tag', "import * as Ui from './ui';\nexport const Page = () => <Ui.DashboardLayout />;\n", 0],
       ['a same-spelled attribute and an unrelated import', "import { DashboardLayoutProps } from './types';\nexport const Page = () => <div DashboardLayout=\"x\" />;\n", 0],
     ])('counts %s', (_label, source, expected) => {
@@ -512,10 +521,10 @@ The guard skips `*.test.*` files, so this copy never shows up in either guard's 
 - [ ] **Step 3: Probe each bypass against both guards**
 
 For each probe below:
-1. Create the probe file (or apply the layout edit).
+1. Write the probe content to `<PROBE_DIR>/<the probe's file name>` first (for example `<PROBE_DIR>/probe-deep.tsx`), then copy it into place with `cp`. The copy in `<PROBE_DIR>` is the reference that cleanup checks against. For probe (e), apply the layout edit instead.
 2. Run: `pnpm --filter web exec vitest run lib/pre-120-guard.test.ts -t "app i18n boundary structure"` and record the result.
 3. Run: `pnpm --filter web exec vitest run lib/web-shell-regressions.test.ts -t "app i18n boundary structure"` and record the result.
-4. Remove only that probe's file with `rm` on its exact path. For probe (e), restore the layout with `cp "<PROBE_DIR>/layout.tsx.orig" apps/web/app/app/layout.tsx`, using the recorded literal path.
+4. Remove only that probe's file, and only after verifying it: `cmp "<PROBE_DIR>/<file name>" <probe path> && rm <probe path>`. If `cmp` reports a difference, stop and report it; do not delete the file. For probe (e), restore the layout with `cp "<PROBE_DIR>/layout.tsx.orig" apps/web/app/app/layout.tsx`, using the recorded literal path.
 
 | Probe | Files | #117 guard | Amended guard |
 | --- | --- | --- | --- |
@@ -529,9 +538,15 @@ If any cell differs from the table, stop and report it. Do not change a fixture,
 
 - [ ] **Step 4: Clean up and confirm the tree**
 
-Only the five probe paths listed under **Files** are removed. Step 2 confirmed that none of them existed before this task. If a path holds anything other than the probe content this task wrote, stop and report it; do not delete it.
+Nothing is deleted without verification. Step 2 confirmed that none of the five paths existed before this task, and Step 3 removed each probe only after `cmp` matched its reference copy.
 
-Run, substituting the recorded literal path for `<PROBE_DIR>`: `rm -f apps/web/lib/pre-120-guard.test.ts apps/web/components/probe-deep.tsx apps/web/components/probe-relative.tsx apps/web/lib/probe-load.ts apps/web/components/probe-shell.tsx && cmp "<PROBE_DIR>/layout.tsx.orig" apps/web/app/app/layout.tsx && rm -r "<PROBE_DIR>" && git status --short`
+Run: `ls apps/web/components/probe-deep.tsx apps/web/components/probe-relative.tsx apps/web/lib/probe-load.ts apps/web/components/probe-shell.tsx 2>&1 | grep -v 'No such file'`
+Expected: no output (every probe is already gone). If anything is printed, stop and report it; do not delete it.
+
+Run: `git show main:apps/web/lib/web-shell-regressions.test.ts | cmp - apps/web/lib/pre-120-guard.test.ts && rm apps/web/lib/pre-120-guard.test.ts`
+Expected: no output, and the guard copy is removed. If `cmp` reports a difference, stop and report it; do not delete the file.
+
+Run, substituting the recorded literal path for `<PROBE_DIR>`: `cmp "<PROBE_DIR>/layout.tsx.orig" apps/web/app/app/layout.tsx && rm -r "<PROBE_DIR>" && git status --short`
 Expected: no output. `cmp` confirms the layout is byte-identical and the tree is clean. If `cmp` reports a difference, restore with `cp "<PROBE_DIR>/layout.tsx.orig" apps/web/app/app/layout.tsx`, using the same recorded literal path, and re-run.
 
 Run: `git diff --stat main -- apps packages .github`
@@ -555,7 +570,7 @@ Record the filled-in Step 3 table in the M6 Slice Completion Report and the PR d
 | Package boundary: relative, absolute (built at test time) and `@/` targets, the directory itself, segment-by-segment comparison | 2 |
 | Package boundary: bare `@clensy/web`, other packages and lookalikes allowed | 2 |
 | Zero boundary violations, an independent assertion | 2 (`has no package boundary violations anywhere in apps/web`) |
-| Dashboard shell recognition (literal, or named import from any module; no escape rules) | 3 |
+| Dashboard shell recognition: a literal `DashboardLayout` spelling is recognised regardless of binding; an alias is recognised only when bound by a named import whose imported name is `DashboardLayout` (from any module); no escape rules | 3 |
 | Dashboard shell placement: exactly one, in `app/app/layout.tsx`, the provider's direct child | 3 (tree test plus the unchanged layout-wiring test; see the Task 3 note) |
 | #120 fixture list | 1–3 (inline), 4 (before/after demonstration) |
 | Layout wiring and all #117 assertions unchanged | No task edits them; Task 3 only adds one characterisation row |
