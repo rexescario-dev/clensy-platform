@@ -98,6 +98,29 @@ Final whole-branch review: one fresh reviewer, independent of the executor. Resu
   - Terminology: "provider escape" and "app i18n boundary" are used as defined in spec §3.
   - No heading changes, no duplicate or contradictory sections, no code or contract edits.
 
+**M10 (2026-10-03): Accepted (workflow validated).** Subject: the installed workflow prompt library (`docs/workflows/`, generic 1.2.0), validated against `docs/workflows/specs/agent-workflow-design.md` §2.10. This slice ran the workflow on #117 from M2 to M9.
+
+Asset inventory:
+- `prompts/`: `specification` M2, `design-review` M3, `implementation-planning` M4, `plan-review` M5, `implementation-execution` M6, `code-review` M7, `refactoring` M8, `documentation-execution` M9, `workflow-validation` M10.
+- `conventions/`: `prompt-library` M1, `reporting-conventions` (§2.11).
+- `specs/agent-workflow-design.md`: the governing contract.
+
+Checks:
+- All 9 prompts cite the governing contract and declare exactly one stage. There are no orphan assets.
+- Every relative link under `docs/workflows/` resolves (scripted scan, no broken links).
+- The M5→M6 hard prerequisite is stated in both process spec §2.5 and the M6 prompt, and this slice honoured it: plan Accept `bbab9dc` precedes the first implementation commit `c833aed`.
+- The provider rule (`prompt-library.md` §12) was honoured: GitHub for the issue, the branch and the PR.
+- Slice Completion Reports were emitted at M6 and at M7–M9.
+
+Blocking findings: none. The M2→M9 path for #117 was executed using only these assets plus the process spec.
+
+Non-blocking observations:
+1. **Amending an Accepted spec has no written procedure.** §2.8 permits "slice-local specification amendments", but `specification.md` describes only a fresh Draft spec ("exactly one Draft specification"). This slice ran M2/M3 on an in-place §6.1 amendment, with Draft and then Accepted recorded in the header and M3 rows, following the bookings-spec precedent. That worked, but it was inferred rather than instructed.
+2. **Carried forward from #115** (observations 1–3, still open):
+   - M10 has no conventional report location, so the report again lives in the slice plan.
+   - `code-review.md` does not say whether the M7 reviewer must be independent of the M6 implementer. Here, too, the M7 record was written by the implementer, based on an independent whole-branch review.
+   - The §2.12 merge and M10 have no stated order between them. This slice again ran M10 before the human-authorized merge.
+
 **Goal:** Close the three bypasses of the app i18n boundary guard. These are unscanned JavaScript files, provider escapes (re-export barrels and value references), and name-only layout wiring. The fix is to implement the amended spec §6.1 in the existing structural test.
 
 **Architecture:** The guard stays a syntactic, parser-only check in `apps/web/lib/web-shell-regressions.test.ts`.
