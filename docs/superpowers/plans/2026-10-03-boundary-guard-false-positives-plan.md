@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Accepted |
+| M5 decision | **Accepted** — 2026-10-03, by the owner, with one clarification, applied: Task 2 Step 3 states that `isNamedTypeQuery` recognises only the leftmost identifier of the qualified name, climbing through `.left` only. To be executed natively. Execution guard: if the real repository contradicts a precondition, fixture expectation or RED/GREEN result, stop and report it; do not alter the implementation or fixtures to make an expected result pass. |
 | Date | 2026-10-03 |
 | Tracking issue | [#124](https://github.com/rexescario-dev/clensy-platform/issues/124): the #117 deferred minors, plus the #122 characterisation fixture |
 | Scope | `apps/web/lib/web-shell-regressions.test.ts` only. No production code, package, CI or catalog change. The workflow-process observations are out of scope and go upstream to `rexescario-dev/context-forge` as a separate PR. |
@@ -226,6 +227,8 @@ with:
 ```
 
 The heritage exemption applies to namespace bindings only. Item 2 gives the named binding none.
+
+`isNamedTypeQuery` MUST recognise only the **leftmost identifier** of the qualified name. It starts at the identifier and climbs only while that node is the `.left` of its parent `QualifiedName`, so the walk begins at `P`. In `typeof P.a.b`, `P` is the binding being queried. `a` and `b` are `.right` names, not independent binding references: the climb never starts from them, and they are not bindings anyway.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
