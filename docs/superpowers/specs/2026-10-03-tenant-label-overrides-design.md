@@ -2,8 +2,9 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft (revised after the first M3 pass) |
+| Status | Accepted |
 | Date | 2026-10-03 |
+| M3 decision | **Accepted** — 2026-10-03, at `f78c36a`, by the owner, with no further clarification. M4 implements it mechanically and MUST keep the locked decisions: a typed, roles-only, `en`-only `CurrentAdmin.tenantLabelOverrides` field with no arguments; a single service read path through the validator; a data-only web mapper; `deepMerge(APP_I18N_OVERRIDES, tenantLayer)` precedence; and no write path. |
 | M3 history | First pass (2026-10-03) returned eleven clarifications without reopening the design, all applied: read-path ownership (§4.2, §4.7 item 3), the meaning of *object* (§4.2), log-once structural logging (§4.2), `locale` as a catalog identifier (§4.3), Apollo loading and cached-data behavior (§4.4, §4.5), the session-transition term and step order (§3, §4.5, §4.7 item 9), an explicit cross-identity isolation test (§6.2), scoped acceptance wording (§9), migration `NULL` and `down()` assertions (§6.1), a same-function `deepMerge` export test (§6.2), and a pinned `deepMerge` argument order (§4.5, §6.2). |
 | Document kind | Architecture RFC |
 | Tracking issue | [#118](https://github.com/rexescario-dev/clensy-platform/issues/118) — deferred from #115 ([single app i18n provider spec](2026-10-02-single-app-i18n-provider-design.md) §8). |
