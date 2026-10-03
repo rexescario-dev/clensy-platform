@@ -15,6 +15,29 @@
 | Edit anchors | Every edit is located by the **quoted code**, not by line number. Line numbers are approximate, taken from `main` at `0cd53cb`. |
 | Pre-validation | The code and every fixture expectation below were extracted from this plan's text and applied to a copy of the guard outside the repo. That copy was then checked with **every command this plan's `Expected:` lines name**: Vitest, `tsc` in strict mode, and ESLint with `apps/web`'s own config (this answers #120's M10 observation 1). All matched, and the RED state was confirmed. On the real `apps/web` tree the amended rule finds 0 violations. |
 
+
+## Gate outcomes
+
+**M6 (2026-10-03): Complete.** Tasks 1–2 were executed natively, in order and test-first:
+- `2b0f73b`: Task 1
+- Task 2 committed nothing.
+
+The planned RED state occurred: exactly the 6 violation rows failed, each receiving `[]`. The 5 allowed rows passed before implementation. GREEN: the guard file passes 137/137, and the real tree has no violations. The final full web suite has 13 files and 230 tests passing, and `tsc --noEmit` and lint exit 0. Every `Expected:` line matched, and there were **no executor rulings**.
+
+Task 2 demonstration (spec "Demonstration (#122)"): each guard run was separate, and every probe was removed only after `cmp`.
+
+| Spec point | Probe | `main` guard (pre-#122 amendment) | Amended guard |
+| --- | --- | --- | --- |
+| 1–2 | the exact #122 mount, `'../../node_modules/@clensy/web'` | PASS (not reported) | FAIL: `has no package boundary violations…` lists `{ file: 'app/app/probe-link.tsx', specifiers: ['../../node_modules/@clensy/web'] }` |
+| 3 | the `/src` form | PASS | FAIL: boundary lists `app/app/probe-link-src.tsx` |
+| 4 | the lookalikes (`webkit`, `web-extra`, `ui`, `my_node_modules`) | PASS | PASS (still allowed) |
+
+The `main` guard copy was removed after `cmp` against `git show main:…`. The tree is clean, and the diff against `main` outside `docs/` is the test file only.
+
+Final whole-branch review: one fresh reviewer, independent of the executor. Result: 0 Critical, 0 Important, 1 Minor, ready to merge. The implementation conforms exactly to item 3, and the #117 and #120 code is byte-identical. The reviewer's extra probes confirmed whole-segment matching, any depth (including `.pnpm` and repo-root `node_modules`), and normalisation cases (`web/`, `./`, `//`, `web/../ui`).
+
+**Deferred minor:** spec §6.1 item 3's sentence "a mount reached through such a path still counts no provider mount" has no provider-detector fixture. It is not required by "Fixtures (#122)", and its behaviour is correct today (0 mounts, 0 escapes, 1 boundary violation). Pinning it would be optional hardening.
+
 **Goal:** Close #122's bypass, where `'../../node_modules/@clensy/web'` reaches `packages/web` through pnpm's workspace symlink. A computed target that contains the whole segments `node_modules`, `@clensy`, `web` becomes a package boundary violation.
 
 **Architecture:** One new pure predicate, `passesThroughClensyWebLink(target)`, joins the existing `isInsidePackagesWeb(target)` inside `isBoundaryViolation`. Both run only on the target `specifierTarget` computes, which is `undefined` for bare specifiers. So every specifier form, the literal-only handling and the tree-wide zero-violation assertion from #120 apply unchanged.
