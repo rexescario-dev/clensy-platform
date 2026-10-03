@@ -4,5 +4,16 @@ query CurrentAdmin {
     role
     scope
     tenantId
+    tenantLabelOverrides {
+      locale
+      roles {
+        ANALYST
+        CUSTOMER_SUPPORT
+        FINANCE
+        OPS_MANAGER
+        SCHEDULER
+        TENANT_OWNER
+      }
+    }
   }
 }
