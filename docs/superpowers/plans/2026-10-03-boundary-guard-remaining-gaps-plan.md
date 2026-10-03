@@ -71,6 +71,30 @@ Final whole-branch review: one fresh reviewer, independent of the executor. Resu
 - Non-blocking observation: the `node_modules/@clensy/web` symlink path is a spec-level gap for a follow-up (see M6). It does not affect the merge decision.
 - This record was written by the implementer, based on the independent whole-branch review and the CI evidence (as for #117). Merge per human/project norms.
 
+**M8 (2026-10-03): N/A.**
+- Scope: the #120 change set, `apps/web/lib/web-shell-regressions.test.ts`.
+- The three new checks are independent and each does one thing: `loadCallEscapes`, `boundaryViolations` (with `moduleSpecifierOf`, `specifierTarget`, `isInsidePackagesWeb` and `isBoundaryViolation`), and `dashboardShellElements`. Each is pinned by inline fixtures and its own tree test.
+- `dashboardShellElements` and `#117`'s `namedImportLocal` both read named imports, but with different semantics: imports from any module versus one exact path. Merging them would add a parameterised abstraction for no gain.
+- As at #115 and #117, the helpers stay next to their only test. Moving them into `lib/` would put them in the tree the guard scans.
+- No behaviour-preserving restructuring is worth its risk.
+
+**M9 (2026-10-03): Complete.** Documentation scope: `apps/web/README.md` § i18n, the spec's Tracking cell, and this section.
+- Content updates:
+  - `apps/web/README.md`, "No local providers": the closing sentence claimed the guard "covers only `import … from '@clensy/web'`", which #120 made false. It now describes load-call escapes. Caused by Task 1 and §6.1 escape item 4.
+  - `apps/web/README.md`: new "Public entry point only" and "One dashboard shell" bullets, plus a line stating the syntactic, no-module-resolution scope. Caused by Tasks 2–3 and the §6.1 package boundary and dashboard shell invariants.
+  - The spec's Tracking cell links PR #121. Caused by the PR being opened.
+  - This section. Caused by the M7–M9 gate outcomes.
+- Editorial changes: none.
+- Unchanged:
+  - `packages/web/README.md`: says nothing about the guard.
+  - `docs/README.md`: #115 and #117 have no index entry.
+  - The #117 plan: left as the record of its own slice.
+- Verification:
+  - Links: the PR, issue and spec links resolve.
+  - Status consistency: the #120 amendment and this plan are both Accepted, and the PR is open and green.
+  - Terminology: "provider escape", "package boundary" and "app i18n boundary" are used as defined in spec §3.
+  - No heading changes. No contradictory sections remain; the README's former "covers only…" claim is removed. No code or contract edits.
+
 **Goal:** Close the three bypasses left by #117: deep or `packages/web` module specifiers, package load calls (`require`, `import()` and import-equals), and a second `DashboardLayout` shell. This implements the #120 amendment of spec §6.1 in the existing structural test.
 
 **Architecture:** Three independent, syntactic checks sit beside the #117 helpers.
