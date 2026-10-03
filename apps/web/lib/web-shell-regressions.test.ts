@@ -90,6 +90,46 @@ describe('web shell regressions', () => {
     const handleLogin = /async function handleLogin[\s\S]*?\n {2}\}/.exec(login)?.[0] ?? '';
 
     expect(handleLogin).toMatch(/await apolloClient\.clearStore\(\);\s*router\.push\('\/app'\)/);
+    // Tenant label overrides spec §4.5: confirm the session, then clear, then navigate.
+    expect(handleLogin).toMatch(
+      /if \(!result\.data\?\.login\.success\)[\s\S]*await apolloClient\.clearStore\(\);\s*router\.push\('\/app'\)/,
+    );
+  });
+
+  // Tenant label overrides spec §4.5, §4.7 item 9: the logout session
+  // transition confirms the server-side logout, then clears the Apollo
+  // store, then navigates.
+  it('ends the session, then clears the Apollo cache, then leaves /app on logout', () => {
+    const userMenu = readWebSource('components/layout/user-menu.tsx');
+    const handleLogout = /async function handleLogout\(\)[\s\S]*?\n {2}\}/.exec(userMenu)?.[0] ?? '';
+
+    expect(handleLogout).toMatch(
+      /await logout\(\);\s*if \(!result\.data\?\.logout\) throw[\s\S]*await apolloClient\.clearStore\(\);\s*router\.replace\('\/login'\)/,
+    );
+  });
+
+  // Amended single app i18n provider spec §4.5 items 5 and 9; tenant label
+  // overrides spec §4.4, §4.5. Pins the provider's invariants directly.
+  it('keeps AppI18nProvider children-only, composing exactly the static and currentAdmin layers', () => {
+    const provider = readWebSource('components/layout/app-i18n-provider.tsx');
+
+    // 1. Children-only signature.
+    expect(provider).toContain('export function AppI18nProvider({ children }: { children: ReactNode })');
+    // 2. Locale only from next-intl.
+    expect(provider).toContain('const locale = useLocale();');
+    // 3. Default cache-first query, data only: no options (so no fetchPolicy /
+    //    network-only), and no loading or error destructured, so neither gates
+    //    rendering nor clears the tenant layer.
+    expect(provider).toContain('const { data } = useCurrentAdminQuery();');
+    expect(provider.match(/useCurrentAdminQuery\(/g)).toHaveLength(1);
+    expect(provider).not.toMatch(/fetchPolicy|network-only/);
+    // 4–6. Static layer first, tenant layer second (tenant wins), memoized on
+    //      the tenant overrides and locale.
+    expect(provider).toMatch(
+      /useMemo\(\s*\(\) => deepMerge\(APP_I18N_OVERRIDES, tenantLayer\(tenantLabelOverrides, locale\)\),\s*\[tenantLabelOverrides, locale\],?\s*\)/,
+    );
+    // 7. The merged value is the only overrides input to the provider mount.
+    expect(provider).toContain('<ClensyI18nProvider locale={locale} overrides={overrides}>');
   });
 });
 

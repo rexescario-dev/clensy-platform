@@ -6,6 +6,8 @@ import { LoginService } from './application/services/login.service';
 import { AdminIdentityLookupService } from './infrastructure/admin-identity-lookup.service';
 import { AdminUserEntity } from './infrastructure/persistence/admin-user.entity';
 import { TenantEntity } from './infrastructure/persistence/tenant.entity';
+import { TenantLabelOverridesService } from './application/services/tenant-label-overrides.service';
+import { CurrentAdminLabelOverridesResolver } from './presentation/graphql/current-admin-label-overrides.resolver';
 
 // Imports `AuditModule` (for the `AUDIT_LOGGER` token `AdminsService`/
 // `LoginService` inject) but deliberately does NOT import `AuthModule`
@@ -38,6 +40,15 @@ import { TenantEntity } from './infrastructure/persistence/tenant.entity';
     TypeOrmModule.forFeature([AdminUserEntity, TenantEntity]),
     AuditModule,
   ],
-  providers: [AdminsService, LoginService, AdminIdentityLookupService],
+  // `CurrentAdminLabelOverridesResolver` needs only this module's own
+  // `TenantLabelOverridesService`, so unlike `AdminResolver` (see above) it
+  // can be registered here (#118).
+  providers: [
+    AdminsService,
+    LoginService,
+    AdminIdentityLookupService,
+    TenantLabelOverridesService,
+    CurrentAdminLabelOverridesResolver,
+  ],
 })
 export class AdminsModule {}

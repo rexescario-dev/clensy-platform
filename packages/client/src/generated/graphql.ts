@@ -715,7 +715,7 @@ export type CreateAdminMutation = { createAdmin: { id: string, email: string, ro
 export type CurrentAdminQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type CurrentAdminQuery = { currentAdmin: { id: string, role: Role, scope: AdminScope, tenantId: string | null } };
+export type CurrentAdminQuery = { currentAdmin: { id: string, role: Role, scope: AdminScope, tenantId: string | null, tenantLabelOverrides: { locale: string, roles: { ANALYST: string | null, CUSTOMER_SUPPORT: string | null, FINANCE: string | null, OPS_MANAGER: string | null, SCHEDULER: string | null, TENANT_OWNER: string | null } } | null } };
 
 export type CustomersQueryVariables = Exact<{
   paging?: OffsetPaging | null | undefined;
@@ -2002,6 +2002,17 @@ export const CurrentAdminDocument = gql`
     role
     scope
     tenantId
+    tenantLabelOverrides {
+      locale
+      roles {
+        ANALYST
+        CUSTOMER_SUPPORT
+        FINANCE
+        OPS_MANAGER
+        SCHEDULER
+        TENANT_OWNER
+      }
+    }
   }
 }
     `;

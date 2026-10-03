@@ -19,6 +19,13 @@ export class TenantEntity implements Tenant {
   @Column()
   name!: string;
 
+  // Tenant label overrides spec §4.1, §4.2: raw, untrusted jsonb. With
+  // `select: false`, an ordinary TenantEntity load never reads it; only
+  // TenantLabelOverridesService selects it, and only through the validator.
+  // Deliberately not part of the `Tenant` domain interface.
+  @Column({ type: 'jsonb', nullable: true, select: false })
+  labelOverrides!: unknown;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;
 
