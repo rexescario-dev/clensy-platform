@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Draft (revised after the first M5 pass) |
+| M5 history | First pass (2026-10-04) requested changes without architectural redesign, all applied. MUST: validator treats only `null` as a NULL column (Task 1); the migration test counts rows before `up()` and checks its own inserted row, with no bootstrap assumption (Task 2); e2e warning expectations are explicit `(path, reason)` tuples, and redaction checks the exact rejected values (Task 3); the mapper accepts `null` (Task 7); the Phase 8 RED check backs up and restores the file byte for byte, never `git checkout --` (Task 4); Phase 8 stores more tenant-specific labels (Task 4); the schema test owns only the new field (Task 3); the provider is pinned to the default cache-first, data-only `useCurrentAdminQuery()` (Task 9). SHOULD: the mapper indexes the typed `roles` directly (Task 7); the Task 9 provider assertions pin the provider's actual invariants (Task 9); the service follows the module's `@InjectRepository` read pattern, verified (Task 3, decision 2); "exactly" is reworded as "only retained shape" (Global Constraints). Also: the isolation test probes two role paths and checks the static layer is not mutated (Task 8); the e2e commands follow the verified pattern-forwarding convention (Environment prerequisites, Final verification); the `implements` comment is corrected (Task 3). |
 | Date | 2026-10-03 |
 | Tracking issue | [#118](https://github.com/rexescario-dev/clensy-platform/issues/118) |
 | Scope | `apps/api` (domain, application, persistence, GraphQL, migration, tests, generated `schema.gql`), `packages/client` (one operation document and generated code), `packages/web` (one additive export and its test), `apps/web` (mapper, `AppI18nProvider`, tests, one dev dependency). |
@@ -29,11 +30,11 @@
 
 Copied from the Accepted spec. Every task's requirements implicitly include this section.
 
-- Accepted stored shape: exactly `{ "en": { "roles": { <Role>: <string> } } }`. Everything else is dropped, never preserved (§4.1, §4.7 item 4).
+- Retained shape: only `{ "en": { "roles": { <Role>: <string> } } }` survives. Every other node or leaf is rejected and dropped **individually**; it is never preserved, and it does not invalidate valid siblings (§4.1, §4.2, §4.7 item 4).
 - Relabelable roles: `Role` minus `SUPER_ADMIN`, **derived** from the enum. The six names are not written a second time in validation logic (§4.2).
 - Leaf rule: string; trimmed; 1–64 **Unicode code points**; no control characters, including `\r` and `\n`. A kept value is returned **trimmed** (§4.2).
 - *Object* means a non-null, non-array JSON object with string keys. Never rely on `typeof value === 'object'` alone (§4.2).
-- Each rejected node or leaf is logged **once**, at warning level, at its own path (`$` for the top level), with tenant id and reason, **never the value**. Nothing beneath a rejected node is logged. A `NULL` column is not logged (§4.2, §4.7 item 6).
+- Each rejected node or leaf is logged **once**, at warning level, at its own path (`$` for the top level), with tenant id and reason, **never the value**. Nothing beneath a rejected node is logged. A `NULL` column (`null`) is not logged. `undefined` is not a database value and gets no special case; the service normalizes a missing row to `null` (§4.2, §4.7 item 6).
 - One application-service method is the only application code that reads `TenantEntity.labelOverrides`. The resolver never reads the column or `TenantEntity` (§4.2, §4.7 item 3).
 - `CurrentAdmin.tenantLabelOverrides: TenantLabelOverrides` is nullable and takes **no arguments**. It is `null` for `PLATFORM` scope and when nothing is kept. `locale` is always `"en"` (§4.3).
 - No new root query or mutation; the root-operation inventory does not change (§4.3).
@@ -71,12 +72,12 @@ Inputs and conditions the spec implies but does not list as test cases, most lik
 These are planning choices, not product semantics. They are listed here so M5 can accept or reject them explicitly.
 
 1. **Logging sits at the service, not in the validator.** Spec §4.2 calls the validator a "pure domain function" that "logs each node or leaf it rejects". Logging is a side effect, and the repository conventions keep pure helpers pure. So the validator returns its rejections (`{ path, reason }`, never a value), and `TenantLabelOverridesService` writes exactly one warning per rejection. The observable behavior is the same: one warning per rejected node or leaf, at its own path, without the value. The log tests sit at the e2e level (Task 3), and the one-per-node and path tests sit at the validator level (Task 1).
-2. **`labelOverrides` is declared with `select: false`.** An ordinary `TenantEntity` load then never reads the column. Only the service's explicit `addSelect` does. This enforces invariant 3 mechanically.
+2. **`labelOverrides` is declared with `select: false`, and the service injects `Repository<TenantEntity>`.** An ordinary `TenantEntity` load then never reads the column. Only the service's explicit `addSelect` does. This enforces invariant 3 mechanically. Verified against the existing pattern: `admins` read services inject TypeORM repositories with `@InjectRepository` (`LoginService`, `AdminIdentityLookupService`), and `DataSource` is used only where a transaction is needed (`AdminsService`). `TenantEntity` is already in `AdminsModule`'s `TypeOrmModule.forFeature`. No new repository abstraction is introduced.
 3. **The field resolver reads the tenant from its parent `CurrentAdmin`, not from `@CurrentUser()`.** `login` also returns a `CurrentAdmin` and has no `AuthGuard`, so there is no request principal there. Every `CurrentAdmin` value is built only by `toCurrentAdminType(principal)`, from the guarded `currentAdmin` or from the credential-verified `login`. So `parent.tenantId` is the principal's tenant, and the field still takes no input (§4.3, §4.7 item 1).
 4. **Cross-tenant isolation runs as release-gate Phase 8.** CI runs only `test:e2e:release-gate` among the e2e suites. Spec §6.1 names the two-tenant release gate as the natural home, and putting it there gives the isolation test CI coverage. The malformed-shape, logging and login cases go in a standalone e2e file, which runs locally like every other non-gate e2e suite here.
 5. **`jsdom` becomes a dev dependency of `apps/web` only**, enabled per file with `// @vitest-environment jsdom`. Spec §6.2 requires one *mounted* boundary whose query result changes between steps, and the workspace has no DOM test environment. React's own `createRoot` and `act` are used; Testing Library is not added. All other tests stay on `environment: 'node'`.
-6. **In the isolation test, step 4 (the static layer) runs on a fresh mount.** In production `APP_I18N_OVERRIDES` is a module constant and cannot change under a mounted boundary, and steps 1–3 need it to be `{}` so step 3 can show the package default. Steps 1–3 share one mounted root.
-7. **The mapper takes the `tenantLabelOverrides` value, not the whole `currentAdmin`.** It is named `tenantLayer(overrides, locale)`. This keeps the `useMemo` dependency list exactly `[tenantLabelOverrides, locale]` (§4.5) and remains data-only (§4.4). It bounds keys to `STAFF_ROLE_OPTIONS`, the six tenant roles that `@clensy/web` already exports. That drops `__typename` without validating values.
+6. **In the isolation test, step 4 (the static layer) runs on a fresh mount, and the probe renders two role paths (`FINANCE|SCHEDULER`).** In production `APP_I18N_OVERRIDES` is a module constant and cannot change under a mounted boundary, and steps 1–3 need it to be `{}` so step 3 can show the package default. Steps 1–3 share one mounted root.
+7. **The mapper takes the `tenantLabelOverrides` value, not the whole `currentAdmin`.** It is named `tenantLayer(overrides, locale)` and accepts `null | undefined`. This keeps the `useMemo` dependency list exactly `[tenantLabelOverrides, locale]` (§4.5) and remains data-only (§4.4). It iterates `STAFF_ROLE_OPTIONS` (the six tenant roles `@clensy/web` already exports) and indexes the generated, typed `roles` object directly. Apollo's runtime `__typename` is never visited, without any widening cast or value validation.
 
 ## File map
 
@@ -108,6 +109,9 @@ These are planning choices, not product semantics. They are listed here so M5 ca
 | `apps/web/lib/web-shell-regressions.test.ts` | Modify | Session-transition order, children-only provider |
 
 ## Environment prerequisites (M6)
+
+- Work happens in the #118 worktree, `/home/rex/Project/clensy-platform/.claude/worktrees/feat+118-tenant-label-overrides`, never in the shared main checkout. Run `pnpm install --frozen-lockfile` there once before Task 1 (a new worktree has no `node_modules`).
+- Command convention: `pnpm --filter <pkg> test -- <patterns>` and `pnpm --filter api test:e2e -- <patterns>` forward a literal `--`, so Jest treats **everything** after it as test-path patterns (several are ORed). Verified during M5 review. Never put a Jest option after `--`. Where an option is needed (`-t`), call `pnpm --filter api exec jest …` directly.
 
 - PostgreSQL reachable with the defaults in `apps/api/test/helpers/migration-db.ts` (`localhost:5432`, `clensy` / `clensy_dev`). In this workspace, the `clensy-platform-postgres-1` container provides it.
 - Before any e2e run against the `clensy` database (Tasks 3 and 4): `pnpm --filter api migration:run`. The migration e2e (Task 2) uses its own throwaway database and does not need it.
@@ -270,7 +274,7 @@ describe('validateTenantLabelOverrides (spec §4.2)', () => {
     });
 
     it('returns none without rejections for a NULL column and for empty shapes', () => {
-      for (const raw of [null, undefined, {}, { en: {} }, roles({})]) {
+      for (const raw of [null, {}, { en: {} }, roles({})]) {
         expect(validateTenantLabelOverrides(raw)).toEqual({
           labels: null,
           rejections: [],
@@ -428,12 +432,14 @@ function onlyChild(
   return child;
 }
 
-// A NULL column (null/undefined) is "no overrides", not a rejection.
+// A NULL column (`null`) is "no overrides", not a rejection. `undefined` is
+// not a database value: it falls through and is rejected as not-an-object.
+// The service normalizes a missing row to `null`.
 function rolesNode(
   raw: unknown,
   rejections: LabelOverrideRejection[],
 ): JsonObject | null {
-  if (raw === null || raw === undefined) return null;
+  if (raw === null) return null;
   if (!isJsonObject(raw)) {
     rejections.push({ path: '$', reason: 'not-an-object' });
     return null;
@@ -506,6 +512,15 @@ describe('AddTenantLabelOverrides migration (real Postgres)', () => {
     return rows[0];
   }
 
+  const preMigrationName = `pre-migration-${randomUUID()}`;
+
+  async function tenantCount(): Promise<{ total: number; unset: number }> {
+    const [counts] = (await dataSource.query(
+      `SELECT COUNT(*)::int AS "total", (COUNT(*) FILTER (WHERE "labelOverrides" IS NULL))::int AS "unset" FROM "tenant_entity"`,
+    )) as { total: number; unset: number }[];
+    return counts;
+  }
+
   beforeAll(async () => {
     admin = new DataSource(connectionOptions(process.env.DB_NAME ?? 'clensy'));
     await admin.initialize();
@@ -518,7 +533,7 @@ describe('AddTenantLabelOverrides migration (real Postgres)', () => {
     await dataSource.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
     await dataSource.runMigrations();
     await dataSource.query(`INSERT INTO "tenant_entity" ("name") VALUES ($1)`, [
-      `pre-migration-${randomUUID()}`,
+      preMigrationName,
     ]);
   }, 120_000);
 
@@ -533,17 +548,25 @@ describe('AddTenantLabelOverrides migration (real Postgres)', () => {
     const queryRunner = dataSource.createQueryRunner();
     try {
       expect(await labelOverridesColumn()).toBeUndefined();
+      const [{ count: before }] = (await dataSource.query(
+        `SELECT COUNT(*)::int AS "count" FROM "tenant_entity"`,
+      )) as { count: number }[];
 
       await migration.up(queryRunner);
       expect(await labelOverridesColumn()).toEqual({
         data_type: 'jsonb',
         is_nullable: 'YES',
       });
-      const [{ total, unset }] = (await dataSource.query(
-        `SELECT COUNT(*)::int AS "total", (COUNT(*) FILTER (WHERE "labelOverrides" IS NULL))::int AS "unset" FROM "tenant_entity"`,
-      )) as { total: number; unset: number }[];
-      expect(total).toBeGreaterThanOrEqual(2); // bootstrap + pre-migration row
+      // Writes no data: the same rows, every one still NULL — including the
+      // row this test inserted, independent of any baseline seed data.
+      const { total, unset } = await tenantCount();
+      expect(total).toBe(before);
       expect(unset).toBe(total);
+      const [inserted] = (await dataSource.query(
+        `SELECT "labelOverrides" FROM "tenant_entity" WHERE "name" = $1`,
+        [preMigrationName],
+      )) as { labelOverrides: unknown }[];
+      expect(inserted.labelOverrides).toBeNull();
 
       await migration.down(queryRunner);
       expect(await labelOverridesColumn()).toBeUndefined();
@@ -682,17 +705,13 @@ describe('CurrentAdmin.tenantLabelOverrides', () => {
         .create([AdminResolver, CurrentAdminLabelOverridesResolver]);
     });
 
-    it('adds one nullable field with no arguments to CurrentAdmin', () => {
+    // Owns only the new field. The rest of CurrentAdmin's field set is
+    // pinned by admin.resolver.spec.ts.
+    it('adds a nullable tenantLabelOverrides field with no arguments to CurrentAdmin', () => {
       const fields = (
         schema.getType('CurrentAdmin') as GraphQLObjectType
       ).getFields();
-      expect(Object.keys(fields).sort()).toEqual([
-        'id',
-        'role',
-        'scope',
-        'tenantId',
-        'tenantLabelOverrides',
-      ]);
+      expect(fields.tenantLabelOverrides).toBeDefined();
       expect(String(fields.tenantLabelOverrides.type)).toBe(
         'TenantLabelOverrides',
       );
@@ -774,6 +793,7 @@ import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../src/app/app.module';
 import { Role } from '../src/platform/auth/domain/role';
+import type { LabelOverrideRejectionReason } from '../src/modules/admins/domain/tenant-label-overrides';
 import { applyPlatformPipes } from '../src/platform/graphql/apply-platform-pipes';
 import {
   createTestTenant,
@@ -802,6 +822,36 @@ const UNSET = {
   SCHEDULER: null,
   TENANT_OWNER: null,
 };
+
+type Rejection = [path: string, reason: LabelOverrideRejectionReason];
+
+// [label, stored jsonb value, expected rejections, rejected stored strings
+// that must never appear in a log line]
+const MALFORMED: [string, unknown, Rejection[], string[]][] = [
+  ['a scalar', 'Billing', [['$', 'not-an-object']], ['Billing']],
+  ['an array', ['Billing'], [['$', 'not-an-object']], ['Billing']],
+  [
+    'only an unknown locale',
+    { fr: { roles: { FINANCE: 'Facturation' } } },
+    [['fr', 'unknown-key']],
+    ['Facturation'],
+  ],
+  [
+    'only wrong value types',
+    { en: { roles: { ANALYST: true, FINANCE: 42 } } },
+    [
+      ['en.roles.ANALYST', 'not-a-string'],
+      ['en.roles.FINANCE', 'not-a-string'],
+    ],
+    [],
+  ],
+  [
+    'a roles array of 100 items',
+    { en: { roles: Array.from({ length: 100 }, () => 'Billing') } },
+    [['en.roles', 'not-an-object']],
+    ['Billing'],
+  ],
+];
 
 interface GraphqlBody {
   data?: {
@@ -858,9 +908,13 @@ describe('Tenant label overrides (e2e, #118)', () => {
     return warn.mock.calls.map(([message]) => String(message)).sort();
   }
 
-  function expectedWarnings(...suffixes: string[]): string[] {
-    return suffixes
-      .map((suffix) => `tenant ${tenantId}: dropped label override at ${suffix}`)
+  // The exact line TenantLabelOverridesService writes per rejection.
+  function expectedWarnings(...rejections: Rejection[]): string[] {
+    return rejections
+      .map(
+        ([path, reason]) =>
+          `tenant ${tenantId}: dropped label override at ${path} (${reason})`,
+      )
       .sort();
   }
 
@@ -899,33 +953,15 @@ describe('Tenant label overrides (e2e, #118)', () => {
     expect(warnings()).toEqual([]);
   });
 
-  it.each([
-    ['a scalar', 'Billing', ['$ (not-an-object)']],
-    ['an array', ['Billing'], ['$ (not-an-object)']],
-    [
-      'only an unknown locale',
-      { fr: { roles: { FINANCE: 'Facturation' } } },
-      ['fr (unknown-key)'],
-    ],
-    [
-      'only wrong value types',
-      { en: { roles: { ANALYST: true, FINANCE: 42 } } },
-      ['en.roles.ANALYST (not-a-string)', 'en.roles.FINANCE (not-a-string)'],
-    ],
-    [
-      'a roles array of 100 items',
-      { en: { roles: Array.from({ length: 100 }, () => 'Billing') } },
-      ['en.roles (not-an-object)'],
-    ],
-  ])(
+  it.each(MALFORMED)(
     'returns null for structurally malformed JSONB with no valid leaf: %s',
-    async (_label, value, suffixes) => {
+    async (_label, value, rejections, rejectedValues) => {
       await store(value);
       expect(await currentAdminOverrides()).toBeNull();
-      expect(warnings()).toEqual(expectedWarnings(...suffixes));
+      expect(warnings()).toEqual(expectedWarnings(...rejections));
       const logged = warnings().join('\n');
-      for (const stored of ['Billing', 'Facturation']) {
-        expect(logged).not.toContain(stored);
+      for (const rejected of rejectedValues) {
+        expect(logged).not.toContain(rejected);
       }
     },
   );
@@ -948,16 +984,19 @@ describe('Tenant label overrides (e2e, #118)', () => {
     });
     expect(warnings()).toEqual(
       expectedWarnings(
-        'en.roles.ANALYST (too-long)',
-        'en.roles.SCHEDULER (control-character)',
-        'en.roles.SUPER_ADMIN (unknown-key)',
-        'fr (unknown-key)',
+        ['en.roles.ANALYST', 'too-long'],
+        ['en.roles.SCHEDULER', 'control-character'],
+        ['en.roles.SUPER_ADMIN', 'unknown-key'],
+        ['fr', 'unknown-key'],
       ),
     );
     const logged = warnings().join('\n');
-    for (const stored of ['xxxxxxxx', 'Billing', 'Sched', 'Root-Label-SA']) {
-      expect(logged).not.toContain(stored);
+    // No rejected value, exactly as stored, reaches the log.
+    for (const rejected of ['x'.repeat(65), 'Sched\nUler', 'Root-Label-SA']) {
+      expect(logged).not.toContain(rejected);
     }
+    // Deliberately also the kept value: a warning carries no stored value at all.
+    expect(logged).not.toContain('Billing');
   });
 
   it('resolves the same tenant labels on the login result', async () => {
@@ -986,7 +1025,8 @@ Create `apps/api/src/modules/admins/application/services/tenant-label-overrides.
 
 ```ts
 import { Injectable, Logger } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import {
   RoleLabels,
   validateTenantLabelOverrides,
@@ -1001,11 +1041,13 @@ import { TenantEntity } from '../../infrastructure/persistence/tenant.entity';
 export class TenantLabelOverridesService {
   private readonly logger = new Logger(TenantLabelOverridesService.name);
 
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    @InjectRepository(TenantEntity)
+    private readonly tenantRepository: Repository<TenantEntity>,
+  ) {}
 
   async labelsFor(tenantId: string): Promise<RoleLabels | null> {
-    const tenant = await this.dataSource
-      .getRepository(TenantEntity)
+    const tenant = await this.tenantRepository
       .createQueryBuilder('tenant')
       .select('tenant.id')
       .addSelect('tenant.labelOverrides')
@@ -1030,9 +1072,12 @@ Create `apps/api/src/modules/admins/presentation/graphql/tenant-label-overrides.
 import { Field, ObjectType } from '@nestjs/graphql';
 import type { RelabelableRole } from '../../domain/tenant-label-overrides';
 
-// Spec §4.3. Code-first NestJS needs each field declared; `implements`
-// makes a missing relabelable role a compile error, and the schema drift
-// test (current-admin-label-overrides.resolver.spec.ts) catches an extra one.
+// Spec §4.3. Code-first NestJS needs each field declared by hand, so the six
+// names appear here by necessity. Two complementary guards keep them aligned
+// with RELABELABLE_ROLES: `implements Record<RelabelableRole, …>` fails to
+// compile if a relabelable role has no property, and the schema drift test
+// (current-admin-label-overrides.resolver.spec.ts) fails on any difference
+// between the declared GraphQL fields and RELABELABLE_ROLES.
 @ObjectType('RoleLabelOverrides')
 export class RoleLabelOverridesType implements Record<
   RelabelableRole,
@@ -1157,7 +1202,7 @@ with:
 - [ ] **Step 4: Run the tests to verify they pass, and regenerate the schema**
 
 Run: `pnpm --filter api test -- current-admin-label-overrides admin.resolver`
-Expected: PASS. The existing `admin.resolver.spec.ts` builds its schema from `[AdminResolver]` alone, so its `CurrentAdmin` field-set assertion (four fields) is unchanged and still passes. That is a **characterization** check.
+Expected: PASS. The existing `admin.resolver.spec.ts` builds its schema from `[AdminResolver]` alone and remains the one owner of `CurrentAdmin`'s base field set (four fields). It is unchanged and still passes, as a **characterization** check.
 
 Run: `pnpm --filter api test:e2e -- tenant-label-overrides.e2e`
 Expected: PASS, all six cases. Booting `AppModule` rewrites `apps/api/src/schema.gql`.
@@ -1211,8 +1256,10 @@ Append this test as the last test inside `describe('Two-tenant isolation release
     const stored: Readonly<
       Record<'A' | 'B', Readonly<Partial<Record<RelabelableRole, string>>>>
     > = {
-      A: { FINANCE: 'Billing A' },
-      B: { ANALYST: 'Insights B', FINANCE: 'Billing B' },
+      // Every stored label is tenant-specific, and each tenant leaves some
+      // roles unset, so a leak in either direction changes a value.
+      A: { FINANCE: 'Billing A', SCHEDULER: 'Scheduling A' },
+      B: { ANALYST: 'Insights B', FINANCE: 'Billing B', TENANT_OWNER: 'Owners B' },
     };
     const query =
       '{ currentAdmin { tenantLabelOverrides { locale roles { ANALYST CUSTOMER_SUPPORT FINANCE OPS_MANAGER SCHEDULER TENANT_OWNER } } } }';
@@ -1272,13 +1319,23 @@ Append this test as the last test inside `describe('Two-tenant isolation release
 
 - [ ] **Step 2: Verify the phase fails without the feature (RED check)**
 
-Task 3 is already committed, so the RED state is made by a temporary edit. In `apps/api/src/modules/admins/admins.module.ts`, delete the `import { CurrentAdminLabelOverridesResolver } …` line and the `CurrentAdminLabelOverridesResolver,` providers entry.
+Task 3 is already committed, so the RED state is made by a temporary edit. The edit is backed up and restored byte for byte, so any unrelated uncommitted change in the file survives. Never use `git checkout --` for this.
 
-Run: `pnpm --filter api test:e2e:release-gate -t 'Phase 8'`
-Expected: Phase 8 FAILS. With the resolver unregistered, each query returns a GraphQL error, so every `[isolation] tenant … got undefined` line and the `SUPER_ADMIN` line appear.
+Run, from the worktree root:
 
-Run: `git checkout -- apps/api/src/modules/admins/admins.module.ts && git status --short apps/api/src`
-Expected: no output (the edit is reverted).
+```bash
+module=apps/api/src/modules/admins/admins.module.ts
+backup=$(mktemp)
+cp "$module" "$backup"
+sed -i '/CurrentAdminLabelOverridesResolver/d' "$module"
+grep -c CurrentAdminLabelOverridesResolver "$module"   # Expected: 0
+pnpm --filter api exec jest --config ./test/jest-e2e.json two-tenant-release-gate -t 'Phase 8'
+cp "$backup" "$module" && cmp "$backup" "$module" && rm "$backup"
+```
+
+Expected:
+- The `jest` run: Phase 8 FAILS. With the resolver unregistered (its import line and providers entry are the only lines naming it), each query returns a GraphQL error, so every `[isolation] tenant … got undefined` line and the `SUPER_ADMIN` line appear.
+- `cmp` prints nothing: the file is restored exactly.
 
 - [ ] **Step 3: Run the gate with the feature**
 
@@ -1426,7 +1483,7 @@ git commit -m "feat(118): export deepMerge from the @clensy/web entry"
 
 **Interfaces:**
 - Consumes: Task 5's `CurrentAdminQuery` type from `@clensy/client`; `STAFF_ROLE_OPTIONS`, `ClensyMessages`, `DeepPartial` from `@clensy/web`.
-- Produces: `tenantLayer(overrides: TenantLabelOverrides | null | undefined, locale: string): DeepPartial<ClensyMessages>`, where `TenantLabelOverrides = CurrentAdminQuery['currentAdmin']['tenantLabelOverrides']`. Used by Task 8.
+- Produces: `tenantLayer(overrides: TenantLabelOverrides | null | undefined, locale: string): DeepPartial<ClensyMessages>`, where `TenantLabelOverrides = NonNullable<CurrentAdminQuery['currentAdmin']['tenantLabelOverrides']>`. Used by Task 8.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1483,7 +1540,7 @@ Create `apps/web/lib/tenant-label-overrides.ts`:
 import type { CurrentAdminQuery } from '@clensy/client';
 import { STAFF_ROLE_OPTIONS, type ClensyMessages, type DeepPartial, type StaffRole } from '@clensy/web';
 
-type TenantLabelOverrides = CurrentAdminQuery['currentAdmin']['tenantLabelOverrides'];
+type TenantLabelOverrides = NonNullable<CurrentAdminQuery['currentAdmin']['tenantLabelOverrides']>;
 
 // The tenant layer of the app i18n boundary (tenant label overrides spec
 // §4.4). Data only: it never sees the query's loading/error flags, and it
@@ -1491,12 +1548,14 @@ type TenantLabelOverrides = CurrentAdminQuery['currentAdmin']['tenantLabelOverri
 // for another locale's catalog, and never forwards null, which deepMerge
 // would otherwise write over the package default. Keys are bounded to the
 // six tenant roles, which also drops Apollo's runtime __typename.
-export function tenantLayer(overrides: TenantLabelOverrides | undefined, locale: string): DeepPartial<ClensyMessages> {
+export function tenantLayer(
+  overrides: TenantLabelOverrides | null | undefined,
+  locale: string,
+): DeepPartial<ClensyMessages> {
   if (!overrides || overrides.locale !== locale) return {};
-  const source: Readonly<Record<string, unknown>> = overrides.roles;
   const roles: Partial<Record<StaffRole, string>> = {};
   for (const role of STAFF_ROLE_OPTIONS) {
-    const label = source[role];
+    const label = overrides.roles[role];
     if (typeof label === 'string') roles[role] = label;
   }
   return { roles };
@@ -1704,14 +1763,16 @@ function admin(tenantId: string, tenantLabelOverrides: unknown) {
   return { currentAdmin: { id: `admin-${tenantId}`, role: 'FINANCE', scope: 'TENANT', tenantId, tenantLabelOverrides } };
 }
 
-function FinanceLabel() {
-  return <span>{useClensyTranslations('roles')('FINANCE')}</span>;
+// Two role paths, so contamination of any stored role is visible: "FINANCE|SCHEDULER".
+function RoleLabels() {
+  const t = useClensyTranslations('roles');
+  return <span>{`${t('FINANCE')}|${t('SCHEDULER')}`}</span>;
 }
 
 const tree = (
   <NextIntlClientProvider locale="en" messages={getMessages()}>
     <AppI18nProvider>
-      <FinanceLabel />
+      <RoleLabels />
     </AppI18nProvider>
   </NextIntlClientProvider>
 );
@@ -1743,18 +1804,25 @@ describe('app i18n boundary — isolation across identities', () => {
 
   it("never carries tenant A's label to tenant B or to a signed-out state, and keeps the static layer", () => {
     mount();
-    expect(show(admin('a', { locale: 'en', roles: { ...UNSET, FINANCE: 'Billing' } }))).toBe('Billing');
-    expect(show(admin('b', { locale: 'en', roles: { ...UNSET, FINANCE: 'Invoicing' } }))).toBe('Invoicing');
-    expect(show(admin('b', null))).toBe('Finance');
-    expect(show(null)).toBe('Finance');
+    // 1. Tenant A sets both roles.
+    expect(show(admin('a', { locale: 'en', roles: { ...UNSET, FINANCE: 'Billing', SCHEDULER: 'Dispatch' } }))).toBe(
+      'Billing|Dispatch',
+    );
+    expect(state.app).toEqual({}); // deepMerge did not write into the static layer
+    // 2. Tenant B sets only FINANCE: A's SCHEDULER label must not survive.
+    expect(show(admin('b', { locale: 'en', roles: { ...UNSET, FINANCE: 'Invoicing' } }))).toBe('Invoicing|Scheduler');
+    expect(show(admin('b', null))).toBe('Finance|Scheduler');
+    // 3. Signed out.
+    expect(show(null)).toBe('Finance|Scheduler');
 
-    // Step 4 on a fresh mount: APP_I18N_OVERRIDES is a module constant in
-    // production and cannot change under a mounted boundary.
+    // 4. Fresh mount: APP_I18N_OVERRIDES is a module constant in production
+    // and cannot change under a mounted boundary.
     act(() => root.unmount());
     container.remove();
     state.app = { roles: { FINANCE: 'Static Finance' } };
     mount();
-    expect(show(admin('b', null))).toBe('Static Finance');
+    expect(show(admin('b', null))).toBe('Static Finance|Scheduler');
+    expect(state.app).toEqual({ roles: { FINANCE: 'Static Finance' } }); // unmutated
   });
 });
 ```
@@ -1762,7 +1830,7 @@ describe('app i18n boundary — isolation across identities', () => {
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `pnpm --filter web exec vitest run lib/app-i18n-tenant-overrides.test.tsx lib/app-i18n-tenant-isolation.test.tsx`
-Expected: FAIL. Every case that expects a tenant value fails (for example `expected '…Finance…' to match />Billing<\/span>/`, and `expected 'Finance' to be 'Billing'`), because the provider does not read `currentAdmin` yet. Cases that expect only defaults or the static layer pass already.
+Expected: FAIL. Every case that expects a tenant value fails (for example `expected '…Finance…' to match />Billing<\/span>/`, and `expected 'Finance|Scheduler' to be 'Billing|Dispatch'`), because the provider does not read `currentAdmin` yet. Cases that expect only defaults or the static layer pass already.
 
 - [ ] **Step 3: Compose the tenant layer in `AppI18nProvider`**
 
@@ -1830,7 +1898,7 @@ git commit -m "feat(118): layer tenant label overrides over the static app layer
 - Consumes: `readWebSource` (already in the file).
 - Produces: source-level pins for the session-transition order and for the children-only provider with its two override sources.
 
-Every new assertion here pins behavior that Tasks 1–8 leave correct. These are **characterization tests**: they pass when written, and the RED check is done by deliberate mutation in Step 2.
+Every new assertion here pins behavior that Tasks 1–8 leave correct. These are **characterization tests**: they pass when written, and the RED check is done by deliberate mutation in Step 2. Each mutation is reverted by undoing that one edit (or by restoring a `mktemp` backup taken first), never by `git checkout --`, so unrelated uncommitted work is safe.
 
 - [ ] **Step 1: Add the assertions**
 
@@ -1863,16 +1931,28 @@ with:
     );
   });
 
-  // Amended single app i18n provider spec §4.5 items 5 and 9.
+  // Amended single app i18n provider spec §4.5 items 5 and 9; tenant label
+  // overrides spec §4.4, §4.5. Pins the provider's invariants directly.
   it('keeps AppI18nProvider children-only, composing exactly the static and currentAdmin layers', () => {
     const provider = readWebSource('components/layout/app-i18n-provider.tsx');
 
+    // 1. Children-only signature.
     expect(provider).toContain('export function AppI18nProvider({ children }: { children: ReactNode })');
-    expect(provider).toContain('useCurrentAdminQuery()');
-    expect(provider).toContain('deepMerge(APP_I18N_OVERRIDES, tenantLayer(tenantLabelOverrides, locale))');
-    for (const forbidden of ['process.env', 'localStorage', 'sessionStorage', 'useContext(', 'props.']) {
-      expect(provider).not.toContain(forbidden);
-    }
+    // 2. Locale only from next-intl.
+    expect(provider).toContain('const locale = useLocale();');
+    // 3. Default cache-first query, data only: no options (so no fetchPolicy /
+    //    network-only), and no loading or error destructured, so neither gates
+    //    rendering nor clears the tenant layer.
+    expect(provider).toContain('const { data } = useCurrentAdminQuery();');
+    expect(provider.match(/useCurrentAdminQuery\(/g)).toHaveLength(1);
+    expect(provider).not.toMatch(/fetchPolicy|network-only/);
+    // 4–6. Static layer first, tenant layer second (tenant wins), memoized on
+    //      the tenant overrides and locale.
+    expect(provider).toMatch(
+      /useMemo\(\s*\(\) => deepMerge\(APP_I18N_OVERRIDES, tenantLayer\(tenantLabelOverrides, locale\)\),\s*\[tenantLabelOverrides, locale\],?\s*\)/,
+    );
+    // 7. The merged value is the only overrides input to the provider mount.
+    expect(provider).toContain('<ClensyI18nProvider locale={locale} overrides={overrides}>');
   });
 ```
 
@@ -1886,9 +1966,10 @@ Then mutate and revert, one at a time:
 - In `user-menu.tsx`, swap the `clearStore()` and `router.replace('/login')` lines. Expected: the logout test FAILS. Revert.
 - In `login/page.tsx`, move `await apolloClient.clearStore();` above `const result = await login(…)`. Expected: the login test FAILS. Revert.
 - In `app-i18n-provider.tsx`, swap the `deepMerge` arguments. Expected: the children-only test FAILS, and so does Task 8's `lets the tenant layer win` test. Revert.
+- In `app-i18n-provider.tsx`, change `useCurrentAdminQuery()` to `useCurrentAdminQuery({ fetchPolicy: 'network-only' })`. Expected: the children-only test FAILS. Revert.
 
 Run: `git diff --stat -- apps/web/components apps/web/app`
-Expected: empty (all mutations reverted).
+Expected: no change introduced by the mutations; the output matches what it was before Step 2 (empty on a clean tree).
 
 - [ ] **Step 3: Commit**
 
@@ -1907,8 +1988,12 @@ git commit -m "test(118): pin session-transition order and the two-layer provide
   Expected: no errors.
 - [ ] Run: `pnpm run test`
   Expected: every workspace suite passes. This includes the API unit tests (Tasks 1 and 3), `@clensy/web` (Task 6) and `apps/web` (Tasks 7–9).
-- [ ] Run: `pnpm --filter api test:e2e -- add-tenant-label-overrides tenant-label-overrides.e2e admin-foundation`
-  Expected: PASS. `admin-foundation` is a **characterization** run: it shows the `currentAdmin` and `login` selections without the new field are unchanged.
+- [ ] Run each e2e suite separately:
+  - `pnpm --filter api exec jest --config ./test/jest-e2e.json add-tenant-label-overrides`
+  - `pnpm --filter api exec jest --config ./test/jest-e2e.json tenant-label-overrides.e2e`
+  - `pnpm --filter api exec jest --config ./test/jest-e2e.json admin-foundation`
+
+  Expected: each PASSES. `admin-foundation` is a **characterization** run: it shows the `currentAdmin` and `login` selections without the new field are unchanged.
 - [ ] Run: `pnpm --filter api test:e2e:release-gate`
   Expected: PASS, every phase including Phase 8.
 - [ ] Run: `git status --short`
