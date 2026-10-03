@@ -82,6 +82,28 @@ After the fix, the full web suite has 13 files and 268 tests passing, and tsc an
 - Unchanged: `packages/web/README.md`, `docs/README.md` and earlier slice plans.
 - Verification: links resolve; status is consistent (amendment and plan Accepted, PR open and green); terminology follows §3; no heading changes, no contradictions.
 
+**M10 (2026-10-03): Accepted (workflow validated).** Subject: the installed workflow prompt library (`docs/workflows/`, generic 1.2.0), against `docs/workflows/specs/agent-workflow-design.md` §2.10. This slice ran the workflow on #124 from M2 to M9.
+
+Asset inventory: unchanged (9 prompts M2–M10, `conventions/`, the governing process spec).
+
+Checks:
+- All 9 prompts cite the governing contract. There are no orphan assets.
+- Every relative link under `docs/workflows/` resolves (scripted scan).
+- §2.5 was honoured: plan Accept `2429b8b` is an ancestor of `449ac39`.
+- The providers were honoured (GitHub).
+- Slice Completion Reports were emitted at M6 and at M7–M9.
+
+Blocking findings: none.
+
+Non-blocking observations:
+1. **A fix pass where RED is impossible.** The executing skill's final-review fix pass requires "a test that failed first". The two characterisation pins added here pin behaviour that is already correct, so RED against the real code was impossible. They were verified by mutation instead (breaking the predicate in a scratch copy). The workflow could name mutation verification as the acceptable evidence for characterisation fixtures.
+2. **Carried forward from #117/#120/#122, and now queued as the upstream `context-forge` PR:**
+   - M4 pre-validation should run every `Expected:` command.
+   - The amendment of an Accepted spec has no written procedure.
+   - M10 has no report location.
+   - M7 reviewer independence is unspecified.
+   - The order of merge and M10 is unstated.
+
 **Goal:** Remove the five #117-deferred false positives from the provider-escape detector, without exempting any position that can load or mount the provider. Also pin the #122 `node_modules` interaction.
 
 **Architecture:** Every change is a narrower predicate at one exact syntax position:
