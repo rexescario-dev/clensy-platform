@@ -2,15 +2,15 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted. **§6.1 amendment (#117): Accepted** 2026-10-03. |
-| Date | 2026-10-02 (revised 2026-10-03 after first M3 pass; §6.1 amendment drafted 2026-10-03 for #117) |
+| Status | Accepted. **§6.1 amendment (#117): Accepted** 2026-10-03. **§6.1 amendment (#120): Draft**, pending M3. |
+| Date | 2026-10-02 (revised 2026-10-03 after first M3 pass; §6.1 amendment drafted 2026-10-03 for #117; second §6.1 amendment drafted 2026-10-03 for #120) |
 | Document kind | Architecture RFC |
-| Tracking issue | [#115](https://github.com/rexescario-dev/clensy-platform/issues/115) — deferred from #88/#89. Implemented in PR [#116](https://github.com/rexescario-dev/clensy-platform/pull/116). §6.1 amended by [#117](https://github.com/rexescario-dev/clensy-platform/issues/117) (deferred from PR #116's M7 review, Minor 1–3), implemented in PR [#119](https://github.com/rexescario-dev/clensy-platform/pull/119). |
+| Tracking issue | [#115](https://github.com/rexescario-dev/clensy-platform/issues/115) — deferred from #88/#89. Implemented in PR [#116](https://github.com/rexescario-dev/clensy-platform/pull/116). §6.1 amended by [#117](https://github.com/rexescario-dev/clensy-platform/issues/117) (deferred from PR #116's M7 review, Minor 1–3), implemented in PR [#119](https://github.com/rexescario-dev/clensy-platform/pull/119). §6.1 amended again by [#120](https://github.com/rexescario-dev/clensy-platform/issues/120) (the #117 final-review follow-ups). |
 | Depends on (Accepted) | [App Router i18n Architecture (next-intl)](2026-09-13-web-i18n-architecture-design.md) — next-intl is `apps/web`'s only locale source (`useLocale()` on the client). This spec reads the locale exactly that way (relies upon). [`LoginForm` — Self-Translating UI Copy](2026-09-20-login-form-self-translating-design.md) — its §2 deliberately keeps `/login` without a `ClensyI18nProvider`, relying on `useClensyI18nContext()`'s package-default fallback. This spec preserves that by placing the boundary under `/app` only (relies upon; does not reverse). [Reusable-Component `errorMessage` API](2026-09-20-component-error-message-api-design.md) — established the provider's `locale` + `overrides` contract and the "no provider is a valid state" guarantee (relies upon, unchanged). [Multi-Tenant Architecture](2026-09-23-multi-tenant-architecture-design.md) — §4.8's staff console and the tenant-aware shell are the consumers this spec re-homes; the API stays the authorization boundary (relies upon, unchanged). |
 | Related (not a dependency) | [`@clensy/ui` as the Shared UI System](2026-09-16-shadcn-ui-boundary-design.md) — unaffected; this spec does not touch `@clensy/ui`. |
 | Followed by | A future, separately specified issue for **tenant-sourced overrides** (§8). Not opened by this spec. |
 | Governing references | This document. It does not change `ClensyI18nProvider`, `useClensyTranslations`, any `@clensy/web` message catalog, next-intl configuration, or `/login`. |
-| M3 decision | **Accepted** — 2026-10-03, at `31b713a`, by the owner. M4 must stay mechanical and keep the locked decisions: a single AST-detectable provider mount, test-only override mocking, and no production or runtime override source. First pass (2026-10-03) returned nine clarifications, all applied: committed-`{}` wording (§4.1), application-owned override scope (§4.5 items 5 and 9), Vitest mock ordering (§6.2), AST import-resolution and location rules (§6.1), effective-messages equivalence (§4.4), `DashboardLayout` wrapping rationale (§4.3), type-level test framing (§6.3), a no-runtime-override-source invariant (§4.5 item 9), and one canonical term (§3). **§6.1 amendment (#117) — Accepted 2026-10-03, at `9a23c98`, by the owner, with no further clarification.** M4 implements it mechanically from the amended §6.1 and MUST keep the assertion of zero provider escapes anywhere in `apps/web`, independent of the mount assertion. It tightens the structural guard only: the scan covers `.js`/`.jsx`/`.mjs`/`.cjs`/`.mts`/`.cts` as well as `.ts`/`.tsx`, a new **provider escape** rule (§3, §6.1) fails any non-JSX use of the provider, including re-export barrels, and the layout wiring check binds both tag names to their imports. No production code, no other section, and no locked decision above changes. |
+| M3 decision | **Accepted** — 2026-10-03, at `31b713a`, by the owner. M4 must stay mechanical and keep the locked decisions: a single AST-detectable provider mount, test-only override mocking, and no production or runtime override source. First pass (2026-10-03) returned nine clarifications, all applied: committed-`{}` wording (§4.1), application-owned override scope (§4.5 items 5 and 9), Vitest mock ordering (§6.2), AST import-resolution and location rules (§6.1), effective-messages equivalence (§4.4), `DashboardLayout` wrapping rationale (§4.3), type-level test framing (§6.3), a no-runtime-override-source invariant (§4.5 item 9), and one canonical term (§3). **§6.1 amendment (#117) — Accepted 2026-10-03, at `9a23c98`, by the owner, with no further clarification.** M4 implements it mechanically from the amended §6.1 and MUST keep the assertion of zero provider escapes anywhere in `apps/web`, independent of the mount assertion. It tightens the structural guard only: the scan covers `.js`/`.jsx`/`.mjs`/`.cjs`/`.mts`/`.cts` as well as `.ts`/`.tsx`, a new **provider escape** rule (§3, §6.1) fails any non-JSX use of the provider, including re-export barrels, and the layout wiring check binds both tag names to their imports. No production code, no other section, and no locked decision above changes. **§6.1 amendment (#120) — Draft, pending M3.** It closes the three gaps the #117 final review found, still syntactically and still failing closed. It adds **two new invariants**, each with its own assertion, rather than folding them into the provider detector: the **package boundary** (no deep `@clensy/web/…` specifier, and no path into `packages/web`, in any module-specifier form) and **one dashboard shell** (exactly one `DashboardLayout` element across `apps/web`). It also extends **provider escapes** with item 4, **package load calls**. No production code changes, and no `exports` map is added to `packages/web`. No other section, and no locked decision above, changes. |
 
 ## 1. Thesis
 
@@ -57,6 +57,8 @@ Because of this, `apps/web` has no single place to set an app-wide `@clensy/web`
 - **App i18n boundary**: the **sole application-owned provider mount**. It is rendered by `AppI18nProvider` and placed in `apps/web/app/app/layout.tsx`. "Provider" in this document always means the package component; "boundary" means this architectural mount.
 - **Application-owned override**: a `DeepPartial<ClensyMessages>` value that `apps/web` supplies to the boundary, merged over `@clensy/web`'s package defaults for the whole `/app` tree. `DeepPartial` and `ClensyMessages` are the types `@clensy/web` already exports.
 - **Provider escape** *(added by the #117 amendment)*: in non-test `apps/web` source, a re-export of the provider from `@clensy/web`, or any occurrence of a `@clensy/web` provider binding (named or namespace) other than a provider mount or an exempt position, as defined in §6.1. A re-export or value reference would let a mount happen elsewhere under a different name, so the structural guard treats every escape as a failure.
+- **Package boundary violation** *(added by the #120 amendment)*: in non-test `apps/web` source, a module specifier that targets a deep `@clensy/web/…` subpath or a path inside the `packages/web` package, as defined in §6.1. Bare `@clensy/web`, the package's public entry point, is not a violation.
+- **Dashboard shell element** *(added by the #120 amendment)*: a JSX element in non-test `apps/web` source that is recognised as `DashboardLayout` under the rules in §6.1.
 
 Reuses **component-owned default** and **override** as defined in the Accepted `errorMessage` spec §3.
 
@@ -161,6 +163,12 @@ Any other identifier or property access is **not** a mount, even if it is spelle
    - in a type position: inside a `typeof` type query (`typeof W.ClensyI18nProvider`), or the left side of a qualified type name (`W.SomeType`).
 
    For example, `W.ClensyI18nProvider` as a value, `W['ClensyI18nProvider']`, `W.foo`, and bare `W` (`const X = W`, `export { W }`) are all escapes.
+4. **Package load call** *(added by #120)*. Each of the following is one escape, whatever happens to its result:
+   - a call whose callee is the identifier `require` (by spelling, with no scope analysis), or a dynamic `import(…)` call, whose first argument is the specifier `'@clensy/web'`;
+   - an import-equals declaration `import X = require('@clensy/web')`;
+   - a `require(…)` or dynamic `import(…)` call whose first argument is missing or is not a literal specifier. The guard cannot tell what such a call loads.
+
+   A "literal specifier" is a string literal, or a template literal with no substitutions. These forms can destructure or alias the provider under any name, so the load itself is the escape. Load calls whose specifier is a deep or `packages/web` path are boundary violations instead (see **Package boundary**), not escapes.
 
 An identifier is an "occurrence" by spelling. Property names (`obj.P`), property-assignment keys (`{ P: 1 }`), and JSX attribute names (`<X P="…" />`) are not identifier references and are not counted. The guard does **no scope analysis**: a local declaration that shadows a collected binding name is still counted. That false positive is intended, because the guard fails closed.
 
@@ -169,6 +177,8 @@ Assertions:
 - The set of provider mounts across `apps/web` has exactly **one** member.
 - That member is in `components/layout/app-i18n-provider.tsx`. The test MUST fail if the single mount is in any other file, not only if the count is wrong.
 - `apps/web` has **zero** provider escapes, in every scanned file, including `components/layout/app-i18n-provider.tsx`.
+- *(#120)* `apps/web` has **zero** package boundary violations, in every scanned file.
+- *(#120)* `apps/web` has exactly **one** dashboard shell element. It is in `app/app/layout.tsx`, and it is the provider element's direct child under **Layout wiring**.
 
 This check does not depend on formatting, line breaks, or import style.
 
@@ -178,6 +188,36 @@ This check does not depend on formatting, line breaks, or import style.
 - That provider element directly wraps exactly one non-whitespace child, and that child is a JSX element whose tag is the local name bound by a named import of `DashboardLayout` from exactly `'../../components/layout/dashboard-layout'`. Aliases pass.
 - A tag spelled `AppI18nProvider` or `DashboardLayout` whose binding is imported from any other module, or not imported at all, fails.
 
+**Package boundary** *(added by #120; a new invariant)*. `apps/web` consumes `@clensy/web` only through its public entry point, the bare specifier `'@clensy/web'`. Every module specifier in a scanned file is checked, in each form the parser exposes:
+
+- `import` and `import type` declarations;
+- `export … from` declarations, including `export type … from`;
+- import-equals declarations `import X = require('…')`;
+- calls whose callee is the identifier `require`;
+- dynamic `import(…)` calls;
+- import type nodes, `import('…')` in a type position.
+
+Only literal specifiers (a string literal, or a template literal with no substitutions) are checked. Non-literal load calls are handled by provider escape item 4.
+
+A specifier is a **package boundary violation** when either of these holds:
+
+1. It is a **deep package specifier**: it starts with `@clensy/web/`. Bare `@clensy/web` is not a violation; it is governed by the provider rules above.
+2. It is a **path into `packages/web`**. The specifier's target path is computed with plain path arithmetic, with no module resolution: no file-system lookup, no extension or index probing, and no `package.json` reading. The target is computed only for these specifier kinds:
+   - **Relative** (`.`, `..`, or starting `./` or `../`): resolved against the importing file's directory.
+   - **Absolute**: taken as is, normalised.
+   - **`@/…`**: resolved against the `apps/web` root, mirroring `apps/web/tsconfig.json`'s `paths` entry `"@/*": ["./*"]`.
+
+   The specifier is a violation only if the target is the `packages/web` directory itself (`<repo>/packages/web`) or lies inside it, compared path segment by path segment. So `../my-packages/web`, `../packages/webby` and a file named `packages-web.ts` are not violations. Bare package names other than `@clensy/web/…` are never violations.
+
+What the deep module exports is never inspected; the path alone is forbidden. Each violating specifier is one violation.
+
+**Dashboard shell** *(added by #120; a new invariant)*. Recognition and placement are separate.
+
+- **Recognition.** A JSX opening or self-closing element counts as `DashboardLayout` if its tag name is literally `DashboardLayout`, or its local name comes from a named import whose imported name is `DashboardLayout`, from any module. No module resolution is involved. Closing tags are not counted separately.
+- **Placement.** Across all scanned `apps/web` files, exactly one JSX element is recognised as `DashboardLayout`. That element is in `app/app/layout.tsx`, and it is the same element that **Layout wiring** finds as the provider element's direct child.
+
+`DashboardLayout` gets no escape rules: it is an app-owned component, and the regression this invariant prevents is rendering a second shell. The binding-aware **Layout wiring** check above is unchanged.
+
 **Fixtures.** Each bypass this amendment closes MUST have an inline fixture that fails against the pre-amendment guard and passes against the amended one:
 
 - a JavaScript or `.jsx` source mounting the provider, and the file selection accepting and rejecting the right names;
@@ -185,6 +225,14 @@ This check does not depend on formatting, line breaks, or import style.
 - layout sources with a wrong provider import path, a wrong `DashboardLayout` import path, and aliased imports.
 
 The existing fixture "an import that is never rendered" (`export { ClensyI18nProvider }`) still has zero mounts, and now has one escape.
+
+**Fixtures (#120).** Each bypass the #120 amendment closes MUST have an inline fixture that fails against the #117 guard and passes against the amended one:
+
+- **Boundary:** a deep `@clensy/web/…` specifier in each form (`import`, `import type`, `export … from`, `export type … from`, `import X = require(…)`, `require(…)`, `import(…)`, an import type node, and a no-substitution template literal).
+- **Boundary:** a relative path into `packages/web`, an absolute path into `packages/web` built from the repository root at test time (not hard-coded to a machine), and an `@/` path into `packages/web`.
+- **Boundary, allowed:** bare `'@clensy/web'`, a relative path that stays inside `apps/web`, the `../my-packages/web` and `../packages/webby` lookalikes, and a `packages-web` file name.
+- **Load calls:** `require('@clensy/web')`, `import('@clensy/web')`, `import X = require('@clensy/web')`, and non-literal `require(name)` and `import(name)`.
+- **Dashboard shell:** a second `DashboardLayout` element in another file, an aliased `DashboardLayout` import rendered in another file, a second element inside the layout source (a sibling, and a conditional branch), and the real tree.
 
 **Secondary text guard.** A source scan confirms that `user-menu.tsx`, `admin/page.tsx`, `bookings/page.tsx` and `app/login/page.tsx` do not contain `ClensyI18nProvider`.
 
@@ -230,5 +278,6 @@ The explicit annotation on `APP_I18N_OVERRIDES` (§4.1) is the primary type-leve
   - The behavioural test's mock-ordering requirement and test-only override are explicit (§6.2).
   - The type-level test is framed as supplemental to the annotation (§6.3).
 - *(#117 amendment.)* §6.1 states the scanned extension set and its exclusions, the provider escape forms and their exempt positions, the zero-escape assertion, the syntactic import binding of both layout tags, and the fixture requirement. These are precise enough that M4 does not need to invent any rule. The amendment changes nothing outside §3's new term and §6.1, and adds no production change.
+- *(#120 amendment.)* §6.1 states the package-boundary invariant, the `DashboardLayout` recognition and placement invariant, provider escape item 4 (package load calls), their assertions, and the fixture requirement. These are precise enough that M4 does not need to invent any rule. The specifier forms, the path-arithmetic rule, literal handling and the lookalike exclusions are all explicit. The amendment changes nothing outside §3's two new terms and §6.1, and adds no production or package change.
 - Explicitly defers tenant-sourced overrides (§8) and introduces no `@clensy/web` / `@clensy/ui` API changes (§4.5 item 8).
 - Covers each acceptance bullet of #115: one app-level provider that the user menu, admin page and bookings page all render through; one override applying to the user menu, staff table and create-staff form; the regression test updated to check for the single provider; and consistency with the Web i18n spec and the package boundary.
