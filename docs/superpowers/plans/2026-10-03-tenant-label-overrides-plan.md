@@ -2059,3 +2059,47 @@ Rulings (deviations from the plan text, none changing product semantics):
 - Lint-only reorders (`record-key-order`) and Prettier wrapping in test files.
 
 Final verification: `pnpm run lint`, `tsc --noEmit` for `apps/api` and `apps/web`, `@clensy/client` and `@clensy/web` builds, and `pnpm run test` all passed (9/9 turbo tasks; API 987 unit tests). The e2e suites `add-tenant-label-overrides` (1/1), `tenant-label-overrides.e2e` (8/8), `admin-foundation` (5/5, characterization) and `two-tenant-release-gate` (12/12) passed.
+
+**M7 (2026-10-04): Approved for merge.** Basis:
+- An independent whole-branch review by a fresh agent context that did not implement the change. It reviewed `fb12aea..8d50ca2` against the Accepted spec and plan, the plan's five Review Focus items and every M6 ruling.
+- Plan conformance: Tasks 1–9 all covered. Spec conformance: §4.1–§4.7 and §6 pass.
+- Results: 0 Critical, 0 Important, 5 Minor, plus 1 observation. It agreed with all M6 rulings.
+- The reviewer reran lint, both `tsc` checks, `pnpm run test` (API 987, `@clensy/web` 63, `apps/web` 282, `@clensy/ui` 81, `@clensy/validation` 79) and the four e2e suites (1/1, 8/8, 5/5, 12/12).
+- PR [#128](https://github.com/rexescario-dev/clensy-platform/pull/128), CI run [37137206774](https://github.com/rexescario-dev/clensy-platform/actions/runs/37137206774): Lint, Test and Release gate all passed.
+
+**Deferred minors** (none blocking):
+1. Rejection paths include raw stored keys. A key with a newline, or a very long key, reaches the warning line unescaped. Only operations staff write the column. A follow-up could escape or truncate the key.
+2. The other-locale boundary test asserts only that "Billing" is absent. It could also assert that "Finance" renders. The mapper unit test pins the rule.
+3. Adding `jsdom` let pnpm re-resolve `lru-cache` 11.5.2 → 11.5.3 for two unrelated packages (patch level).
+4. `apps/web/eslint.config.mjs` was outside the plan's file map. The change is a narrow named exception that follows precedent.
+5. Spec §6.2 named `app-i18n-boundary.test.tsx`, while the plan used new files. Resolved at M9 with an informative spec note.
+
+Observation: warnings are written on every read (once per rejected node per read), as the spec requires.
+
+**Declined to judge, ruled:**
+- U+2028/U+2029 and bidi or format (Cf) characters are kept, because the spec rejects control characters only. Values are ops-written and React renders them as text.
+- A transient DB error in the field resolver surfaces like any other `currentAdmin` DB failure. The spec's failure isolation covers validation drops only.
+- Per-key log volume follows the spec.
+
+**M8 (2026-10-04): N/A.**
+- Scope: the #118 change set.
+- Each unit is already small and single-purpose: a pure validator (≈130 lines), a 40-line service, a field resolver with one mapping helper, a 20-line mapper, and a provider of about 15 lines. Tests sit next to the code they pin.
+- The deferred minors would add behavior (key escaping) or tests, not restructure code, so they are not M8 work.
+- No behavior-preserving restructuring is worth its risk.
+
+**M9 (2026-10-04): Complete.** Documentation scope and causes:
+
+| Path | Kind | Caused by |
+| --- | --- | --- |
+| `apps/web/README.md` § i18n, *Overrides* | Content | Tasks 7–9: the two override layers, precedence, the cache-first query, session clearing |
+| `packages/web/README.md` § i18n | Content | Task 6: the `deepMerge` export |
+| Spec Tracking cell | Content | PR #128 opened |
+| Spec §6.2 informative note | Content (traceability) | M7 deferred minor 5: tests placed in new files by the Accepted plan; no semantic change |
+| Single app i18n provider spec "Followed by" row | Content | PR #128 opened |
+| This section | Content | M7–M9 gate outcomes |
+
+Editorial verification:
+- Every relative link in the five touched documents resolves (scripted scan, 0 broken).
+- Status fields are consistent: spec Accepted, plan Accepted, and implemented in PR #128 (open, awaiting the human merge).
+- Terminology follows the spec: *tenant layer*, *static app layer*, *session-transition path*, *relabelable role*.
+- No code or contract changed.
