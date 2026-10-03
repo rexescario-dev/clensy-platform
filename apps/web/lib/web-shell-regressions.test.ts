@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { relative, resolve } from 'node:path';
+import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
@@ -186,6 +186,40 @@ function isNamespaceTypePosition(identifier: ts.Identifier) {
   return isQualified && ts.isTypeReferenceNode(entityName.parent);
 }
 
+// §6.1: a literal module specifier is a string literal, or a template literal
+// with no substitutions.
+function isLiteralSpecifier(node: ts.Node | undefined): node is ts.NoSubstitutionTemplateLiteral | ts.StringLiteral {
+  return node !== undefined && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node));
+}
+
+// A `require(…)` call (callee spelled `require`, no scope analysis) or a
+// dynamic `import(…)` call. In the TypeScript 5.9 AST, `import(…)` is a
+// CallExpression whose `expression` has kind SyntaxKind.ImportKeyword.
+// `require.resolve(…)` has a PropertyAccessExpression callee, so it is not a load.
+function isLoadCall(node: ts.Node): node is ts.CallExpression {
+  return (
+    ts.isCallExpression(node) &&
+    (node.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(node.expression) && node.expression.text === 'require'))
+  );
+}
+
+// §6.1 escape item 4 (#120): loading the package can destructure or alias the
+// provider under any name, so the load itself is the escape. A load the guard
+// cannot read (non-literal or missing specifier) fails closed. Deep and
+// packages/web specifiers are boundary violations instead.
+function loadCallEscapes(node: ts.Node) {
+  if (isLoadCall(node)) {
+    const [specifier] = node.arguments;
+    if (!isLiteralSpecifier(specifier)) return 1;
+    return specifier.text === '@clensy/web' ? 1 : 0;
+  }
+  if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
+    const { expression } = node.moduleReference;
+    return isLiteralSpecifier(expression) && expression.text === '@clensy/web' ? 1 : 0;
+  }
+  return 0;
+}
+
 function packageReExportEscapes(declaration: ts.ExportDeclaration) {
   const clause = declaration.exportClause;
   if (!clause || ts.isNamespaceExport(clause)) return 1;
@@ -215,6 +249,7 @@ function providerUses(fileName: string, text: string) {
       return;
     }
     if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && isProviderTag(node.tagName)) mounts += 1;
+    escapes += loadCallEscapes(node);
     if (ts.isIdentifier(node) && !isNonReferenceName(node)) {
       if (named.has(node.text) && !isJsxTagName(node) && !isNamedTypeQuery(node)) escapes += 1;
       if (namespaces.has(node.text) && !isNamespaceMountTag(node) && !isNamespaceTypePosition(node)) escapes += 1;
@@ -267,6 +302,88 @@ function wrapsDashboardInBoundary(fileName: string, text: string) {
   if (boundaries.length !== 1 || !ts.isJsxElement(boundary)) return false;
   const children = boundary.children.filter((child) => !(ts.isJsxText(child) && child.containsOnlyTriviaWhiteSpaces));
   return children.length === 1 && hasTag(children[0], dashboard);
+}
+
+// §6.1 dashboard shell (#120). Recognition: a JSX opening or self-closing
+// element whose tag name is literally DashboardLayout, or a local name bound by
+// a named import whose imported name is DashboardLayout, from any module (no
+// module resolution). DashboardLayout gets no escape rules.
+function dashboardShellElements(fileName: string, text: string) {
+  const source = parseSource(fileName, text);
+  const names = new Set(['DashboardLayout']);
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement)) continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (!bindings || !ts.isNamedImports(bindings)) continue;
+    for (const element of bindings.elements) {
+      if ((element.propertyName ?? element.name).text === 'DashboardLayout') names.add(element.name.text);
+    }
+  }
+  let count = 0;
+  const visit = (node: ts.Node) => {
+    if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && ts.isIdentifier(node.tagName) && names.has(node.tagName.text)) {
+      count += 1;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return count;
+}
+
+// §6.1 package boundary (#120): plain path arithmetic only. No module
+// resolution, file-system lookup, extension or index probing, or package.json.
+const packagesWebRoot = resolve(webRoot, '../../packages/web');
+
+// Segment-by-segment containment, so `packages/webby` and `my-packages/web` are outside.
+function isInsidePackagesWeb(target: string) {
+  const fromPackage = relative(packagesWebRoot, target);
+  return fromPackage === '' || (!isAbsolute(fromPackage) && fromPackage.split(sep)[0] !== '..');
+}
+
+// Relative specifiers resolve against the importing file's directory, absolute
+// ones as is, and `@/…` against the apps/web root (tsconfig paths "@/*": ["./*"]).
+// Bare package names have no path target.
+function specifierTarget(fileName: string, specifier: string) {
+  if (specifier === '.' || specifier === '..' || specifier.startsWith('./') || specifier.startsWith('../')) {
+    return resolve(dirname(fileName), specifier);
+  }
+  if (isAbsolute(specifier)) return resolve(specifier);
+  if (specifier.startsWith('@/')) return resolve(webRoot, specifier.slice(2));
+  return undefined;
+}
+
+function isBoundaryViolation(fileName: string, specifier: string) {
+  if (specifier.startsWith('@clensy/web/')) return true;
+  const target = specifierTarget(fileName, specifier);
+  return target !== undefined && isInsidePackagesWeb(target);
+}
+
+// Every module-specifier form the parser exposes, by AST node:
+// - ImportDeclaration: both `import … from` and `import type … from`;
+// - ExportDeclaration: both `export … from` and `export type … from`;
+// - ImportEqualsDeclaration + ExternalModuleReference: `import X = require('…')`;
+// - CallExpression via isLoadCall: `require(…)` and dynamic `import(…)`;
+// - ImportTypeNode: type-position `import('…')`, e.g. `type T = import('…').X`.
+// `import type` declarations and type-position `import('…')` are different
+// nodes; both are needed. Type-only forms count: the invariant is structural
+// access, not runtime loading.
+function moduleSpecifierOf(node: ts.Node): ts.Node | undefined {
+  if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return node.moduleSpecifier;
+  if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) return node.moduleReference.expression;
+  if (isLoadCall(node)) return node.arguments[0];
+  if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) return node.argument.literal;
+  return undefined;
+}
+
+function boundaryViolations(fileName: string, text: string) {
+  const violations: string[] = [];
+  const visit = (node: ts.Node) => {
+    const specifier = moduleSpecifierOf(node);
+    if (isLiteralSpecifier(specifier) && isBoundaryViolation(fileName, specifier.text)) violations.push(specifier.text);
+    ts.forEachChild(node, visit);
+  };
+  visit(parseSource(fileName, text));
+  return violations;
 }
 
 function nonTestSources(dir: string): string[] {
@@ -359,8 +476,56 @@ describe('app i18n boundary structure', () => {
       ['a nested namespace typeof type query', 'fixture.ts', `${NAMESPACE}type T = typeof W.ClensyI18nProvider.displayName;`, 0, 0],
       ['a bare namespace typeof type query', 'fixture.ts', `${NAMESPACE}type T = typeof W;`, 0, 0],
       ['a nested namespace import-equals', 'fixture.ts', `${NAMESPACE}import X = W.Foo.Bar;`, 0, 1],
+      // Package load calls (item 4, #120).
+      ['a require of the package', 'fixture.js', "const { ClensyI18nProvider: P } = require('@clensy/web');", 0, 1],
+      ['a dynamic import of the package', 'fixture.ts', "const m = await import('@clensy/web');", 0, 1],
+      ['a template-literal require of the package', 'fixture.js', 'const m = require(`@clensy/web`);', 0, 1],
+      ['an import-equals require of the package', 'fixture.ts', "import W = require('@clensy/web');", 0, 1],
+      ['a non-literal require', 'fixture.js', "const name = '@clensy/web';\nconst m = require(name);", 0, 1],
+      ['a non-literal dynamic import', 'fixture.ts', "const name = '@clensy/web';\nconst m = await import(name);", 0, 1],
+      ['a template literal with a substitution', 'fixture.ts', 'const pkg = "web";\nconst m = await import(`@clensy/${pkg}`);', 0, 1],
+      ['a require with no argument', 'fixture.js', 'require();', 0, 1],
+      ['a require of another module', 'fixture.js', "const path = require('node:path');", 0, 0],
+      ['a dynamic import of another module', 'fixture.ts', "const page = await import('./page');", 0, 0],
+      ['require.resolve of the package', 'fixture.js', "const where = require.resolve('@clensy/web');", 0, 0],
+      ['a deep load call (a boundary violation, not an escape)', 'fixture.js', "const m = require('@clensy/web/src');", 0, 0],
     ])('counts %s correctly', (_label, fileName, source, mounts, escapes) => {
       expect(providerUses(fileName, source)).toEqual({ mounts, escapes });
+    });
+  });
+
+  describe('package-boundary check', () => {
+    // A fixture at apps/web/app/app/fixture.tsx: four `..` segments reach the repository root.
+    const FIXTURE = resolve(webRoot, 'app/app/fixture.tsx');
+    const INTO_PACKAGE = JSON.stringify(resolve(webRoot, '../../packages/web/src/index.ts'));
+
+    it.each([
+      // Deep @clensy/web specifiers, one per form (§6.1 Package boundary, #120).
+      ['an import', "import { ClensyI18nProvider as P } from '@clensy/web/src';", ['@clensy/web/src']],
+      ['an import type', "import type { ClensyMessages } from '@clensy/web/src/i18n';", ['@clensy/web/src/i18n']],
+      ['an export-from', "export { ClensyI18nProvider } from '@clensy/web/src';", ['@clensy/web/src']],
+      ['an export type-from', "export type { ClensyMessages } from '@clensy/web/src';", ['@clensy/web/src']],
+      ['an import-equals require', "import W = require('@clensy/web/src');", ['@clensy/web/src']],
+      ['a require', "const m = require('@clensy/web/src');", ['@clensy/web/src']],
+      ['a dynamic import', "const m = await import('@clensy/web/src');", ['@clensy/web/src']],
+      ['an import type node', "type T = import('@clensy/web/src').ClensyMessages;", ['@clensy/web/src']],
+      ['a template-literal require', 'const m = require(`@clensy/web/src`);', ['@clensy/web/src']],
+      // Paths into packages/web.
+      ['a relative path into packages/web', "import { X } from '../../../../packages/web/src/i18n/i18n-context';", ['../../../../packages/web/src/i18n/i18n-context']],
+      ['a relative path to the packages/web directory itself', "import X from '../../../../packages/web';", ['../../../../packages/web']],
+      ['an absolute path into packages/web', `import { X } from ${INTO_PACKAGE};`, [JSON.parse(INTO_PACKAGE)]],
+      ['an @/ path into packages/web', "import { X } from '@/../../packages/web/src';", ['@/../../packages/web/src']],
+      ['two violations in one file', "import a from '@clensy/web/a';\nimport b from '@clensy/web/b';", ['@clensy/web/a', '@clensy/web/b']],
+      // Allowed.
+      ['the bare package', "import { ClensyI18nProvider } from '@clensy/web';\nconst m = require('@clensy/web');", []],
+      ['a relative path inside apps/web', "import { DashboardLayout } from '../../components/layout/dashboard-layout';", []],
+      ['a my-packages/web lookalike', "import x from '../../../../my-packages/web/src';", []],
+      ['a packages/webby lookalike', "import x from '../../../../packages/webby/src';", []],
+      ['a packages-web file name', "import x from './packages-web';", []],
+      ['another scoped package', "import { Button } from '@clensy/ui';\nimport x from '@clensy/webkit/y';", []],
+      ['a non-literal load (an escape, not a violation)', 'const m = await import(name);', []],
+    ])('reports %s', (_label, source, expected) => {
+      expect(boundaryViolations(FIXTURE, source)).toEqual(expected);
     });
   });
 
@@ -380,6 +545,16 @@ describe('app i18n boundary structure', () => {
       .filter(({ count }) => count > 0);
 
     expect(escapes).toEqual([]);
+  });
+
+  // §6.1 package boundary (#120): zero violations anywhere, independent of the
+  // provider assertions.
+  it('has no package boundary violations anywhere in apps/web', () => {
+    const violations = nonTestSources(webRoot)
+      .map((path) => ({ file: relative(webRoot, path), specifiers: boundaryViolations(path, readFileSync(path, 'utf8')) }))
+      .filter(({ specifiers }) => specifiers.length > 0);
+
+    expect(violations).toEqual([]);
   });
 
   describe('layout-wiring check', () => {
@@ -413,6 +588,11 @@ describe('app i18n boundary structure', () => {
         `${PROVIDER}${DASHBOARD}${layoutReturning('<><AppI18nProvider><DashboardLayout>{children}</DashboardLayout></AppI18nProvider><AppI18nProvider /></>')}`,
         false,
       ],
+      [
+        'a second shell in a conditional branch (caught by the dashboard-shell invariant, not here)',
+        `${PROVIDER}${DASHBOARD}${layoutReturning('cond ? <DashboardLayout>{children}</DashboardLayout> : <AppI18nProvider><DashboardLayout>{children}</DashboardLayout></AppI18nProvider>')}`,
+        true,
+      ],
     ])('checks %s', (_label, source, expected) => {
       expect(wrapsDashboardInBoundary('layout.tsx', source)).toBe(expected);
     });
@@ -420,6 +600,44 @@ describe('app i18n boundary structure', () => {
 
   it('mounts AppI18nProvider in the /app layout, directly around DashboardLayout', () => {
     expect(wrapsDashboardInBoundary('app/app/layout.tsx', readWebSource('app/app/layout.tsx'))).toBe(true);
+  });
+
+  describe('dashboard-shell recognition', () => {
+    const PROVIDER = "import { AppI18nProvider } from '../../components/layout/app-i18n-provider';\n";
+    const DASHBOARD = "import { DashboardLayout } from '../../components/layout/dashboard-layout';\n";
+    const layoutReturning = (jsx: string) => `export default function Layout({ children }) {\n  return ${jsx};\n}\n`;
+
+    it.each([
+      ['the canonical layout', `${PROVIDER}${DASHBOARD}${layoutReturning('<AppI18nProvider><DashboardLayout>{children}</DashboardLayout></AppI18nProvider>')}`, 1],
+      [
+        'a sibling shell outside the provider',
+        `${PROVIDER}${DASHBOARD}${layoutReturning('<><AppI18nProvider><DashboardLayout>{children}</DashboardLayout></AppI18nProvider><DashboardLayout /></>')}`,
+        2,
+      ],
+      [
+        'a shell in a conditional branch',
+        `${PROVIDER}${DASHBOARD}${layoutReturning('cond ? <DashboardLayout>{children}</DashboardLayout> : <AppI18nProvider><DashboardLayout>{children}</DashboardLayout></AppI18nProvider>')}`,
+        2,
+      ],
+      ['a shell in another file', "import { DashboardLayout } from '../components/layout/dashboard-layout';\nexport default function Page() {\n  return <DashboardLayout>x</DashboardLayout>;\n}\n", 1],
+      ['an aliased import from any module', "import { DashboardLayout as Shell } from './somewhere';\nexport const Page = () => <Shell />;\n", 1],
+      ['a literal DashboardLayout tag without an import', 'export const Page = () => <DashboardLayout />;\n', 1],
+      ['a property-access tag', "import * as Ui from './ui';\nexport const Page = () => <Ui.DashboardLayout />;\n", 0],
+      ['a same-spelled attribute and an unrelated import', "import { DashboardLayoutProps } from './types';\nexport const Page = () => <div DashboardLayout=\"x\" />;\n", 0],
+    ])('counts %s', (_label, source, expected) => {
+      expect(dashboardShellElements('fixture.tsx', source)).toBe(expected);
+    });
+  });
+
+  // §6.1 dashboard shell (#120): exactly one recognised element across apps/web,
+  // in the /app layout. With the layout-wiring test above, it is the provider's
+  // direct child.
+  it('renders exactly one DashboardLayout shell in apps/web, in the /app layout', () => {
+    const shells = nonTestSources(webRoot)
+      .map((path) => ({ file: relative(webRoot, path), count: dashboardShellElements(path, readFileSync(path, 'utf8')) }))
+      .filter(({ count }) => count > 0);
+
+    expect(shells).toEqual([{ file: 'app/app/layout.tsx', count: 1 }]);
   });
 
   // Secondary text guard; the AST check above is the primary one.
