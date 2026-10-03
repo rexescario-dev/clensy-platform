@@ -186,6 +186,40 @@ function isNamespaceTypePosition(identifier: ts.Identifier) {
   return isQualified && ts.isTypeReferenceNode(entityName.parent);
 }
 
+// §6.1: a literal module specifier is a string literal, or a template literal
+// with no substitutions.
+function isLiteralSpecifier(node: ts.Node | undefined): node is ts.NoSubstitutionTemplateLiteral | ts.StringLiteral {
+  return node !== undefined && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node));
+}
+
+// A `require(…)` call (callee spelled `require`, no scope analysis) or a
+// dynamic `import(…)` call. In the TypeScript 5.9 AST, `import(…)` is a
+// CallExpression whose `expression` has kind SyntaxKind.ImportKeyword.
+// `require.resolve(…)` has a PropertyAccessExpression callee, so it is not a load.
+function isLoadCall(node: ts.Node): node is ts.CallExpression {
+  return (
+    ts.isCallExpression(node) &&
+    (node.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(node.expression) && node.expression.text === 'require'))
+  );
+}
+
+// §6.1 escape item 4 (#120): loading the package can destructure or alias the
+// provider under any name, so the load itself is the escape. A load the guard
+// cannot read (non-literal or missing specifier) fails closed. Deep and
+// packages/web specifiers are boundary violations instead.
+function loadCallEscapes(node: ts.Node) {
+  if (isLoadCall(node)) {
+    const [specifier] = node.arguments;
+    if (!isLiteralSpecifier(specifier)) return 1;
+    return specifier.text === '@clensy/web' ? 1 : 0;
+  }
+  if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
+    const { expression } = node.moduleReference;
+    return isLiteralSpecifier(expression) && expression.text === '@clensy/web' ? 1 : 0;
+  }
+  return 0;
+}
+
 function packageReExportEscapes(declaration: ts.ExportDeclaration) {
   const clause = declaration.exportClause;
   if (!clause || ts.isNamespaceExport(clause)) return 1;
@@ -215,6 +249,7 @@ function providerUses(fileName: string, text: string) {
       return;
     }
     if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && isProviderTag(node.tagName)) mounts += 1;
+    escapes += loadCallEscapes(node);
     if (ts.isIdentifier(node) && !isNonReferenceName(node)) {
       if (named.has(node.text) && !isJsxTagName(node) && !isNamedTypeQuery(node)) escapes += 1;
       if (namespaces.has(node.text) && !isNamespaceMountTag(node) && !isNamespaceTypePosition(node)) escapes += 1;
@@ -359,6 +394,19 @@ describe('app i18n boundary structure', () => {
       ['a nested namespace typeof type query', 'fixture.ts', `${NAMESPACE}type T = typeof W.ClensyI18nProvider.displayName;`, 0, 0],
       ['a bare namespace typeof type query', 'fixture.ts', `${NAMESPACE}type T = typeof W;`, 0, 0],
       ['a nested namespace import-equals', 'fixture.ts', `${NAMESPACE}import X = W.Foo.Bar;`, 0, 1],
+      // Package load calls (item 4, #120).
+      ['a require of the package', 'fixture.js', "const { ClensyI18nProvider: P } = require('@clensy/web');", 0, 1],
+      ['a dynamic import of the package', 'fixture.ts', "const m = await import('@clensy/web');", 0, 1],
+      ['a template-literal require of the package', 'fixture.js', 'const m = require(`@clensy/web`);', 0, 1],
+      ['an import-equals require of the package', 'fixture.ts', "import W = require('@clensy/web');", 0, 1],
+      ['a non-literal require', 'fixture.js', "const name = '@clensy/web';\nconst m = require(name);", 0, 1],
+      ['a non-literal dynamic import', 'fixture.ts', "const name = '@clensy/web';\nconst m = await import(name);", 0, 1],
+      ['a template literal with a substitution', 'fixture.ts', 'const pkg = "web";\nconst m = await import(`@clensy/${pkg}`);', 0, 1],
+      ['a require with no argument', 'fixture.js', 'require();', 0, 1],
+      ['a require of another module', 'fixture.js', "const path = require('node:path');", 0, 0],
+      ['a dynamic import of another module', 'fixture.ts', "const page = await import('./page');", 0, 0],
+      ['require.resolve of the package', 'fixture.js', "const where = require.resolve('@clensy/web');", 0, 0],
+      ['a deep load call (a boundary violation, not an escape)', 'fixture.js', "const m = require('@clensy/web/src');", 0, 0],
     ])('counts %s correctly', (_label, fileName, source, mounts, escapes) => {
       expect(providerUses(fileName, source)).toEqual({ mounts, escapes });
     });
