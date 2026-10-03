@@ -31,7 +31,8 @@ Produce **exactly one** Draft implementation plan that translates an **Accepted*
 6. **Inventory contracts / surfaces to implement** — only what the Accepted specification authorizes. Mark deferred items explicitly.
 7. **Sequence delivery.** Prefer the **smallest independently reviewable slices** that preserve correctness and minimize partially implemented behavior. Call out hard prerequisites between slices. Task order MUST be executable without inventing missing work.
 8. **Identify public surfaces that require implementation.** Do not freeze signatures, type shapes, or APIs beyond what the Accepted specification already defines. Export/public-surface decisions are planning aids, not new product contracts.
-9. **Plan for TDD where code is in scope.** For each implementation slice, identify the tests that fail before implementation and the observable behavior they verify. If the work is docs/process-only, state that TDD does not apply and what verification replaces it.
+9. **Plan for TDD where code is in scope.** For each implementation slice, identify the tests that fail before implementation and the observable behavior they verify. If the work is docs/process-only, state that TDD does not apply and what verification replaces it. Label any test that pins already-correct behavior as a **characterization test** ([M6](implementation-execution.md) step 3).
+   **Pre-validation** *(optional)*. If the plan claims pre-validation (its code, fixtures, or edits were run before M5), it MUST run every command its `Expected:` lines name (for example tests, type-check, lint, build) and record which commands ran. A claim that does not cover every named command MUST be labelled **partial** and MUST name the commands not run.
 10. **List bite-sized tasks** sufficient for M5 to judge executability and for M6 to execute without inventing sequencing. Tasks SHOULD map to Accepted-spec requirements.
 11. **Traceability.** Every major task or slice SHOULD reference the Accepted specification section(s) it implements. Do not add “nice to have” work outside the Accepted spec without an explicit out-of-scope deferral.
 12. **Keep planning decisions non-normative.** File layout, task grouping, sequencing, temporary naming, and implementation order are planning decisions. They MUST NOT be interpreted as product semantics.
@@ -53,6 +54,7 @@ Produce **exactly one** Draft implementation plan that translates an **Accepted*
 | Task breakdown | Always |
 | Traceability to Accepted spec | Always |
 | Execution / dependency / scheduling risks | Only operational risks—not redesign proposals |
+| Gate outcomes *(appended after M5)* | Delivery slices: M6–M10 records are appended here as they arrive; it is the default home of the M10 report ([workflow-validation.md](workflow-validation.md)) |
 
 ### Self-check before handoff *(planner)*
 
@@ -63,6 +65,8 @@ Produce **exactly one** Draft implementation plan that translates an **Accepted*
 | Task ordering is executable without inventing missing work | Fix sequencing |
 | Deferred work explicitly identified | Fix if ambiguous |
 | Missing design semantics → stopped and returned to M2/M3 | Do not Draft-gap-fill |
+| A pre-validation claim ran every `Expected:` command, or is labelled **partial** with the gaps named | Fix the claim before Draft handoff |
+| Tests that pin already-correct behavior are labelled characterization tests | Fix before Draft handoff |
 
 ## Outputs
 

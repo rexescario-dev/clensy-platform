@@ -52,6 +52,8 @@ Review a Draft implementation plan produced by M4 and decide **Accepted** or **R
 | Task ordering executable without inventing missing work | Return |
 | No demand for implementation-level detail beyond Accepted spec | Return if over-specified as blocker |
 | TDD/verification strategy adequate for the work kind | Return |
+| A pre-validation claim covers every command the plan's `Expected:` lines name, or is labelled **partial** with the gaps named | Return |
+| Tests that pin already-correct behavior are labelled characterization tests | Return |
 | Public surfaces not frozen beyond Accepted spec | Return |
 | No hidden redesign / gap-filling of missing semantics | Return |
 | Risks are execution/dependency/scheduling only; do not reopen design | Return |

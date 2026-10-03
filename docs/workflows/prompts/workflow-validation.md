@@ -50,7 +50,7 @@ Validate the **workflow assets themselves** (prompt library + governing process 
 
 | Output | Status |
 | --- | --- |
-| Validation report (path recorded) | **Accepted** or **Returned** |
+| Validation report — recorded by default in the slice's Accepted implementation plan under **Gate outcomes**; when validating outside a slice, at a project-chosen path that the report states | **Accepted** or **Returned** |
 
 ### Outcome template
 

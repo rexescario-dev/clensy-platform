@@ -2,8 +2,8 @@ workflow:
   version: "1"
   profile: application
   packages:
-    generic: 1.2.0
-    claude: 0.1.0
+    generic: 1.4.1
+    claude: 0.2.0
     ui-ux-claude: 0.1.0
     ui-ux: 0.1.0
     javascript-conventions: 0.3.0
@@ -11,60 +11,60 @@ workflow:
   assets:
     - path: docs/workflows/README.md
       package: generic
-      version: 1.2.0
+      version: 1.4.1
       digest: sha256:ce2d90a4b4bec3c3c23cb607dc75bb3e97ac3c0fcb689370f763cc4aac53bd0a
     - path: docs/workflows/specs/agent-workflow-design.md
       package: generic
-      version: 1.2.0
-      digest: sha256:c79e1a7d6ab0a4c9a150a7a288e934275a7f821706eb1b10cf14bd48b49e4d0c
+      version: 1.4.1
+      digest: sha256:188cda44333c87f6f941d82ba1cb37d58227a97d8e1e120385117063e042d2bb
     - path: docs/workflows/conventions/prompt-library.md
       package: generic
-      version: 1.2.0
+      version: 1.4.1
       digest: sha256:b45b7ee524ddf95a26701ce491ba3f7c85ba8372595d4a1f029785bc2256f960
     - path: docs/workflows/conventions/reporting-conventions.md
       package: generic
-      version: 1.2.0
+      version: 1.4.1
       digest: sha256:52a5a0e332ca03da31126137c9a2c268e221db758bf72f0768f4846b9977692d
     - path: docs/workflows/prompts/specification.md
       package: generic
-      version: 1.2.0
-      digest: sha256:c0171774c06817ec1d62582e0c1081cbcba418cb223d3c1de05298727ffa6bd4
+      version: 1.4.1
+      digest: sha256:90b6d36876eb830051845aba19ba6fff98ae9e7701fa87acd21701e371e87413
     - path: docs/workflows/prompts/design-review.md
       package: generic
-      version: 1.2.0
-      digest: sha256:df24b0777626160fe01737c897a435e00cbffc413497ee3fde4c733f1cc145fc
+      version: 1.4.1
+      digest: sha256:12b4b5882ff9e9a474380bde329eb3f10f815c95aab6d3f8be7757bb46406e8a
     - path: docs/workflows/prompts/implementation-planning.md
       package: generic
-      version: 1.2.0
-      digest: sha256:4c2993137f082adc0243958b832fc8496bc94781874b4d3ebdb9b3bf27a96157
+      version: 1.4.1
+      digest: sha256:e42ee1db2db4ccba4a343ce25801e2a5fe57f9456095cee960ef4b4dd6fe6b48
     - path: docs/workflows/prompts/plan-review.md
       package: generic
-      version: 1.2.0
-      digest: sha256:3c02bca9e4c74dc9eaed1af8ac701a61f3e01dd3b928d4162ff74cf7ad26db2e
+      version: 1.4.1
+      digest: sha256:5c632b5a01bc0250419c417523ae97ddac5cb77a16e80800822bc355273a07f3
     - path: docs/workflows/prompts/implementation-execution.md
       package: generic
-      version: 1.2.0
-      digest: sha256:d50592418442294028cc26187c578627710ce374dafbf6b5b232c79a9a2a1af6
+      version: 1.4.1
+      digest: sha256:03e12fc7cc135991ec8b6e1b240a2f2bc049689ed5c56e867a27fc12b35530f0
     - path: docs/workflows/prompts/code-review.md
       package: generic
-      version: 1.2.0
-      digest: sha256:10e79516afad0fe15992086d4ea2f0291e589395ef864ed20ce9c0b7f6f622c4
+      version: 1.4.1
+      digest: sha256:d2a58b831ebaa41126ae992ba2f8e922310bf353d97547a31df9c83daa3c9be3
     - path: docs/workflows/prompts/refactoring.md
       package: generic
-      version: 1.2.0
-      digest: sha256:a0a1f4131df01be62d93fedd207a9cd0866db4061c1e04483a748fee2984abc2
+      version: 1.4.1
+      digest: sha256:606c58b290d663441c7ec5c3cc640cb70a49a85f6e10170d4069d4d90cff18e0
     - path: docs/workflows/prompts/documentation-execution.md
       package: generic
-      version: 1.2.0
-      digest: sha256:8a2646dbb1faa5e52aba6f151e5e6189c722901b5234942deb7544eee52702aa
+      version: 1.4.1
+      digest: sha256:73ff6c639a9a1dac536fe44d4c2fc07fcc65dddc0e4a2f98b266f0ea2e3e54c3
     - path: docs/workflows/prompts/workflow-validation.md
       package: generic
-      version: 1.2.0
-      digest: sha256:303efbfb6c8b6dc8ea0443e1ad0a5139ce36e8ba5b71df4e11c37489aecced2b
+      version: 1.4.1
+      digest: sha256:193657277247ceaeae5ad3782ecfe1001410b3bd6156d331534ea3673bf39b88
     - path: .claude/skills/workflow/SKILL.md
       package: claude
-      version: 0.1.0
-      digest: sha256:e3d2e0dfd8f8a03ea9121c2be82029a882d0d86dce28d7b063f13e9ae6c7cc96
+      version: 0.2.0
+      digest: sha256:8239c28c56158f0506df3ccb787cda75ebe8dfd27d25dce171dda40a8d56e224
     - path: .claude/skills/ui-ux/SKILL.md
       package: ui-ux-claude
       version: 0.1.0
@@ -114,7 +114,7 @@ workflow:
       version: 0.1.0
       digest: sha256:b677dc5b0bc3d94952d14a7a39dfb0a21d3e9a20154bbad9a4d373f7d2141c9e
   installation:
-    installedAt: 2026-09-24T04:36:33.288Z
+    installedAt: 2026-10-03T14:43:48.939Z
     toolVersion: 0.0.0
     catalogId: local
   providers:

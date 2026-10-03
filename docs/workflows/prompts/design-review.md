@@ -12,6 +12,7 @@ Review a Draft specification produced by M2 and decide **Accepted** or **Returne
 
 - A Draft specification exists and is ready for Design Review
 - Re-reviewing a specification after M2 addressed a prior return
+- Reviewing a Draft **slice-local amendment** of an Accepted specification (see below)
 
 ## Preconditions
 
@@ -33,6 +34,8 @@ Review a Draft specification produced by M2 and decide **Accepted** or **Returne
  - **Accepted** — The reviewer finds **no design blockers** and believes the specification is sufficiently complete and internally consistent that **M4 should not need to invent semantics**. Set specification Status to **Accepted** (or instruct the author to); record brief rationale.
  - **Returned for Revision** — Keep Status **Draft**. List required changes; every required change MUST identify the violated review criterion (scope, dependency, invariant, layering, rationale, completeness, terminology, etc.). Do not silently edit the design into acceptance.
 10. **Stop.** Do not produce an implementation plan, task list, or code. Hand Accepted specs to **Implementation Planning (M4)**; hand returns back to **Specification (M2)**.
+
+**Slice-local amendments.** When the subject is a Draft amendment of an Accepted specification, review **the amended text plus its consistency with the unchanged remainder**; do not re-review the unchanged text. Record the decision in the specification's status and decision rows for the amendment. The remainder's Accepted status is unaffected by either outcome.
 
 ### Review checklist *(non-exhaustive)*
 

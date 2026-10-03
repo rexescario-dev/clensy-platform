@@ -37,7 +37,7 @@ Authoritative inputs (same dual model as M6):
 4. **Check incremental delivery.** If the submitted change set intentionally represents only a subset of the implementation plan, verify that the plan explicitly authorizes incremental delivery for that subset. Otherwise **Return** (missing work vs staged delivery must not be ambiguous).
 5. **Check plan conformance.** Does the diff match authorized tasks/ownership? List plan tasks reviewed and mark each covered / deferred / missing. Silent task reordering, skipped tasks, or undeclared extras → **Return** (or require plan amendment via M4/M5).
 6. **Check specification conformance.** Behavior and contracts match Accepted semantics. Contradictions or invented semantics → **Return**; if the gap is in the spec, require M2/M3—not a clever merge.
-7. **Verify correctness and tests.** Record the exact verification evidence reviewed (CI status, test commands and results, logs, or equivalent). For code: tests cover the claimed behaviors; TDD evidence or equivalent verification is present where the plan required it. If verification cannot be confirmed, **Return**. Missing or misleading verification → **Return**.
+7. **Verify correctness and tests.** Record the exact verification evidence reviewed (CI status, test commands and results, logs, or equivalent). For code: tests cover the claimed behaviors; TDD evidence or equivalent verification is present where the plan required it. For a **characterization test**, a recorded failing run against a deliberately broken copy or mutation that is not part of the change is equivalent verification. If verification cannot be confirmed, **Return**. Missing or misleading verification → **Return**.
 8. **Assess quality without redesign.** Assess quality against repository conventions (prompt README, contribution rules, architecture boundaries) without redesigning Accepted behavior. Flag clear defects: incorrectness, unnecessary complexity for the task, duplication that harms the slice, obvious regression risk, broken boundaries. Do **not** reject merely because you would have structured internals differently when behavior and plan conformance hold.
 9. **Reject hidden scope expansion.** Drive-by refactors, dependency upgrades, API expansions, or docs campaigns outside the plan → **Return**.
 10. **No silent rewrite / no fix-during-review.** Reviewers MUST NOT modify implementation code as part of review. Any required implementation changes belong in M6 after a Return decision. Do not push “fixup commits” that redefine the change into acceptance without an explicit Return.
@@ -47,11 +47,15 @@ Authoritative inputs (same dual model as M6):
     - **Returned for Revision** — Every required change MUST identify the violated criterion (plan conformance, spec conformance, verification, scope, correctness, regression risk, etc.). Hand back to M6 (or M4/M2 if plan/spec gaps).
 13. **Stop.** Do not start broad refactoring (M8) or documentation campaigns (M9) as part of “review.” Optional follow-on M8/M9 happens after approval when appropriate.
 
+**Reviewer independence.** The review SHOULD be performed by a reviewer **independent of the M6 implementer**: a different person, or a **fresh agent context** that did not implement the change. When the implementer writes the outcome record, the record MUST **cite the independent review** it is based on. A review by the implementer alone MUST be labelled a **self-review** in the record.
+
 ### Review checklist *(non-exhaustive)*
 
 | Check | Fail → |
 | --- | --- |
 | Artifact actually inspected (no fabricated review) | Stop / request artifact |
+| Reviewer independent of the M6 implementer, or the record labels a self-review | Label before deciding |
+| An implementer-written record cites the independent review (or is labelled a self-review) | Add the citation or the label |
 | Accepted spec + Accepted plan cited | Return |
 | Incremental subset authorized by plan (if partial delivery) | Return |
 | Plan tasks reviewed with coverage marks | Return if incomplete |

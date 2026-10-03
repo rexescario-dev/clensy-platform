@@ -44,6 +44,7 @@ Where they appear to conflict, **stop** and escalate (do not “pick a side” i
    3. Implement the **smallest correct change** that satisfies the Accepted specification and current plan task
    4. Run tests — confirm pass
    5. Refactor only as needed for the task: refactoring MUST preserve all observable behavior validated by the current tests and MUST NOT broaden the task scope (broader refactoring is M8)
+   6. **Characterization tests.** A test that pins existing, already-correct behavior cannot fail first. Label it a **characterization test** (distinct from a regression test, which fails before its fix) in the plan and in the M6 record. Its evidence that it can fail is a failing run against a deliberately broken copy or mutation of the code under test, made **outside the committed change**. The broken copy or mutation MUST NOT be committed as part of the implementation.
 4. **Docs/process-only work.** Follow the plan’s stated verification (checklist, link checks, conformance notes). Do not invent a code TDD ritual.
 5. **Stay inside ownership boundaries.** Touch only packages/areas the plan authorizes. No drive-by cleanups outside the task.
 6. **No design or plan invention.** Do not introduce new product semantics, APIs, or “while we’re here” features. Planning decisions in the plan (layout, naming) may guide structure but MUST NOT expand meaning beyond the Accepted specification.
@@ -64,6 +65,7 @@ Where they appear to conflict, **stop** and escalate (do not “pick a side” i
 | Plan and spec still Accepted | Stop; do not implement |
 | Task is next (or explicitly allowed) in plan; no silent deviation from order | Stop or escalate |
 | Failing test first (code/TDD) | Write test before production code |
+| Characterization tests labelled, with failing-against-a-broken-copy evidence that is not committed | Add the evidence, or relabel as a regression test only if it failed before its fix |
 | Smallest correct change for Accepted spec + current task | Narrow or rewrite approach |
 | Implementation attributable to Accepted spec + plan | Stop / escalate if not |
 | No new product semantics; no hidden replanning | Revert / escalate |
