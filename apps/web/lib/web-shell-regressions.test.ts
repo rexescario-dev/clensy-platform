@@ -108,8 +108,8 @@ function isScannedSource(fileName: string) {
 }
 
 function scriptKindFor(fileName: string) {
-  if (fileName.endsWith('.tsx')) return ts.ScriptKind.TSX;
-  if (fileName.endsWith('.jsx')) return ts.ScriptKind.JSX;
+  if (fileName.endsWith('tsx')) return ts.ScriptKind.TSX;
+  if (fileName.endsWith('jsx')) return ts.ScriptKind.JSX;
   if (/\.(m|c)?js$/.test(fileName)) return ts.ScriptKind.JS;
   return ts.ScriptKind.TS;
 }
@@ -145,19 +145,42 @@ function isJsxTagName(node: ts.Node) {
   return (ts.isJsxOpeningElement(parent) || ts.isJsxSelfClosingElement(parent) || ts.isJsxClosingElement(parent)) && parent.tagName === node;
 }
 
-// Occurrences are by spelling, with no scope analysis. These positions are
-// names rather than references, so they are never counted.
+// Occurrences are by spelling, with no scope analysis. These exact name
+// positions are names rather than references, so they are never counted
+// (§6.1; the declaration-name positions were added by #124). Each test checks
+// that the identifier IS the name/label/right/qualifier node itself, never
+// merely that it sits somewhere under the construct.
 function isNonReferenceName(identifier: ts.Identifier) {
   const { parent } = identifier;
   return (
     (ts.isPropertyAccessExpression(parent) && parent.name === identifier) ||
     (ts.isPropertyAssignment(parent) && parent.name === identifier) ||
-    (ts.isJsxAttribute(parent) && parent.name === identifier)
+    (ts.isJsxAttribute(parent) && parent.name === identifier) ||
+    ((ts.isPropertySignature(parent) || ts.isMethodSignature(parent)) && parent.name === identifier) ||
+    ((ts.isPropertyDeclaration(parent) || ts.isMethodDeclaration(parent) || ts.isGetAccessorDeclaration(parent) || ts.isSetAccessorDeclaration(parent)) &&
+      parent.name === identifier) ||
+    (ts.isEnumMember(parent) && parent.name === identifier) ||
+    ((ts.isLabeledStatement(parent) || ts.isBreakStatement(parent) || ts.isContinueStatement(parent)) && parent.label === identifier) ||
+    (ts.isQualifiedName(parent) && parent.right === identifier) ||
+    isImportTypeQualifierName(identifier)
   );
 }
 
+// `import('x').W`, `import('x').A.W`: names inside an import type node's
+// qualifier. Type arguments (`import('x').A<W>`) are not part of the qualifier.
+function isImportTypeQualifierName(identifier: ts.Identifier) {
+  let name: ts.Node = identifier;
+  while (ts.isQualifiedName(name.parent)) name = name.parent;
+  return ts.isImportTypeNode(name.parent) && name.parent.qualifier === name;
+}
+
+// §6.1 item 2: `typeof P`, or (#124) P as the leftmost name of a qualified name
+// inside a `typeof` query (`typeof P.displayName`). `const Q = P.displayName`
+// is a value use and stays an escape.
 function isNamedTypeQuery(identifier: ts.Identifier) {
-  return ts.isTypeQueryNode(identifier.parent) && identifier.parent.exprName === identifier;
+  let entityName: ts.Node = identifier;
+  while (ts.isQualifiedName(entityName.parent) && entityName.parent.left === entityName) entityName = entityName.parent;
+  return ts.isTypeQueryNode(entityName.parent) && entityName.parent.exprName === entityName;
 }
 
 function isNamespaceMountTag(identifier: ts.Identifier) {
@@ -220,6 +243,18 @@ function loadCallEscapes(node: ts.Node) {
   return 0;
 }
 
+// §6.1 item 3 (#124): type-only heritage. W is exempt only as the leftmost name
+// of the expression in a class `implements` clause or an interface `extends`
+// clause. A class `extends` clause is runtime heritage and is never exempt.
+function isTypeOnlyHeritageName(identifier: ts.Identifier) {
+  let expression: ts.Node = identifier;
+  while (ts.isPropertyAccessExpression(expression.parent) && expression.parent.expression === expression) expression = expression.parent;
+  const heritageType = expression.parent;
+  if (!ts.isExpressionWithTypeArguments(heritageType) || heritageType.expression !== expression) return false;
+  const clause = heritageType.parent;
+  if (!ts.isHeritageClause(clause)) return false;
+  return clause.token === ts.SyntaxKind.ImplementsKeyword || ts.isInterfaceDeclaration(clause.parent);
+}
 function packageReExportEscapes(declaration: ts.ExportDeclaration) {
   const clause = declaration.exportClause;
   if (!clause || ts.isNamespaceExport(clause)) return 1;
@@ -252,7 +287,9 @@ function providerUses(fileName: string, text: string) {
     escapes += loadCallEscapes(node);
     if (ts.isIdentifier(node) && !isNonReferenceName(node)) {
       if (named.has(node.text) && !isJsxTagName(node) && !isNamedTypeQuery(node)) escapes += 1;
-      if (namespaces.has(node.text) && !isNamespaceMountTag(node) && !isNamespaceTypePosition(node)) escapes += 1;
+      if (namespaces.has(node.text) && !isNamespaceMountTag(node) && !isNamespaceTypePosition(node) && !isTypeOnlyHeritageName(node)) {
+        escapes += 1;
+      }
     }
     ts.forEachChild(node, visit);
   };
@@ -501,6 +538,48 @@ describe('app i18n boundary structure', () => {
       ['a dynamic import of another module', 'fixture.ts', "const page = await import('./page');", 0, 0],
       ['require.resolve of the package', 'fixture.js', "const where = require.resolve('@clensy/web');", 0, 0],
       ['a deep load call (a boundary violation, not an escape)', 'fixture.js', "const m = require('@clensy/web/src');", 0, 0],
+      // #124: *tsx files parse as TSX, *jsx as JSX (§6.1 Scanned files).
+      ['a .mtsx mount', 'fixture.mtsx', `${NAMED}export const x = <ClensyI18nProvider />;`, 1, 0],
+      ['a .ctsx mount', 'fixture.ctsx', `${NAMED}export const x = <ClensyI18nProvider />;`, 1, 0],
+      ['a .mjsx mount', 'fixture.mjsx', `${NAMED}export const x = <ClensyI18nProvider />;`, 1, 0],
+      ['a .cjsx mount', 'fixture.cjsx', `${NAMED}export const x = <ClensyI18nProvider />;`, 1, 0],
+      // #124: the named typeof exemption and namespace type-only heritage (§6.1 items 2–3).
+      ['a qualified typeof of the named binding', 'fixture.ts', `${ALIASED}type T = typeof P.displayName;`, 0, 0],
+      ['a deeper qualified typeof of the named binding', 'fixture.ts', `${ALIASED}type T = typeof P.a.b;`, 0, 0],
+      ['a namespace in a class implements clause', 'fixture.ts', `${NAMESPACE}class C implements W.Foo {}`, 0, 0],
+      ['a namespace in a class-expression implements clause', 'fixture.ts', `${NAMESPACE}const C = class implements W.Foo {};`, 0, 0],
+      ['a namespace in an interface extends clause', 'fixture.ts', `${NAMESPACE}interface I extends W.Foo {}`, 0, 0],
+      ['a value use of a provider property', 'fixture.ts', `${ALIASED}const Q = P.displayName;`, 0, 1],
+      ['a namespace in a class extends clause (runtime heritage)', 'fixture.ts', `${NAMESPACE}class C extends W.ClensyI18nProvider {}`, 0, 1],
+      ['a namespace in a class-expression extends clause (runtime heritage)', 'fixture.ts', `${NAMESPACE}const C = class extends W.Foo {};`, 0, 1],
+      ['a named binding in an implements clause (no named heritage exemption)', 'fixture.ts', `${ALIASED}class C implements P {}`, 0, 1],
+      // #124: declaration-name positions and import type qualifiers (§6.1 non-reference names).
+      ['a namespace name in an import type qualifier', 'fixture.ts', `${NAMESPACE}type T = import('x').W;`, 0, 0],
+      ['a namespace name in a nested import type qualifier', 'fixture.ts', `${NAMESPACE}type T = import('x').A.W;`, 0, 0],
+      ['an interface property signature name', 'fixture.ts', `${ALIASED}interface I {\n  P: string;\n}`, 0, 0],
+      ['a type-literal method signature name', 'fixture.ts', `${ALIASED}type T = { P(): void };`, 0, 0],
+      ['a class property name', 'fixture.ts', `${ALIASED}class C {\n  P = 1;\n}`, 0, 0],
+      ['a class method name', 'fixture.ts', `${ALIASED}class C {\n  P() {}\n}`, 0, 0],
+      ['class accessor names', 'fixture.ts', `${ALIASED}class C {\n  get P() {\n    return 1;\n  }\n  set P(value: number) {}\n}`, 0, 0],
+      ['an object-literal method name', 'fixture.ts', `${ALIASED}const o = { P() {} };`, 0, 0],
+      ['an object-literal getter name', 'fixture.ts', `${ALIASED}const o = {\n  get P() {\n    return 1;\n  },\n};`, 0, 0],
+      ['an enum member name', 'fixture.ts', `${ALIASED}enum E {\n  P,\n}`, 0, 0],
+      ['a label with break', 'fixture.ts', `${ALIASED}P: for (;;) {\n  break P;\n}`, 0, 0],
+      ['a label with continue', 'fixture.ts', `${ALIASED}P: for (;;) {\n  continue P;\n}`, 0, 0],
+      ['the right side of a qualified type name', 'fixture.ts', `${ALIASED}type T = X.P;`, 0, 0],
+      ['a value use inside a labeled loop', 'fixture.ts', `${ALIASED}P: for (;;) {\n  f(P);\n}`, 0, 1],
+      ['a namespace as an import type argument (not the qualifier)', 'fixture.ts', `${NAMESPACE}type T = import('x').A<W>;`, 0, 1],
+      ['a namespace as an interface member type (not a name position)', 'fixture.ts', `${NAMESPACE}interface I {\n  a: W;\n}`, 0, 1],
+      ['a namespace value alias', 'fixture.ts', `${NAMESPACE}const X = W;`, 0, 1],
+      ['a computed property name', 'fixture.ts', `${ALIASED}const o = { [P]: 1 };`, 0, 1],
+      ['a computed class member name', 'fixture.ts', `${ALIASED}class C {\n  [P] = 1;\n}`, 0, 1],
+      ['a parameter named like the binding', 'fixture.ts', `${ALIASED}function f(P: number) {\n  return 1;\n}`, 0, 1],
+      ['an enum member initializer', 'fixture.ts', `${ALIASED}enum E {\n  A = P,\n}`, 0, 1],
+      ['an object-literal setter name', 'fixture.ts', `${ALIASED}const o = {\n  set P(value: number) {},\n};`, 0, 0],
+      ['a class property initializer under an exempt name', 'fixture.ts', `${ALIASED}class C {\n  P = P;\n}`, 0, 1],
+      ['an object-literal getter body under an exempt name', 'fixture.ts', `${ALIASED}const o = {\n  get P() {\n    return P;\n  },\n};`, 0, 1],
+      // #124: characterisation of the #122 interaction (already correct; not a red test).
+      ['a provider imported through the node_modules link (a boundary violation, not a mount)', 'fixture.tsx', "import { ClensyI18nProvider as P } from '../../node_modules/@clensy/web';\nconst x = <P />;", 0, 0],
     ])('counts %s correctly', (_label, fileName, source, mounts, escapes) => {
       expect(providerUses(fileName, source)).toEqual({ mounts, escapes });
     });
