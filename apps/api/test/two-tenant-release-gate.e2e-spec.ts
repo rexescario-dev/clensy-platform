@@ -4,6 +4,12 @@ import { Test } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
 import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
+import request from 'supertest';
+import { isDeepStrictEqual } from 'util';
+import {
+  RELABELABLE_ROLES,
+  RelabelableRole,
+} from '../src/modules/admins/domain/tenant-label-overrides';
 import { AppModule } from '../src/app/app.module';
 import { Role } from '../src/platform/auth/domain/role';
 import { AuthGuard } from '../src/platform/auth/guards/auth.guard';
@@ -322,4 +328,80 @@ describe('Two-tenant isolation release gate (#92)', () => {
       }, 120_000);
     });
   }
+
+  // #118 (tenant label overrides spec §4.7 items 1–2, §6.1): each tenant's
+  // stored role labels reach only that tenant's principals, through every
+  // tenant role; Super Admin receives null. Restores both columns to NULL.
+  it('Phase 8 — label overrides: each tenant receives only its own; Super Admin receives null', async () => {
+    // Independent of earlier phases (the world is built in beforeAll), so it
+    // can run alone with `-t 'Phase 8'`.
+    const stored: Readonly<
+      Record<'A' | 'B', Readonly<Partial<Record<RelabelableRole, string>>>>
+    > = {
+      // Every stored label is tenant-specific, and each tenant leaves some
+      // roles unset, so a leak in either direction changes a value.
+      A: { FINANCE: 'Billing A', SCHEDULER: 'Scheduling A' },
+      B: {
+        ANALYST: 'Insights B',
+        FINANCE: 'Billing B',
+        TENANT_OWNER: 'Owners B',
+      },
+    };
+    const query =
+      '{ currentAdmin { tenantLabelOverrides { locale roles { ANALYST CUSTOMER_SUPPORT FINANCE OPS_MANAGER SCHEDULER TENANT_OWNER } } } }';
+    const overridesFor = async (cookie: string): Promise<unknown> => {
+      const response = await request(app.getHttpServer())
+        .post('/graphql')
+        .set('Cookie', cookie)
+        .send({ query });
+      return (
+        response.body as {
+          data?: { currentAdmin?: { tenantLabelOverrides: unknown } };
+        }
+      ).data?.currentAdmin?.tenantLabelOverrides;
+    };
+    const failures: string[] = [];
+    try {
+      for (const tenant of [world.a, world.b]) {
+        await dataSource.query(
+          `UPDATE "tenant_entity" SET "labelOverrides" = $2::jsonb WHERE "id" = $1`,
+          [
+            tenant.tenantId,
+            JSON.stringify({ en: { roles: stored[tenant.name] } }),
+          ],
+        );
+      }
+      for (const tenant of [world.a, world.b]) {
+        const expected = {
+          locale: 'en',
+          roles: Object.fromEntries(
+            RELABELABLE_ROLES.map((role) => [
+              role,
+              stored[tenant.name][role] ?? null,
+            ]),
+          ),
+        };
+        for (const role of RELABELABLE_ROLES) {
+          const actual = await overridesFor(tenant.cookies[role]);
+          if (!isDeepStrictEqual(actual, expected)) {
+            failures.push(
+              `[isolation] tenant ${tenant.name} ${role}: expected its own labels, got ${JSON.stringify(actual)}`,
+            );
+          }
+        }
+      }
+      const platform = await overridesFor(world.superAdminCookie);
+      if (platform !== null) {
+        failures.push(
+          `[isolation] SUPER_ADMIN: expected null, got ${JSON.stringify(platform)}`,
+        );
+      }
+    } finally {
+      await dataSource.query(
+        `UPDATE "tenant_entity" SET "labelOverrides" = NULL WHERE "id" = ANY($1)`,
+        [[world.a.tenantId, world.b.tenantId]],
+      );
+    }
+    expect(failures).toEqual([]);
+  });
 });
