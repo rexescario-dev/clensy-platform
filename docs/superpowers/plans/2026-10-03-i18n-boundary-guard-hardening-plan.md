@@ -75,6 +75,29 @@ Final whole-branch review: one fresh reviewer, independent of the executor. Resu
 - Non-blocking observations (these do not affect the merge decision): the spec-level follow-ups and the four deferred minors recorded under M6. The executor's two rulings, the Task 3 title and the scratchpad temp directory, are cosmetic, and the reviewer agreed with both.
 - This record was written by the implementer, based on the independent whole-branch review and the CI evidence. That is the same arrangement as #115's non-blocking observation 2. Merge per human/project norms.
 
+**M8 (2026-10-03): N/A.**
+- Scope: the #117 change set, `apps/web/lib/web-shell-regressions.test.ts`.
+- Each helper does one thing: `isScannedSource`, `scriptKindFor`, `parseSource`, `providerUses` and its position predicates, and `wrapsDashboardInBoundary`. Each is pinned by inline fixtures.
+- `clensyProviderBindings` and `namedImportLocal` both walk import declarations, but they collect different shapes (provider bindings versus one named local). Merging them would add a parameterised abstraction for no gain.
+- Moving the helpers into a separate `lib/` module was considered and rejected. It would put a non-test module into the very tree this guard scans, and import `typescript` into app source, for no maintainability benefit. The helpers stay next to the only test that uses them, as in #115's M8.
+- No behaviour-preserving restructuring is worth its risk.
+
+**M9 (2026-10-03): Complete.** Documentation scope: `apps/web/README.md` § i18n, the spec's Tracking cell, and this section.
+- Content updates:
+  - `apps/web/README.md`: the "No local providers" bullet now describes the hardened guard, with the scanned extension set, provider escapes (including barrels, aliases and `createElement`) and its syntactic `import … from '@clensy/web'` scope. Caused by Tasks 1–2 and spec §3/§6.1 as amended.
+  - The spec's Tracking cell links PR #119. Caused by the PR being opened.
+  - This section. Caused by the M7–M9 gate outcomes.
+- Editorial changes: none.
+- Unchanged:
+  - `packages/web/README.md`: says nothing about the guard.
+  - `docs/README.md`: #115 has no index entry, so #117 gets none, following that slice's precedent.
+  - Historical plans (#115, #88/#89): left as the record of their own slices.
+- Verification:
+  - Links: the PR, issue and spec links resolve, and the README's relative spec link is unchanged.
+  - Status consistency: the spec's amendment and the plan are both Accepted, and the PR is open and green.
+  - Terminology: "provider escape" and "app i18n boundary" are used as defined in spec §3.
+  - No heading changes, no duplicate or contradictory sections, no code or contract edits.
+
 **Goal:** Close the three bypasses of the app i18n boundary guard. These are unscanned JavaScript files, provider escapes (re-export barrels and value references), and name-only layout wiring. The fix is to implement the amended spec §6.1 in the existing structural test.
 
 **Architecture:** The guard stays a syntactic, parser-only check in `apps/web/lib/web-shell-regressions.test.ts`.
