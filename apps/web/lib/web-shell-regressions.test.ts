@@ -575,6 +575,8 @@ describe('app i18n boundary structure', () => {
       ['a computed class member name', 'fixture.ts', `${ALIASED}class C {\n  [P] = 1;\n}`, 0, 1],
       ['a parameter named like the binding', 'fixture.ts', `${ALIASED}function f(P: number) {\n  return 1;\n}`, 0, 1],
       ['an enum member initializer', 'fixture.ts', `${ALIASED}enum E {\n  A = P,\n}`, 0, 1],
+      // #124: characterisation of the #122 interaction (already correct; not a red test).
+      ['a provider imported through the node_modules link (a boundary violation, not a mount)', 'fixture.tsx', "import { ClensyI18nProvider as P } from '../../node_modules/@clensy/web';\nconst x = <P />;", 0, 0],
     ])('counts %s correctly', (_label, fileName, source, mounts, escapes) => {
       expect(providerUses(fileName, source)).toEqual({ mounts, escapes });
     });
