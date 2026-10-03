@@ -2103,3 +2103,27 @@ Editorial verification:
 - Status fields are consistent: spec Accepted, plan Accepted, and implemented in PR #128 (open, awaiting the human merge).
 - Terminology follows the spec: *tenant layer*, *static app layer*, *session-transition path*, *relabelable role*.
 - No code or contract changed.
+
+**M10 (2026-10-04): Accepted (workflow validated).** Subject: the installed workflow prompt library (`docs/workflows/`, generic 1.4.1), validated against `docs/workflows/specs/agent-workflow-design.md`. This slice ran the workflow on #118 from M2 to M9.
+
+Asset inventory:
+- `prompts/`: `specification` M2, `design-review` M3, `implementation-planning` M4, `plan-review` M5, `implementation-execution` M6, `code-review` M7, `refactoring` M8, `documentation-execution` M9, `workflow-validation` M10.
+- `conventions/`: `prompt-library` M1, `reporting-conventions` (Slice Completion Report).
+- `specs/agent-workflow-design.md`: the governing contract.
+
+Checks:
+- All 9 prompts cite the governing contract and declare exactly one stage. There are no orphan assets.
+- Every relative link under `docs/workflows/` resolves (scripted scan, 0 broken).
+- The M5→M6 hard prerequisite is stated in both the process spec and the M6 prompt. This slice honoured it: plan Accept `13c5fa8` precedes the first implementation commit `e00aaf7`.
+- The provider rule (`prompt-library.md` §12) was honoured: GitHub for the issue, the branch and PR #128.
+- A Slice Completion Report was emitted at M6 (PR #128 body). M7–M9 are recorded above, and M7 was performed by an independent reviewer, as `code-review.md` now requires.
+- The three observations carried from #115/#117 are resolved in 1.4.1:
+  - the M10 report home is the plan's Gate outcomes (`implementation-planning.md`);
+  - M7 reviewer independence is required, or a self-review label (`code-review.md`);
+  - M10 runs before closeout (process spec §2.12).
+
+Blocking findings: none. The M2→M9 path for #118 was executed using only these assets plus the process spec.
+
+Non-blocking observations:
+1. **Reviewers cannot see an unpushed branch.** The owner's external M5 reviewer could not open the Draft plan, because it existed only in a local worktree. The plan had to be relayed by hand. The workflow says to place the Draft plan on the issue branch (`implementation-planning.md` step 15) but not to push it before review. Pushing the issue branch at M2/M4 would let any reviewer read the Accepted artifacts from the remote.
+2. **Amending another spec is still inferred.** Carried forward from #117 observation 1. This slice amended the single app i18n provider spec's §4.5 through a section of the new spec (§4.6) and a pointer row, rather than an in-place M2/M3 amendment. It worked, but no prompt describes either pattern.
