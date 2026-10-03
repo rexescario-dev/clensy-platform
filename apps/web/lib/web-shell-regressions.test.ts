@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { relative, resolve } from 'node:path';
+import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
@@ -304,6 +304,62 @@ function wrapsDashboardInBoundary(fileName: string, text: string) {
   return children.length === 1 && hasTag(children[0], dashboard);
 }
 
+// §6.1 package boundary (#120): plain path arithmetic only. No module
+// resolution, file-system lookup, extension or index probing, or package.json.
+const packagesWebRoot = resolve(webRoot, '../../packages/web');
+
+// Segment-by-segment containment, so `packages/webby` and `my-packages/web` are outside.
+function isInsidePackagesWeb(target: string) {
+  const fromPackage = relative(packagesWebRoot, target);
+  return fromPackage === '' || (!isAbsolute(fromPackage) && fromPackage.split(sep)[0] !== '..');
+}
+
+// Relative specifiers resolve against the importing file's directory, absolute
+// ones as is, and `@/…` against the apps/web root (tsconfig paths "@/*": ["./*"]).
+// Bare package names have no path target.
+function specifierTarget(fileName: string, specifier: string) {
+  if (specifier === '.' || specifier === '..' || specifier.startsWith('./') || specifier.startsWith('../')) {
+    return resolve(dirname(fileName), specifier);
+  }
+  if (isAbsolute(specifier)) return resolve(specifier);
+  if (specifier.startsWith('@/')) return resolve(webRoot, specifier.slice(2));
+  return undefined;
+}
+
+function isBoundaryViolation(fileName: string, specifier: string) {
+  if (specifier.startsWith('@clensy/web/')) return true;
+  const target = specifierTarget(fileName, specifier);
+  return target !== undefined && isInsidePackagesWeb(target);
+}
+
+// Every module-specifier form the parser exposes, by AST node:
+// - ImportDeclaration: both `import … from` and `import type … from`;
+// - ExportDeclaration: both `export … from` and `export type … from`;
+// - ImportEqualsDeclaration + ExternalModuleReference: `import X = require('…')`;
+// - CallExpression via isLoadCall: `require(…)` and dynamic `import(…)`;
+// - ImportTypeNode: type-position `import('…')`, e.g. `type T = import('…').X`.
+// `import type` declarations and type-position `import('…')` are different
+// nodes; both are needed. Type-only forms count: the invariant is structural
+// access, not runtime loading.
+function moduleSpecifierOf(node: ts.Node): ts.Node | undefined {
+  if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return node.moduleSpecifier;
+  if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) return node.moduleReference.expression;
+  if (isLoadCall(node)) return node.arguments[0];
+  if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) return node.argument.literal;
+  return undefined;
+}
+
+function boundaryViolations(fileName: string, text: string) {
+  const violations: string[] = [];
+  const visit = (node: ts.Node) => {
+    const specifier = moduleSpecifierOf(node);
+    if (isLiteralSpecifier(specifier) && isBoundaryViolation(fileName, specifier.text)) violations.push(specifier.text);
+    ts.forEachChild(node, visit);
+  };
+  visit(parseSource(fileName, text));
+  return violations;
+}
+
 function nonTestSources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = resolve(dir, entry.name);
@@ -412,6 +468,41 @@ describe('app i18n boundary structure', () => {
     });
   });
 
+  describe('package-boundary check', () => {
+    // A fixture at apps/web/app/app/fixture.tsx: four `..` segments reach the repository root.
+    const FIXTURE = resolve(webRoot, 'app/app/fixture.tsx');
+    const INTO_PACKAGE = JSON.stringify(resolve(webRoot, '../../packages/web/src/index.ts'));
+
+    it.each([
+      // Deep @clensy/web specifiers, one per form (§6.1 Package boundary, #120).
+      ['an import', "import { ClensyI18nProvider as P } from '@clensy/web/src';", ['@clensy/web/src']],
+      ['an import type', "import type { ClensyMessages } from '@clensy/web/src/i18n';", ['@clensy/web/src/i18n']],
+      ['an export-from', "export { ClensyI18nProvider } from '@clensy/web/src';", ['@clensy/web/src']],
+      ['an export type-from', "export type { ClensyMessages } from '@clensy/web/src';", ['@clensy/web/src']],
+      ['an import-equals require', "import W = require('@clensy/web/src');", ['@clensy/web/src']],
+      ['a require', "const m = require('@clensy/web/src');", ['@clensy/web/src']],
+      ['a dynamic import', "const m = await import('@clensy/web/src');", ['@clensy/web/src']],
+      ['an import type node', "type T = import('@clensy/web/src').ClensyMessages;", ['@clensy/web/src']],
+      ['a template-literal require', 'const m = require(`@clensy/web/src`);', ['@clensy/web/src']],
+      // Paths into packages/web.
+      ['a relative path into packages/web', "import { X } from '../../../../packages/web/src/i18n/i18n-context';", ['../../../../packages/web/src/i18n/i18n-context']],
+      ['a relative path to the packages/web directory itself', "import X from '../../../../packages/web';", ['../../../../packages/web']],
+      ['an absolute path into packages/web', `import { X } from ${INTO_PACKAGE};`, [JSON.parse(INTO_PACKAGE)]],
+      ['an @/ path into packages/web', "import { X } from '@/../../packages/web/src';", ['@/../../packages/web/src']],
+      ['two violations in one file', "import a from '@clensy/web/a';\nimport b from '@clensy/web/b';", ['@clensy/web/a', '@clensy/web/b']],
+      // Allowed.
+      ['the bare package', "import { ClensyI18nProvider } from '@clensy/web';\nconst m = require('@clensy/web');", []],
+      ['a relative path inside apps/web', "import { DashboardLayout } from '../../components/layout/dashboard-layout';", []],
+      ['a my-packages/web lookalike', "import x from '../../../../my-packages/web/src';", []],
+      ['a packages/webby lookalike', "import x from '../../../../packages/webby/src';", []],
+      ['a packages-web file name', "import x from './packages-web';", []],
+      ['another scoped package', "import { Button } from '@clensy/ui';\nimport x from '@clensy/webkit/y';", []],
+      ['a non-literal load (an escape, not a violation)', 'const m = await import(name);', []],
+    ])('reports %s', (_label, source, expected) => {
+      expect(boundaryViolations(FIXTURE, source)).toEqual(expected);
+    });
+  });
+
   it('has exactly one provider mount in apps/web, in app-i18n-provider.tsx', () => {
     const mounts = nonTestSources(webRoot)
       .map((path) => ({ file: relative(webRoot, path), count: providerUses(path, readFileSync(path, 'utf8')).mounts }))
@@ -428,6 +519,16 @@ describe('app i18n boundary structure', () => {
       .filter(({ count }) => count > 0);
 
     expect(escapes).toEqual([]);
+  });
+
+  // §6.1 package boundary (#120): zero violations anywhere, independent of the
+  // provider assertions.
+  it('has no package boundary violations anywhere in apps/web', () => {
+    const violations = nonTestSources(webRoot)
+      .map((path) => ({ file: relative(webRoot, path), specifiers: boundaryViolations(path, readFileSync(path, 'utf8')) }))
+      .filter(({ specifiers }) => specifiers.length > 0);
+
+    expect(violations).toEqual([]);
   });
 
   describe('layout-wiring check', () => {
