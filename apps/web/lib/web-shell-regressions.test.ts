@@ -108,8 +108,8 @@ function isScannedSource(fileName: string) {
 }
 
 function scriptKindFor(fileName: string) {
-  if (fileName.endsWith('.tsx')) return ts.ScriptKind.TSX;
-  if (fileName.endsWith('.jsx')) return ts.ScriptKind.JSX;
+  if (fileName.endsWith('tsx')) return ts.ScriptKind.TSX;
+  if (fileName.endsWith('jsx')) return ts.ScriptKind.JSX;
   if (/\.(m|c)?js$/.test(fileName)) return ts.ScriptKind.JS;
   return ts.ScriptKind.TS;
 }
@@ -501,6 +501,11 @@ describe('app i18n boundary structure', () => {
       ['a dynamic import of another module', 'fixture.ts', "const page = await import('./page');", 0, 0],
       ['require.resolve of the package', 'fixture.js', "const where = require.resolve('@clensy/web');", 0, 0],
       ['a deep load call (a boundary violation, not an escape)', 'fixture.js', "const m = require('@clensy/web/src');", 0, 0],
+      // #124: *tsx files parse as TSX, *jsx as JSX (§6.1 Scanned files).
+      ['a .mtsx mount', 'fixture.mtsx', `${NAMED}export const x = <ClensyI18nProvider />;`, 1, 0],
+      ['a .ctsx mount', 'fixture.ctsx', `${NAMED}export const x = <ClensyI18nProvider />;`, 1, 0],
+      ['a .mjsx mount', 'fixture.mjsx', `${NAMED}export const x = <ClensyI18nProvider />;`, 1, 0],
+      ['a .cjsx mount', 'fixture.cjsx', `${NAMED}export const x = <ClensyI18nProvider />;`, 1, 0],
     ])('counts %s correctly', (_label, fileName, source, mounts, escapes) => {
       expect(providerUses(fileName, source)).toEqual({ mounts, escapes });
     });
