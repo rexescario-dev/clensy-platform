@@ -15,6 +15,46 @@
 | Edit anchors | Every edit is located by the **quoted code**, not by line number. Line numbers are approximate, taken from `main` at `c339812`. |
 | Pre-validation | This plan's text was replayed task by task: each task's code blocks were extracted from the plan and applied in order to a copy of the guard outside the repo. That copy was checked with **every command the `Expected:` lines name**: Vitest, `tsc` in strict mode, and ESLint with `apps/web`'s own config. Each task's RED set was measured, not inferred: Task 1 had 4 failing rows, Task 2 had 5, Task 3 had 14, and Task 4 had 0. The GREEN counts were 141, 150, 171 and 172. On the real tree there are still 0 escapes. These changes only remove escapes, so the real tree's zero cannot regress, but the full-suite and tree-zero checks are kept as confirmation. |
 
+
+## Gate outcomes
+
+**M6 (2026-10-03): Complete.** Tasks 1–4 were executed natively, in order and test-first:
+- `449ac39`: Task 1
+- `5cc97a7`: Task 2
+- `0525a98`: Task 3
+- `937b32a`: Task 4
+
+Every RED and GREEN matched the plan exactly:
+- Task 1: RED 4, GREEN 141.
+- Task 2: RED 5, GREEN 150. The 4 retained-escape pins passed throughout.
+- Task 3: RED 14, GREEN 171. The labelled-loop pin received 2 escapes and expected 1; the other 7 pins passed throughout.
+- Task 4: the characterisation row passed on first run, by design; 172 in total.
+
+There were no executor rulings during the tasks.
+
+Final whole-branch review: one fresh reviewer, independent of the executor. Result: 0 Critical, 0 Important, 4 Minor, ready to merge. About 90 adversarial probes found **no false exemption**:
+- class `extends` in every form;
+- decorators;
+- initialisers and bodies;
+- computed names;
+- import type arguments;
+- value-level `typeof`;
+- instantiation expressions.
+
+**Fix pass** (`1fe9939`). Two Minors were re-graded as must-fix, because they are spec and M3 requirements rather than polish:
+1. **Object-literal setter row.** "Fixtures (#124)" requires a fixture for each listed declaration-name position, and it was missing.
+2. **Retained-escape pins for a member's initialiser and body** (`class C { P = P }`, `{ get P() { return P } }`). M3 requires a pin wherever an over-broad predicate is plausible, such as skipping the whole member.
+
+Both are characterisation pins of behaviour that is already correct, so they could not fail first against the real code. They were verified by mutation in a scratch copy:
+- removing the set-accessor check made the setter row fail;
+- a skip-the-whole-member visitor made both new pins fail.
+
+After the fix, the full web suite has 13 files and 268 tests passing, and tsc and lint exit 0. The only file changed outside `docs/` is the test file.
+
+**Deferred minors:**
+- No row documents that the qualified-name right-hand exemption also applies in import-equals (`import X = A.P` gives 0). The behaviour is correct, and the spec rule is general.
+- A missing blank line between `isTypeOnlyHeritageName` and `packageReExportEscapes` (style; lint passes).
+
 **Goal:** Remove the five #117-deferred false positives from the provider-escape detector, without exempting any position that can load or mount the provider. Also pin the #122 `node_modules` interaction.
 
 **Architecture:** Every change is a narrower predicate at one exact syntax position:
