@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Accepted |
+| M5 decision | **Accepted** — 2026-10-03, by the owner; Native execution. Two execution clarifications applied: Step 2 states that the fetch only refreshes the remote-tracking ref (all installer/build work happens inside the detached scratch worktree) and verifies the detached SHA; Step 6 makes the changed-path set an exact machine assertion. `written: 26` is an installer-level count — the Git diff is the authoritative evidence for repository scope. |
 | Date | 2026-10-03 |
 | Tracking issue | [#126](https://github.com/rexescario-dev/clensy-platform/issues/126) |
 | Branch | `feat/126-adopt-workflow-generic-1-4-1` (off `main` `bb358d3`) |
@@ -52,8 +53,11 @@ console.log("policy", JSON.stringify({ written: p.written, updated: p.updated, r
 - [ ] **Step 1: Preconditions.** Run: `git branch --show-current && git status --short`
 Expected: `feat/126-adopt-workflow-generic-1-4-1`; no output from status (apart from this plan once committed).
 
-- [ ] **Step 2: Build the installer from a clean upstream checkout.** Run: `git -C /home/rex/Project/ContextForge fetch -q origin && git -C /home/rex/Project/ContextForge worktree add --detach <scratch>/cf origin/master && (cd <scratch>/cf && bash .github/scripts/ci-packages.sh)`
-Expected: exit 0 (972 tests); `<scratch>/cf/workflow-packages/generic/package.yaml` says `version: 1.4.1`.
+- [ ] **Step 2: Build the installer from a clean upstream checkout.** The `fetch` only refreshes the remote-tracking ref `origin/master`; it does not touch the existing checkout's working tree. Every installer and build operation happens inside the detached scratch worktree.
+Run: `git -C /home/rex/Project/ContextForge fetch -q origin && git -C /home/rex/Project/ContextForge worktree add --detach <scratch>/cf origin/master && git -C <scratch>/cf rev-parse --short HEAD`
+Expected: the SHA is `cc20395`, or a later `master` commit whose `workflow-packages/generic/package.yaml` says `version: 1.4.1` and whose `workflow-packages/claude/package.yaml` says `version: 0.2.0`. Otherwise stop and report.
+Run: `(cd <scratch>/cf && bash .github/scripts/ci-packages.sh)`
+Expected: exit 0 (972 tests).
 
 - [ ] **Step 3: Doctor before + Replace safety gate.**
 Run: `node <scratch>/installer.mjs <scratch>/cf /home/rex/Project/clensy-platform doctor`
@@ -67,7 +71,31 @@ Expected: `written` 26, `skipped` [], packages `generic: 1.4.1`, `claude: 0.2.0`
 - [ ] **Step 5: Doctor after.** Run: `node <scratch>/installer.mjs <scratch>/cf /home/rex/Project/clensy-platform doctor`
 Expected: exit 0; `ok: true`; findings only `info:PROVIDERS_CONFIGURED`.
 
-- [ ] **Step 6: Reviewed diff.** Run: `git status --short && git diff --stat -- docs/workflows/prompts/documentation-execution.md`
+- [ ] **Step 6: Reviewed diff (exact assertion).** Write the expected set to `<scratch>/expected-paths.txt`, one path per line and sorted:
+```text
+.claude/skills/workflow/SKILL.md
+docs/workflows/prompts/code-review.md
+docs/workflows/prompts/design-review.md
+docs/workflows/prompts/implementation-execution.md
+docs/workflows/prompts/implementation-planning.md
+docs/workflows/prompts/plan-review.md
+docs/workflows/prompts/refactoring.md
+docs/workflows/prompts/specification.md
+docs/workflows/prompts/workflow-validation.md
+docs/workflows/specs/agent-workflow-design.md
+workflow.yaml
+```
+Run: `git status --porcelain | cut -c4- | sort | diff - <scratch>/expected-paths.txt && git diff --quiet -- docs/workflows/prompts/documentation-execution.md && echo exact-scope-ok`
+Expected: `exact-scope-ok`, which proves all of the following:
+- `documentation-execution.md` is **not** modified;
+- no product, source, test or config file outside the installer-managed set changed;
+- the modified set is exactly the eleven paths above.
+
+Then read two diffs:
+- `git diff workflow.yaml`: inventory only (package versions, asset versions and digests, installation metadata).
+- `git diff .claude/skills/workflow/SKILL.md`: only the Accepted-spec routing clause ` or amending it (M2, then M3)`.
+
+The older wording follows; read it as the same check.
 Expected: exactly these modified paths — `.claude/skills/workflow/SKILL.md`, `docs/workflows/prompts/{code-review,design-review,implementation-execution,implementation-planning,plan-review,refactoring,specification,workflow-validation}.md`, `docs/workflows/specs/agent-workflow-design.md`, `workflow.yaml`; **no** diff for `documentation-execution.md`. Read the `SKILL.md` diff: only the Accepted-spec routing clause ` or amending it (M2, then M3)`.
 
 - [ ] **Step 7: Clensy checks.** Run: `pnpm run lint && pnpm run test`
