@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Draft (revised after M5 round 1) |
+| M5 decision | **Changes Requested** — 2026-10-03, round 1, by the owner. Two fixes, both applied. (1) Task 4 no longer relies on `$PROBE_DIR` surviving between executor calls: Step 2 records the printed temporary directory, and every later command, including the `cmp` recovery, uses that recorded literal path, written `<PROBE_DIR>`. (2) `moduleSpecifierOf()`'s comment now ties each accepted syntax to its AST node: `ImportDeclaration` covers both normal and `import type` declarations, and `ImportTypeNode` covers type-position `import('…')`. The implementation is unchanged. Step 4 also restates the stop-don't-delete rule for unexpected probe content. |
 | Date | 2026-10-03 |
 | Tracking issue | [#120](https://github.com/rexescario-dev/clensy-platform/issues/120), the #117 / PR #119 final-review follow-ups |
 | Scope | `apps/web/lib/web-shell-regressions.test.ts` only. No production code, package (no `exports` map), CI or catalog change. |
@@ -308,10 +309,15 @@ function isBoundaryViolation(fileName: string, specifier: string) {
   return target !== undefined && isInsidePackagesWeb(target);
 }
 
-// Every module-specifier form the parser exposes: import / import type,
-// export … from (incl. export type), import-equals require, require(…),
-// import(…), and import type nodes. Type-only forms count: the invariant is
-// structural access, not runtime loading.
+// Every module-specifier form the parser exposes, by AST node:
+// - ImportDeclaration: both `import … from` and `import type … from`;
+// - ExportDeclaration: both `export … from` and `export type … from`;
+// - ImportEqualsDeclaration + ExternalModuleReference: `import X = require('…')`;
+// - CallExpression via isLoadCall: `require(…)` and dynamic `import(…)`;
+// - ImportTypeNode: type-position `import('…')`, e.g. `type T = import('…').X`.
+// `import type` declarations and type-position `import('…')` are different
+// nodes; both are needed. Type-only forms count: the invariant is structural
+// access, not runtime loading.
 function moduleSpecifierOf(node: ts.Node): ts.Node | undefined {
   if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return node.moduleSpecifier;
   if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) return node.moduleReference.expression;
@@ -497,7 +503,7 @@ Run: `git status --short && ls apps/web/lib/pre-120-guard.test.ts apps/web/compo
 Expected: no output. The tree is clean and no probe path exists yet. If anything is printed, stop and report it. Do not overwrite or delete it.
 
 Run: `PROBE_DIR=$(mktemp -d) && cp apps/web/app/app/layout.tsx "$PROBE_DIR/layout.tsx.orig" && echo "$PROBE_DIR"`
-Note the printed directory and use its literal path below. Shell variables do not persist between tool calls. An executor whose session provides a scratchpad directory may create the directory there instead (`mktemp -d -p <that directory>`); the save, restore and `cmp` steps work the same either way.
+**Record the printed path.** Shell variables do not persist between executor calls, so the shell variable MUST NOT be used after this command. In every later step, `<PROBE_DIR>` means this recorded literal path, and it MUST be substituted before the command runs (for example `cmp "/tmp/tmp.AbC123/layout.tsx.orig" …`). An executor whose session provides a scratchpad directory may create the directory there instead (`mktemp -d -p <that directory>`); the save, restore and `cmp` steps work the same either way.
 
 Run: `git show main:apps/web/lib/web-shell-regressions.test.ts > apps/web/lib/pre-120-guard.test.ts`
 
@@ -509,7 +515,7 @@ For each probe below:
 1. Create the probe file (or apply the layout edit).
 2. Run: `pnpm --filter web exec vitest run lib/pre-120-guard.test.ts -t "app i18n boundary structure"` and record the result.
 3. Run: `pnpm --filter web exec vitest run lib/web-shell-regressions.test.ts -t "app i18n boundary structure"` and record the result.
-4. Remove only that probe's file with `rm` on its exact path. For probe (e), restore the layout with `cp "$PROBE_DIR/layout.tsx.orig" apps/web/app/app/layout.tsx`.
+4. Remove only that probe's file with `rm` on its exact path. For probe (e), restore the layout with `cp "<PROBE_DIR>/layout.tsx.orig" apps/web/app/app/layout.tsx`, using the recorded literal path.
 
 | Probe | Files | #117 guard | Amended guard |
 | --- | --- | --- | --- |
@@ -523,8 +529,10 @@ If any cell differs from the table, stop and report it. Do not change a fixture,
 
 - [ ] **Step 4: Clean up and confirm the tree**
 
-Run: `rm -f apps/web/lib/pre-120-guard.test.ts apps/web/components/probe-deep.tsx apps/web/components/probe-relative.tsx apps/web/lib/probe-load.ts apps/web/components/probe-shell.tsx && cmp "$PROBE_DIR/layout.tsx.orig" apps/web/app/app/layout.tsx && rm -r "$PROBE_DIR" && git status --short`
-Expected: no output. `cmp` confirms the layout is byte-identical and the tree is clean. If `cmp` reports a difference, restore with `cp "$PROBE_DIR/layout.tsx.orig" apps/web/app/app/layout.tsx` and re-run.
+Only the five probe paths listed under **Files** are removed. Step 2 confirmed that none of them existed before this task. If a path holds anything other than the probe content this task wrote, stop and report it; do not delete it.
+
+Run, substituting the recorded literal path for `<PROBE_DIR>`: `rm -f apps/web/lib/pre-120-guard.test.ts apps/web/components/probe-deep.tsx apps/web/components/probe-relative.tsx apps/web/lib/probe-load.ts apps/web/components/probe-shell.tsx && cmp "<PROBE_DIR>/layout.tsx.orig" apps/web/app/app/layout.tsx && rm -r "<PROBE_DIR>" && git status --short`
+Expected: no output. `cmp` confirms the layout is byte-identical and the tree is clean. If `cmp` reports a difference, restore with `cp "<PROBE_DIR>/layout.tsx.orig" apps/web/app/app/layout.tsx`, using the same recorded literal path, and re-run.
 
 Run: `git diff --stat main -- apps packages .github`
 Expected: only `apps/web/lib/web-shell-regressions.test.ts` changed.
