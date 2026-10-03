@@ -65,6 +65,27 @@ Final whole-branch review: one fresh reviewer, independent of the executor. Resu
 - Unchanged: `packages/web/README.md`, `docs/README.md` (no index entries for these slices) and the earlier slice plans.
 - Verification: the links resolve; status is consistent (the #122 amendment and this plan are Accepted, and the PR is open and green); the terminology matches spec §3; there are no heading changes and no contradictory sections.
 
+**M10 (2026-10-03): Accepted (workflow validated).** Subject: the installed workflow prompt library (`docs/workflows/`, generic 1.2.0), against `docs/workflows/specs/agent-workflow-design.md` §2.10. This slice ran the workflow on #122 from M2 to M9.
+
+Asset inventory: unchanged from #117 and #120. There are nine prompts (M2–M10), `conventions/` (`prompt-library` M1, `reporting-conventions` §2.11) and the governing process spec.
+
+Checks:
+- All 9 prompts cite the governing contract. There are no orphan assets.
+- Every relative link under `docs/workflows/` resolves (scripted scan).
+- §2.5 was honoured: plan Accept `77a16b7` is an ancestor of the implementation commit `2b0f73b`.
+- GitHub was used for the issue, the branch and the PR (`prompt-library.md` §12).
+- Slice Completion Reports were emitted at M6 and at M7–M9.
+
+Blocking findings: none.
+
+Non-blocking observations:
+1. **#120 observation 1 is resolved in practice.** This plan's pre-validation ran every command named in its `Expected:` lines, including ESLint, and M6 had no deviations and no rulings. The M4 prompt itself still doesn't require this. It remains a candidate improvement to the managed workflow, which this slice does not edit.
+2. **Carried forward from #117/#120:**
+   - The amendment of an already-Accepted spec has no written procedure.
+   - M10 has no conventional report location.
+   - M7 reviewer independence is unspecified.
+   - The order of the §2.12 merge and M10 is unstated. This slice again ran M10 before the human-authorized merge.
+
 **Goal:** Close #122's bypass, where `'../../node_modules/@clensy/web'` reaches `packages/web` through pnpm's workspace symlink. A computed target that contains the whole segments `node_modules`, `@clensy`, `web` becomes a package boundary violation.
 
 **Architecture:** One new pure predicate, `passesThroughClensyWebLink(target)`, joins the existing `isInsidePackagesWeb(target)` inside `isBoundaryViolation`. Both run only on the target `specifierTarget` computes, which is `undefined` for bare specifiers. So every specifier form, the literal-only handling and the tree-wide zero-violation assertion from #120 apply unchanged.
