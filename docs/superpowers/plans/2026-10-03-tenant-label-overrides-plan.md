@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft (revised after the first M5 pass) |
+| Status | Accepted |
+| M5 decision | **Accepted** — 2026-10-04, at `c0dcba5`, by the owner, on the second pass, with one non-blocking SHOULD applied at acceptance: Task 4's RED check restores the module from an `EXIT` trap, so restoration also happens if the run is interrupted. Executed natively in the #118 worktree, task by task. M6 MUST keep Phase 8 asserting the full six-role object for every tenant role, including unset roles; it must not be narrowed to the populated roles. |
 | M5 history | First pass (2026-10-04) requested changes without architectural redesign, all applied. MUST: validator treats only `null` as a NULL column (Task 1); the migration test counts rows before `up()` and checks its own inserted row, with no bootstrap assumption (Task 2); e2e warning expectations are explicit `(path, reason)` tuples, and redaction checks the exact rejected values (Task 3); the mapper accepts `null` (Task 7); the Phase 8 RED check backs up and restores the file byte for byte, never `git checkout --` (Task 4); Phase 8 stores more tenant-specific labels (Task 4); the schema test owns only the new field (Task 3); the provider is pinned to the default cache-first, data-only `useCurrentAdminQuery()` (Task 9). SHOULD: the mapper indexes the typed `roles` directly (Task 7); the Task 9 provider assertions pin the provider's actual invariants (Task 9); the service follows the module's `@InjectRepository` read pattern, verified (Task 3, decision 2); "exactly" is reworded as "only retained shape" (Global Constraints). Also: the isolation test probes two role paths and checks the static layer is not mutated (Task 8); the e2e commands follow the verified pattern-forwarding convention (Environment prerequisites, Final verification); the `implements` comment is corrected (Task 3). |
 | Date | 2026-10-03 |
 | Tracking issue | [#118](https://github.com/rexescario-dev/clensy-platform/issues/118) |
@@ -1327,15 +1328,18 @@ Run, from the worktree root:
 module=apps/api/src/modules/admins/admins.module.ts
 backup=$(mktemp)
 cp "$module" "$backup"
+# Restores on every exit path, including an interrupted jest run.
+trap 'cp "$backup" "$module"; cmp "$backup" "$module"; rm -f "$backup"' EXIT
 sed -i '/CurrentAdminLabelOverridesResolver/d' "$module"
 grep -c CurrentAdminLabelOverridesResolver "$module"   # Expected: 0
 pnpm --filter api exec jest --config ./test/jest-e2e.json two-tenant-release-gate -t 'Phase 8'
-cp "$backup" "$module" && cmp "$backup" "$module" && rm "$backup"
 ```
+
+Run the block in one shell (one Bash call), so the trap fires when that shell exits.
 
 Expected:
 - The `jest` run: Phase 8 FAILS. With the resolver unregistered (its import line and providers entry are the only lines naming it), each query returns a GraphQL error, so every `[isolation] tenant … got undefined` line and the `SUPER_ADMIN` line appear.
-- `cmp` prints nothing: the file is restored exactly.
+- When the shell exits, the trap restores the file and `cmp` prints nothing: it is byte-identical.
 
 - [ ] **Step 3: Run the gate with the feature**
 
