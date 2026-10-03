@@ -156,8 +156,13 @@ function isNonReferenceName(identifier: ts.Identifier) {
   );
 }
 
+// §6.1 item 2: `typeof P`, or (#124) P as the leftmost name of a qualified name
+// inside a `typeof` query (`typeof P.displayName`). `const Q = P.displayName`
+// is a value use and stays an escape.
 function isNamedTypeQuery(identifier: ts.Identifier) {
-  return ts.isTypeQueryNode(identifier.parent) && identifier.parent.exprName === identifier;
+  let entityName: ts.Node = identifier;
+  while (ts.isQualifiedName(entityName.parent) && entityName.parent.left === entityName) entityName = entityName.parent;
+  return ts.isTypeQueryNode(entityName.parent) && entityName.parent.exprName === entityName;
 }
 
 function isNamespaceMountTag(identifier: ts.Identifier) {
@@ -220,6 +225,18 @@ function loadCallEscapes(node: ts.Node) {
   return 0;
 }
 
+// §6.1 item 3 (#124): type-only heritage. W is exempt only as the leftmost name
+// of the expression in a class `implements` clause or an interface `extends`
+// clause. A class `extends` clause is runtime heritage and is never exempt.
+function isTypeOnlyHeritageName(identifier: ts.Identifier) {
+  let expression: ts.Node = identifier;
+  while (ts.isPropertyAccessExpression(expression.parent) && expression.parent.expression === expression) expression = expression.parent;
+  const heritageType = expression.parent;
+  if (!ts.isExpressionWithTypeArguments(heritageType) || heritageType.expression !== expression) return false;
+  const clause = heritageType.parent;
+  if (!ts.isHeritageClause(clause)) return false;
+  return clause.token === ts.SyntaxKind.ImplementsKeyword || ts.isInterfaceDeclaration(clause.parent);
+}
 function packageReExportEscapes(declaration: ts.ExportDeclaration) {
   const clause = declaration.exportClause;
   if (!clause || ts.isNamespaceExport(clause)) return 1;
@@ -252,7 +269,9 @@ function providerUses(fileName: string, text: string) {
     escapes += loadCallEscapes(node);
     if (ts.isIdentifier(node) && !isNonReferenceName(node)) {
       if (named.has(node.text) && !isJsxTagName(node) && !isNamedTypeQuery(node)) escapes += 1;
-      if (namespaces.has(node.text) && !isNamespaceMountTag(node) && !isNamespaceTypePosition(node)) escapes += 1;
+      if (namespaces.has(node.text) && !isNamespaceMountTag(node) && !isNamespaceTypePosition(node) && !isTypeOnlyHeritageName(node)) {
+        escapes += 1;
+      }
     }
     ts.forEachChild(node, visit);
   };
@@ -506,6 +525,16 @@ describe('app i18n boundary structure', () => {
       ['a .ctsx mount', 'fixture.ctsx', `${NAMED}export const x = <ClensyI18nProvider />;`, 1, 0],
       ['a .mjsx mount', 'fixture.mjsx', `${NAMED}export const x = <ClensyI18nProvider />;`, 1, 0],
       ['a .cjsx mount', 'fixture.cjsx', `${NAMED}export const x = <ClensyI18nProvider />;`, 1, 0],
+      // #124: the named typeof exemption and namespace type-only heritage (§6.1 items 2–3).
+      ['a qualified typeof of the named binding', 'fixture.ts', `${ALIASED}type T = typeof P.displayName;`, 0, 0],
+      ['a deeper qualified typeof of the named binding', 'fixture.ts', `${ALIASED}type T = typeof P.a.b;`, 0, 0],
+      ['a namespace in a class implements clause', 'fixture.ts', `${NAMESPACE}class C implements W.Foo {}`, 0, 0],
+      ['a namespace in a class-expression implements clause', 'fixture.ts', `${NAMESPACE}const C = class implements W.Foo {};`, 0, 0],
+      ['a namespace in an interface extends clause', 'fixture.ts', `${NAMESPACE}interface I extends W.Foo {}`, 0, 0],
+      ['a value use of a provider property', 'fixture.ts', `${ALIASED}const Q = P.displayName;`, 0, 1],
+      ['a namespace in a class extends clause (runtime heritage)', 'fixture.ts', `${NAMESPACE}class C extends W.ClensyI18nProvider {}`, 0, 1],
+      ['a namespace in a class-expression extends clause (runtime heritage)', 'fixture.ts', `${NAMESPACE}const C = class extends W.Foo {};`, 0, 1],
+      ['a named binding in an implements clause (no named heritage exemption)', 'fixture.ts', `${ALIASED}class C implements P {}`, 0, 1],
     ])('counts %s correctly', (_label, fileName, source, mounts, escapes) => {
       expect(providerUses(fileName, source)).toEqual({ mounts, escapes });
     });
