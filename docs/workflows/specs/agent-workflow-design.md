@@ -64,6 +64,8 @@ Specification and Implementation Plan artifacts follow **Draft → Review → Ac
 
 No downstream stage may begin until its required upstream artifact(s) reach **Accepted**.
 
+**Slice-local amendments** *(normative)*. A later slice MAY amend an Accepted specification **in place** (§2.8). The amendment follows its own **Draft → Review → Accepted** lifecycle, recorded in the specification's status and decision rows against its tracking issue. The unchanged remainder stays **Accepted** throughout and remains authoritative for downstream stages. M3 reviews the amended text plus its consistency with the remainder.
+
 ### 2.5 Hard prerequisite *(normative)*
 
 **No implementation activity governed by M6 MUST begin until M5 has accepted the implementation plan.**
@@ -95,7 +97,11 @@ M8 Refactoring complete (or not applicable)
 M9 Documentation complete
     ↓
 M10 Workflow validated
+    ↓
+Closeout (§2.12)
 ```
+
+When M10 is in scope for a slice, it runs **before closeout**, so its validation report lands in the slice PR (§2.8). The order is M7 → M8 → M9 → M10 (when in scope) → closeout (§2.12).
 
 ### 2.7 Refactoring scope *(M8)*
 
@@ -144,7 +150,7 @@ M5 Plan Review SHOULD emit the same report when Accepting a plan (Status: Ready 
 
 ### 2.12 Closeout (final acceptance) *(normative)*
 
-**Closeout** is the final acceptance sequence for a delivery slice, entered once M7 has Approved for merge (and M8/M9 are Complete, N/A, or explicitly deferred per §2.7/§2.9):
+**Closeout** is the final acceptance sequence for a delivery slice, entered once M7 has Approved for merge, M8/M9 are Complete, N/A, or explicitly deferred per §2.7/§2.9, and any M10 in scope for the slice is recorded (§2.6):
 
 1. **Merge** the slice's pull request (§2.8) per human/project norms. No stage prompt in this workflow grants merge authority by itself (§2.6) — closeout does not change that; it is the point at which a human-authorized merge occurs, not a mechanism for authorizing one.
 2. **Verify** the merge succeeded before proceeding — closeout MUST NOT continue past this point on an unconfirmed or failed merge.

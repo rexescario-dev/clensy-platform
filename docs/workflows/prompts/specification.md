@@ -13,6 +13,7 @@ Author a specification (architecture RFC or process specification) that states t
 - Starting a new design-backed change that needs an Accepted specification before planning or implementation
 - Revising a specification that M3 returned for revision (re-enter at M2, then M3 again)
 - Writing a process specification that governs how work is performed (not product architecture)
+- Amending an Accepted specification for a later slice (a **slice-local amendment**; process spec §2.4, §2.8)
 
 ## Preconditions
 
@@ -33,6 +34,16 @@ Author a specification (architecture RFC or process specification) that states t
 9. **State acceptance criteria** for *this specification* (when it may move from Draft to Accepted after M3)—distinct from product acceptance tests.
 10. **Traceability.** Reference every Accepted specification or RFC this document depends on and state whether it extends, constrains, or merely relies upon each dependency. Do not silently reinterpret them.
 11. **Stop at Draft.** Set Status to **Draft** (or keep Draft after addressing an M3 return). Hand off to **Design Review (M3)**; do not write the implementation plan or code. Do not describe implementation sequencing, task decomposition, milestones, or execution strategy. Those belong to M4.
+
+### Slice-local amendment of an Accepted specification
+
+When a later slice changes an Accepted specification:
+
+1. **Amend in place.** Edit the Accepted specification itself. Do not replace or rewrite it.
+2. **Give the amendment its own lifecycle.** Record the amendment as **Draft** in the specification's status and decision rows, against the amendment's tracking issue. It moves Draft → Review → Accepted on its own.
+3. **State the delta.** Say exactly what the amendment changes and what it does not, including which earlier acceptance criteria are unaffected, and add an acceptance bullet for the amendment.
+4. **Keep the remainder Accepted.** The unchanged remainder stays **Accepted** throughout; downstream stages may keep relying on it.
+5. **Stop at Draft.** Hand the amendment to **Design Review (M3)**.
 
 ### Recommended section checklist *(adapt to document kind)*
 

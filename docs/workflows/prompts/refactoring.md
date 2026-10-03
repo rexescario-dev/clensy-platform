@@ -30,7 +30,7 @@ Improve **internal implementation quality** (clarity, locality, duplication, com
    - **N/A** — no worthwhile maintainability improvement; risk exceeds likely benefit
    - **Deferred** — improvement may be warranted, but behavior is insufficiently characterized or other verification is required before safe refactoring
    - Otherwise proceed toward **Complete**
-4. **Lock behavior first.** Characterization tests (when needed) MUST capture **existing externally observable behavior**. They MUST NOT encode desired future behavior or new product requirements. If coverage cannot be established safely → **Deferred** (not a silent refactor).
+4. **Lock behavior first.** Characterization tests (when needed) MUST capture **existing externally observable behavior**. They MUST NOT encode desired future behavior or new product requirements. Each characterization test MUST also carry the evidence [M6](implementation-execution.md) step 3 requires: a failing run against a deliberately broken copy or mutation of the code under test, made outside the committed change and never committed. M8 MUST NOT treat a before-and-after passing run alone as that evidence. If coverage cannot be established safely → **Deferred** (not a silent refactor).
 5. **Apply safe transformations only.** Prefer small steps. Examples of **acceptable** refactors:
    - Rename private symbols
    - Extract private helper methods
@@ -59,6 +59,7 @@ Improve **internal implementation quality** (clarity, locality, duplication, com
 | Intent is behavior-preserving maintainability | Stop; wrong stage |
 | N/A or Deferred used when Complete is inappropriate | Prefer honest signal over busywork |
 | Characterization locks existing externally observable behavior only | Rewrite tests or Deferred |
+| Each characterization test has failing-against-a-broken-copy evidence that is not committed | Add the evidence or Deferred |
 | Only acceptable transformation classes used | Revert / escalate |
 | Before/after verification recorded; failures reverted | Revert before continuing |
 | No new product semantics or scope expansion | Revert / escalate |

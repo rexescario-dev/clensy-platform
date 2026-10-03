@@ -21,7 +21,7 @@ Before performing workflow-governed engineering work, read `docs/workflows/READM
 Determine the current stage from the user request and available Accepted artifacts.
 
 - If the request begins a new feature or design and no Accepted specification exists, start with M2 (`docs/workflows/prompts/specification.md`).
-- If an Accepted specification is available, continue with M4 (`docs/workflows/prompts/implementation-planning.md`) unless the user is in Design Review (M3).
+- If an Accepted specification is available, continue with M4 (`docs/workflows/prompts/implementation-planning.md`) unless the user is in Design Review (M3) or amending it (M2, then M3).
 - If an Accepted implementation plan is available, continue with M6 (`docs/workflows/prompts/implementation-execution.md`).
 - For review / refactor / docs / workflow-validation requests, open the matching prompt under `docs/workflows/prompts/`.
 - If the requested stage's prerequisites are missing, **stop** at the appropriate gate and explain what is missing.
@@ -48,5 +48,7 @@ Determine the current stage from the user request and available Accepted artifac
 1. Accepted specs and Accepted implementation plans are authoritative — do not redesign them in later stages.
 2. Do not begin M6 until M5 has Accepted the implementation plan.
 3. Prefer one PR per tracking issue for a delivery slice (Accepted plan + implementation when both apply).
-4. `workflow.yaml` is installer inventory only — not agent process instructions.
+4. `workflow.yaml` is installer-managed operational state (packages, inventory, `providers`) — not stage process instructions.
 5. Do not edit managed `docs/workflows/**` unless the user is intentionally customizing the installed workflow (Update/Replace may overwrite).
+6. Capability providers: for issue tracker / source control / PRs, honor `workflow.providers` in `workflow.yaml`. Availability is never policy; never silent fallback (full rule: prompt-library.md §12).
+7. At M6–M9 handoffs and final acceptance, emit a Slice Completion Report per `docs/workflows/conventions/reporting-conventions.md` (full rule: prompt-library.md §13).
