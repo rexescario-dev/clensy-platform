@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Draft (revised after first M5 pass) |
+| M5 history | First pass (2026-10-04) returned one required clarification and two wording fixes, all applied without changing the approach. **Required:** Task 2 states that ungated means the rendering decision does not depend on the `currentAdmin` result, not that the hook is skipped (the hook runs unconditionally, per spec §4.2 and the rules of hooks). A new test proves that no query state changes an ungated path's rendering. **Wording:** the query-call test is renamed to what it observes (`calls useCurrentAdminQuery with no options`). Final verification's out-of-scope diff now includes `apps/web/middleware.ts`. **Kept, with reason:** Task 1's private helper order (`isPlatformPath`, `segmentMatches`) is alphabetical, as `docs/conventions/javascript/README.md` § Function order requires ("each group by name"); the plan now quotes that rule. |
 | Date | 2026-10-04 |
 | Tracking issue | [#114](https://github.com/rexescario-dev/clensy-platform/issues/114) |
 | Scope | `apps/web` (`lib/nav-groups.ts`, a new layout component, `app/app/layout.tsx`, `app/app/admin/page.tsx`, `lib/staff-console.ts`, `messages/en/nav.json`, tests). `packages/web` (one message key removed). No `apps/api`, `packages/client` or `packages/ui` changes. |
@@ -19,7 +20,7 @@
 **Architecture:**
 
 - **Rules (`lib/nav-groups.ts`).** Two pure exports sit next to the existing `visibleNavGroups` / `landingHref`. A private `segmentMatches(pathname, href)` becomes the one definition of a segment match, shared by `findActiveHref` (unchanged behavior) and the platform-path check.
-- **Gate (`components/layout/page-visibility-gate.tsx`).** It calls its three hooks unconditionally, then decides in the spec's row order:
+- **Gate (`components/layout/page-visibility-gate.tsx`).** It calls its three hooks unconditionally, as the rules of hooks require. "Ungated" means the *rendering decision* ignores the `currentAdmin` result. It does not mean the query hook is skipped: on an ungated path `useCurrentAdminQuery()` still runs its normal cache/network behavior (the same shared read the sidebar makes), and its result is not consulted (spec §4.2 Inputs). It then decides in the spec's row order:
   - ungated → `children`;
   - principal present → `children` or the unavailable state;
   - no principal: error → `children`, loading → `LoadingState`, otherwise → `children`.
@@ -34,7 +35,7 @@
 
 **Pre-validation (full).** Before M5, on 2026-10-04, every code block in Tasks 1–3 was applied verbatim to a working tree at `db60664`, and every command named by an `Expected:` line in this plan ran with the stated result, including each planned RED state. The tree was then reverted.
 
-The first pass found one gap: `pnpm --filter web lint` failed on the gate test's `getMessages()` import (`no-restricted-imports`). Task 2 Step 6 (the named ESLint exception) was added to the plan, applied verbatim, and every Task 2 and Task 3 command plus Final verification was re-run green. Commands run:
+The first pass found one gap: `pnpm --filter web lint` failed on the gate test's `getMessages()` import (`no-restricted-imports`). Task 2 Step 6 (the named ESLint exception) was added to the plan, applied verbatim, and every Task 2 and Task 3 command plus Final verification was re-run green. After the first M5 pass's revisions, Tasks 1–3 were re-applied from the revised plan text (at `b432685`) and every command below was re-run: the same RED states, then `apps/web` 482 tests, `@clensy/web` 62 tests, and every other check green. Commands run:
 
 - `pnpm --filter web exec vitest run lib/nav-groups.test.ts lib/web-shell-regressions.test.ts`
 - `pnpm --filter web exec vitest run lib/page-visibility-gate.test.tsx lib/web-shell-regressions.test.ts i18n/messages.test.ts`
@@ -46,7 +47,7 @@ The first pass found one gap: `pnpm --filter web lint` failed on the gate test's
 - `pnpm --filter @clensy/web build`
 - `pnpm --filter @clensy/web lint`
 - `pnpm --filter web build`
-- `git diff --stat fb12aea -- apps/api packages/client packages/ui`
+- `git diff --stat fb12aea -- apps/api packages/client packages/ui apps/web/middleware.ts`
 
 ## Global Constraints
 
@@ -57,7 +58,7 @@ Copied from the Accepted spec. Every task's requirements implicitly include this
 - **Segment match** means `pathname === href || pathname.startsWith(`${href}/`)`. `findActiveHref` keeps segment-match, longest-match semantics (§3, §5 invariant 11).
 - `PLATFORM_HOME_HREF` is reserved: it segment-matches no `NAV_GROUPS` href, and none segment-matches it (§5 invariant 9).
 - The gate uses `useCurrentAdminQuery()` with **no arguments**: the default cache-first policy, never `fetchPolicy` (§4.2, §5 invariant 4).
-- Ungated paths (`/app`, unknown/unlisted, and `''` for a `null` pathname) render `children` without waiting on principal data (§4.2 row 0, §5 invariant 10).
+- Ungated paths (`/app`, unknown/unlisted, and `''` for a `null` pathname) render `children` without waiting on principal data (§4.2 row 0, §5 invariant 10). The gate still calls `useCurrentAdminQuery()` there, unconditionally, as the rules of hooks require (§4.2 Inputs). Its loading, error and data states simply do not affect what an ungated path renders.
 - **Not mounted** means the page component's function body never runs, so its hooks and queries never execute (§3, §5 invariant 5).
 - The gate never redirects, never routes to `/login`, and never inspects API errors. With no principal on a gated path it passes `children` through, except while loading (§4.2 rows 3–5, §5 invariant 6).
 - The gate is mounted exactly once, in `app/app/layout.tsx`, directly inside `DashboardLayout` (§5 invariant 7).
@@ -331,7 +332,7 @@ function segmentMatches(pathname: string, href: string): boolean {
 }
 ```
 
-The resulting top-level order is exported functions by name (`canViewPath`, `findActiveHref`, `isGatedPath`, `landingHref`, `visibleNavGroups`), then private ones by name (`isPlatformPath`, `segmentMatches`), per `docs/conventions/javascript/README.md` § Function order.
+The resulting top-level order follows `docs/conventions/javascript/README.md` § Function order: "`export function` … first, then module-private functions, each group by name." That gives exported `canViewPath`, `findActiveHref`, `isGatedPath`, `landingHref`, `visibleNavGroups`, then private `isPlatformPath`, `segmentMatches` (*i* before *s*).
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -459,6 +460,24 @@ describe('PageVisibilityGate', () => {
         expect(html).not.toContain(LOADING);
       },
     );
+
+    // "Ungated" means the rendering decision ignores the currentAdmin result,
+    // not that the hook is skipped (spec §4.2 Inputs): the hook still runs,
+    // and no query state changes what an ungated path renders.
+    it.each([
+      ['loading', { loading: true }],
+      ['an error', { error: new Error('session expired'), loading: false }],
+      ['a settled null', { data: { currentAdmin: null }, loading: false }],
+      ['a principal with no tenant pages', admin('SUPER_ADMIN', 'PLATFORM')],
+      ['a principal denied every gated page', admin('SUPER_ADMIN', 'TENANT')],
+    ] as [string, QueryState][])('mounts an unknown/unlisted path whatever the query state: %s', (_label, query) => {
+      const html = renderGate('/app/does-not-exist', query);
+
+      expectMounted(html);
+      expect(html).not.toContain(LOADING);
+      expect(html).not.toContain(UNAVAILABLE);
+      expect(inputs.queryCalls).toEqual([[]]);
+    });
   });
 
   describe('rows 1–2: principal present', () => {
@@ -542,7 +561,9 @@ describe('PageVisibilityGate', () => {
     });
   });
 
-  it('reads currentAdmin with no options, i.e. the default cache-first policy', () => {
+  // The generated hook's default fetch policy is cache-first; passing no
+  // options is the spec §4.2 mechanism for using it.
+  it('calls useCurrentAdminQuery with no options', () => {
     renderGate('/app/bookings', admin('FINANCE', 'TENANT'));
 
     expect(inputs.queryCalls).toEqual([[]]);
@@ -1001,7 +1022,7 @@ Run each command and record its result in the M6 Slice Completion Report's Valid
 | `pnpm --filter web lint` | exit 0 |
 | `pnpm --filter web build` | exit 0 (Next.js production build of the client gate in the server layout) |
 | `pnpm --filter @clensy/web test` / `build` / `lint` | exit 0 |
-| `git diff --stat fb12aea -- apps/api packages/client packages/ui` | empty (spec §8.5: no API, client or UI package change) |
+| `git diff --stat fb12aea -- apps/api packages/client packages/ui apps/web/middleware.ts` | empty (spec §2 and §8.5: no API, client, UI package or middleware change) |
 
 **Optional manual smoke**, at M6's discretion and not a gate: sign in as a `FINANCE` seed user, open `/app/customers` and `/app/platform`, and confirm that the shell chrome is intact, the unavailable state shows, and the link goes to `/app/bookings`.
 
