@@ -145,15 +145,33 @@ function isJsxTagName(node: ts.Node) {
   return (ts.isJsxOpeningElement(parent) || ts.isJsxSelfClosingElement(parent) || ts.isJsxClosingElement(parent)) && parent.tagName === node;
 }
 
-// Occurrences are by spelling, with no scope analysis. These positions are
-// names rather than references, so they are never counted.
+// Occurrences are by spelling, with no scope analysis. These exact name
+// positions are names rather than references, so they are never counted
+// (§6.1; the declaration-name positions were added by #124). Each test checks
+// that the identifier IS the name/label/right/qualifier node itself, never
+// merely that it sits somewhere under the construct.
 function isNonReferenceName(identifier: ts.Identifier) {
   const { parent } = identifier;
   return (
     (ts.isPropertyAccessExpression(parent) && parent.name === identifier) ||
     (ts.isPropertyAssignment(parent) && parent.name === identifier) ||
-    (ts.isJsxAttribute(parent) && parent.name === identifier)
+    (ts.isJsxAttribute(parent) && parent.name === identifier) ||
+    ((ts.isPropertySignature(parent) || ts.isMethodSignature(parent)) && parent.name === identifier) ||
+    ((ts.isPropertyDeclaration(parent) || ts.isMethodDeclaration(parent) || ts.isGetAccessorDeclaration(parent) || ts.isSetAccessorDeclaration(parent)) &&
+      parent.name === identifier) ||
+    (ts.isEnumMember(parent) && parent.name === identifier) ||
+    ((ts.isLabeledStatement(parent) || ts.isBreakStatement(parent) || ts.isContinueStatement(parent)) && parent.label === identifier) ||
+    (ts.isQualifiedName(parent) && parent.right === identifier) ||
+    isImportTypeQualifierName(identifier)
   );
+}
+
+// `import('x').W`, `import('x').A.W`: names inside an import type node's
+// qualifier. Type arguments (`import('x').A<W>`) are not part of the qualifier.
+function isImportTypeQualifierName(identifier: ts.Identifier) {
+  let name: ts.Node = identifier;
+  while (ts.isQualifiedName(name.parent)) name = name.parent;
+  return ts.isImportTypeNode(name.parent) && name.parent.qualifier === name;
 }
 
 // §6.1 item 2: `typeof P`, or (#124) P as the leftmost name of a qualified name
@@ -535,6 +553,28 @@ describe('app i18n boundary structure', () => {
       ['a namespace in a class extends clause (runtime heritage)', 'fixture.ts', `${NAMESPACE}class C extends W.ClensyI18nProvider {}`, 0, 1],
       ['a namespace in a class-expression extends clause (runtime heritage)', 'fixture.ts', `${NAMESPACE}const C = class extends W.Foo {};`, 0, 1],
       ['a named binding in an implements clause (no named heritage exemption)', 'fixture.ts', `${ALIASED}class C implements P {}`, 0, 1],
+      // #124: declaration-name positions and import type qualifiers (§6.1 non-reference names).
+      ['a namespace name in an import type qualifier', 'fixture.ts', `${NAMESPACE}type T = import('x').W;`, 0, 0],
+      ['a namespace name in a nested import type qualifier', 'fixture.ts', `${NAMESPACE}type T = import('x').A.W;`, 0, 0],
+      ['an interface property signature name', 'fixture.ts', `${ALIASED}interface I {\n  P: string;\n}`, 0, 0],
+      ['a type-literal method signature name', 'fixture.ts', `${ALIASED}type T = { P(): void };`, 0, 0],
+      ['a class property name', 'fixture.ts', `${ALIASED}class C {\n  P = 1;\n}`, 0, 0],
+      ['a class method name', 'fixture.ts', `${ALIASED}class C {\n  P() {}\n}`, 0, 0],
+      ['class accessor names', 'fixture.ts', `${ALIASED}class C {\n  get P() {\n    return 1;\n  }\n  set P(value: number) {}\n}`, 0, 0],
+      ['an object-literal method name', 'fixture.ts', `${ALIASED}const o = { P() {} };`, 0, 0],
+      ['an object-literal getter name', 'fixture.ts', `${ALIASED}const o = {\n  get P() {\n    return 1;\n  },\n};`, 0, 0],
+      ['an enum member name', 'fixture.ts', `${ALIASED}enum E {\n  P,\n}`, 0, 0],
+      ['a label with break', 'fixture.ts', `${ALIASED}P: for (;;) {\n  break P;\n}`, 0, 0],
+      ['a label with continue', 'fixture.ts', `${ALIASED}P: for (;;) {\n  continue P;\n}`, 0, 0],
+      ['the right side of a qualified type name', 'fixture.ts', `${ALIASED}type T = X.P;`, 0, 0],
+      ['a value use inside a labeled loop', 'fixture.ts', `${ALIASED}P: for (;;) {\n  f(P);\n}`, 0, 1],
+      ['a namespace as an import type argument (not the qualifier)', 'fixture.ts', `${NAMESPACE}type T = import('x').A<W>;`, 0, 1],
+      ['a namespace as an interface member type (not a name position)', 'fixture.ts', `${NAMESPACE}interface I {\n  a: W;\n}`, 0, 1],
+      ['a namespace value alias', 'fixture.ts', `${NAMESPACE}const X = W;`, 0, 1],
+      ['a computed property name', 'fixture.ts', `${ALIASED}const o = { [P]: 1 };`, 0, 1],
+      ['a computed class member name', 'fixture.ts', `${ALIASED}class C {\n  [P] = 1;\n}`, 0, 1],
+      ['a parameter named like the binding', 'fixture.ts', `${ALIASED}function f(P: number) {\n  return 1;\n}`, 0, 1],
+      ['an enum member initializer', 'fixture.ts', `${ALIASED}enum E {\n  A = P,\n}`, 0, 1],
     ])('counts %s correctly', (_label, fileName, source, mounts, escapes) => {
       expect(providerUses(fileName, source)).toEqual({ mounts, escapes });
     });
