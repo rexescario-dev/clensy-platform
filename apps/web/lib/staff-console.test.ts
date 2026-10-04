@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canManageStaff, disableConfirmDescription, staffMutationErrorKey } from './staff-console';
+import { disableConfirmDescription, staffMutationErrorKey } from './staff-console';
 
 // Mirrors what the API actually sends (@nestjs/apollo 13, probed against the
 // running API): a status with a dedicated Apollo code (400 BAD_REQUEST, 403
@@ -19,17 +19,6 @@ const gqlError = (status?: number) => ({
             : { code: 'INTERNAL_SERVER_ERROR', originalError: { statusCode: status }, status },
     },
   ],
-});
-
-describe('canManageStaff', () => {
-  it('requires both TENANT scope and TENANT_OWNER role', () => {
-    expect(canManageStaff({ role: 'TENANT_OWNER', scope: 'TENANT' })).toBe(true);
-    expect(canManageStaff({ role: 'TENANT_OWNER', scope: 'PLATFORM' })).toBe(false);
-    expect(canManageStaff({ role: 'SUPER_ADMIN', scope: 'PLATFORM' })).toBe(false);
-    expect(canManageStaff({ role: 'FINANCE', scope: 'TENANT' })).toBe(false);
-    expect(canManageStaff(null)).toBe(false);
-    expect(canManageStaff(undefined)).toBe(false);
-  });
 });
 
 describe('staffMutationErrorKey', () => {

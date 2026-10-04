@@ -1,12 +1,4 @@
-import type { AdminScope, Role } from '@clensy/client';
 import type { StaffErrorKey } from '@clensy/web';
-
-// UX gate for the staff console. Branches on the explicit scope, never on
-// tenantId === null (multi-tenant spec §3/§4.1). Not authorization — the API
-// enforces Tenant-Owner-only, same-tenant access regardless (§4.2).
-export function canManageStaff(admin: { role: Role; scope: AdminScope } | null | undefined): boolean {
-  return admin?.scope === 'TENANT' && admin.role === 'TENANT_OWNER';
-}
 
 export type StaffMutation = 'create' | 'disable';
 
