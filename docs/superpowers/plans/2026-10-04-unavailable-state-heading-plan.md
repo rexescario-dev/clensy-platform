@@ -172,3 +172,24 @@ Per spec §11 (#132): page-specific document titles, `Button asChild variant="li
 - **HTML escaping.** `renderToStaticMarkup` escapes `'` as `&#x27;`. The helper therefore compares the extracted heading text with the existing escaped `UNAVAILABLE` constant, as data.
 
 ## Gate outcomes
+
+### M6 — Implementation complete (2026-10-04)
+
+Executed natively, in plan order, on `feat/132-unavailable-state-heading`. Plan Accept `ece4b7c` is the parent of the implementation commit.
+
+| Task | Commit | RED observed | GREEN |
+| --- | --- | --- | --- |
+| 1. The unavailable state's `<h1>` | `5cc0b82` | Exactly the four §8 item 2 tests, each `expected [] to deeply equal [ [ 'h1', …(1) ] ]`; 17 passed | `lib/page-visibility-gate.test.tsx` 21/21 |
+
+- **Characterization tests:** none. Every new assertion failed before the change.
+- **Deviations from the plan:** none. The test and code edits are the plan's text verbatim.
+- **Final whole-branch review:** a **self-review** by the implementer, because no fresh-agent reviewer was requested this session. There were no Critical, Important or Minor findings. It checked the three Review Focus items:
+  1. The heading helper rejects any extra or missing heading.
+  2. The No-landing test keeps the heading.
+  3. Tailwind 4 preflight resets `h1` size and weight, and `globals.css` adds no heading styles.
+
+  It also checked that the shell chrome renders no `<h1>`: the only other heading in the chrome is the mobile sidebar's `SheetTitle`, rendered only while that sheet is open. So the state is the page's single `<h1>`.
+- **Final verification**, all exit 0 or empty as the plan expects:
+  - `pnpm --filter web test`: 17 files, 496/496.
+  - `pnpm --filter web exec tsc --noEmit`, `pnpm --filter web lint` and `pnpm --filter web build`: exit 0.
+  - `git diff --stat main -- apps/api packages apps/web/middleware.ts apps/web/messages`: empty.
