@@ -1052,4 +1052,26 @@ Per spec §11: session/expiry routing across `/app` pages, platform navigation, 
 
 ## Gate outcomes
 
-*(Appended after M5.)*
+### M6 — Implementation complete (2026-10-04)
+
+Executed natively, task by task, in plan order, on `feat/114-role-aware-typed-urls`.
+
+| Task | Commit | RED observed | GREEN |
+| --- | --- | --- | --- |
+| 1. Path rules | `9802644` | `canViewPath` / `isGatedPath` `is not a function` (187 failing); the three characterization tests passing | `nav-groups` + `web-shell-regressions` 387/387 |
+| 2. Gate, copy, mount | `fb0a20f` | Exactly the four Step 2 failures | `apps/web` 482/482 |
+| 3. Retirement | `fc24b1c` | The two new `tenant-role-regressions` tests only; Step 1 grep showed exactly the two expected consumers | `apps/web` 482/482; `@clensy/web` 62/62 |
+
+- **Characterization tests** (M6 step 3.6). Each was shown to fail against a mutation made outside the commit and restored byte for byte:
+  - `matches on path segments, not string prefixes` failed under a string-prefix `findActiveHref`.
+  - The `PLATFORM_HOME_HREF` reservation test failed with `PLATFORM_HOME_HREF = '/app/admin'`.
+  - `keeps viewRoles in lib/nav-groups.ts only` failed with `viewRoles` appended to `customers/page.tsx`.
+- **Deviations from the plan:** none.
+- **Final whole-branch review** (fresh Opus reviewer): no Critical or Important findings, "Ready to merge: Yes". It checked all five Review Focus items, including that real Apollo 3.14.1 keeps the cached `data` alongside an `error` (Focus 1). Deferred Minors, for the M7 reviewer's judgment:
+  1. No literal trailing-slash case (`/app/admin/`) in the `nav-groups` tests. Next's default 308 means the gate never sees one today.
+  2. The unavailable state has no heading or landmark for screen-reader users who deep-link. Spec §4.3 pins `EmptyState` as-is, so this is a follow-up rather than an M6 change.
+  3. The home link uses hand-written classes rather than `@clensy/ui` `Button asChild variant="link"`.
+- **Final verification**, all exit 0 or empty as the plan expects:
+  - `pnpm --filter web test` 482/482; `pnpm --filter web exec tsc --noEmit`; `pnpm --filter web lint`; `pnpm --filter web build`.
+  - `pnpm --filter @clensy/web test` 62/62, `build` and `lint`.
+  - `git diff --stat fb12aea -- apps/api packages/client packages/ui apps/web/middleware.ts` is empty.
