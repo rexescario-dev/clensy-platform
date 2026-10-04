@@ -28,6 +28,10 @@
     "empty": "No areas are available for your account.",
     "loading": "Loading…"
   },
+  "unavailable": {
+    "action": "Go to your home page",
+    "message": "This page isn't available to you."
+  },
   "platform": {
     "description": "Platform administration is not available yet.",
     "title": "Platform"

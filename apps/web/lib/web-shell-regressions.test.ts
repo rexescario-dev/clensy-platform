@@ -76,6 +76,28 @@ describe('web shell regressions', () => {
     expect(owners).toEqual(['lib/nav-groups.ts']);
   });
 
+  // Role-aware typed URLs spec §4.2, §5 invariants 4, 6 and 7.
+  it('mounts the page-visibility gate once, directly inside DashboardLayout', () => {
+    const layout = readWebSource('app/app/layout.tsx');
+
+    expect(layout).toMatch(
+      /<DashboardLayout>\s*<PageVisibilityGate>\{children\}<\/PageVisibilityGate>\s*<\/DashboardLayout>/,
+    );
+    const mounts = nonTestSources(webRoot)
+      .filter((path) => readFileSync(path, 'utf8').includes('<PageVisibilityGate'))
+      .map((path) => relative(webRoot, path));
+    expect(mounts).toEqual(['app/app/layout.tsx']);
+  });
+
+  it('reads currentAdmin in the gate with the default cache-first policy and never redirects', () => {
+    const gate = readWebSource('components/layout/page-visibility-gate.tsx');
+
+    expect(gate).toContain('useCurrentAdminQuery()');
+    expect(gate).not.toContain('fetchPolicy');
+    expect(gate).not.toMatch(/useRouter|redirect\(|'\/login'/);
+    expect(gate).not.toMatch(/tenantId|viewRoles/);
+  });
+
   it('presents identity through @clensy/web roles and accountIdentity, with no hard-coded copy', () => {
     const userMenu = readWebSource('components/layout/user-menu.tsx');
 
