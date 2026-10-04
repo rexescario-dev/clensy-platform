@@ -141,11 +141,11 @@ Consequences, all normative:
 
 ### 4.3 The unavailable state
 
-*Amended by #132 (Draft).* `UnavailableState` is a page-level shell state. It is rendered by the gate file (a module-local component), with the existing unavailable message as its single `<h1>`. It does not compose `EmptyState`.
+*Amended by #132 (Draft).* `UnavailableState` is a page-level shell state implemented as a module-local component in `page-visibility-gate.tsx`. The gate renders it with the existing unavailable message as its single `<h1>`. It does not compose `EmptyState`.
 
 - **Heading:** an `<h1>` whose text is `nav.unavailable.message`. It is the state's only heading. There is no additional generic heading such as "Unavailable", and no visually hidden duplicate of the message.
 - **Action:** after the heading, a `next/link` `Link` to `landingHref(principal)`, labelled `nav.unavailable.action`. If `landingHref(principal)` is `undefined`, the action is omitted and the heading renders alone. That cannot happen with today's role matrix, because every tenant role sees `/app/bookings` and Super Admin lands on `/app/platform`, but the contract defines it.
-- **Presentation:** the visual treatment stays as it is before #132: the centered `EmptyState`-style container, and the message at its current `text-sm` slate size and colour. The heading level is semantic and does not imply heading styling. It does not use `PageHeader`.
+- **Presentation:** the visual treatment stays as it is before #132: the same centered container styling previously used by `EmptyState`, and the message at its current `text-sm` slate size and colour. The heading level is semantic and does not imply heading styling. It does not use `PageHeader`.
 
 Requirements:
 
