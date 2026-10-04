@@ -1075,3 +1075,65 @@ Executed natively, task by task, in plan order, on `feat/114-role-aware-typed-ur
   - `pnpm --filter web test` 482/482; `pnpm --filter web exec tsc --noEmit`; `pnpm --filter web lint`; `pnpm --filter web build`.
   - `pnpm --filter @clensy/web test` 62/62, `build` and `lint`.
   - `git diff --stat fb12aea -- apps/api packages/client packages/ui apps/web/middleware.ts` is empty.
+
+**Integration with `main`** (`e7f1101`, after M6). #118 (PR #128) merged into `main` after this branch was cut, which left PR #130 conflicting, so CI could not run. `origin/main` was merged in. The one conflict, the `getMessages()` exception list in `apps/web/eslint.config.mjs`, was resolved as a union: #118's two tenant override tests plus this slice's gate test, under one combined comment. No plan task changed. Merged tree:
+- `pnpm --filter web test`: 17 files, 496/496.
+- `tsc`, lint and `next build`: exit 0.
+- `@clensy/web`: 63/63; build and lint exit 0.
+- `git diff --stat origin/main HEAD -- apps/api packages/client packages/ui apps/web/middleware.ts`: empty.
+
+### M7 — Approved for merge (2026-10-04)
+
+- **Subject:** PR [#130](https://github.com/rexescario-dev/clensy-platform/pull/130), head `e7f1101`. It carries the spec, this Accepted plan, the M6 change set and the `main` integration merge (process spec §2.8).
+- **Accepted specification:** `docs/superpowers/specs/2026-10-04-role-aware-typed-urls-design.md`.
+- **Accepted implementation plan:** this document.
+- **M6 gate:** plan Accept `dfe1d91` is an ancestor of the first implementation commit `9802644`.
+- **Plan tasks reviewed:**
+  - Task 1, path rules (`9802644`) ✓
+  - Task 2, gate, copy and mount (`fb0a20f`) ✓
+  - Task 3, retirement (`fc24b1c`) ✓
+
+  No reordering, no skipped task, and no extras beyond the recorded `main` merge.
+- **Spec conformance:** §4.1–§4.5 and invariants §5 1–11 ✓. Rows 0–5 are in spec order, with no `fetchPolicy`, no redirect, no session decision and no new role or path data. Under real Apollo 3.14.1, a refetch error keeps the cached `data`, so Focus 1 holds in production as well as in the mocks.
+- **Scope:** only `apps/web`, one `packages/web` catalog key, and the #114 docs. The out-of-scope diff against `main` is empty.
+- **Verification evidence:**
+  - CI run [37174496806](https://github.com/rexescario-dev/clensy-platform/actions/runs/37174496806) on `e7f1101`: Lint, Test and Release gate all succeeded.
+  - Local runs on the merged tree, as listed above.
+  - Per-task RED/GREEN and the characterization mutation evidence are in the M6 record.
+- **Review basis:** this record was written by the implementer. It is based on the independent final review by a fresh Opus reviewer that did not implement the change (M6 record: no Critical or Important findings, "Ready to merge: Yes"), plus CI.
+- **Blocking findings:** none.
+- **Non-blocking observations:** the three deferred minors in the M6 record (trailing-slash test row; a heading or landmark for the unavailable state; `Button asChild variant="link"` for the home link). The reviewer also recommends tracking the session/expiry inconsistency of spec §11 as its own issue. These MUST NOT affect the merge decision.
+- **Gate:** merge per human/project norms.
+
+### M8 — N/A (2026-10-04)
+
+- The two new rules are short, share one private `segmentMatches`, and sit beside their `nav-groups.ts` siblings. The gate is one decision function plus one module-local state component.
+- None of the deferred minors is a behavior-preserving refactor:
+  - The trailing-slash row is a new test.
+  - The heading or landmark changes markup.
+  - `Button asChild` changes the link's classes.
+  
+  They belong to a follow-up, not to M8.
+
+### M9 — Complete (2026-10-04)
+
+**Documentation scope:** `apps/web/README.md` (the shell paragraph and the i18n catalog list), the spec's Tracking cell, and this section.
+
+**Content updates:**
+- `apps/web/README.md`, shell paragraph. The sentence "typing a hidden page's URL still reaches that page's API error" was false after Task 2. It is replaced by a description of the shared unavailable state for role and scope, the single `PageVisibilityGate` and its `isGatedPath` / `canViewPath` rules, ungated `/app` and unlisted paths, and "never redirects". The UX-only / API-boundary statement is kept. Caused by Tasks 1–2 and spec §4.1–§4.3.
+- `apps/web/README.md`, UI catalogs. The `nav` namespace now lists the `unavailable` copy. Caused by Task 2 and spec §4.4.
+- The spec's Tracking cell links PR #130. Caused by the PR being opened.
+- This section. Caused by the M7–M9 gate outcomes.
+
+**Editorial changes:** none.
+
+**Unchanged:**
+- Earlier slice plans that quote `canManageStaff` / `notAuthorized` (#88, #115) are historical records.
+- `docs/README.md` has no #88 or #89 section that describes typed-URL behavior.
+
+**Verification:**
+- Links in the spec, this plan and the README resolve (scripted scan).
+- Status is consistent: spec and plan Accepted, PR open with CI green.
+- Terminology follows spec §3 (shell-hidden, ungated, unlisted).
+- No heading changes, contradictions or stale references.
+
