@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft (revised after first M5 pass) |
+| Status | Accepted |
+| M5 decision | **Accepted** — 2026-10-04, at `66e4f45`, by the owner, on the second pass, with no further revision. Executed natively in this session, task by task. M6 MUST implement it as written: `isGatedPath` / `canViewPath` derived only from `NAV_GROUPS` and `PLATFORM_HOME_HREF`; one `PageVisibilityGate` in the layout calling `useCurrentAdminQuery()` unconditionally with no options, deciding in the spec's row order; denied and loading-gated pages not mounted; and the `canManageStaff` / `staff.page.notAuthorized` retirement keeping the admin page's own session handling. |
 | M5 history | First pass (2026-10-04) returned one required clarification and two wording fixes, all applied without changing the approach. **Required:** Task 2 states that ungated means the rendering decision does not depend on the `currentAdmin` result, not that the hook is skipped (the hook runs unconditionally, per spec §4.2 and the rules of hooks). A new test proves that no query state changes an ungated path's rendering. **Wording:** the query-call test is renamed to what it observes (`calls useCurrentAdminQuery with no options`). Final verification's out-of-scope diff now includes `apps/web/middleware.ts`. **Kept, with reason:** Task 1's private helper order (`isPlatformPath`, `segmentMatches`) is alphabetical, as `docs/conventions/javascript/README.md` § Function order requires ("each group by name"); the plan now quotes that rule. |
 | Date | 2026-10-04 |
 | Tracking issue | [#114](https://github.com/rexescario-dev/clensy-platform/issues/114) |
