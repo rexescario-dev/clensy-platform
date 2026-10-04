@@ -62,6 +62,14 @@ function homeLink(href: string) {
   return new RegExp(`<a [^>]*href="${href}"[^>]*>Go to your home page</a>`);
 }
 
+// Spec §4.3 (#132): the state's only heading is an <h1> holding the message.
+// Static markup can't compute accessible names, so this checks the text
+// content; the <h1> carries no naming attributes, so that is its name.
+function expectUnavailableHeading(html: string) {
+  const headings = [...html.matchAll(/<(h[1-6])\b[^>]*>(.*?)<\/h[1-6]>/g)].map(([, tag, text]) => [tag, text]);
+  expect(headings).toEqual([['h1', UNAVAILABLE]]);
+}
+
 function expectMounted(html: string) {
   expect(html).toContain('page-probe');
   expect(pageRenders).toBe(1);
@@ -120,7 +128,7 @@ describe('PageVisibilityGate', () => {
       const html = renderGate('/app/customers', admin('FINANCE', 'TENANT'));
 
       expectNotMounted(html);
-      expect(html).toContain(UNAVAILABLE);
+      expectUnavailableHeading(html);
       expect(html).toMatch(homeLink('/app/bookings'));
     });
 
@@ -135,6 +143,7 @@ describe('PageVisibilityGate', () => {
       const html = renderGate('/app/bookings', admin('SUPER_ADMIN', 'PLATFORM'));
 
       expectNotMounted(html);
+      expectUnavailableHeading(html);
       expect(html).toMatch(homeLink('/app/platform'));
     });
 
@@ -142,7 +151,7 @@ describe('PageVisibilityGate', () => {
       const html = renderGate('/app/platform', admin('SCHEDULER', 'TENANT'));
 
       expectNotMounted(html);
-      expect(html).toContain(UNAVAILABLE);
+      expectUnavailableHeading(html);
       expect(html).toMatch(homeLink('/app/bookings'));
     });
 
@@ -150,7 +159,7 @@ describe('PageVisibilityGate', () => {
       const html = renderGate('/app/bookings', admin('SUPER_ADMIN', 'TENANT'));
 
       expectNotMounted(html);
-      expect(html).toContain(UNAVAILABLE);
+      expectUnavailableHeading(html);
       expect(html).not.toContain('<a ');
     });
 

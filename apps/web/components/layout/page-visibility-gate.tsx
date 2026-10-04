@@ -1,7 +1,7 @@
 'use client';
 
 import { useCurrentAdminQuery } from '@clensy/client';
-import { EmptyState, LoadingState } from '@clensy/ui';
+import { LoadingState } from '@clensy/ui';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -32,21 +32,22 @@ export function PageVisibilityGate({ children }: { children: ReactNode }) {
 }
 
 // The shared state for every denied path (spec §4.3): no roles or scopes
-// named, one way home through the same landing rule as /app.
+// named, one way home through the same landing rule as /app. Its message is
+// the page's single <h1>, styled as the former EmptyState message.
 function UnavailableState({ principal }: { principal: NavPrincipal }) {
   const t = useTranslations('nav');
   const home = landingHref(principal);
 
   return (
-    <EmptyState
-      message={t('unavailable.message')}
-      action={
-        home ? (
+    <div className="flex flex-col items-center justify-center gap-3 px-3 py-10 text-center text-slate-500">
+      <h1 className="text-sm">{t('unavailable.message')}</h1>
+      {home ? (
+        <div>
           <Link href={home} className="text-sm font-medium text-slate-900 underline underline-offset-4">
             {t('unavailable.action')}
           </Link>
-        ) : undefined
-      }
-    />
+        </div>
+      ) : null}
+    </div>
   );
 }

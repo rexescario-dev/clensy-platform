@@ -2,14 +2,14 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted |
-| Date | 2026-10-04 |
+| Status | Accepted. **§4.3 amendment (#132): Accepted** 2026-10-04. |
+| Date | 2026-10-04 (§4.3 amendment drafted 2026-10-04 for #132) |
 | Document kind | Architecture RFC |
-| Tracking issue | [#114](https://github.com/rexescario-dev/clensy-platform/issues/114) — surfaced by the #89 closeout. Program [#81](https://github.com/rexescario-dev/clensy-platform/issues/81). Implemented in PR [#130](https://github.com/rexescario-dev/clensy-platform/pull/130). |
-| Depends on (Accepted) | [Multi-Tenant Architecture](2026-09-23-multi-tenant-architecture-design.md) — **relied upon** unchanged: the API is the authorization boundary (§4.2, §4.5), UI visibility is not authorization (§4.2), shell and navigation MAY reflect scope and role for UX but MUST NOT be the isolation mechanism (§4.8), and navigation and middleware MUST NOT be the security boundary (§5 invariant 13). [Web Shell and Design System](2026-09-10-web-shell-and-design-system-design.md) — **relied upon**: the single `/app` layout and the shell is not an authorization boundary. This spec adds one component inside that layout and does not change shell chrome. [Single App-Level `ClensyI18nProvider`](2026-10-02-single-app-i18n-provider-design.md) — **relied upon** unchanged: `AppI18nProvider` stays the outermost `/app` wrapper. [`@clensy/ui` as the Shared UI System](2026-09-16-shadcn-ui-boundary-design.md) — **relied upon**: the new state composes existing `@clensy/ui` exports and adds no primitive. |
+| Tracking issue | [#114](https://github.com/rexescario-dev/clensy-platform/issues/114) — surfaced by the #89 closeout. Program [#81](https://github.com/rexescario-dev/clensy-platform/issues/81). Implemented in PR [#130](https://github.com/rexescario-dev/clensy-platform/pull/130). §4.3 amendment: [#132](https://github.com/rexescario-dev/clensy-platform/issues/132), implemented in PR [#133](https://github.com/rexescario-dev/clensy-platform/pull/133). |
+| Depends on (Accepted) | [Multi-Tenant Architecture](2026-09-23-multi-tenant-architecture-design.md) — **relied upon** unchanged: the API is the authorization boundary (§4.2, §4.5), UI visibility is not authorization (§4.2), shell and navigation MAY reflect scope and role for UX but MUST NOT be the isolation mechanism (§4.8), and navigation and middleware MUST NOT be the security boundary (§5 invariant 13). [Web Shell and Design System](2026-09-10-web-shell-and-design-system-design.md) — **relied upon**: the single `/app` layout and the shell is not an authorization boundary. This spec adds one component inside that layout and does not change shell chrome. [Single App-Level `ClensyI18nProvider`](2026-10-02-single-app-i18n-provider-design.md) — **relied upon** unchanged: `AppI18nProvider` stays the outermost `/app` wrapper. [`@clensy/ui` as the Shared UI System](2026-09-16-shadcn-ui-boundary-design.md) — **relied upon**: the gate uses existing `@clensy/ui` exports and adds no primitive. *(#132)* The unavailable state no longer composes `EmptyState` (§4.3). |
 | Related (not a dependency) | [Admin Foundation](2026-08-14-admin-foundation-design.md) — owns `Query.currentAdmin`, read here unchanged. The #89 tenant-aware shell slice ([plan](../plans/2026-10-01-tenant-aware-application-shell-plan.md)) introduced `NAV_GROUPS[].viewRoles`, `visibleNavGroups`, `findActiveHref`, `landingHref` and `landingTarget` in `apps/web`, which this spec reuses. |
 | Followed by | None. Session/expiry routing across `/app` pages is a known inconsistency (§2, §11) and is not opened by this spec. |
-| M3 decision | **Accepted** — 2026-10-04, at `4d1d4c0`, by the owner, on the second pass, with no further clarification. M4 implements it mechanically and MUST keep the locked decisions: one layout-level `PageVisibilityGate` using the default cache-first `useCurrentAdminQuery()`; `isGatedPath` decided before the principal, so `/app` and unknown/unlisted paths render at once; `canViewPath` derived only from `NAV_GROUPS` and `PLATFORM_HOME_HREF`, with segment-match semantics and `PLATFORM_HOME_HREF` reserved; denied pages not mounted (§3); no redirects, no session handling, no API changes; the shared "This page isn't available to you." state with a `landingHref` link; and the retirement of `canManageStaff` and `staff.page.notAuthorized`. |
+| M3 decision | **Accepted** — 2026-10-04, at `4d1d4c0`, by the owner, on the second pass, with no further clarification. M4 implements it mechanically and MUST keep the locked decisions: one layout-level `PageVisibilityGate` using the default cache-first `useCurrentAdminQuery()`; `isGatedPath` decided before the principal, so `/app` and unknown/unlisted paths render at once; `canViewPath` derived only from `NAV_GROUPS` and `PLATFORM_HOME_HREF`, with segment-match semantics and `PLATFORM_HOME_HREF` reserved; denied pages not mounted (§3); no redirects, no session handling, no API changes; the shared "This page isn't available to you." state with a `landingHref` link; and the retirement of `canManageStaff` and `staff.page.notAuthorized`. **§4.3 amendment (#132) — Accepted 2026-10-04, at `194c11d`, by the owner, on the first pass, with two wording clarifications applied (`UnavailableState` ownership in `page-visibility-gate.tsx`; container styling described as previously used by `EmptyState`).** M4 implements it mechanically. It is presentation only. `UnavailableState` exposes its existing message as the page's single `<h1>` and no longer composes `EmptyState` (§4.3). Its delta is confined to the Depends-on row, §4.3, §6, §8 item 2, §9, §10 and §11. Every locked decision above is unchanged, including the copy, the `landingHref` link and the six rendering rows, as are all the other sections and the earlier acceptance criteria. |
 | M3 history | First pass (2026-10-04) accepted the direction and returned the spec with six required changes and four clarifications, all applied without changing the decision. **Required:** `/app` and unknown/unlisted paths render without waiting for principal data (§4.1 `isGatedPath`, §4.2 row 0); segment-boundary semantics for `findActiveHref` (§4.1, §8); `PLATFORM_HOME_HREF` reserved as a non-nav path (§4.1, §5 invariant 9); "never mount" defined as the page component and its hooks never executing (§3, §4.2, §8); the cold-load serialization stated as an explicit trade-off (§4.2, §7); copy changed to "This page isn't available to you." (§4.4). **Clarifications:** the `/app/admin` redirect lifecycle (§4.5); a systematic nested-path assertion (§8); the term *shell-hidden page* (§3); the copy now covers scope as well as role (§4.3). |
 
 ## 1. Primary question and thesis
@@ -141,14 +141,17 @@ Consequences, all normative:
 
 ### 4.3 The unavailable state
 
-It is rendered by the gate file (a module-local component), composed from `@clensy/ui`'s existing `EmptyState`:
+*Amended by #132 (Accepted).* `UnavailableState` is a page-level shell state implemented as a module-local component in `page-visibility-gate.tsx`. The gate renders it with the existing unavailable message as its single `<h1>`. It does not compose `EmptyState`.
 
-- `message`: `nav.unavailable.message`.
-- `action`: a `next/link` `Link` to `landingHref(principal)`, labelled `nav.unavailable.action`. If `landingHref(principal)` is `undefined`, the action is omitted (`EmptyState` without `action`). That cannot happen with today's role matrix, because every tenant role sees `/app/bookings` and Super Admin lands on `/app/platform`, but the contract defines it.
+- **Heading:** an `<h1>` whose text is `nav.unavailable.message`. It is the state's only heading. There is no additional generic heading such as "Unavailable", and no visually hidden duplicate of the message.
+- **Action:** after the heading, a `next/link` `Link` to `landingHref(principal)`, labelled `nav.unavailable.action`. If `landingHref(principal)` is `undefined`, the action is omitted and the heading renders alone. That cannot happen with today's role matrix, because every tenant role sees `/app/bookings` and Super Admin lands on `/app/platform`, but the contract defines it.
+- **Presentation:** the visual treatment stays as it is before #132: the same centered container styling previously used by `EmptyState`, and the message at its current `text-sm` slate size and colour. The heading level is semantic and does not imply heading styling. It does not use `PageHeader`.
 
 Requirements:
 
-- It is shell chrome, not a domain component. It lives in `apps/web` and adds nothing to `@clensy/ui` or `@clensy/web` (multi-tenant spec §4.8 is unaffected).
+- It is shell chrome, not a domain component. It lives in `apps/web` and adds nothing to `@clensy/ui` or `@clensy/web` (multi-tenant spec §4.8 is unaffected). *(#132)* `@clensy/ui`'s `EmptyState` and its API are unchanged. `EmptyState` renders its `message` string in a `<p>`, so the state renders its own markup rather than widening that shared API for a single caller.
+- *(#132)* It adds no live region, `role="status"`/`role="alert"` or landmark. The `<h1>` is the cue for heading navigation, and a live region would announce the message a second time.
+- *(#132)* It does not change the document `<title>`. Every `/app` page shares the root layout's `metadata.title` ("Clensy"), so a page-specific title would be an app-wide metadata decision (§11).
 - Its copy covers both role and scope denial. It MUST NOT name the roles or scopes that could view the page, and MUST NOT state or imply that an API operation was attempted or denied.
 - It renders identically for every denied path. There is no per-page copy.
 
@@ -212,6 +215,7 @@ They are read with next-intl `useTranslations('nav')`, as `app/app/page.tsx` rea
 - One visibility rule shared by the sidebar, the landing redirect and the gate. Future nav entries are covered by their `viewRoles` alone.
 - Denied pages don't execute their hooks or data queries.
 - `/app` and unknown/unlisted paths behave exactly as today.
+- *(#132)* A screen-reader user who lands on a denied page can reach the unavailable message as the page's `<h1>` by heading navigation.
 
 **Non-goals**
 
@@ -222,6 +226,7 @@ They are read with next-intl `useTranslations('nav')`, as `app/app/page.tsx` rea
 - Hiding or gating unknown/unlisted paths.
 - Per-page, per-role, or per-tenant copy for the unavailable state.
 - Gating individual actions or fields within a visible page (relation-level RBAC is #106).
+- *(#132)* Changing the document `<title>`, adding a live region, or changing `@clensy/ui`'s `EmptyState` for the unavailable state.
 
 ## 7. Rationale
 
@@ -264,6 +269,7 @@ These are acceptance anchors for M4–M7. Test file names are planning decisions
    - **Denied:** the unavailable state renders with the `landingHref(principal)` link, and the probe is not mounted.
    - **Cross-scope:** `SUPER_ADMIN`/`PLATFORM` on a tenant page is denied with a `/app/platform` link, and a tenant principal on `/app/platform` is denied.
    - **No landing:** for a principal whose `landingHref` is `undefined` (for example the inconsistent `SUPER_ADMIN`/`TENANT` pair, which sees no nav items), a denied path renders the state without an action.
+   - **Heading** *(#132)*: in each of the Denied, Cross-scope and No-landing cases, the rendered output has exactly one heading. It is level 1, and its accessible name is the `nav.unavailable.message` text. The link assertions above are unchanged.
 3. **Source regressions**, in the style of the existing `web-shell-regressions.test.ts` / `tenant-role-regressions.test.ts`:
    - `app/app/layout.tsx` mounts `PageVisibilityGate` inside `DashboardLayout`.
    - The gate's `useCurrentAdminQuery` call passes no `fetchPolicy`.
@@ -279,7 +285,7 @@ These are acceptance anchors for M4–M7. Test file names are planning decisions
 | Multi-Tenant Architecture §4.2, §4.8, §5 invariant 13 | **Relied upon** unchanged. This spec is the "shell MAY reflect scope / role for UX" allowance of §4.8, bounded by invariant 13. |
 | Web Shell and Design System | **Relied upon**: the single `/app` layout. One component is added inside it, and shell chrome is unchanged. |
 | Single App-Level `ClensyI18nProvider` | **Relied upon**: `AppI18nProvider` stays outermost, and the gate's copy uses next-intl, not `@clensy/web`. |
-| `@clensy/ui` Shared UI System | **Relied upon**: `EmptyState` and `LoadingState` are used as-is. |
+| `@clensy/ui` Shared UI System | **Relied upon**: `LoadingState` is used as-is. *(#132)* `EmptyState` is no longer used by the gate (§4.3). Its API is unchanged, and no `@clensy/ui` export is added or changed. |
 | #89 shell slice (`nav-groups.ts`, `landing-target.ts`) | **Extended** with `isGatedPath` and `canViewPath`. `findActiveHref`'s segment semantics are made contractual, not changed. `visibleNavGroups`, `landingHref` and `landingTarget` are unchanged. |
 | Staff Administration UI (#88), `canManageStaff` | **Superseded** for the page-visibility decision only (§4.5). The staff console's mutations, error mapping, `/login` redirect and API gates are unchanged. |
 
@@ -295,8 +301,15 @@ This specification may move from Draft to Accepted at M3 when the reviewer agree
 6. Every shell-hidden page, including `/app/platform` for tenant principals, is covered by the worked examples and the verification contract (§4.6, §8).
 7. Nothing here changes API authorization or contradicts the Accepted multi-tenant RFC (§5 invariant 1, §9).
 
+**§4.3 amendment (#132).** Criteria 1–7 are unaffected and stay met. The amendment may move from Draft to Accepted at M3 when the reviewer agrees that:
+
+8. The unavailable state's single `<h1>` (the existing message), its unchanged presentation and link, and its decision not to compose `EmptyState` are unambiguous. The exclusions are explicit: no title change, no live region, no `@clensy/ui` change. They are verified by the §8 item 2 heading assertion and leave the copy, the visibility rule, the six rendering rows and the API unchanged (§4.3, §6, §9).
+
 ## 11. Explicit deferrals
 
 - **Session/expiry routing across `/app` pages.** Only `/app` and `/app/admin` route a missing or invalid `currentAdmin` to `/login`. Unifying this is a separate authentication-UX concern and needs its own issue.
 - **Platform navigation.** `/app/platform` stays a single placeholder that is not a nav item (multi-tenant spec §10), and it is reserved under §5 invariant 9. Adding platform nav items requires a spec amendment that revisits §4.1 rule 2 and invariant 9.
 - **Additional locales** for `nav.unavailable.*`.
+- **Page-specific document titles** *(#132)*. Every `/app` page shares the root layout's "Clensy" title. Giving pages, including the unavailable state, their own titles is an app-wide metadata decision.
+- **`Button asChild variant="link"` for the home link** *(#132)*. `@clensy/ui` `Button` supports `asChild`, but no `apps/web` code uses it for a link, so there is no established shell-link convention to adopt here.
+- **A trailing-slash row (`/app/admin/`) in `lib/nav-groups.test.ts`** *(#132)*. `next.config.ts` sets no `trailingSlash`, and Next's default 308 normalizes it today. This is path-matching coverage, unrelated to the heading.
