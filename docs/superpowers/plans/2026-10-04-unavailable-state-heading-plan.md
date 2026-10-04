@@ -243,3 +243,26 @@ The change replaces one component's JSX: a container, an `<h1>` and a conditiona
 - Status is consistent: the spec and its §4.3 amendment are Accepted, this plan is Accepted, and PR #133 is open with CI green.
 - Terminology follows spec §3 (shell-hidden, unavailable state).
 - No heading changes, contradictions or stale references.
+
+### M10 — Accepted, workflow validated (2026-10-04)
+
+**Subject:** the installed workflow prompt library (`docs/workflows/`, generic 1.4.1 / claude 0.2.0), against `docs/workflows/specs/agent-workflow-design.md` §2.10. This slice ran it on #132 from M2 (a slice-local amendment) to M9.
+
+**Asset inventory:** unchanged, and the branch diff against `main` for `docs/workflows/` and `workflow.yaml` is empty. Nine prompts (`specification`, `design-review`, `implementation-planning`, `plan-review`, `implementation-execution`, `code-review`, `refactoring`, `documentation-execution`, `workflow-validation`) map to M2–M10. `conventions/` holds M1 and the reporting conventions; the governing process spec is under `specs/`.
+
+**Checks:**
+- All nine prompts cite the governing contract. There are no orphan assets.
+- Every relative link under `docs/workflows/`, in the #114 spec, in this plan and in `apps/web/README.md` resolves (scripted scan).
+- The slice-local amendment procedure (M2 prompt) was followed. The amendment was made in place, with its own Draft → Accepted lifecycle against #132, while the remainder stayed Accepted. It states its delta, and adds §10 criterion 8.
+- §2.4 was honoured: amendment Accept `93a56f0` is an ancestor of the M4 draft `fae3093`.
+- §2.5 was honoured: plan Accept `ece4b7c` is the parent of the implementation commit `5cc0b82`.
+- Both review gates recorded an explicit first-pass return before Accept: M3 returned two wording fixes, and M5 returned one required change, one wording fix and one hardening.
+- Providers were honoured: GitHub for the issue, branch and PR (`workflow.providers`).
+- Slice Completion Reports were emitted at M6 and at M7–M9.
+- §2.8 was honoured: one PR (#133) carries the amendment, plan, implementation and docs.
+
+**Blocking findings:** none.
+
+**Non-blocking observations:**
+1. **M7 by self-review.** No fresh-agent reviewer was used this time. The M7 prompt allows a self-review when it is labelled, and the record labels it. For a two-file presentation change with CI green, the owner may judge that sufficient. Slices with wider blast radius should keep the independent reviewer that #114 and #124 used.
+2. **The #114 M6 deferred minors became an issue and a spec amendment cleanly.** The amendment procedure handled a follow-up to an already-implemented Accepted spec without friction. No change to the workflow is suggested.
