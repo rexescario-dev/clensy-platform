@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Accepted |
+| M5 decision | **Accepted** — 2026-10-04, at `a402219`, by the owner, on the second pass, with no further revision. M6 MUST implement Task 1 as written: `UnavailableState` stays module-local in `page-visibility-gate.tsx`, renders the existing message as its single `<h1 className="text-sm">` inside `EmptyState`'s copied container classes, keeps the conditional `landingHref` link, and drops only the `EmptyState` import; the four §8 item 2 tests assert `[['h1', UNAVAILABLE]]` via `expectUnavailableHeading`. |
 | M5 history | First pass (2026-10-04) returned one required change and one optional hardening, both applied without changing the approach. **Required:** the plan no longer claims the static-markup test computes an accessible name. It verifies the `<h1>`'s text content, which is that heading's accessible name because it has no naming attributes (Task 1 Step 1, "What this verifies"). **Wording:** Step 3's RED state now says all four heading assertions fail because there are zero heading elements. **Hardening:** the helper no longer builds a regex from the message. It extracts `[tag, text]` pairs and compares them by equality. |
 | Date | 2026-10-04 |
 | Tracking issue | [#132](https://github.com/rexescario-dev/clensy-platform/issues/132). Program [#81](https://github.com/rexescario-dev/clensy-platform/issues/81). |
