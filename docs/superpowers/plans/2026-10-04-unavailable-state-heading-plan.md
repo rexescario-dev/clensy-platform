@@ -193,3 +193,53 @@ Executed natively, in plan order, on `feat/132-unavailable-state-heading`. Plan 
   - `pnpm --filter web test`: 17 files, 496/496.
   - `pnpm --filter web exec tsc --noEmit`, `pnpm --filter web lint` and `pnpm --filter web build`: exit 0.
   - `git diff --stat main -- apps/api packages apps/web/middleware.ts apps/web/messages`: empty.
+
+### M7 — Approved for merge (2026-10-04)
+
+- **Subject:** PR [#133](https://github.com/rexescario-dev/clensy-platform/pull/133), head `4051923`, mergeable with `main` (`ce2cd18`). It carries the spec amendment, this Accepted plan and the M6 change set (process spec §2.8).
+- **Accepted specification:** `docs/superpowers/specs/2026-10-04-role-aware-typed-urls-design.md`, §4.3 amendment (#132).
+- **Accepted implementation plan:** this document.
+- **M6 gate:** plan Accept `ece4b7c` is the parent of the implementation commit `5cc0b82`.
+- **Plan tasks reviewed:**
+  - Task 1, the unavailable state's `<h1>` (`5cc0b82`) ✓
+
+  No reordering, no skipped task, no extras.
+- **Spec conformance:** amended §4.3 ✓.
+  - `UnavailableState` is module-local and doesn't compose `EmptyState`.
+  - Its single `<h1>` is `nav.unavailable.message`, with no other or hidden heading.
+  - Presentation is unchanged, with no `PageHeader`.
+  - The `landingHref` link and its omission are unchanged.
+  - There's no live region, `role` or landmark, and no `<title>` change.
+  - §8 item 2 Heading is covered in the Denied, both Cross-scope, and No-landing tests.
+  - §5 invariants 1–11 are untouched; the gate function is byte-identical.
+- **Scope:** two `apps/web` files plus the #132 docs. The out-of-scope diff against `main` is empty.
+- **Verification evidence:**
+  - CI run [37210044278](https://github.com/rexescario-dev/clensy-platform/actions/runs/37210044278) on `4051923`: Lint, Test and Release gate all succeeded.
+  - Local runs and the RED/GREEN evidence are in the M6 record.
+- **Review basis:** a **self-review**. The implementer wrote this record and performed the review in the same session; no independent or fresh-agent reviewer was used. Its basis is the whole-branch diff, the Review Focus checks and the shell-heading check in the M6 record, plus CI.
+- **Blocking findings:** none.
+- **Non-blocking observations:** none beyond the spec §11 (#132) deferrals.
+- **Gate:** merge per human/project norms.
+
+### M8 — N/A (2026-10-04)
+
+The change replaces one component's JSX: a container, an `<h1>` and a conditional link. It adds one five-line test helper. There's no duplication or complexity worth a behavior-preserving refactor. The two styling deferrals (`Button asChild`, and the trailing-slash test row) aren't refactors.
+
+### M9 — Complete (2026-10-04)
+
+**Documentation scope:** `apps/web/README.md` (the shell paragraph), the spec's Tracking issue cell, and this section.
+
+**Content updates:**
+- `apps/web/README.md`, shell paragraph. After the unavailable-state sentence, one sentence now says the message is the page's `<h1>` and reachable by heading navigation, with a link to #132. Caused by Task 1 and amended spec §4.3.
+- The spec's Tracking issue cell links #132 and PR #133 for the §4.3 amendment. Caused by the PR being opened.
+- This section. Caused by the M7–M9 gate outcomes.
+
+**Editorial changes:** none.
+
+**Unchanged:** the #114 plan's M6 record, which lists the missing heading as a deferred minor. It's a historical record, and #132 is its follow-up.
+
+**Verification:**
+- Links in the spec, this plan and the README resolve (scripted scan).
+- Status is consistent: the spec and its §4.3 amendment are Accepted, this plan is Accepted, and PR #133 is open with CI green.
+- Terminology follows spec §3 (shell-hidden, unavailable state).
+- No heading changes, contradictions or stale references.
