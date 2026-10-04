@@ -1137,3 +1137,25 @@ Executed natively, task by task, in plan order, on `feat/114-role-aware-typed-ur
 - Terminology follows spec §3 (shell-hidden, ungated, unlisted).
 - No heading changes, contradictions or stale references.
 
+### M10 — Accepted, workflow validated (2026-10-04)
+
+**Subject:** the installed workflow prompt library (`docs/workflows/`, generic 1.4.1 / claude 0.2.0), against `docs/workflows/specs/agent-workflow-design.md` §2.10. This slice ran it on #114 from M2 to M9.
+
+**Asset inventory:** unchanged. Nine prompts (`specification`, `design-review`, `implementation-planning`, `plan-review`, `implementation-execution`, `code-review`, `refactoring`, `documentation-execution`, `workflow-validation`) map to M2–M10. `conventions/` holds M1 and the reporting conventions; the governing process spec is under `specs/`.
+
+**Checks:**
+- All nine prompts cite the governing contract. There are no orphan assets.
+- Every relative link under `docs/workflows/`, in the #114 spec and in this plan resolves (scripted scan).
+- §2.5 was honoured: plan Accept `dfe1d91` is an ancestor of the first implementation commit `9802644`.
+- §2.4 was honoured: spec Accept `db60664` precedes the M4 draft `b432685`.
+- Both review gates recorded explicit Returns before Accept: M3 returned 6 required changes and 4 clarifications; M5 returned 1 required change and 2 wording fixes.
+- Providers were honoured: GitHub for the issue, branch and PR (`workflow.providers`).
+- Slice Completion Reports were emitted at M6 and at M7–M9.
+- §2.8 was honoured: one PR (#130) carries the spec, plan, implementation and docs.
+
+**Blocking findings:** none.
+
+**Non-blocking observations:**
+1. **Base drift suppresses CI silently.** PR #130 conflicted with `main` after #118 merged, and GitHub then runs no `pull_request` workflow at all ("no checks reported"), so M7's verification evidence was briefly unavailable. The M6 handoff or the M7 checklist could require the PR to be mergeable with its base before M7 cites CI.
+2. **M7 independence through a fresh agent.** As in #124, the implementer wrote the M7 record, citing a fresh-context reviewer's report. The M7 prompt allows this, and the record labels its basis. Carried forward with the earlier slices' upstream notes.
+
