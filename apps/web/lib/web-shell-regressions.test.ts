@@ -66,6 +66,16 @@ describe('web shell regressions', () => {
     expect(platform).not.toContain('fetch(');
   });
 
+  // Role-aware typed URLs spec §5 invariant 2 (characterization: holds on
+  // main). Page visibility has one source; no page or gate declares roles.
+  it('keeps viewRoles in lib/nav-groups.ts only', () => {
+    const owners = nonTestSources(webRoot)
+      .filter((path) => readFileSync(path, 'utf8').includes('viewRoles'))
+      .map((path) => relative(webRoot, path));
+
+    expect(owners).toEqual(['lib/nav-groups.ts']);
+  });
+
   it('presents identity through @clensy/web roles and accountIdentity, with no hard-coded copy', () => {
     const userMenu = readWebSource('components/layout/user-menu.tsx');
 
