@@ -33,7 +33,6 @@ export const staff = {
   page: {
     loading: 'Loading…',
     newAccount: '+ New Staff Account',
-    notAuthorized: 'You are not authorized to view this page.',
     title: 'Staff Accounts',
   },
   roleGroups: { owner: 'Tenant Owner', staff: 'Staff' },

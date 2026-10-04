@@ -13,12 +13,23 @@ function readWebSource(relativePath: string) {
 // checked or offered anywhere in the console. These are UX gates only — the
 // API enforces RBAC independently.
 describe('tenant role contract in the staff console', () => {
-  it('gates the staff admin page on the scope-aware canManageStaff predicate', () => {
+  // Role-aware typed URLs spec §4.5: the /app layout's PageVisibilityGate
+  // decides whether the staff page is shown; the page keeps its own session
+  // handling and its own currentAdmin read.
+  it('leaves staff page visibility to the layout gate and keeps its session handling', () => {
     const adminPage = readWebSource('app/app/admin/page.tsx');
 
-    expect(adminPage).toContain('canManageStaff(');
+    expect(adminPage).not.toContain('canManageStaff');
+    expect(adminPage).not.toContain('notAuthorized');
     expect(adminPage).not.toMatch(/role === 'TENANT_OWNER'/);
     expect(adminPage).not.toMatch(/tenantId === null/);
+    expect(adminPage).toContain("useCurrentAdminQuery({ fetchPolicy: 'network-only' })");
+    expect(adminPage).toContain("router.replace('/login')");
+    expect(adminPage).toContain('<StaffConsole currentAdminId={currentAdmin.id} />');
+  });
+
+  it('retires the canManageStaff helper', () => {
+    expect(readWebSource('lib/staff-console.ts')).not.toContain('canManageStaff');
   });
 
   it('offers operational roles and TENANT_OWNER on create, never SUPER_ADMIN', () => {

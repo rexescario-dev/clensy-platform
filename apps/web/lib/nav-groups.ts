@@ -110,14 +110,34 @@ export const NAV_GROUPS: NavGroup[] = [
 
 const ALL_HREFS = NAV_GROUPS.flatMap((group) => group.items.map((item) => item.href));
 
+// Whether the principal may be shown the page at pathname (role-aware typed
+// URLs spec §4.1). A client-side presentation rule derived from the shell
+// navigation policy; it does not grant, deny, or replace API authorization
+// (multi-tenant spec §4.2, §5.13). A nav item path follows the sidebar, a
+// platform path needs PLATFORM scope, and an ungated path (/app, or a path
+// with no shell rule) is always viewable.
+export function canViewPath(principal: NavPrincipal, pathname: string): boolean {
+  const href = findActiveHref(pathname);
+  if (href !== undefined) {
+    return visibleNavGroups(principal).some((group) => group.items.some((item) => item.href === href));
+  }
+  if (isPlatformPath(pathname)) return principal.scope === 'PLATFORM';
+  return true;
+}
+
 export function findActiveHref(pathname: string): string | undefined {
-  return ALL_HREFS.filter(
-    (href) => pathname === href || pathname.startsWith(`${href}/`),
-  ).reduce<string | undefined>(
+  return ALL_HREFS.filter((href) => segmentMatches(pathname, href)).reduce<string | undefined>(
     (longest, current) =>
       longest === undefined || current.length > longest.length ? current : longest,
     undefined,
   );
+}
+
+// Whether pathname needs a visibility decision at all: a nav item path or a
+// platform path (spec §4.1). /app and unknown/unlisted paths need no
+// principal. Presentation only, like canViewPath.
+export function isGatedPath(pathname: string): boolean {
+  return findActiveHref(pathname) !== undefined || isPlatformPath(pathname);
 }
 
 // The one landing rule, derived from visibleNavGroups so the sidebar and the
@@ -137,4 +157,15 @@ export function visibleNavGroups(principal: NavPrincipal | null | undefined): Na
     ...group,
     items: group.items.filter((item) => item.viewRoles.includes(role)),
   })).filter((group) => group.items.length > 0);
+}
+
+// PLATFORM_HOME_HREF is a reserved non-nav shell path (spec §5 invariant 9).
+function isPlatformPath(pathname: string): boolean {
+  return segmentMatches(pathname, PLATFORM_HOME_HREF);
+}
+
+// The one segment-match definition (spec §3): the href itself or a path
+// beneath it, never a bare string prefix (/app/customers-old is no match).
+function segmentMatches(pathname: string, href: string): boolean {
+  return pathname === href || pathname.startsWith(`${href}/`);
 }

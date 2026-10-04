@@ -17,7 +17,7 @@ import {
 } from '@clensy/web';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { canManageStaff, disableConfirmDescription, staffMutationErrorKey } from '../../../lib/staff-console';
+import { disableConfirmDescription, staffMutationErrorKey } from '../../../lib/staff-console';
 
 const EMPTY_FORM: CreateStaffFormValues = { email: '', password: '', role: 'CUSTOMER_SUPPORT' };
 
@@ -30,8 +30,9 @@ const EMPTY_FORM: CreateStaffFormValues = { email: '', password: '', role: 'CUST
 // cookie is present, not that it's still valid — an expired, invalid, or
 // disabled-account session lands here, where the guarded `currentAdmin`
 // surfaces it as an error (or a missing `currentAdmin`) and we send the user
-// back to `/login`. `canManageStaff` is a UX nicety only — the API
-// independently enforces Tenant-Owner-only, same-tenant access on
+// back to `/login`. Whether this page is shown at all is the /app layout's
+// PageVisibilityGate (role-aware typed URLs spec §4.2, §4.5), a UX rule only
+// — the API independently enforces Tenant-Owner-only, same-tenant access on
 // `admins`/`createAdmin`/`disableAdmin` (multi-tenant spec §4.2).
 export default function AdminPage() {
   const t = useClensyTranslations('staff');
@@ -52,10 +53,6 @@ export default function AdminPage() {
   if (error || !currentAdmin) {
     // Redirect already dispatched in the effect above.
     return null;
-  }
-
-  if (!canManageStaff(currentAdmin)) {
-    return <p className="text-sm text-slate-700">{t('page.notAuthorized')}</p>;
   }
 
   return <StaffConsole currentAdminId={currentAdmin.id} />;

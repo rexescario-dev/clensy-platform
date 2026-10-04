@@ -18,6 +18,13 @@ describe('getMessages', () => {
     });
   });
 
+  it('carries the unavailable-page copy in nav.unavailable', () => {
+    expect(getMessages().nav.unavailable).toEqual({
+      action: 'Go to your home page',
+      message: "This page isn't available to you.",
+    });
+  });
+
   it('carries the user menu copy in nav.userMenu', () => {
     expect(getMessages().nav.userMenu).toEqual({
       loadingIdentity: 'Loading user identity',

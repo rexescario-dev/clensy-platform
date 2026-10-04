@@ -14,17 +14,19 @@ export default tseslint.config(
   },
   {
     files: ['**/*.{ts,tsx}'],
-    // `lib/i18n-rendering.test.tsx` and the app i18n boundary tests are the
-    // deliberate exceptions outside `i18n/**`: they render through the real
-    // getMessages() -> NextIntlClientProvider path (i18n spec §6; single app
-    // i18n provider spec §6.2; tenant label overrides spec §6.2) and must
-    // import getMessages directly.
+    // `lib/i18n-rendering.test.tsx`, the app i18n boundary tests and
+    // `lib/page-visibility-gate.test.tsx` are the deliberate exceptions
+    // outside `i18n/**`: they render through the real getMessages() ->
+    // NextIntlClientProvider path (i18n spec §6; single app i18n provider spec
+    // §6.2; tenant label overrides spec §6.2; role-aware typed URLs spec §8.2)
+    // and must import getMessages directly.
     ignores: [
       'i18n/**',
       'lib/i18n-rendering.test.tsx',
       'lib/app-i18n-boundary.test.tsx',
       'lib/app-i18n-tenant-overrides.test.tsx',
       'lib/app-i18n-tenant-isolation.test.tsx',
+      'lib/page-visibility-gate.test.tsx',
     ],
     rules: {
       'no-restricted-imports': [
