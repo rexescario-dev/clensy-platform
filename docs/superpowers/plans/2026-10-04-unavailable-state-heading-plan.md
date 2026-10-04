@@ -5,6 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Status | Draft |
+| M5 history | First pass (2026-10-04) returned one required change and one optional hardening, both applied without changing the approach. **Required:** the plan no longer claims the static-markup test computes an accessible name. It verifies the `<h1>`'s text content, which is that heading's accessible name because it has no naming attributes (Task 1 Step 1, "What this verifies"). **Wording:** Step 3's RED state now says all four heading assertions fail because there are zero heading elements. **Hardening:** the helper no longer builds a regex from the message. It extracts `[tag, text]` pairs and compares them by equality. |
 | Date | 2026-10-04 |
 | Tracking issue | [#132](https://github.com/rexescario-dev/clensy-platform/issues/132). Program [#81](https://github.com/rexescario-dev/clensy-platform/issues/81). |
 | Scope | `apps/web` only: `components/layout/page-visibility-gate.tsx` and `lib/page-visibility-gate.test.tsx`. No `apps/api`, `packages/client`, `packages/ui`, `packages/web`, middleware or message changes. |
@@ -23,7 +24,7 @@
 
 **Tech Stack:** Next.js 16 App Router (client component), React 19, next-intl 4, Tailwind CSS 4, Vitest in the `node` environment with `react-dom/server` `renderToStaticMarkup` (the repo has no DOM test environment).
 
-**Pre-validation (full).** Before M5, on 2026-10-04, Task 1's code was applied verbatim to a working tree at `93a56f0`, and every command named by an `Expected:` line in this plan ran with the stated result, including the planned RED state (4 failed, 17 passed). The tree was then reverted. Commands run:
+**Pre-validation (full).** Before M5, on 2026-10-04, Task 1's code was applied verbatim to a working tree at `93a56f0`, and every command named by an `Expected:` line in this plan ran with the stated result, including the planned RED state (4 failed, 17 passed). The tree was then reverted. After the first M5 pass revised the Step 1 helper, Task 1 was re-applied from the revised plan text at `fae3093`, and every command below was re-run with the same results. The tree was reverted again. Commands run:
 
 - `pnpm --filter web exec vitest run lib/page-visibility-gate.test.tsx` (RED, then GREEN: 21 passed)
 - `pnpm --filter web test` (17 files, 496 tests passed)
@@ -45,7 +46,7 @@ Copied from the Accepted spec. Every task's requirements implicitly include this
 
 ## Review Focus
 
-1. **A duplicate or missing heading.** A future edit could add a visually hidden heading, or turn the message back into a `<p>`. The `expectUnavailableHeading` helper counts every `<h1>`–`<h6>` in the gate's output and requires exactly one `<h1>` carrying the message.
+1. **A duplicate or missing heading.** A future edit could add a visually hidden heading, or turn the message back into a `<p>`. The `expectUnavailableHeading` helper extracts every `<h1>`–`<h6>` in the gate's output and requires that the whole list is exactly one `<h1>` whose text content is the message.
 2. **The no-landing branch.** With no link, the heading must still be there, and still the only heading. This is pinned by the "omits the home link" test.
 3. **Visual drift.** The `<h1>` must not pick up heading styles. This is guaranteed by Tailwind preflight plus `text-sm`, which pre-validation confirmed in the source. Optional manual smoke is listed in Final verification.
 
@@ -69,13 +70,18 @@ Copied from the Accepted spec. Every task's requirements implicitly include this
 - [ ] **Step 1: Add the heading assertion helper.** In `apps/web/lib/page-visibility-gate.test.tsx`, insert this directly above `function expectMounted(html: string) {`. `UNAVAILABLE` is the file's existing escaped-message constant.
 
 ```tsx
-// Spec §4.3 (#132): the message is the state's single heading, at level 1.
-// Its accessible name is its text content.
+// Spec §4.3 (#132): the state's only heading is an <h1> holding the message.
+// Static markup can't compute accessible names, so this checks the text
+// content; the <h1> carries no naming attributes, so that is its name.
 function expectUnavailableHeading(html: string) {
-  expect(html.match(/<h[1-6][\s>]/g) ?? []).toHaveLength(1);
-  expect(html).toMatch(new RegExp(`<h1[^>]*>${UNAVAILABLE}</h1>`));
+  const headings = [...html.matchAll(/<(h[1-6])\b[^>]*>(.*?)<\/h[1-6]>/g)].map(([, tag, text]) => [tag, text]);
+  expect(headings).toEqual([['h1', UNAVAILABLE]]);
 }
 ```
+
+  It extracts every `<h1>`–`<h6>` as `[tag, text]` and compares the whole list in one equality check. That checks three things together: there's exactly one heading, it's level 1, and its text content is the message. The message is compared as data and is never used as a regex pattern.
+
+  **What this verifies.** The repo renders with `renderToStaticMarkup` and has no DOM or accessibility-tree test environment, and this slice adds no accessibility-testing dependency. So the test verifies the `<h1>`'s **text content**, not a computed accessible name. For this markup the two are the same, because the `<h1>` has no `aria-label`, `aria-labelledby` or `title`. That's how the plan satisfies spec §8 item 2's "accessible name".
 
 - [ ] **Step 2: Assert it in the four §8 item 2 cases.** These are inside `describe('rows 1–2: principal present', …)`:
 
@@ -89,7 +95,7 @@ function expectUnavailableHeading(html: string) {
 - [ ] **Step 3: Run it and watch it fail.**
 
 Run: `pnpm --filter web exec vitest run lib/page-visibility-gate.test.tsx`
-Expected: FAIL. 4 failed and 17 passed, each failure from `expectUnavailableHeading`'s count (`expected [] to have a length of 1 but got +0`), because `EmptyState` renders the message in a `<p>`.
+Expected: FAIL, with 4 failed and 17 passed. All four new heading assertions fail because the unavailable state currently contains zero heading elements, since `EmptyState` renders the message in a `<p>`. Each fails with `expected [] to deeply equal [ [ 'h1', …(1) ] ]`.
 
 - [ ] **Step 4: Render the message as the `<h1>`.** In `apps/web/components/layout/page-visibility-gate.tsx`:
 
@@ -162,6 +168,6 @@ Per spec §11 (#132): page-specific document titles, `Button asChild variant="li
 
 ## Execution risks (operational only)
 
-- **HTML escaping.** `renderToStaticMarkup` escapes `'` as `&#x27;`. The helper therefore builds its regex from the existing escaped `UNAVAILABLE` constant. That constant contains no regex metacharacters other than `.`, which still matches itself.
+- **HTML escaping.** `renderToStaticMarkup` escapes `'` as `&#x27;`. The helper therefore compares the extracted heading text with the existing escaped `UNAVAILABLE` constant, as data.
 
 ## Gate outcomes
