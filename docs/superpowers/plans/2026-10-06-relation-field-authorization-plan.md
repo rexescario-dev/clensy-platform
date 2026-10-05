@@ -759,3 +759,30 @@ M9 owns these. They are listed so nothing is lost; M6 does not edit them.
 
 - **Shared e2e database.** The suite builds a two-tenant world (12 principals) with the release-gate fixtures and removes it in `afterAll`. A crash mid-build is already cleaned up by `buildGateWorld`'s own rollback (#92 M7 finding).
 - **SQL log format.** `withCapturedSql` fails loudly if TypeORM's query log format changes (it throws when nothing is captured), so the tenant-predicate test cannot pass vacuously.
+
+## Gate outcomes
+
+### M6 — Implementation (2026-10-06)
+
+Executed natively (inline), in plan order, with no rulings needed: no deviation from the plan.
+
+- **Task 1** (`392ec2c`).
+  - **RED:** observed before any source change. Only the metadata guard failed, listing exactly the 14 owners in Step 2.
+  - **Characterization tests:** each one was shown to be able to fail, using uncommitted mutations that were reverted with `git checkout`:
+    - Enable field-resolver guards, with relation `Roles(TENANT_OWNER)` and a guard on `JobResolver.team`. Every rule 1, 3 and 5 test fails.
+    - Remove the tenant predicate (`tenantFilterFor` → `{}`; `getTeamsByIds` without `tenantId`). All three SQL-capture tests and the relation-filter test fail.
+    - Let `AuthGuard` admit FINANCE and CUSTOMER_SUPPORT on any role list. All eight root-denial tests fail.
+  - **GREEN:** the suite passes in full; `tsc` and `eslint` (src + test) are clean; unit tests pass (73 suites, 987 tests).
+- **Task 2** (`7dbab6b`). `eslint` is clean. `root-operation-authorization` and `two-tenant-release-gate` pass (16/16). `tenant-read-authorizers` shows only the #135 baseline failure.
+- **Final verification.**
+  - `pnpm --filter api test:e2e`: 457/458. The only failure is the #135 baseline.
+  - `git diff --stat main -- apps/api/src/schema.gql apps/web packages apps/api/src/migrations`: empty.
+- **Whole-branch review.** A fresh reviewer found no Critical or Important findings. It confirmed:
+  - no root `@Roles()` list changed;
+  - nothing reads `ROLES_KEY` except `AuthGuard`;
+  - the guard inventory finds all 19 object-typed field resolvers: 14 generated and 5 hand-written.
+
+  Three Minor test-hardening items are deferred and left to M7 to accept or act on:
+  1. The guard reads method-level metadata only, so class-level `@UseGuards` / `@Roles` on a resolver that hosts a relation field would pass. None exist today.
+  2. A resolver whose `@Resolver` type name does not resolve in the schema is skipped silently instead of failing. This does not occur today.
+  3. The prototype walk reads `proto[key]`, which would invoke a getter on a future resolver. That would be a loud false failure, not a silent pass.
