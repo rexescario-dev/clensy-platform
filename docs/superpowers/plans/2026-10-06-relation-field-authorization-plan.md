@@ -4,10 +4,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Draft (revised after the first M5 pass) |
 | Date | 2026-10-06 |
+| M5 history | First pass (2026-10-06) returned seven required changes, all applied without changing the approach. (1) "No runtime change" is replaced by "no intended application behavior change; the implementation removes non-executing relation metadata". (2–3) Required verification 5 no longer reads as if the spec prescribes SQL capture. The SQL test is described as string-level, implementation-level evidence, with the composite FKs as the structural guarantee. (4) The rule 8 row now says there is no executable verification. (5) The metadata guard is scoped to live `@ResolveField()` handlers and is not claimed to be exhaustive. (6) RED/GREEN expectations are semantic, not test counts. (7) Task 1 is "implementation and executable tests", including the three production comments; Task 2 is the existing suites' traceability comments only. The embedded suite changed only in three comments; it was re-linted and re-run after the change (see Pre-validation). |
 | Tracking issue | [#106](https://github.com/rexescario-dev/clensy-platform/issues/106). Program [#81](https://github.com/rexescario-dev/clensy-platform/issues/81). Surfaced by #85 and #90. |
-| Scope | `apps/api` only. Eight presentation type files, three comments in `src`, one new e2e suite, and comment updates in three existing e2e suites. No change to `apps/web`, `packages/*`, migrations, `schema.gql`, role matrices or runtime behavior. |
+| Scope | `apps/api` only. Eight presentation type files, three comments in `src`, one new e2e suite, and comment updates in three existing e2e suites. No change to `apps/web`, `packages/*`, migrations, `schema.gql` or role matrices. No intended application behavior change for currently reachable relation fields. |
 | Implements (Accepted) | [Multi-Tenant Architecture](../specs/2026-09-23-multi-tenant-architecture-design.md), **§4.2 relation-field authorization amendment (#106)**, Status **Accepted** (M3, 2026-10-06; recorded at `71d505e`, drafted at `05d45b5`). The amended parts are §3 (*root operation*, *relation field*), §4.2 "Relation-field authorization" rules 1–8 and Required verification 1–7, §4.9 (two examples), §5 invariants 15–17, §7, §8, §9 criterion 6 and §10. |
 | Relies on (Accepted) | The remainder of the same RFC, unchanged, especially §4.4 (same-tenant composite FKs) and §4.5 (tenant predicate on relation resolvers). The #92 release-gate fixtures (`test/release-gate/two-tenant-world.ts`, `client.ts`) and `test/helpers/capture-sql.ts`, used as they are. |
 | Authority | Where this plan and the Accepted spec disagree, the **spec wins** and this plan must be revised. File names, test names, helper names, comment wording and task order are planning decisions, not product semantics. |
@@ -15,24 +16,25 @@
 
 **Goal:** Deliver the #106 amendment. The relation-field authorization model (the root operation authorizes; relation fields re-apply the tenant predicate; no relation-level guards or `@Roles()`) is pinned by executable tests, and every dead relation-level `guards` / `decorators: [Roles(…)]` declaration is removed so the code no longer reads as target-role enforcement.
 
-**Architecture:** There is no runtime change. `fieldResolverEnhancers: ['interceptors']` (in `graphql.module.ts`) already means guards never run on field resolvers. So:
+**Architecture:** No intended application behavior change for currently reachable relation fields. The implementation removes relation-level authorization metadata that never executes, so the code matches the accepted policy. That is a deliberate change to resolver metadata and to what any future enhancer configuration would pick up, not a no-op. `fieldResolverEnhancers: ['interceptors']` (in `graphql.module.ts`) already means guards never run on field resolvers. So:
 
-- removing the 14 relation-level `AuthGuard` / `@Roles()` declarations changes metadata only;
+- removing the 14 relation-level `AuthGuard` / `@Roles()` declarations changes resolver metadata and leaves the existing runtime behavior unchanged;
 - the runtime tests are **characterization tests**: they pin behavior that already holds (spec Required verification 1–6);
-- the only test that is RED before the change is the metadata guard (Required verification 7). It walks every live `@ResolveField` handler, generated or hand-written, whose schema field is object-typed, and requires that none carries guards or `@Roles()` metadata.
+- the only test that is RED before the change is the metadata guard (Required verification 7). It inventories the live `@ResolveField()` handlers whose schema field is object-typed, and requires that none carries guards or `@Roles()` metadata. That inventory includes the resolver methods nestjs-query generates for relations: the RED list in Task 1 Step 2 is entirely generated methods. It is not claimed to be exhaustive over the RFC's *relation field* definition. Generated relation configuration is also covered by the explicit source edits (Steps 3–4) and by the characterization tests.
 
 **Tech Stack:** NestJS 11, `@nestjs/graphql` + Apollo, `@ptc-org/nestjs-query-graphql` 9.5.0, TypeORM, PostgreSQL 16, Jest e2e (`apps/api/test/jest-e2e.json`) with supertest.
 
 **Pre-validation (full).** On 2026-10-06, before M5, Task 1's suite and source edits and Task 2's comment edits were applied to a working tree at `71d505e`. Every command named by an `Expected:` line below was run with the stated result, including the planned RED state (1 failed, 19 passed). The tree was then reverted. Commands run:
 
-- `pnpm --filter api exec jest --config test/jest-e2e.json test/relation-field-authorization.e2e-spec.ts` (RED: 1 failed / 19 passed, listing exactly the 14 owners in Task 1 Step 2; then GREEN: 20 passed)
+- `pnpm --filter api exec jest --config test/jest-e2e.json test/relation-field-authorization.e2e-spec.ts` (RED: only the metadata guard failed, listing exactly the 14 owners in Task 1 Step 2, with 19 tests passing; then GREEN: all 20 passed)
 - `pnpm --filter api exec tsc --noEmit -p tsconfig.json`
 - `pnpm --filter api exec eslint "src/**/*.ts" "test/**/*.ts"`
 - `pnpm --filter api test` (73 suites, 987 tests passed)
 - `pnpm --filter api test:e2e` (48/49 suites, 457/458 tests; the one failure is the **Known baseline failure**). This full run was made with Task 1 applied, before Task 2's comment-only edits and one comment-only rewording in `graphql.module.ts`. After those edits, `tsc`, `eslint`, and the three suites Task 2 touches were re-run with the results stated in Task 2 Step 2.
 - `git diff --stat main -- apps/api/src/schema.gql apps/web packages apps/api/src/migrations`
+- After the first M5 pass changed three comments in the embedded suite, the suite was re-extracted verbatim from this plan. It was re-linted (`eslint` on the file: clean), and re-run against `main` source (RED: only the metadata guard failed) and with Task 1's source edits applied (`tsc` clean; GREEN: all tests passed). The tree was then reverted.
 
-**Known baseline failure (not introduced here).** On `main` (`35c6118`), `pnpm --filter api test:e2e` already fails one test: `tenant-read-authorizers.e2e-spec.ts` › "accounts for every object-typed field", for `CurrentAdmin.tenantLabelOverrides`. #118 / PR #128 added that field without adding it to that suite's `CUSTOM_OBJECT_FIELDS` allowlist. The baseline is 47/48 suites and 437/438 tests passing; with this plan applied it is 48/49 suites and 457/458 tests passing (the 20 new tests pass). Fixing that allowlist is outside the #106 spec. This plan does **not** change it. **M5 decides** whether to track it as a separate issue (recommended) or authorize it here as a one-line addition.
+**Known baseline failure (not introduced here).** On `main` (`35c6118`), `pnpm --filter api test:e2e` already fails one test: `tenant-read-authorizers.e2e-spec.ts` › "accounts for every object-typed field", for `CurrentAdmin.tenantLabelOverrides`. #118 / PR #128 added that field without adding it to that suite's `CUSTOM_OBJECT_FIELDS` allowlist. At pre-validation the baseline was 437/438 tests passing, and 457/458 with this plan applied (all new tests pass). Those counts are a record, not acceptance criteria. Fixing that allowlist is outside the #106 spec. This plan does **not** change it. **M5 decides** whether to track it as a separate issue (recommended) or authorize it here as a one-line addition.
 
 ## Global Constraints
 
@@ -48,8 +50,8 @@ These come from the Accepted spec. Every task's requirements implicitly include 
 
 ## Review Focus
 
-1. **A vacuous metadata guard.** If the inventory found no field resolvers, or only one kind, an empty violation list would pass. Task 1 pins five sentinels that span both kinds: `Booking.team`, `Invoice.customer` and `Customer.properties` (generated), plus `CleaningJob.team` and `Cleaner.team` (hand-written). Pre-validation found a real trap here: a hand-written `@ResolveField(() => TeamType)` with no explicit name stores `undefined` as its field name, and Nest falls back to the method name. The helper does the same (`?? key`). Without that fallback, the hand-written relations silently dropped out.
-2. **The tenant-predicate proof checking the wrong query.** The SQL-capture test keeps only SELECTs `from "<target table>"`, requires at least one, and asserts each carries `"tenantId"` and tenant A's id, and does **not** carry tenant B's id. This covers a nestjs-query relation (`invoice.customer`, `booking.team`) and the hand-written loader (`job.team`).
+1. **A vacuous metadata guard.** The guard inventories live `@ResolveField()` handlers. If it found none, or only one kind, an empty violation list would pass. Task 1 pins five sentinels that span both kinds: `Booking.team`, `Invoice.customer` and `Customer.properties` (generated), plus `CleaningJob.team` and `Cleaner.team` (hand-written). Pre-validation found a real trap here: a hand-written `@ResolveField(() => TeamType)` with no explicit name stores `undefined` as its field name, and Nest falls back to the method name. The helper does the same (`?? key`). Without that fallback, the hand-written relations silently dropped out.
+2. **Over-reading the SQL-capture test.** The test keeps only SELECTs `from "<target table>"` and requires at least one. It asserts that each statement's text, including TypeORM's `-- PARAMETERS: [...]` suffix, contains `"tenantId"` and tenant A's id, and does not contain tenant B's id. This is a string-level check. It shows that representative relation target queries contain a tenant predicate and are parameterized with the principal's tenant. It does not bind the id to a particular placeholder, and on its own it does not prove that a cross-tenant row is impossible at the database level; the same-tenant composite FKs (§4.4) remain the structural guarantee. It covers a nestjs-query relation (`invoice.customer`, `booking.team`) and the hand-written loader (`job.team`).
 3. **A relation filter acting as a separate authorization path.** Tenant B's FINANCE filters `invoices` by tenant A's customer, and `jobs` by tenant A's booking. Both return `{ nodes: [] }` with no error (rule 4).
 4. **Nesting depth and mutation returns.** `job → booking → customer → properties` (rule 1 at depth) and `markLaundryOrderAwaitingPayment { customer }` as FINANCE (rule 3) are both pinned. Neither appears in the spec's numbered list, but both follow from rules 1 and 3.
 5. **Root denial drift.** The eight FINANCE / CUSTOMER_SUPPORT root reads in Required verification 6 must each return exactly one `FORBIDDEN` error. This pins that removing relation declarations widened nothing.
@@ -82,7 +84,9 @@ These come from the Accepted spec. Every task's requirements implicitly include 
 
 ---
 
-### Task 1: Relation-field authorization suite and removal of the dead relation declarations
+### Task 1: Implementation and executable tests
+
+The relation-field authorization suite, removal of the non-executing relation declarations, and the three production comments that explain the change. Task 2 holds only the existing suites' traceability comments.
 
 Spec: §4.2 relation-field rules 1–7, Required verification 1–7; §5 invariants 15–17.
 
@@ -132,7 +136,8 @@ import {
 // authorized by the root operation that reaches it, never by the target
 // type's root roles, and it re-applies the tenant predicate. Items 1–6 pin
 // behavior that already holds (characterization); item 7 is the metadata
-// guard against relation-level guards / @Roles().
+// guard against relation-level guards / @Roles() on live @ResolveField()
+// handlers.
 
 interface GraphqlBody {
   data?: Record<string, unknown> | null;
@@ -167,9 +172,11 @@ describe('Relation-field authorization (#106, RFC §4.2)', () => {
     return (body.errors ?? []).map((error) => error.extensions?.code);
   }
 
-  // Every @ResolveField handler on a live resolver whose schema field is
-  // object-typed (relation fields, generated or hand-written; RFC §3),
-  // read from the metadata Nest and nestjs-query attach to the method.
+  // Every live @ResolveField() handler whose schema field is
+  // object-typed, read from the metadata Nest and nestjs-query attach to
+  // the method. This includes the methods nestjs-query generates for
+  // relations. It is not claimed to be exhaustive over the RFC §3
+  // relation-field definition.
   function objectFieldResolvers(): FieldResolverRecord[] {
     const { schema } = app.get(GraphQLSchemaHost);
     const records: FieldResolverRecord[] = [];
@@ -337,10 +344,12 @@ describe('Relation-field authorization (#106, RFC §4.2)', () => {
   });
 
   // Required verification 5 (rules 2 and 4). Composite same-tenant FKs
-  // (§4.4) make a stored cross-tenant reference impossible, so the proof
-  // is (a) the SQL each relation path runs carries the principal's tenant
-  // predicate, and (b) relation filters cannot select another tenant's
-  // rows. Neither weakens the schema.
+  // (§4.4) make a stored cross-tenant reference impossible. As additional,
+  // implementation-level evidence that does not weaken the schema, these
+  // tests check that representative relation queries contain a tenant
+  // predicate parameterized with the principal's tenant (a string-level
+  // check of the logged SQL, parameters included), and that relation
+  // filters cannot select another tenant's rows.
   it.each([
     [
       'invoice.customer (nestjs-query)',
@@ -474,8 +483,10 @@ What each test verifies:
 | FINANCE and CUSTOMER_SUPPORT hand-written `job.team` | Required verification 4; rule 5 | Characterization |
 | FINANCE `job → booking → customer → properties` | Rule 1 (any depth) | Characterization |
 | FINANCE `markLaundryOrderAwaitingPayment { customer }` | Rule 3 | Characterization |
-| SQL of `invoice.customer`, `booking.team`, `job.team` carries tenant A's predicate and never tenant B's id | Required verification 5; rule 2 | Characterization |
+| SQL of `invoice.customer`, `booking.team`, `job.team` contains a tenant predicate parameterized with tenant A, never tenant B (implementation-level evidence) | Required verification 5; rule 2 | Characterization |
 | Tenant B's relation filters on tenant A's ids return no rows | Required verification 5; rule 4 | Characterization |
+
+**Required verification 5.** Same-tenant composite FKs (§4.4) make a stored cross-tenant reference impossible. In addition, the suite verifies the tenant predicate on representative relation queries, and verifies that relation filters cannot select another tenant's rows. These tests provide implementation-level evidence without weakening the schema. The spec does not prescribe SQL capture as the mechanism; it is this plan's choice.
 | Eight root reads stay `FORBIDDEN` | Required verification 6; rule 7 | Characterization |
 | No relation field resolver carries guards or `@Roles()` | Required verification 7; rule 6 | **RED → GREEN** |
 
@@ -483,7 +494,7 @@ What each test verifies:
 
 Run: `pnpm --filter api exec jest --config test/jest-e2e.json test/relation-field-authorization.e2e-spec.ts`
 
-Expected: `Tests: 1 failed, 19 passed, 20 total`. The failure is "declares no guards or @Roles() on any relation field resolver", and its received array is exactly:
+Expected: the metadata-guard test ("declares no guards or @Roles() on any relation field resolver") fails, and every characterization test passes. The violation list must contain exactly these 14 owners:
 
 ```text
 BookingReadResolver.findCustomer
@@ -610,7 +621,7 @@ with
 - [ ] **Step 6: Run the suite and verify GREEN**
 
 Run: `pnpm --filter api exec jest --config test/jest-e2e.json test/relation-field-authorization.e2e-spec.ts`
-Expected: `Tests: 20 passed, 20 total`
+Expected: every test in the suite passes.
 
 - [ ] **Step 7: Type-check, lint and unit tests**
 
@@ -621,7 +632,7 @@ Run: `pnpm --filter api exec eslint "src/**/*.ts" "test/**/*.ts"`
 Expected: exit 0, no output. This catches any leftover unused import or constant from Steps 3–4, and enforces the repository's `contextforge/record-key-order` rule (`id` first) that the suite's object literals already follow.
 
 Run: `pnpm --filter api test`
-Expected: `Test Suites: 73 passed, 73 total` / `Tests: 987 passed, 987 total`
+Expected: every unit suite passes.
 
 - [ ] **Step 8: Commit**
 
@@ -635,7 +646,7 @@ the relation-level AuthGuard/@Roles() declarations that never ran."
 
 ---
 
-### Task 2: Point the existing guard suites at the #106 suite
+### Task 2: Traceability comments in the existing test suites
 
 Spec: §8 traceability. This is a comment-only change. TDD does not apply; verification is lint plus a re-run of the three suites.
 
@@ -700,7 +711,7 @@ Run: `pnpm --filter api exec jest --config test/jest-e2e.json test/root-operatio
 Expected: both suites pass.
 
 Run: `pnpm --filter api exec jest --config test/jest-e2e.json test/tenant-read-authorizers.e2e-spec.ts`
-Expected: `Tests: 1 failed, 8 passed, 9 total`. The single failure is the known baseline failure (`CurrentAdmin.tenantLabelOverrides`), unchanged from `main`.
+Expected: the only failure is the known baseline failure (`CurrentAdmin.tenantLabelOverrides`), unchanged from `main`.
 
 - [ ] **Step 3: Commit**
 
@@ -714,7 +725,7 @@ git commit -m "test(api): point the #90/#92 guard suites at the #106 relation su
 ## Final verification (end of M6)
 
 Run: `pnpm --filter api test:e2e`
-Expected: `Test Suites: 1 failed, 48 passed, 49 total` / `Tests: 1 failed, 457 passed, 458 total`. The one failure is the known baseline failure. Any other failure is a regression.
+Expected: every suite passes except the known baseline failure in `tenant-read-authorizers.e2e-spec.ts`. Any other failure is a regression.
 
 Run: `git diff --stat main -- apps/api/src/schema.gql apps/web packages apps/api/src/migrations`
 Expected: no output. The schema, web, packages and migrations are unchanged.
@@ -728,9 +739,9 @@ Expected: no output. The schema, web, packages and migrations are unchanged.
 | §4.2 rule 3 (mutation returns) | 1 (mutation test) |
 | §4.2 rule 4 (relation filters inside tenant scope) | 1 (relation-filter test) |
 | §4.2 rule 5 (both resolver kinds) | 1 (hand-written `job.team` tests; guard sentinels) |
-| §4.2 rule 6 / invariant 15 (no relation-level declarations) | 1 (Steps 3–4; metadata guard) |
+| §4.2 rule 6 / invariant 15 (no relation-level declarations) | 1 (Steps 3–4 remove the generated-relation declarations; the metadata guard checks live `@ResolveField()` handlers) |
 | §4.2 rule 7 / invariant 17 (root denial intact) | 1 (eight `FORBIDDEN` tests) |
-| §4.2 rule 8 (adding a relation is a policy review) | No code. It is a review obligation on future specs. The metadata guard and sentinels make a new relation visible to reviewers. |
+| §4.2 rule 8 (adding a relation is a policy review) | **No executable verification.** Rule 8 is a future design and review obligation: adding a relation requires an authorization-policy review against the root operations and the tenant-isolation requirements. The metadata guard enforces rule 6. It does not mechanically enforce rule 8, and it does not detect a newly added relation that carries no forbidden metadata. |
 | §8 traceability | 2 |
 | "No web changes" | Final verification `git diff --stat` |
 | §10 deferral (per-role field redaction) | Not implemented (deferred) |
