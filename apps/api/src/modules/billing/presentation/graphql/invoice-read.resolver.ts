@@ -22,8 +22,10 @@ import { InvoiceType, VIEW_ROLES } from './invoice.type';
 // relations and the nested `lines` connection (all declared on
 // `InvoiceType`, wired by `Relatable`). `one` is disabled — the nullable
 // single-invoice query is a hand-written `@Query` on `InvoiceResolver`
-// (the `LaundryOrderResolver.laundryOrder` precedent). Every entry point
-// is guarded by `AuthGuard` + `@Roles(...VIEW_ROLES)` (spec §4.7).
+// (the `LaundryOrderResolver.laundryOrder` precedent). Every root entry
+// point is guarded by `AuthGuard` + `@Roles(...VIEW_ROLES)` (spec §4.7);
+// the relations are authorized by the root operation that reaches them
+// (multi-tenant RFC §4.2 relation-field rules, #106).
 @Resolver(() => InvoiceType)
 export class InvoiceReadResolver extends Relatable(InvoiceType, {
   enableAggregate: false,

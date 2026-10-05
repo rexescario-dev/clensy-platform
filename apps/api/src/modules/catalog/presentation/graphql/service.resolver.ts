@@ -39,9 +39,9 @@ export class ServiceResolver {
   // Presentation-layer-only computed field (spec §4.5), batched via
   // `ActivePricingLoader` (request-scoped, constructor-injected — not
   // `@Context()`) to avoid one query per parent row. No separate
-  // `@UseGuards`/`@Roles()`: reachable only after the guarded parent query
-  // already succeeded, the same precedent `Cleaner.team`/`Team.cleaners`
-  // established. Tenant from the principal, never from the parent row (#84
+  // `@UseGuards`/`@Roles()`: a relation field is authorized by the root
+  // operation that reaches it (multi-tenant RFC §4.2 relation-field rules,
+  // #106). Tenant from the principal, never from the parent row (#84
   // slice decision 7). No principal ⇒ null-tenant loader ⇒ null.
   @ResolveField(() => PricingRuleType, { nullable: true })
   async activePricing(

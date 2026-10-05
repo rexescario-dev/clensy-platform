@@ -13,17 +13,7 @@ import {
   PLATFORM_PAGE_MAX,
 } from '../../../../platform/graphql/paging';
 import { tenantReadAuthorizer } from '../../../../platform/auth/authorization/tenant-read.authorizer';
-import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
-import { Role } from '../../../../platform/auth/domain/role';
-import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
 import type { CleanerType as CleanerTypeClass } from './cleaner.type';
-
-const VIEW_ROLES = [
-  Role.TENANT_OWNER,
-  Role.OPS_MANAGER,
-  Role.SCHEDULER,
-  Role.ANALYST,
-];
 
 /* eslint-disable @typescript-eslint/no-require-imports -- Lazy thunk below:
    CleanerType imports TeamType, so this must stay a runtime require() (not
@@ -55,14 +45,12 @@ function cleanerDto(): typeof CleanerTypeClass {
   pagingStrategy: PagingStrategies.OFFSET,
 })
 @OffsetConnection('cleaners', cleanerDto, {
-  decorators: [Roles(...VIEW_ROLES)],
   defaultResultSize: PLATFORM_PAGE_DEFAULT,
   defaultSort: [
     { direction: SortDirection.DESC, field: 'createdAt' },
     { direction: SortDirection.ASC, field: 'id' },
   ],
   enableTotalCount: false,
-  guards: [AuthGuard],
   maxResultsSize: PLATFORM_PAGE_MAX,
   nullable: false,
   relationName: 'cleaners',

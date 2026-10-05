@@ -13,9 +13,7 @@ import {
   PLATFORM_PAGE_MAX,
 } from '../../../../platform/graphql/paging';
 import { tenantReadAuthorizer } from '../../../../platform/auth/authorization/tenant-read.authorizer';
-import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
 import { Role } from '../../../../platform/auth/domain/role';
-import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
 import { CustomerType } from '../../../customers/presentation/graphql/customer.type';
 import { PropertyType } from '../../../customers/presentation/graphql/property.type';
 import { ServiceType } from '../../../catalog/presentation/graphql/service.type';
@@ -41,9 +39,11 @@ const WRITE_ROLES = [
   Role.CUSTOMER_SUPPORT,
 ];
 
+// No relation-level guards or `@Roles()`: a relation field is authorized
+// by the root operation that reaches it, and its target's authorizer
+// re-applies the tenant predicate (multi-tenant RFC §4.2 relation-field
+// rules, #106).
 const relationReadOpts = {
-  decorators: [Roles(...VIEW_ROLES)],
-  guards: [AuthGuard],
   remove: { enabled: false },
   update: { enabled: false },
 };
