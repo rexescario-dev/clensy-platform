@@ -59,7 +59,8 @@ import {
 // Failure prefixes: [inventory] a surface escaped the gate; [policy] the
 // pinned role matrix drifted from live @Roles(); [authentication] /
 // [enforcement] / [isolation] / [integrity] a runtime defect. Out of scope:
-// relation-field RBAC (#106), UI, query counts.
+// relation-field authorization (relation-field-authorization.e2e-spec.ts,
+// #106), UI, query counts.
 describe('Two-tenant isolation release gate (#92)', () => {
   let app: INestApplication<App>;
   let dataSource: DataSource;

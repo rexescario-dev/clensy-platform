@@ -29,8 +29,9 @@ import {
 // Regression guard for the #90 sweep (decisions 7–8; RFC §4.5). Reads live
 // GraphQL, nestjs-query, Nest discovery and TypeORM metadata. A metadata
 // check of tenant *read filters* and inventory completeness; it does not
-// prove runtime isolation (the module two-tenant suites do), relation-level
-// RBAC (#106), or the scoping inside custom @Query handlers and loaders.
+// prove runtime isolation (the module two-tenant suites do), relation-field
+// authorization (relation-field-authorization.e2e-spec.ts, #106), or the
+// scoping inside custom @Query handlers and loaders.
 
 // `TypeMetadataStorage` types ObjectType targets as `Function`.
 // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type

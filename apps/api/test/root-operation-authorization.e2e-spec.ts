@@ -17,7 +17,8 @@ import {
 // fails until someone decides its class. This is a metadata check of
 // root-operation authentication and roles. It does not prove runtime
 // tenant isolation (the module two-tenant suites do) and does not cover
-// relation-field RBAC (#106). The classification lives in
+// relation fields, which the root operation authorizes (RFC §4.2;
+// relation-field-authorization.e2e-spec.ts, #106). The classification lives in
 // helpers/root-operation-inventory.ts, shared with #92's release gate.
 
 const TENANT_ROLES = new Set<Role>([
