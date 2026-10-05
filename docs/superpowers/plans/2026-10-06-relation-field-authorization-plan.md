@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft (revised after the first M5 pass) |
+| Status | Accepted |
+| M5 decision | **Accepted** — 2026-10-06, at `41b827d`, by the owner, on the second pass, with no further revision. Execution: native (inline). The pre-existing `tenant-read-authorizers.e2e-spec.ts` failure stays out of #106 and is tracked as [#135](https://github.com/rexescario-dev/clensy-platform/issues/135). Failure policy for M6: a failure introduced by this implementation is a blocker. The unchanged #135 baseline failure is not a blocker. A new failure in the characterization suite or in any previously passing suite means stop and investigate. |
 | Date | 2026-10-06 |
 | M5 history | First pass (2026-10-06) returned seven required changes, all applied without changing the approach. (1) "No runtime change" is replaced by "no intended application behavior change; the implementation removes non-executing relation metadata". (2–3) Required verification 5 no longer reads as if the spec prescribes SQL capture. The SQL test is described as string-level, implementation-level evidence, with the composite FKs as the structural guarantee. (4) The rule 8 row now says there is no executable verification. (5) The metadata guard is scoped to live `@ResolveField()` handlers and is not claimed to be exhaustive. (6) RED/GREEN expectations are semantic, not test counts. (7) Task 1 is "implementation and executable tests", including the three production comments; Task 2 is the existing suites' traceability comments only. The embedded suite changed only in three comments; it was re-linted and re-run after the change (see Pre-validation). |
 | Tracking issue | [#106](https://github.com/rexescario-dev/clensy-platform/issues/106). Program [#81](https://github.com/rexescario-dev/clensy-platform/issues/81). Surfaced by #85 and #90. |
@@ -34,7 +35,7 @@
 - `git diff --stat main -- apps/api/src/schema.gql apps/web packages apps/api/src/migrations`
 - After the first M5 pass changed three comments in the embedded suite, the suite was re-extracted verbatim from this plan. It was re-linted (`eslint` on the file: clean), and re-run against `main` source (RED: only the metadata guard failed) and with Task 1's source edits applied (`tsc` clean; GREEN: all tests passed). The tree was then reverted.
 
-**Known baseline failure (not introduced here).** On `main` (`35c6118`), `pnpm --filter api test:e2e` already fails one test: `tenant-read-authorizers.e2e-spec.ts` › "accounts for every object-typed field", for `CurrentAdmin.tenantLabelOverrides`. #118 / PR #128 added that field without adding it to that suite's `CUSTOM_OBJECT_FIELDS` allowlist. At pre-validation the baseline was 437/438 tests passing, and 457/458 with this plan applied (all new tests pass). Those counts are a record, not acceptance criteria. Fixing that allowlist is outside the #106 spec. This plan does **not** change it. **M5 decides** whether to track it as a separate issue (recommended) or authorize it here as a one-line addition.
+**Known baseline failure (not introduced here).** On `main` (`35c6118`), `pnpm --filter api test:e2e` already fails one test: `tenant-read-authorizers.e2e-spec.ts` › "accounts for every object-typed field", for `CurrentAdmin.tenantLabelOverrides`. #118 / PR #128 added that field without adding it to that suite's `CUSTOM_OBJECT_FIELDS` allowlist. At pre-validation the baseline was 437/438 tests passing, and 457/458 with this plan applied (all new tests pass). Those counts are a record, not acceptance criteria. Fixing that allowlist is outside the #106 spec. This plan does **not** change it. M5 decided to track it separately as [#135](https://github.com/rexescario-dev/clensy-platform/issues/135).
 
 ## Global Constraints
 
