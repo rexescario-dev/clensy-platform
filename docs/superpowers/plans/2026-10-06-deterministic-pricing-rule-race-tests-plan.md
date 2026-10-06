@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Accepted |
+| M5 decision | **Accepted** — 2026-10-06, at `fed28bd`, by the owner, on the second pass, with no further revision. All three first-pass items (barrier lifecycle, interception contract, ME cleanup) were verified resolved, with MF/MG and the trap-guarded ME as evidence. Execution: native (inline). M6 MUST implement exactly the validated helper and test wiring in Task 1; it MUST NOT redesign the synchronization mechanism. |
 | Date | 2026-10-06 |
 | Tracking issue | [#138](https://github.com/rexescario-dev/clensy-platform/issues/138) |
 | M2 / M3 | **N/A** — owner decision, 2026-10-06, the same reasoning as #135. #138 adds no product or authorization semantics, no schema or API contract change, no production code and no architectural decision. It replaces a timing assumption in three existing e2e tests with synchronization. |
