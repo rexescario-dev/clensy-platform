@@ -786,3 +786,80 @@ Executed natively (inline), in plan order, with no rulings needed: no deviation 
   1. The guard reads method-level metadata only, so class-level `@UseGuards` / `@Roles` on a resolver that hosts a relation field would pass. None exist today.
   2. A resolver whose `@Resolver` type name does not resolve in the schema is skipped silently instead of failing. This does not occur today.
   3. The prototype walk reads `proto[key]`, which would invoke a getter on a future resolver. That would be a loud false failure, not a silent pass.
+
+### M7 — Approved for merge (2026-10-06)
+
+- **Subject:** PR [#136](https://github.com/rexescario-dev/clensy-platform/pull/136), head `f5626fd`, mergeable with `main` (`35c6118`). It carries the spec amendment, this Accepted plan and the M6 change set (process spec §2.8).
+- **Accepted specification:** `docs/superpowers/specs/2026-09-23-multi-tenant-architecture-design.md`, §4.2 relation-field authorization amendment (#106).
+- **Accepted implementation plan:** this document.
+- **M6 gate:** plan Accept `0103fa8` is the parent of the first implementation commit `392ec2c`.
+- **Plan tasks reviewed:**
+  - Task 1, the suite and removal of the relation declarations (`392ec2c`) ✓
+  - Task 2, traceability comments in the existing suites (`7dbab6b`) ✓
+
+  No reordering, no skipped task, no extras.
+- **Spec conformance:** §4.2 relation-field rules 1–7 and Required verification 1–7 ✓. Rule 8 has no executable verification, as the plan's traceability table states. Invariants 15–17 hold: no root `@Roles()` list changed, and the deleted constants were module-local. No new semantics.
+- **Scope:** `apps/api` only. The diff of `schema.gql`, `apps/web`, `packages` and migrations against `main` is empty.
+- **Verification evidence:**
+  - CI run [37350566758](https://github.com/rexescario-dev/clensy-platform/actions/runs/37350566758) on `f5626fd`: Lint, Test and Release gate all passed.
+  - The local RED/GREEN runs, the three characterization mutation runs and the full-e2e result (457/458; only the #135 baseline) are in the M6 record.
+- **Review basis:** an **independent fresh-agent review**. A reviewer that did not implement the change reviewed the whole branch (`35c6118..7dbab6b`) against the spec, this plan and its Review Focus, and re-ran the suite (20/20). The implementer wrote this record, citing that review.
+- **Blocking findings:** none.
+- **Non-blocking observations:** the three Minor test-hardening items in the M6 record. None of them changes current behavior or coverage. They may become a follow-up issue at the owner's discretion.
+- **Gate:** merge per human/project norms.
+
+### M8 — N/A (2026-10-06)
+
+The production change only deletes declarations and imports and rewords three comments. There's no duplication or complexity worth a behavior-preserving refactor. The three deferred minors would strengthen the metadata guard, which is new test behavior, not refactoring, so they're out of scope for M8.
+
+### M9 — Complete (2026-10-06)
+
+**Documentation scope:** `docs/README.md` (the #106 paragraph), `README.md` (the release-gate paragraph), the RFC's Tracking row, and this section.
+
+**Content updates:**
+- `docs/README.md`: "Open: relation-level role authorization" is rewritten as the shipped rule:
+  - the root operation authorizes relations, and a relation does not widen root access;
+  - the tenant predicate still applies to every relation;
+  - relations carry no relation-level guards or `@Roles()`;
+  - adding a relation is a policy review;
+  - the suite is linked.
+
+  The stale sentence "the interim rule stands" is removed; the RFC already records that rule as lifted by #92. Caused by spec §4.2 (#106) and Task 1.
+- `README.md` release-gate paragraph: "#106, still open" now points at the #106 suite. Caused by Task 1.
+- RFC Tracking row: the #106 entry links PR #136, and the "remains open" sentence now names the suite. Caused by the PR being opened.
+- This section. Caused by the M7–M9 gate outcomes.
+
+**Editorial changes:** none.
+
+**Unchanged:**
+- The older specs and plans that still describe relation `guards`, e.g. the nestjs-query GraphQL Reads spec §4.3. They are historical records, and RFC §8 (#106) records the constraint on them.
+- The role-aware typed URLs spec's mentions of #106. They are historical scope statements.
+
+**Verification:**
+- Links in the four touched or recorded files and under `docs/workflows/` resolve (scripted scan: 17 files, 0 broken).
+- No touched document still calls #106 open.
+- Status is consistent: the spec and its §4.2 amendment are Accepted, this plan is Accepted, and PR #136 is open with CI green.
+- Terminology follows spec §3 (*root operation*, *relation field*).
+
+### M10 — Accepted, workflow validated (2026-10-06)
+
+**Subject:** the installed workflow prompt library (`docs/workflows/`, generic 1.4.1 / claude 0.2.0), against `docs/workflows/specs/agent-workflow-design.md` §2.10. This slice ran it on #106 from M2 (a slice-local amendment) to M9.
+
+**Asset inventory:** unchanged, and the branch diff against `main` for `docs/workflows/` and `workflow.yaml` is empty. Nine prompts map to M2–M10, and all nine cite the governing contract. `conventions/` holds M1 and the reporting conventions. There are no orphan assets.
+
+**Checks:**
+- The slice-local amendment procedure was followed. The amendment was made in place, with its own Draft → Accepted lifecycle against #106, while the remainder stayed Accepted. It states its delta, and adds acceptance criterion 6.
+- §2.4 was honoured: amendment Accept `71d505e` is an ancestor of the M4 draft `4362f09`.
+- §2.5 was honoured: plan Accept `0103fa8` is the parent of the implementation commit `392ec2c`.
+- Both review gates recorded explicit outcomes. M3 accepted with one required revision applied. M5 returned seven required changes on the first pass, then accepted.
+- M6 step 3 was honoured: every characterization test has an uncommitted failing-mutation record.
+- M7 used an independent fresh-agent reviewer, and the record cites it.
+- Providers were honoured: GitHub for the issue, the follow-up issue #135, the branch and the PR (`workflow.providers`).
+- Slice Completion Reports were emitted at M6 and at M7–M9.
+- §2.8 was honoured: one PR (#136) carries the amendment, plan, implementation and docs.
+
+**Blocking findings:** none.
+
+**Non-blocking observations:**
+1. **A pre-existing red test surfaced only through local pre-validation.** CI's Test job doesn't run the full API e2e suite, so `tenant-read-authorizers` had been failing on `main` unnoticed since #128. Pre-validation (M4) caught it, and M5 routed it to #135 cleanly. Adding the e2e guard suites to CI would be a project decision, not a workflow change.
+2. **M5's first-pass return improved claim accuracy, not code.** All seven changes were wording and evidence-scoping, and none changed the approach. This is the M5 gate working as intended. No change to the workflow is suggested.
