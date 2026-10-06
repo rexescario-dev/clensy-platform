@@ -68,6 +68,10 @@ Every Catalog read and write uses the tenant of the logged-in user. That covers 
 - Plan (Accepted): [2026-09-28-catalog-tenant-isolation-plan.md](superpowers/plans/2026-09-28-catalog-tenant-isolation-plan.md)
 - Migrating an existing database: see "Database migrations" in the [root README](../README.md). The migration needs no duplicate pre-check: the global uniques it replaces already rule out duplicates within one tenant.
 
+**Concurrent pricing-rule races ([#138](https://github.com/rexescario-dev/clensy-platform/issues/138)).** `apps/api/test/catalog.service.e2e-spec.ts` proves that two concurrent `createPricingRule` calls for the same target end with one success and one `ConflictException`, and that only one rule remains open ([Laundry catalog foundation spec](superpowers/specs/2026-09-06-laundry-catalog-foundation-design.md) §4.4, §4.7). Since #138 these races are synchronized rather than timed. A test-only save barrier releases the inserts only after it has observed one of two states: both calls at the save, or one call blocked on the predecessor row lock the other holds. If `createPricingRule` changes how it saves a rule, the tests fail with a barrier error until the barrier is updated to match.
+
+- Plan (Accepted, #138): [2026-10-06-deterministic-pricing-rule-race-tests-plan.md](superpowers/plans/2026-10-06-deterministic-pricing-rule-race-tests-plan.md)
+
 ## Booking tenant isolation (#85)
 
 Shipped in this slice (PR [#98](https://github.com/rexescario-dev/clensy-platform/pull/98)). Booking is tenant-owned: a required `tenantId`, composite FKs keep a booking's customer, property, service and team (when set) in the booking's tenant, and `uq_booking_id_tenant` is the FK target #86 will use.
