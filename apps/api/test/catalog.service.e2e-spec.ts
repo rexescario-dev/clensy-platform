@@ -3,7 +3,7 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { AuditEventEntity } from '../src/platform/audit/infrastructure/persistence/audit-event.entity';
 import { AddOnsService } from '../src/modules/catalog/application/services/add-ons.service';
 import { PricingRulesService } from '../src/modules/catalog/application/services/pricing-rules.service';
@@ -481,6 +481,228 @@ describe('AddOnsService (real Postgres)', () => {
   });
 });
 
+// The concurrent `createPricingRule` tests below must prove the losing call
+// hits the open/active partial unique indexes and maps the violation to
+// `ConflictException`. That only happens if the loser's close step (3) runs
+// before the winner commits. Firing both calls in one tick does not
+// guarantee this: if one call commits before the other starts, the second
+// legitimately closes the first's row and both fulfill (#138). This barrier
+// replaces that timing assumption with synchronization. It pauses every
+// `PricingRuleEntity` save (step 5, the INSERT), and releases the paused
+// saves only once the named condition has been observed:
+//
+// - `both-at-save`: both calls have reached the save boundary while their
+//   transactions remain open. The first-ever-rule races use this: with no
+//   open row, neither close step takes a row lock.
+// - `other-blocked-on-close`: one call is paused at the save, still holding
+//   the row lock its close step took on the predecessor, and the other
+//   call's backend is waiting on that lock inside its own close step. The
+//   "extends an existing predecessor" race uses this: the blocked call
+//   cannot reach the save until the paused call commits, so `both-at-save`
+//   would never be met. The waiter is identified exactly: the one backend
+//   whose `pg_blocking_pids` contains the paused call's backend pid, whose
+//   `wait_event_type` is `Lock`, and whose current statement is the close
+//   step's `UPDATE "pricing_rule_entity" SET "effectiveTo"`.
+//
+// Interception contract: the barrier recognizes exactly the call shape
+// `createPricingRule` uses today, `manager.save(entity)` with a
+// `PricingRuleEntity` instance as the only argument. Any other `save` shape
+// that carries a `PricingRuleEntity` (a target plus an object, an array, an
+// options argument) fails the test at once instead of bypassing the
+// barrier. A step 5 that no longer goes through `save` at all never
+// arrives, so the condition is never observed and `restore` (or the
+// timeout) fails the test. If step 5 changes shape, update this barrier
+// rather than loosen it.
+//
+// Saves reaching the barrier after release pass straight through. If the
+// condition is not observed within `PRICING_RULE_SAVE_BARRIER_TIMEOUT_MS`,
+// every paused save is rejected (rolling its transaction back) and
+// `assertReleased` throws a diagnostic naming the condition, the arrivals
+// and the observed Postgres wait state. `restore` removes the spy, rejects
+// any save still paused, and resolves only once the polling loop has
+// settled, so nothing from the barrier outlives the test.
+type PricingRuleSaveBarrierCondition =
+  'both-at-save' | 'other-blocked-on-close';
+
+interface PricingRuleSaveBarrier {
+  assertReleased(): void;
+  restore(): Promise<void>;
+}
+
+// Below Jest's default 5 s test timeout, so a missed condition fails with
+// the barrier's diagnostic rather than a bare Jest timeout.
+const PRICING_RULE_SAVE_BARRIER_TIMEOUT_MS = 3000;
+const PRICING_RULE_SAVE_BARRIER_POLL_MS = 20;
+
+function carriesPricingRule(value: unknown): boolean {
+  return (
+    value === PricingRuleEntity ||
+    value === 'PricingRuleEntity' ||
+    value instanceof PricingRuleEntity ||
+    (Array.isArray(value) && value.some(carriesPricingRule))
+  );
+}
+
+function installPricingRuleSaveBarrier(
+  dataSource: DataSource,
+  condition: PricingRuleSaveBarrierCondition,
+): PricingRuleSaveBarrier {
+  const paused: {
+    pid: number;
+    reject: (error: Error) => void;
+    resolve: () => void;
+  }[] = [];
+  let arrivals = 0;
+  let failure: Error | undefined;
+  let released = false;
+  let stopped = false;
+
+  function fail(error: Error) {
+    failure ??= error;
+    paused.splice(0).forEach((p) => p.reject(failure!));
+  }
+
+  // Read off the descriptor, not `EntityManager.prototype.save`, so the
+  // original is captured as an explicitly `this`-taking function.
+  const originalSave = Object.getOwnPropertyDescriptor(
+    EntityManager.prototype,
+    'save',
+  )!.value as (this: EntityManager, ...args: unknown[]) => Promise<unknown>;
+  const saveSpy = jest
+    .spyOn(EntityManager.prototype, 'save')
+    .mockImplementation(async function (
+      this: EntityManager,
+      ...args: unknown[]
+    ) {
+      const isBarrierShape =
+        args.length === 1 && args[0] instanceof PricingRuleEntity;
+      if (!isBarrierShape && args.some(carriesPricingRule)) {
+        fail(
+          new Error(
+            'PricingRule save barrier: unsupported save call shape for ' +
+              'PricingRuleEntity; expected manager.save(entity) with one ' +
+              'PricingRuleEntity instance. Update the barrier to the new ' +
+              'shape.',
+          ),
+        );
+        throw failure!;
+      }
+      if (isBarrierShape) {
+        arrivals += 1;
+        if (!released) {
+          if (failure !== undefined) {
+            throw failure;
+          }
+          const [{ pid }] = await this.query<{ pid: number }[]>(
+            'SELECT pg_backend_pid() AS pid',
+          );
+          await new Promise<void>((resolve, reject) => {
+            if (failure !== undefined) {
+              reject(failure);
+              return;
+            }
+            paused.push({ pid, reject, resolve });
+          });
+        }
+      }
+      return originalSave.apply(this, args);
+    } as never);
+
+  async function blockedOnCloseWaiters(holderPid: number) {
+    return dataSource.query<
+      { pid: number; query: string; wait_event_type: string | null }[]
+    >(
+      `SELECT pid, wait_event_type, wait_event, query
+         FROM pg_stat_activity
+        WHERE $1 = ANY(pg_blocking_pids(pid))`,
+      [holderPid],
+    );
+  }
+
+  async function conditionMet(): Promise<boolean> {
+    if (condition === 'both-at-save') {
+      return paused.length === 2;
+    }
+    if (paused.length !== 1) {
+      return false;
+    }
+    const waiters = await blockedOnCloseWaiters(paused[0].pid);
+    return (
+      waiters.length === 1 &&
+      waiters[0].wait_event_type === 'Lock' &&
+      waiters[0].query.startsWith(
+        'UPDATE "pricing_rule_entity" SET "effectiveTo"',
+      )
+    );
+  }
+
+  async function describeWaitState(): Promise<string> {
+    const rows = await dataSource.query<unknown[]>(
+      `SELECT pid, state, wait_event_type, wait_event,
+              pg_blocking_pids(pid) AS blocked_by, left(query, 80) AS query
+         FROM pg_stat_activity
+        WHERE datname = current_database() AND pid <> pg_backend_pid()`,
+    );
+    return JSON.stringify(rows);
+  }
+
+  async function watch() {
+    const deadline = Date.now() + PRICING_RULE_SAVE_BARRIER_TIMEOUT_MS;
+    while (!stopped && failure === undefined) {
+      if (await conditionMet()) {
+        released = true;
+        paused.splice(0).forEach((p) => p.resolve());
+        return;
+      }
+      if (Date.now() >= deadline) {
+        fail(
+          new Error(
+            `PricingRule save barrier: condition '${condition}' not ` +
+              `observed within ${PRICING_RULE_SAVE_BARRIER_TIMEOUT_MS} ms; ` +
+              `arrivals=${arrivals}; paused pids=` +
+              `[${paused.map((p) => p.pid).join(', ')}]; ` +
+              `pg_stat_activity=${await describeWaitState()}`,
+          ),
+        );
+        return;
+      }
+      await new Promise((resolve) =>
+        setTimeout(resolve, PRICING_RULE_SAVE_BARRIER_POLL_MS),
+      );
+    }
+  }
+  const watching = watch().catch((error: unknown) => {
+    fail(error instanceof Error ? error : new Error(String(error)));
+  });
+
+  return {
+    assertReleased() {
+      if (failure !== undefined) {
+        throw failure;
+      }
+      if (!released) {
+        throw new Error(
+          `PricingRule save barrier: condition '${condition}' was never ` +
+            `observed; arrivals=${arrivals}`,
+        );
+      }
+    },
+    async restore() {
+      stopped = true;
+      saveSpy.mockRestore();
+      if (!released) {
+        fail(
+          new Error(
+            `PricingRule save barrier: restored before condition ` +
+              `'${condition}' was observed; arrivals=${arrivals}`,
+          ),
+        );
+      }
+      await watching;
+    },
+  };
+}
+
 // `PricingRule` has a real FK relationship to `Service` (spec §4.1, §4.7) —
 // unlike `AddOn`. Own `DataSource`/lock (see the top-of-file comment on
 // `createTestDataSource` for why each block does this independently), real
@@ -666,34 +888,12 @@ describe('PricingRulesService (real Postgres)', () => {
     // sole active rule), but only one insert can win. No mocked unit test can
     // produce this signal; it requires real concurrent Postgres transactions.
     //
-    // The two-connection pre-warm below is load-bearing, not decoration:
-    // without it, this test is flaky toward the WRONG side — investigated at
-    // length while writing this task (raw SQL and a delayed-insert probe both
-    // independently confirmed the partial index itself always correctly
-    // blocks/rejects a genuine conflicting concurrent insert). The failure
-    // mode without pre-warming is connection-acquisition asymmetry, not an
-    // index defect: `Promise.allSettled` constructs both `createPricingRule`
-    // promises in the same tick, but if the pool has zero idle connections at
-    // that instant, whichever call's `dataSource.createQueryRunner().connect()`
-    // resolves first gets a head start large enough (a fresh TCP handshake
-    // vs. an already-idle connection) that it completes its entire
-    // transaction — deactivate, insert, COMMIT — before the second call's
-    // deactivate step even runs, which then correctly sees the first call's
-    // now-committed row and cleanly deactivates it before inserting its own:
-    // a legitimate, safe, but non-racing outcome (both fulfill, exactly one
-    // active row) that doesn't exercise the index's conflict path this test
-    // exists to prove. Explicitly warming two idle pool connections
-    // immediately before firing the race removes that asymmetry so both
-    // calls' deactivate/insert steps genuinely overlap.
+    // Firing both calls in one tick does not make them overlap (#138): see
+    // `installPricingRuleSaveBarrier` for the synchronization that does.
     it('two concurrent createPricingRule calls for the same service: exactly one fulfills, one rejects with ConflictException, and exactly one row ends up active', async () => {
       const svc = await seedService('Standard Clean');
 
-      const warmupA = dataSource.createQueryRunner();
-      const warmupB = dataSource.createQueryRunner();
-      await Promise.all([warmupA.connect(), warmupB.connect()]);
-      await Promise.all([warmupA.query('SELECT 1'), warmupB.query('SELECT 1')]);
-      await Promise.all([warmupA.release(), warmupB.release()]);
-
+      const barrier = installPricingRuleSaveBarrier(dataSource, 'both-at-save');
       const [resultA, resultB] = await Promise.allSettled([
         service.createPricingRule({
           actorId: 'actor-1',
@@ -707,7 +907,8 @@ describe('PricingRulesService (real Postgres)', () => {
           tenantId: TENANT_ID,
           priceMinorUnits: 6000,
         }),
-      ]);
+      ]).finally(() => barrier.restore());
+      barrier.assertReleased();
 
       const fulfilled = [resultA, resultB].filter(
         (r) => r.status === 'fulfilled',
@@ -752,14 +953,12 @@ describe('PricingRulesService (real Postgres)', () => {
         priceMinorUnits: 5000,
       });
 
-      const warmupA = dataSource.createQueryRunner();
-      const warmupB = dataSource.createQueryRunner();
-      await Promise.all([warmupA.connect(), warmupB.connect()]);
-      await Promise.all([warmupA.query('SELECT 1'), warmupB.query('SELECT 1')]);
-      await Promise.all([warmupA.release(), warmupB.release()]);
-
       const effFromA = new Date(Date.now() + 60 * 60 * 1000);
       const effFromB = new Date(Date.now() + 2 * 60 * 60 * 1000);
+      const barrier = installPricingRuleSaveBarrier(
+        dataSource,
+        'other-blocked-on-close',
+      );
       const [resultA, resultB] = await Promise.allSettled([
         service.createPricingRule({
           actorId: 'actor-1',
@@ -775,16 +974,19 @@ describe('PricingRulesService (real Postgres)', () => {
           effectiveFrom: effFromB,
           priceMinorUnits: 7000,
         }),
-      ]);
+      ]).finally(() => barrier.restore());
+      barrier.assertReleased();
 
       const fulfilled = [resultA, resultB].filter(
         (r): r is PromiseFulfilledResult<PricingRuleEntity> =>
           r.status === 'fulfilled',
       );
       expect(fulfilled).toHaveLength(1);
-      expect(
-        [resultA, resultB].filter((r) => r.status === 'rejected'),
-      ).toHaveLength(1);
+      const rejected = [resultA, resultB].filter(
+        (r): r is PromiseRejectedResult => r.status === 'rejected',
+      );
+      expect(rejected).toHaveLength(1);
+      expect(rejected[0].reason).toBeInstanceOf(ConflictException);
 
       const allRows = await dataSource
         .getRepository(PricingRuleEntity)
@@ -1024,12 +1226,7 @@ describe('PricingRulesService (real Postgres)', () => {
     it('two concurrent createPricingRule calls for the same addOnId: exactly one fulfills, one rejects, exactly one open row remains', async () => {
       const addOn = await seedAddOn('Same-Day Turnaround');
 
-      const warmupA = dataSource.createQueryRunner();
-      const warmupB = dataSource.createQueryRunner();
-      await Promise.all([warmupA.connect(), warmupB.connect()]);
-      await Promise.all([warmupA.query('SELECT 1'), warmupB.query('SELECT 1')]);
-      await Promise.all([warmupA.release(), warmupB.release()]);
-
+      const barrier = installPricingRuleSaveBarrier(dataSource, 'both-at-save');
       const [resultA, resultB] = await Promise.allSettled([
         service.createPricingRule({
           actorId: 'actor-1',
@@ -1043,15 +1240,18 @@ describe('PricingRulesService (real Postgres)', () => {
           tenantId: TENANT_ID,
           priceMinorUnits: 1200,
         }),
-      ]);
+      ]).finally(() => barrier.restore());
+      barrier.assertReleased();
 
       const fulfilled = [resultA, resultB].filter(
         (r) => r.status === 'fulfilled',
       );
       expect(fulfilled).toHaveLength(1);
-      expect(
-        [resultA, resultB].filter((r) => r.status === 'rejected'),
-      ).toHaveLength(1);
+      const rejected = [resultA, resultB].filter(
+        (r): r is PromiseRejectedResult => r.status === 'rejected',
+      );
+      expect(rejected).toHaveLength(1);
+      expect(rejected[0].reason).toBeInstanceOf(ConflictException);
 
       const openRows = await dataSource
         .getRepository(PricingRuleEntity)
