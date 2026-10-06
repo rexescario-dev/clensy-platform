@@ -9,6 +9,7 @@
 | Tracking issue | [#138](https://github.com/rexescario-dev/clensy-platform/issues/138) |
 | M2 / M3 | **N/A** — owner decision, 2026-10-06, the same reasoning as #135. #138 adds no product or authorization semantics, no schema or API contract change, no production code and no architectural decision. It replaces a timing assumption in three existing e2e tests with synchronization. |
 | Brainstorm approval | 2026-10-06, by the owner. Approved: the in-test barrier at the `PricingRuleEntity` save, one helper kept in the test file, both alternatives rejected (DB trigger with advisory lock; raw SQL race), M4 → M5 → M6–M10, one PR. Conditions, each carried into this plan: (a) the barrier's synchronization semantics are explicit, so it cannot become a timing-based test again (Constraints 1–4); (b) the predecessor case names exactly which backend is expected to wait and the query that identifies it (Constraint 3); (c) the timeout failure names the participant count, the expected condition and the observed Postgres wait state (Constraint 5); (d) the index mutation is fully temporary (Task 2, ME); (e) a passing loop is supporting evidence only (Acceptance). |
+| M5 history | First pass (2026-10-06, owner): **request changes, no redesign**. Three items, each resolved in this revision and re-validated:<br>**(1) Barrier lifecycle:** `restore()` now returns `Promise<void>`. It removes the spy, rejects any save still paused, and resolves only after the polling loop has settled (`await watching`). `.finally(() => barrier.restore())` awaits it. Constraint 9.<br>**(2) Interception contract:** pinned to the exact call shape `createPricingRule` uses today, `manager.save(entity)` with one `PricingRuleEntity` instance (`pricing-rules.service.ts`, step 5). Any other `save` shape that carries a `PricingRuleEntity` fails the test at once. A step 5 that bypasses `save` never arrives, so `restore` (or the timeout) fails it. Constraint 8. New mutations MF and MG prove both paths.<br>**(3) ME cleanup:** ME is one subshell with an `EXIT` trap that drops the throwaway database with `DROP DATABASE IF EXISTS … WITH (FORCE)` however the block ends. Validated both normally and aborted under `set -e -o pipefail` at the expected-failing run.<br>**Also applied:** the `both-at-save` comment now states the invariant as "both calls have reached the save boundary while their transactions remain open". |
 | Scope | One file: `apps/api/test/catalog.service.e2e-spec.ts`. No change to `apps/api/src`, migrations, `schema.gql`, `apps/web`, `packages/*`, CI or other test files. No change to application behavior. |
 | Relies on (Accepted) | [Laundry Architecture & Catalog Foundation](../specs/2026-09-06-laundry-catalog-foundation-design.md), Status **Accepted**. §4.4 step 3 (the close step's row-lock and read-committed re-check; a raced-out call closes zero rows and its insert collides at step 5), §4.4 "insert races" paragraph (the loser's `23505` becomes `ConflictException`), and §4.7 (`uq_pricing_rule_open_service`, `uq_pricing_rule_open_addon`, `uq_pricing_rule_active_service`). Used as is. The three tests verify this behavior. This plan changes how they force it, not what they verify. |
 | Authority | Where this plan and the Accepted spec disagree, the **spec wins** and this plan must be revised. Helper, type and constant names, comment wording, condition names and task order are planning decisions, not product semantics. |
@@ -29,7 +30,7 @@ The tests fire both calls with `Promise.allSettled` and pre-warm two pool connec
 ## Global Constraints
 
 1. **Release only on an observed condition.** The barrier SHALL NOT release a paused save because time has passed. It releases only when its declared condition is observed. The timeout path rejects the paused saves and fails the test; it never lets them proceed.
-2. **`both-at-save`** (first-ever service race; addOn race): release when exactly two `PricingRuleEntity` saves are paused. At that point both close steps have run and neither call has committed, so whatever order the INSERTs then run in, the second one collides on the open/active partial unique index (spec §4.4 step 3, §4.7).
+2. **`both-at-save`** (first-ever service race; addOn race): release when exactly two `PricingRuleEntity` saves are paused. At that point both calls have reached the save boundary while their transactions remain open: both close steps have run and neither call has committed, so whatever order the INSERTs then run in, the second one collides on the open/active partial unique index (spec §4.4 step 3, §4.7).
 3. **`other-blocked-on-close`** (predecessor race): release when exactly one save is paused (call P, backend pid `p`, captured inside P's transaction with `SELECT pg_backend_pid()`) **and** exactly one backend is returned by
 
    ```sql
@@ -41,9 +42,11 @@ The tests fire both calls with `Promise.allSettled` and pre-warm two pool connec
    and that backend has `wait_event_type = 'Lock'` and a current `query` starting with `UPDATE "pricing_rule_entity" SET "effectiveTo"`. That backend is the other call's transaction, blocked in its close step on the predecessor row lock P took in its own close step. After P commits, the waiter's predicate re-check matches zero rows, so it closes nothing, and its INSERT collides with P's open row (spec §4.4 step 3). An unrelated lock, another blocker or another statement does not satisfy the condition. Two paused saves never satisfy it either: that would mean no close step blocked.
 4. **The condition is declared per test, not inferred.** Each test names its condition. The helper does not accept "either condition".
 5. **Diagnostic timeout.** `PRICING_RULE_SAVE_BARRIER_TIMEOUT_MS = 3000`, below Jest's default 5 s test timeout. Polling interval: 20 ms. The timeout error names the condition, the arrival count, the paused backend pids and a `pg_stat_activity` snapshot of the database, excluding the polling connection. The snapshot has `pid`, `state`, `wait_event_type`, `wait_event`, `pg_blocking_pids` and the first 80 characters of `query`.
-6. **No production change.** Nothing under `apps/api/src` changes. The spy is installed only around each race and is restored in `.finally`, so no other test, and no seed or read in a race test, sees it. Saves of other entities, and saves that arrive after release, pass straight through.
+6. **No production change.** Nothing under `apps/api/src` changes (Task 2's MF and MG mutate it temporarily and revert). The spy is installed only around each race and is restored in `.finally`, so no other test, and no seed or read in a race test, sees it. Saves of other entities, and saves that arrive after release, pass straight through.
 7. **Assertions.** Every existing assertion stays. The predecessor and addOn races also assert that the rejection is a `ConflictException`, which the first-ever service race already does. With the barrier, this is what proves the conflict path was taken, not some other rejection. These are **characterization tests**: they pin already-correct production behavior (spec §4.4, §4.7). No production code is expected to change to make them pass.
-8. The helper stays in `catalog.service.e2e-spec.ts`. It is not promoted to `test/helpers/` unless another suite needs it (out of scope).
+8. **Interception contract.** The barrier recognizes exactly the call shape `createPricingRule` uses today: `manager.save(entity)` with one `PricingRuleEntity` instance as the only argument (`pricing-rules.service.ts`, step 5, `await manager.save(entity);`). Any other `save` call that carries a `PricingRuleEntity` (the class or its name as a target, an instance as a later argument, or an array) fails the test at once with `unsupported save call shape`, instead of bypassing the barrier. A step 5 that stops calling `save`, for example `insert`, never arrives: the condition is never observed, and `restore` (or the timeout) fails the test. If step 5's shape changes, the barrier is updated to the new shape, never loosened.
+9. **Lifecycle.** `restore(): Promise<void>` removes the spy, rejects any save still paused (`restored before condition … was observed`), and resolves only once the polling loop has settled. Each test awaits it through `.finally(() => barrier.restore())` before `assertReleased()`. No spy and no polling task outlives the test.
+10. The helper stays in `catalog.service.e2e-spec.ts`. It is not promoted to `test/helpers/` unless another suite needs it (out of scope).
 
 ## Review Focus
 
@@ -52,6 +55,7 @@ The tests fire both calls with `Promise.allSettled` and pre-warm two pool connec
 3. **Spy leaking into later tests.** Expected: restored in `.finally` even if the race throws. Pinned by MA/MB: the other tests in the same run still pass after a barrier failure.
 4. **Non-overlapping schedule (the CI failure).** Expected: the assertions catch it. Pinned by MC, which forces the sequential schedule and reproduces `Expected length: 1 / Received length: 2`.
 5. **The barrier masking a broken index.** Expected: the tests fail if the indexes are gone. Pinned by ME.
+6. **Step 5's call shape changes.** Expected: the tests fail loudly, never silently lose synchronization. Pinned by MF (`save(PricingRuleEntity, entity)` fails with `unsupported save call shape`) and MG (`insert` fails with `restored before condition … arrivals=0`).
 
 ---
 
@@ -88,9 +92,9 @@ import { DataSource, EntityManager } from 'typeorm';
 // `PricingRuleEntity` save (step 5, the INSERT), and releases the paused
 // saves only once the named condition has been observed:
 //
-// - `both-at-save`: both calls are paused at the save, so both close steps
-//   have already run and neither call has committed. The first-ever-rule
-//   races use this: with no open row, neither close step takes a row lock.
+// - `both-at-save`: both calls have reached the save boundary while their
+//   transactions remain open. The first-ever-rule races use this: with no
+//   open row, neither close step takes a row lock.
 // - `other-blocked-on-close`: one call is paused at the save, still holding
 //   the row lock its close step took on the predecessor, and the other
 //   call's backend is waiting on that lock inside its own close step. The
@@ -101,23 +105,44 @@ import { DataSource, EntityManager } from 'typeorm';
 //   `wait_event_type` is `Lock`, and whose current statement is the close
 //   step's `UPDATE "pricing_rule_entity" SET "effectiveTo"`.
 //
+// Interception contract: the barrier recognizes exactly the call shape
+// `createPricingRule` uses today, `manager.save(entity)` with a
+// `PricingRuleEntity` instance as the only argument. Any other `save` shape
+// that carries a `PricingRuleEntity` (a target plus an object, an array, an
+// options argument) fails the test at once instead of bypassing the
+// barrier. A step 5 that no longer goes through `save` at all never
+// arrives, so the condition is never observed and `restore` (or the
+// timeout) fails the test. If step 5 changes shape, update this barrier
+// rather than loosen it.
+//
 // Saves reaching the barrier after release pass straight through. If the
 // condition is not observed within `PRICING_RULE_SAVE_BARRIER_TIMEOUT_MS`,
 // every paused save is rejected (rolling its transaction back) and
 // `assertReleased` throws a diagnostic naming the condition, the arrivals
-// and the observed Postgres wait state.
+// and the observed Postgres wait state. `restore` removes the spy, rejects
+// any save still paused, and resolves only once the polling loop has
+// settled, so nothing from the barrier outlives the test.
 type PricingRuleSaveBarrierCondition =
   'both-at-save' | 'other-blocked-on-close';
 
 interface PricingRuleSaveBarrier {
   assertReleased(): void;
-  restore(): void;
+  restore(): Promise<void>;
 }
 
 // Below Jest's default 5 s test timeout, so a missed condition fails with
 // the barrier's diagnostic rather than a bare Jest timeout.
 const PRICING_RULE_SAVE_BARRIER_TIMEOUT_MS = 3000;
 const PRICING_RULE_SAVE_BARRIER_POLL_MS = 20;
+
+function carriesPricingRule(value: unknown): boolean {
+  return (
+    value === PricingRuleEntity ||
+    value === 'PricingRuleEntity' ||
+    value instanceof PricingRuleEntity ||
+    (Array.isArray(value) && value.some(carriesPricingRule))
+  );
+}
 
 function installPricingRuleSaveBarrier(
   dataSource: DataSource,
@@ -133,6 +158,11 @@ function installPricingRuleSaveBarrier(
   let released = false;
   let stopped = false;
 
+  function fail(error: Error) {
+    failure ??= error;
+    paused.splice(0).forEach((p) => p.reject(failure!));
+  }
+
   // Read off the descriptor, not `EntityManager.prototype.save`, so the
   // original is captured as an explicitly `this`-taking function.
   const originalSave = Object.getOwnPropertyDescriptor(
@@ -145,13 +175,33 @@ function installPricingRuleSaveBarrier(
       this: EntityManager,
       ...args: unknown[]
     ) {
-      if (args[0] instanceof PricingRuleEntity) {
+      const isBarrierShape =
+        args.length === 1 && args[0] instanceof PricingRuleEntity;
+      if (!isBarrierShape && args.some(carriesPricingRule)) {
+        fail(
+          new Error(
+            'PricingRule save barrier: unsupported save call shape for ' +
+              'PricingRuleEntity; expected manager.save(entity) with one ' +
+              'PricingRuleEntity instance. Update the barrier to the new ' +
+              'shape.',
+          ),
+        );
+        throw failure!;
+      }
+      if (isBarrierShape) {
         arrivals += 1;
-        if (!released && failure === undefined) {
+        if (!released) {
+          if (failure !== undefined) {
+            throw failure;
+          }
           const [{ pid }] = await this.query<{ pid: number }[]>(
             'SELECT pg_backend_pid() AS pid',
           );
           await new Promise<void>((resolve, reject) => {
+            if (failure !== undefined) {
+              reject(failure);
+              return;
+            }
             paused.push({ pid, reject, resolve });
           });
         }
@@ -199,21 +249,22 @@ function installPricingRuleSaveBarrier(
 
   async function watch() {
     const deadline = Date.now() + PRICING_RULE_SAVE_BARRIER_TIMEOUT_MS;
-    while (!stopped) {
+    while (!stopped && failure === undefined) {
       if (await conditionMet()) {
         released = true;
         paused.splice(0).forEach((p) => p.resolve());
         return;
       }
       if (Date.now() >= deadline) {
-        failure = new Error(
-          `PricingRule save barrier: condition '${condition}' not observed ` +
-            `within ${PRICING_RULE_SAVE_BARRIER_TIMEOUT_MS} ms; ` +
-            `arrivals=${arrivals}; paused pids=` +
-            `[${paused.map((p) => p.pid).join(', ')}]; ` +
-            `pg_stat_activity=${await describeWaitState()}`,
+        fail(
+          new Error(
+            `PricingRule save barrier: condition '${condition}' not ` +
+              `observed within ${PRICING_RULE_SAVE_BARRIER_TIMEOUT_MS} ms; ` +
+              `arrivals=${arrivals}; paused pids=` +
+              `[${paused.map((p) => p.pid).join(', ')}]; ` +
+              `pg_stat_activity=${await describeWaitState()}`,
+          ),
         );
-        paused.splice(0).forEach((p) => p.reject(failure!));
         return;
       }
       await new Promise((resolve) =>
@@ -221,9 +272,8 @@ function installPricingRuleSaveBarrier(
       );
     }
   }
-  void watch().catch((error: unknown) => {
-    failure = error instanceof Error ? error : new Error(String(error));
-    paused.splice(0).forEach((p) => p.reject(failure!));
+  const watching = watch().catch((error: unknown) => {
+    fail(error instanceof Error ? error : new Error(String(error)));
   });
 
   return {
@@ -238,9 +288,18 @@ function installPricingRuleSaveBarrier(
         );
       }
     },
-    restore() {
+    async restore() {
       stopped = true;
       saveSpy.mockRestore();
+      if (!released) {
+        fail(
+          new Error(
+            `PricingRule save barrier: restored before condition ` +
+              `'${condition}' was observed; arrivals=${arrivals}`,
+          ),
+        );
+      }
+      await watching;
     },
   };
 }
@@ -290,6 +349,8 @@ to
       ]).finally(() => barrier.restore());
       barrier.assertReleased();
 ```
+
+`.finally` awaits the promise `restore()` returns, so the spy is removed and the polling loop has settled before `assertReleased()` runs.
 
 In the predecessor race, the barrier line goes after the `effFromA`/`effFromB` declarations, immediately before `const [resultA, resultB]`.
 
@@ -357,26 +418,41 @@ Run: `cd apps/api && npx jest --config ./test/jest-e2e.json catalog.service -t "
 Expected: `Tests: 1 failed, 40 skipped`, failing at `expect(fulfilled).toHaveLength(1)` with `Expected length: 1 / Received length: 2`. This is the #138 failure, reproduced deterministically. Revert.
 
 - [ ] **MD — barrier disabled (informational).** Replace each of the three `installPricingRuleSaveBarrier(…)` calls with `{ assertReleased() {}, restore() {} }`. Run the three-race command 20 times and count passes.
-Expected: most runs fail. Pre-validation: 0 of 20 passed. This is supporting evidence that the barrier, not luck, makes the tests pass. It is not an acceptance criterion. Revert.
+Expected: most runs fail. Pre-validation: 0 of 20 passed on the first pass and 2 of 20 on the revalidation. This is supporting evidence that the barrier, not luck, makes the tests pass. It is not an acceptance criterion. Revert.
 
-- [ ] **ME — index protection removed, in a throwaway database.** The dev database `clensy` is never mutated.
+- [ ] **ME — index protection removed, in a throwaway database.** The dev database `clensy` is never mutated. Run this block from the repository root with `bash`. The subshell's `EXIT` trap drops the throwaway database however the block ends: after the expected failure of the mutated run, or if any command aborts, including under `set -e`.
 
 ```bash
-P="docker exec clensy-platform-postgres-1 psql -U clensy -v ON_ERROR_STOP=1 -qtAc"
-$P "CREATE DATABASE clensy_mut138" -d postgres
-(cd apps/api && DB_NAME=clensy_mut138 pnpm migration:run)
-(cd apps/api && DB_NAME=clensy_mut138 npx jest --config ./test/jest-e2e.json catalog.service -t "concurrent createPricingRule")   # baseline
-docker exec clensy-platform-postgres-1 psql -U clensy -d clensy_mut138 -v ON_ERROR_STOP=1 -qtAc 'DROP INDEX "uq_pricing_rule_open_service"; DROP INDEX "uq_pricing_rule_active_service"; DROP INDEX "uq_pricing_rule_open_addon";'
-(cd apps/api && DB_NAME=clensy_mut138 npx jest --config ./test/jest-e2e.json catalog.service -t "concurrent createPricingRule")   # mutated
-$P "DROP DATABASE clensy_mut138" -d postgres
-$P "SELECT count(*) FROM pg_database WHERE datname='clensy_mut138'" -d postgres
-docker exec clensy-platform-postgres-1 psql -U clensy -d clensy -qtAc "SELECT count(*) FROM pg_indexes WHERE indexname IN ('uq_pricing_rule_open_service','uq_pricing_rule_active_service','uq_pricing_rule_open_addon')"
+(
+  P="docker exec clensy-platform-postgres-1 psql -U clensy -d postgres -v ON_ERROR_STOP=1 -qtAc"
+  M="docker exec clensy-platform-postgres-1 psql -U clensy -d clensy_mut138 -v ON_ERROR_STOP=1 -qtAc"
+  trap '$P "DROP DATABASE IF EXISTS clensy_mut138 WITH (FORCE)"' EXIT
+  $P "DROP DATABASE IF EXISTS clensy_mut138 WITH (FORCE)"
+  $P "CREATE DATABASE clensy_mut138"
+  cd apps/api
+  DB_NAME=clensy_mut138 pnpm migration:run > /dev/null
+  echo "-- baseline"
+  DB_NAME=clensy_mut138 npx jest --config ./test/jest-e2e.json catalog.service -t "concurrent createPricingRule" 2>&1 | grep -E "^Tests:"
+  $M 'DROP INDEX "uq_pricing_rule_open_service"; DROP INDEX "uq_pricing_rule_active_service"; DROP INDEX "uq_pricing_rule_open_addon";'
+  echo "-- mutated"
+  DB_NAME=clensy_mut138 npx jest --config ./test/jest-e2e.json catalog.service -t "concurrent createPricingRule" 2>&1 | grep -E "^Tests:|Expected length|Received length"
+)
+# Verification, after the trap has run:
+docker exec clensy-platform-postgres-1 psql -U clensy -d postgres -qtAc "SELECT count(*) FROM pg_database WHERE datname = 'clensy_mut138'"
+docker exec clensy-platform-postgres-1 psql -U clensy -d clensy -qtAc "SELECT count(*) FROM pg_indexes WHERE indexname IN ('uq_pricing_rule_open_service', 'uq_pricing_rule_active_service', 'uq_pricing_rule_open_addon')"
 ```
 
 Expected:
 - baseline: `Tests: 38 skipped, 3 passed`;
 - mutated: `Tests: 3 failed, 38 skipped`, each with `Expected length: 1 / Received length: 2`. The barrier still releases, so the tests pass only because the indexes reject the loser;
 - the throwaway-database count prints `0`, and the dev-database index count prints `3`.
+
+- [ ] **MF — step 5 call shape changed.** In `apps/api/src/modules/catalog/application/services/pricing-rules.service.ts`, change `          await manager.save(entity);` to `          await manager.save(PricingRuleEntity, entity);`.
+Run: `cd apps/api && npx jest --config ./test/jest-e2e.json catalog.service -t "concurrent createPricingRule"`
+Expected: `Tests: 3 failed, 38 skipped`, each failing with `PricingRule save barrier: unsupported save call shape for PricingRuleEntity; expected manager.save(entity) with one PricingRuleEntity instance. Update the barrier to the new shape.` Revert with `git checkout -- apps/api/src/modules/catalog/application/services/pricing-rules.service.ts`.
+
+- [ ] **MG — step 5 bypasses `save`.** In the same file, change `          await manager.save(entity);` to `          await manager.insert(PricingRuleEntity, entity);`. Run the same command.
+Expected: `Tests: 3 failed, 38 skipped`. The two `both-at-save` races fail with `PricingRule save barrier: restored before condition 'both-at-save' was observed; arrivals=0`, and the predecessor race with the same message for `'other-blocked-on-close'`. Revert the same way. `git status --short` must then show no change under `apps/api/src`.
 
 ### Task 3: Suites, PR and CI
 
@@ -404,7 +480,7 @@ Expected: green. If it is red on this file, M6 stops and returns to M4/M5 with t
 
 Primary, in this order:
 1. Constraints 1–5 hold in the code as written in Task 1 Step 2. No release path exists except an observed condition.
-2. Mutations MA, MB, MC and ME produce exactly the Expected results.
+2. Mutations MA, MB, MC, ME, MF and MG produce exactly the Expected results, and ME's throwaway database is gone afterwards.
 
 Supporting, not sufficient on its own: the 50-run loop, the full and CI-scoped suites, the PR's **API e2e** check and the post-merge `main` run.
 
@@ -417,7 +493,12 @@ Supporting, not sufficient on its own: the 50-run loop, the full and CI-scoped s
 
 ## Pre-validation (full)
 
-Before M5, on 2026-10-06, every edit in Task 1 was applied verbatim to a working tree at `7f93ffb`, then reverted. Every command named by an `Expected:` line in Tasks 1–3 ran with the stated result: the Step 7 static checks, the Step 8 runs, MA–ME, the 50-run loop, the full and CI-scoped e2e suites, and lint. Exceptions: the Task 1 Step 9 commit and the Task 3 Steps 3–4 push, PR, CI and post-merge checks, which cannot run before M6. ME ran in a throwaway `clensy_mut138` database, which was dropped afterwards; the dev database kept all three indexes. MD's informational count was 0 of 20 with the final assertions (3 of 20 before the Step 6 `ConflictException` assertions were added).
+Before M5, on 2026-10-06, every edit in Task 1 was applied verbatim to a working tree at `7f93ffb`, then reverted. After the M5 first pass, the revised Task 1 was applied again and every check re-ran with the stated results:
+- the Step 7 static checks and the Step 8 runs;
+- MA–MG, including the ME block exactly as written, run once normally and once with the subshell under `set -e -o pipefail`, aborting at the expected-failing mutated run (the trap dropped the database both times, and the dev database kept all three indexes);
+- the 50-run loop, the full and CI-scoped e2e suites, lint and `tsc`.
+
+Not run, because they cannot run before M6: the Task 1 Step 9 commit and the Task 3 Steps 3–4 push, PR, CI and post-merge checks. MD is informational: 0 of 20 runs passed on the first pass and 2 of 20 on the revalidation (3 of 20 before Step 6's `ConflictException` assertions existed).
 
 ## Gate outcomes
 
