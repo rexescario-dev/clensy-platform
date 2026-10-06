@@ -2,13 +2,13 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Accepted |
 | Date | 2026-10-06 |
 | Document kind | Process specification |
 | Tracking issue | [#140](https://github.com/rexescario-dev/clensy-platform/issues/140) — follow-on from [#135](https://github.com/rexescario-dev/clensy-platform/issues/135), which created the **API e2e** job and deferred making it required, and [#138](https://github.com/rexescario-dev/clensy-platform/issues/138), which made the job's only known flaky test deterministic. |
 | Depends on | No Accepted specification. **Relies upon**, unchanged: the four CI jobs in `.github/workflows/ci.yml` as created by [the two-tenant release gate plan](../plans/2026-10-02-two-tenant-release-gate-plan.md) (#92, `Release gate`) and [the tenant-read sweep and guard hardening plan](../plans/2026-10-06-tenant-read-sweep-and-guard-hardening-plan.md) (#135, `API e2e`). This spec **constrains** them: their job names become a contract (§5 invariant 3). |
 | Followed by | None. |
-| M3 decision | Pending. |
+| M3 decision | **Accepted** — 2026-10-06, at `c0b918f`, by the owner, on the first pass, with no revision. The owner's design-review conditions (verify the `pull_request` bypass semantics and the effective-rules endpoint rather than rely on UI wording; state the no-direct-push invariant directly; V4 from a disposable local commit; check for ruleset name collisions; allow only a comment edit in `ci.yml`) were applied in the Draft before acceptance. M4 implements it mechanically and MUST keep: one active ruleset on `refs/heads/main`; the four checks pinned to `integration_id` 15368; strict policy; the Admin role as the only bypass actor, `pull_request` mode; no CI behavior change; GitHub as the single source of truth; and the ruleset POST behind an explicit owner confirmation at the moment it runs. |
 
 ## 1. Primary question and thesis
 
