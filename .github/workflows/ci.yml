@@ -93,3 +93,51 @@ jobs:
       - run: pnpm --filter api migration:run
 
       - run: pnpm --filter api test:e2e:release-gate
+
+  api-e2e:
+    # #135: every API e2e suite except the release gate, which keeps its own
+    # job above. The #90 / #106 guard suites run here, so a field added
+    # without being classified fails CI instead of only local runs. Not a
+    # required status check: `main` has no branch protection, and making
+    # this check required is a separate decision.
+    name: API e2e
+    runs-on: ubuntu-latest
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USERNAME: clensy
+      DB_PASSWORD: clensy_ci
+      DB_NAME: clensy
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: clensy
+          POSTGRES_PASSWORD: clensy_ci
+          POSTGRES_DB: clensy
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U clensy -d clensy"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # `apps/api/public/graphiql/` is gitignored, so a fresh checkout lacks
+      # it, and app.e2e-spec.ts serves those files (#135).
+      - run: pnpm --filter api build:graphiql
+
+      - run: pnpm --filter api migration:run
+
+      - run: pnpm --filter api test:e2e --testPathIgnorePatterns two-tenant-release-gate
