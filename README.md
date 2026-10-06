@@ -185,6 +185,8 @@ pnpm db:seed  # insert/refresh booking fixtures — see "Seeding fake data" abov
 
 Package-specific commands can be run directly, e.g. `pnpm --filter api test:e2e`, `pnpm --filter api test:e2e:release-gate`, `pnpm --filter api migration:generate ...` (see "Database migrations" above).
 
+CI's **API e2e** job ([#135](https://github.com/rexescario-dev/clensy-platform/issues/135)) runs every API e2e suite except the release gate, which has its own job (below). It runs on every pull request and push to `main`, against a fresh Postgres service. Before the suites, it runs `pnpm --filter api build:graphiql` and then `pnpm --filter api migration:run`. `app.e2e-spec.ts` serves the generated, gitignored GraphiQL bundle, so on a fresh checkout run `pnpm --filter api build:graphiql` once before `pnpm --filter api test:e2e`. The job is not a required status check.
+
 ## Two-tenant release gate
 
 `pnpm --filter api test:e2e:release-gate` runs `apps/api/test/two-tenant-release-gate.e2e-spec.ts` (needs the e2e Postgres, like every e2e suite; it also runs as part of `pnpm --filter api test:e2e`). It is the multi-tenancy release criterion ([#92](https://github.com/rexescario-dev/clensy-platform/issues/92)). CI runs it as the **Release gate** job on every pull request and push to `main`, against a fresh Postgres service after `pnpm --filter api migration:run`; it can also be run on demand. It boots the real API against two fresh tenants and checks, in order:

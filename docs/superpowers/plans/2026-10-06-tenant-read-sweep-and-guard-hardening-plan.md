@@ -602,4 +602,92 @@ Executed natively (inline), in plan order. There was one return to M5, during Ta
   - `API e2e` is not a required status check (branch protection is unchanged).
 - **PR:** [#137](https://github.com/rexescario-dev/clensy-platform/pull/137).
 
-*(M7–M10 records are appended here.)*
+### M7 — Approved for merge (2026-10-06)
+
+- **Subject:** PR [#137](https://github.com/rexescario-dev/clensy-platform/pull/137), head `67c573e`, merge-base `0e50831` (`main`). It carries this Accepted plan and the M6 change set (process spec §2.8).
+- **Accepted specifications:** `docs/superpowers/specs/2026-09-23-multi-tenant-architecture-design.md` (§4.2 Required verification 7, §4.5) and `docs/superpowers/specs/2026-10-03-tenant-label-overrides-design.md` (§4.3, §4.7 items 1–2). M2/M3 are N/A by owner decision.
+- **Accepted implementation plan:** this document.
+- **M6 gate:** plan Accept `19ec7a4` is the parent of the first implementation commit `da2bbed`. The M6-discovered revision was accepted at `06ee9d3`, before the CI change `83ee084` that implements it.
+- **Plan tasks reviewed:**
+  - Task 1, the allowlist entries ✓
+  - Task 2, guard hardening edits (a)–(g) ✓
+  - Task 3, the `API e2e` job, including the revision's `build:graphiql` step ✓
+
+  The diff touches only the two e2e suites, `ci.yml` and this plan. The `release-gate` job has no removed lines, and the workflow has no `continue-on-error`.
+- **Spec conformance:**
+  - The allowlist reasons hold against the code. `CurrentAdmin` is built only by `toCurrentAdminType(principal)`, from the AuthGuard'd `currentAdmin` and from the credential-verified `login`. The field takes no arguments and returns `null` for platform scope. `TenantLabelOverrides.roles` is a plain `@Field`.
+  - The guard's metadata reading matches Nest's `ContextCreator` (class + method, `Reflect.getMetadata`) and `AuthGuard`'s `getAllAndOverride([handler, class])`.
+  - No new semantics.
+- **Verification evidence:**
+  - The reviewer re-ran the two suites (29/29).
+  - The reviewer re-applied mutation M1c: it failed, listing `CurrentAdminLabelOverridesResolver.tenantLabelOverrides`. It was reverted, and `git status` was clean afterwards.
+  - The reviewer re-ran the Task 3 Step 3 parity script with the expected output.
+  - CI run [37412482375](https://github.com/rexescario-dev/clensy-platform/actions/runs/37412482375) on `67c573e`: API e2e, Lint, Release gate and Test all passed. The API e2e log shows `GraphiQL bundle built`, 48 suites, 446/446, and no release-gate suite.
+  - The M6 record holds the local RED/GREEN, mutation, clean-checkout and full-suite results.
+- **Review basis:** an **independent fresh-agent review**. A reviewer that did not implement the change reviewed the whole branch against the specs, this plan and its Review Focus. The implementer wrote this record, citing that review.
+- **Blocking findings:** none.
+- **Non-blocking observations:**
+  1. **Interface types: Review Focus 2 and edit (c) disagree.** Review Focus 2 cites "a resolver targeting an interface type" as something the guard must not newly report, but edit (c), as accepted, reports every typed resolver whose type is not a schema object type, interfaces included. The schema has no interface or union types today, so nothing is affected. If one is added, the guard will flag it, and that change will need a follow-up: extend the type check or classify it. Recorded rather than silently corrected, because this plan is Accepted.
+  2. Global guards (`APP_GUARD`) remain out of the guard's scope, as recorded under Deferred.
+  3. `API e2e` is not a required check, as recorded under Deferred.
+- **Gate:** merge per human/project norms.
+
+### M8 — N/A (2026-10-06)
+
+The change set is two allowlist entries, one test helper that is about 25 lines longer, and one CI job that deliberately mirrors `Release gate`. There is no duplication or complexity worth a behavior-preserving refactor. One candidate was considered: factoring the two Postgres-backed CI jobs into a reusable workflow or YAML anchors. It is not taken up, because it would change the `Release gate` job, which this plan keeps unchanged and the RFC cites.
+
+### M9 — Complete (2026-10-06)
+
+**Documentation scope:** `docs/README.md` (the #90 section's guard-suite paragraph and the #106 paragraph with its links), `README.md` (the "Scripts" section), and this section.
+
+**Content updates:**
+- `docs/README.md`, guard-suite paragraph:
+  - the suites now run in CI's **API e2e** job;
+  - #135 classified #118's two object fields in the `tenant-read-authorizers` allowlist.
+
+  Caused by Tasks 1 and 3.
+- `docs/README.md`, #106 paragraph: the metadata guard now reads method and class metadata, inherited included, fails on non-object resolver types, and never invokes a getter. The #135 plan is linked. Caused by Task 2.
+- `README.md`, "Scripts": a paragraph on the **API e2e** job:
+  - what it runs, and that the release gate keeps its own job;
+  - its triggers;
+  - its `build:graphiql` and migration steps;
+  - the local fresh-checkout note (run `pnpm --filter api build:graphiql` once before `test:e2e`);
+  - that it is not a required check.
+
+  Caused by Task 3 and its M5 revision.
+- This section. Caused by the M7–M9 gate outcomes.
+
+**Editorial changes:** none.
+
+**Unchanged:**
+- The RFC's Tracking row. #135 is not an RFC amendment or delivery slice, and the row's #106 sentence, "pinned by `relation-field-authorization.e2e-spec.ts`, not by the release gate", stays true.
+- `README.md`'s "`public/graphiql/` is generated and gitignored — CI/build produces it" is now literally true for CI too.
+- The #106 plan's records of the three Minor items. They are historical, and #135 resolves them.
+
+**Verification:**
+- Internal links in `README.md`, `docs/README.md`, this plan and every file under `docs/workflows/` resolve (scripted scan: 16 files, 0 broken).
+- Status is consistent: this plan is Accepted, M7 is Approved, and PR #137 is open with CI green.
+- Terminology follows the RFC (*relation field*, *root operation*) and the #90 suite's own terms (allowlist, object field).
+- No touched document describes unshipped behavior.
+
+### M10 — Accepted, workflow validated (2026-10-06)
+
+**Subject:** the installed workflow prompt library (`docs/workflows/`, generic 1.4.1 / claude 0.2.0), against `docs/workflows/specs/agent-workflow-design.md` §2.10. This slice ran it on #135 from M4 to M9, with M2/M3 N/A.
+
+**Asset inventory:** unchanged. The branch diff against `main` for `docs/workflows/` and `workflow.yaml` is empty. Nine prompts map to M2–M10, and all nine cite the governing contract. `conventions/` holds M1 and the reporting conventions. There are no orphan assets.
+
+**Checks:**
+- §2.5 was honoured: plan Accept `19ec7a4` is the parent of the implementation commit `da2bbed`.
+- The M6 → M5 return worked as the M6 prompt prescribes (step 7, "sequencing/task gap → return to M4/M5"). The first CI run exposed a gap, coding stopped, the repository stayed coherent, the owner decided, the plan revision (`06ee9d3`) was committed before its implementation (`83ee084`), and the M5 decision row records it.
+- Both review gates recorded explicit outcomes. M5 returned on the first pass. Two of its suggestions were declined with evidence (M1c, M1d), and the owner accepted that. M7 approved.
+- M6 step 3 was honoured: every hardening has an uncommitted mutation record, run against both the old and the new guard.
+- M7 used an independent fresh-agent reviewer, and the record cites it.
+- Providers were honoured: GitHub for the issue (including the owner-approved scope edit), the branch and the PR (`workflow.providers`).
+- Slice Completion Reports were emitted at M6 and at M7–M9.
+- §2.8 was honoured: one PR (#137) carries the plan, implementation and docs.
+
+**Blocking findings:** none.
+
+**Non-blocking observations:**
+1. **The workflow has no explicit "M2/M3 N/A" path.** §2.4 requires Accepted upstream artifacts. For #135 the upstream specs already existed and were Accepted, so the plan traced to them, and the owner recorded M2/M3 as N/A. That worked, but the process spec defines N/A only for M8. A slice with no new semantics (test, CI or allowlist work) has to rely on an owner decision. A future workflow version could state that path. Repository docs don't change for this.
+2. **A fresh database is not a clean checkout.** Pre-validation reset the database, but ran in a tree that had a gitignored build artifact, so the first CI run was the first clean-checkout run. Task 3 Step 5, a run from a clean `git worktree`, now covers that. For future slices that add or change CI jobs, a clean-worktree run in pre-validation is a good project practice. This is not a workflow change.
