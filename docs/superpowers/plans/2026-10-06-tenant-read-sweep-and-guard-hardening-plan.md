@@ -5,7 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Status | Accepted |
-| M5 decision | **Accepted** — 2026-10-06, at `0754d9a`, by the owner, on the second pass, with no further revision. Execution: native (inline). The owner accepted both points where the first pass's suggestion was not adopted: class metadata is read with `Reflect.getMetadata`, so inherited metadata counts (M1c), and roles are `method ?? class`, the roles `AuthGuard` enforces (M1d). The owner also accepted not repeating the fresh-database run after the revision. M6 MUST implement Tasks 1–3 as written. If the Task 2 Step 1 sources differ from the plan, M6 stops and returns to M5. |
+| M5 decision | **Accepted** — 2026-10-06, at `0754d9a`, by the owner, on the second pass, with no further revision. Execution: native (inline). The owner accepted both points where the first pass's suggestion was not adopted: class metadata is read with `Reflect.getMetadata`, so inherited metadata counts (M1c), and roles are `method ?? class`, the roles `AuthGuard` enforces (M1d). The owner also accepted not repeating the fresh-database run after the revision. M6 MUST implement Tasks 1–3 as written. If the Task 2 Step 1 sources differ from the plan, M6 stops and returns to M5.<br>**Revision accepted during M6 (2026-10-06, by the owner):** the first CI run of `API e2e` on PR [#137](https://github.com/rexescario-dev/clensy-platform/pull/137) failed four `app.e2e-spec.ts` tests with 404s on `/graphiql-static/*.js`. The suite serves the generated GraphiQL bundle in `apps/api/public/graphiql/`, which is gitignored and built by `pnpm --filter api build:graphiql`, so a fresh checkout lacks it. M6 stopped and returned to M5. The owner chose an explicit CI step over a `pretest:e2e` hook, because the bundle is a clean-checkout prerequisite, not part of what `test:e2e` should do. Task 3 now adds `pnpm --filter api build:graphiql` after `pnpm install` and before `migration:run`, and its parity check allows exactly that one extra step. The `Release gate` job and `apps/api/package.json` stay unchanged. Pre-validation reset the database but ran in a working tree that already had the bundle, so it could not see this. Task 3 Step 5 adds a run from a clean `git worktree` that covers it. |
 | M5 history | First pass (2026-10-06) returned three must-fix items and four smaller ones. None changed the approach. Each is resolved below.<br>**(1) Metadata inheritance:** Task 2 Step 1 now records the decision. The guard reads class metadata with `Reflect.getMetadata`, so inherited metadata counts, because that is how Nest's guard context and `AuthGuard` read it. `getOwnMetadata` would miss a guard inherited from a base class, as mutation M1c shows.<br>**(2) Role fallback:** kept, with its reason. `method ?? class` is exactly `AuthGuard`'s `getAllAndOverride([handler, class])`, so a record shows the handler's effective roles. A field with roles on both the class and the method is still flagged (mutation M1d). An additive list would report roles that `AuthGuard` never applies, and would turn an empty `@Roles()` into `[]`. That `[]` needs a different assertion from today's `roles !== undefined`.<br>**(3) CI parity:** Task 3 now derives the job from the live `release-gate` job and checks parity mechanically.<br>**Also applied:** a check that the release gate is absent from the CI run's suite list; reverts narrowed to the two mutated files; the exact mutation code (Task 2 Step 2); `unresolved` renamed to `nonObjectResolverTypes`; "Every live" changed to "Every discovered"; a `git status` check before pushing. |
 | Date | 2026-10-06 |
 | Tracking issue | [#135](https://github.com/rexescario-dev/clensy-platform/issues/135). Its scope was extended on 2026-10-06, with the owner's approval, by two follow-ons from [#106](https://github.com/rexescario-dev/clensy-platform/issues/106) / PR [#136](https://github.com/rexescario-dev/clensy-platform/pull/136): (a) the three Minor test-hardening items in the M6/M7 records of [the relation-field authorization plan](2026-10-06-relation-field-authorization-plan.md), and (b) its M10 observation 1 (CI does not run the full API e2e suites). |
@@ -26,7 +26,7 @@
 
 - The #90 sweep's mechanism is unchanged. It gains two allowlist entries, each with its reason.
 - In the #106 suite, `objectFieldResolvers()` also reads class-level metadata the way Nest does, reports typed resolvers whose type is not a schema object type, and reads methods through property descriptors. The Required verification 7 test also asserts that this report is empty.
-- The new CI job is the `Release gate` job with a different name and final command: the full e2e config minus the release-gate suite.
+- The new CI job is the `Release gate` job with a different name and final command (the full e2e config minus the release-gate suite), plus one prerequisite step that builds the gitignored GraphiQL bundle `app.e2e-spec.ts` serves.
 
 **Tech Stack:** NestJS 11, `@nestjs/graphql` + Apollo, `@ptc-org/nestjs-query-graphql` 9.5.0, TypeORM, PostgreSQL 16, Jest e2e (`apps/api/test/jest-e2e.json`, `maxWorkers: 1`), GitHub Actions.
 
@@ -75,7 +75,7 @@ Every task's requirements implicitly include this section.
    - A record's `guards` and `roles` must be what the runtime applies to the handler. Guards are global + class + method, concatenated by Nest's `ContextCreator.createContext`; global guards are out of scope, as they are today. Roles are `AuthGuard`'s `getAllAndOverride([handler, class])`.
    - The hardened guard must stay green on the real code. It must not newly report a legitimate resolver, e.g. one targeting an interface type, or a nestjs-query resolver with class-level guards hosting a relation.
    - Pre-validation found none: `nonObjectResolverTypes` is `[]`, and no class-level metadata reaches a record. Each hardening is shown to catch its mutation (Task 2).
-3. **CI parity.** The job must be the live `release-gate` job except for its name and its final command, and that is checked mechanically (Task 3 Step 3). The release-gate suite must be absent from its suite list, so it doesn't run twice.
+3. **CI parity.** The job must be the live `release-gate` job except for its name, its final command and the one `build:graphiql` step after `pnpm install`, and that is checked mechanically (Task 3 Step 3). The release-gate suite must be absent from its suite list, so it doesn't run twice.
 
 ---
 
@@ -406,9 +406,9 @@ git commit -m "test(api): read class-level metadata, report non-object resolver 
   - the steps, in order: checkout, `pnpm/action-setup` (pnpm comes from the root `packageManager`), `setup-node` (version and cache), `pnpm install --frozen-lockfile`, `pnpm --filter api migration:run`;
   - any `working-directory` or `defaults`.
 
-  At `0e50831` none of those carry anything the YAML in Step 2 doesn't. If the live job has changed, copy the live job instead, and change only the job id, `name`, the comment and the last `run`.
+  At `0e50831` none of those carry anything the YAML in Step 2 doesn't. If the live job has changed, copy the live job instead, and change only the job id, `name`, the comment and the last `run`, and add the `build:graphiql` step.
 
-- [ ] **Step 2: Append the job.** At the end of `jobs:` (after the `release-gate` job's last step), append the `release-gate` job copied from Step 1 with these differences: job id `api-e2e`, `name: API e2e`, the comment below, and the last step. At `0e50831` the result is exactly:
+- [ ] **Step 2: Append the job.** At the end of `jobs:` (after the `release-gate` job's last step), append the `release-gate` job copied from Step 1 with these differences: job id `api-e2e`, `name: API e2e`, the comment below, one extra step that builds the GraphiQL bundle, placed after `pnpm install` and before `migration:run`, and the last step. At `0e50831` the result is exactly:
 
 ```yaml
 
@@ -452,6 +452,10 @@ git commit -m "test(api): read class-level metadata, report non-object resolver 
 
       - run: pnpm install --frozen-lockfile
 
+      # `apps/api/public/graphiql/` is gitignored, so a fresh checkout lacks
+      # it, and app.e2e-spec.ts serves those files (#135).
+      - run: pnpm --filter api build:graphiql
+
       - run: pnpm --filter api migration:run
 
       - run: pnpm --filter api test:e2e --testPathIgnorePatterns two-tenant-release-gate
@@ -469,7 +473,14 @@ print(list(j))
 g, e = j['release-gate'], j['api-e2e']
 for k in sorted((set(g) | set(e)) - {'name', 'steps'}):
     print(k, 'same' if g.get(k) == e.get(k) else 'DIFF')
-print('steps[:-1]', 'same' if g['steps'][:-1] == e['steps'][:-1] else 'DIFF')
+BUILD = 'pnpm --filter api build:graphiql'
+runs = [step.get('run') for step in e['steps']]
+core = [step for step in e['steps'][:-1] if step.get('run') != BUILD]
+print('steps[:-1] without build', 'same' if g['steps'][:-1] == core else 'DIFF')
+print('extra', [r for r in runs if r == BUILD])
+print('build after install, before migrations',
+      runs.index('pnpm install --frozen-lockfile') < runs.index(BUILD)
+      < runs.index('pnpm --filter api migration:run'))
 print(g['name'], '|', g['steps'][-1]['run'])
 print(e['name'], '|', e['steps'][-1]['run'])
 EOF
@@ -477,7 +488,8 @@ EOF
 
 Expected:
 - `['lint', 'test', 'release-gate', 'api-e2e']`;
-- `env`, `runs-on`, `services` and `steps[:-1]` all `same`, with no `DIFF`;
+- `env`, `runs-on`, `services` and `steps[:-1] without build` all `same`, with no `DIFF`;
+- `extra ['pnpm --filter api build:graphiql']` and `build after install, before migrations True`;
 - `Release gate | pnpm --filter api test:e2e:release-gate`;
 - `API e2e | pnpm --filter api test:e2e --testPathIgnorePatterns two-tenant-release-gate`.
 
@@ -489,7 +501,27 @@ Expected: exactly one removed line, ending in `test/two-tenant-release-gate.e2e-
 Run: `pnpm --filter api test:e2e --testPathIgnorePatterns two-tenant-release-gate`
 Expected: every suite passes, and none of them is `two-tenant-release-gate.e2e-spec.ts`.
 
-- [ ] **Step 5: Commit.**
+- [ ] **Step 5: Run the job's steps from a clean checkout.** This checks the failure mode that a fresh database alone cannot show: a gitignored artifact that the developer's tree has and CI's doesn't. The worktree checks out `HEAD`, which carries the Task 1–2 commits. The commands are the job's own steps, so they don't depend on `ci.yml` being committed. From the repository root:
+
+```bash
+WT=$(mktemp -d)/clean && git worktree add --detach "$WT" HEAD
+# Like the CI job's `env`: only DB_* are set; the worktree has no .env.
+for k in DB_HOST DB_PORT DB_USERNAME DB_PASSWORD; do
+  export "$k=$(grep "^$k=" apps/api/.env | cut -d= -f2-)"; done
+export DB_NAME=clensy_clean_probe
+docker compose exec -T postgres psql -U "$DB_USERNAME" -d postgres -c "CREATE DATABASE $DB_NAME"
+(cd "$WT" && test ! -e apps/api/public && test ! -e apps/api/.env \
+  && pnpm install --frozen-lockfile \
+  && pnpm --filter api build:graphiql \
+  && pnpm --filter api migration:run \
+  && pnpm --filter api test:e2e --testPathIgnorePatterns two-tenant-release-gate)
+docker compose exec -T postgres psql -U "$DB_USERNAME" -d postgres -c "DROP DATABASE $DB_NAME WITH (FORCE)"
+git worktree remove --force "$WT"
+```
+
+Expected: `test ! -e apps/api/public` and `test ! -e apps/api/.env` hold, which shows the checkout starts without the bundle and without local config. Every suite passes. Afterwards, `git worktree list` no longer lists the probe worktree.
+
+- [ ] **Step 6: Commit.**
 
 ```bash
 git add .github/workflows/ci.yml
@@ -527,7 +559,7 @@ The acceptance criteria are semantic. Counts are recorded in the M6 record, not 
 
 ## Execution risks (operational only)
 
-- **First CI run on a fresh runner.** The local fresh-DB run covers migrations and data, but not runner-specific timing. A suite with a tight timeout could be flaky on a slower runner. Any CI-only failure is investigated at M6, not papered over with `continue-on-error`.
+- **First CI run on a fresh runner.** The local fresh-DB run covers migrations and data, and Task 3 Step 5 covers a clean checkout's missing gitignored artifacts (the cause of the first CI failure), but neither covers runner-specific timing. A suite with a tight timeout could be flaky on a slower runner. Any CI-only failure is investigated at M6, not papered over with `continue-on-error`.
 - **Shared local e2e database.** The suites build and remove their own fixtures. A crashed local run may leave rows behind; the release-gate fixtures already roll back on a failed build.
 - **Temporary mutations.** They live only in the two named `src` files and are reverted by a two-file checkout. Final verification's `git status --short` catches a mutation left behind.
 
