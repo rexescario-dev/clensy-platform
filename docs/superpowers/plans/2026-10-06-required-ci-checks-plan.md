@@ -511,3 +511,87 @@ Not run:
 3. **PR description.** Task 5 Step 1's attribution line in the PR description was omitted, because the owner's global instructions forbid that line, and they take precedence.
 
 Execution note: Task 1, 2 and 3 have no commits. Their `task-done` ledger lines record the read-back commands as their test commands.
+
+### M7 — Approved for merge, self-review (2026-10-06)
+
+```text
+Decision: Approved for merge
+Subject: PR #141 (feat/140-required-ci-checks), M6 heads 899b02a (Task 4) and 1c0ae9e (M6 record), merge-base 56a4b2a (main)
+Accepted specification: docs/superpowers/specs/2026-10-06-required-ci-checks-design.md (M3 Accepted at c0b918f, recorded in a58dca5)
+Accepted implementation plan: this document (M5 Accepted at c36b04e, recorded in 0efb41d)
+
+M6 gate: the M5 acceptance commit 0efb41d is the parent of the first M6 commit 899b02a. The ruleset POST and the V4 push happened after 0efb41d, each on an explicit owner "yes".
+
+Plan tasks reviewed:
+- Task 1 (preflight, payload): ✓. Every Expected matched (M6 table); read-only.
+- Task 2 (POST): ✓. Ruleset 24586942, owner-confirmed.
+- Task 3 (V1, V1b, Admin role, V4): ✓. All true; the V4 push was rejected with GH013; the correction gate was not needed.
+- Task 4 (README.md, docs/README.md, ci.yml comment): ✓. The diff is exactly the Steps 1–3 replacement text. V5 shows comment-only changes, equal YAML and no payload copy.
+- Task 5 (PR, V2, V3, M6 record, WORK removal): ✓.
+
+Verification evidence:
+- CI on PR #141, run 37479969370 (head 899b02a), and the rerun on head 1c0ae9e: Lint, Test, Release gate and API e2e all SUCCESS; mergeStateStatus CLEAN.
+- Live configuration: REST read-back, rules/branches/main, and GraphQL bypassActors (admin / 5 / PULL_REQUEST) — M6 table.
+- Enforcement: V2 BLOCKED (no checks reported, then all QUEUED, then again on 1c0ae9e); V4 GH013 rejection with main unchanged at 56a4b2a.
+
+Review summary: Checked against spec §4–§5 and Review Focus 1–5, plus regression risks the plan did not exercise:
+- CI has no path filters on push/pull_request, so a docs-only PR still reports all four checks and cannot be blocked forever.
+- No job has an `if:` condition, so no job can be "skipped" and count as satisfying a required check.
+- No concurrency or cancel-in-progress settings.
+- No other workflow, bot or Dependabot/Renovate config pushes to main.
+- README text is accurate against observed behavior: missing checks block (V2), direct pushes are rejected (V4), the bypass list is visible only to writers (GitHub docs).
+- The docs/README link anchor `#scripts-run-from-the-repo-root-via-turborepo` matches the README heading.
+- No scope expansion: no executable CI change, no other rule, no other branch.
+Blocking findings: None (no merge blockers)
+
+Non-blocking observations (optional):
+- Only the api-e2e job carries the "do not rename" comment. The other three jobs rely on the README paragraph and spec §5 invariant 3. Spec §4.3 scoped the comment to api-e2e, so this is not a deviation.
+- Spec §4.1 describes the Admin role id as unverified at spec time. M6 has since verified it (GraphQL: admin, 5). The spec text is left as the historical design record.
+(These MUST NOT affect the merge decision.)
+
+Gate: Merge per human/project norms. M8/M9 may follow when appropriate.
+```
+
+**Review basis: self-review.** The M6 implementer did this review, so it is not independent. No fresh-agent reviewer was dispatched, because this session's standing rule is not to spawn subagents unless the owner asks, and the owner's M7–M10 instruction did not ask for one. The owner may require an independent review before merging.
+
+### M8 — N/A (2026-10-06)
+
+There is nothing to refactor. The slice changes one GitHub setting, two prose paragraphs and one YAML comment, with no code. Any restructuring would only risk the verified wording.
+
+### M9 — Complete (2026-10-06)
+
+- **Scope:**
+  - `docs/README.md`: the #90 section's spec/plan list;
+  - the spec's Tracking issue row;
+  - this plan's records.
+- **Content:**
+  - `docs/README.md` lists the #140 spec and plan as Accepted, next to the #135 plan. Caused by: M3/M5 acceptance and M7 approval.
+  - The spec's Tracking row names PR #141 and ruleset 24586942. Caused by: M6.
+- **Editorial verification:**
+  - Every relative link in the spec, the plan and `docs/README.md` resolves. The one apparent miss, `../README.md` in the plan, is quoted replacement text, relative to `docs/README.md`, where it resolves.
+  - Heading hierarchy unchanged.
+  - Spec and plan Status are both Accepted, consistent with M3/M5.
+  - Terminology ("ruleset", "required check", "strict policy", "bypass actor") matches spec §3.
+  - No contradictory or outdated statements remain. `grep 'not a required status check'` returns 0 in `README.md`, and `ci.yml` no longer says `main` has no branch protection.
+- The root `README.md`'s "Two-tenant release gate" section still says only that CI runs the Release gate job. That is accurate. Requiring it is described once, in the paragraph above, per spec §4.3.
+
+### M10 — Accepted, workflow validated (2026-10-06)
+
+**Subject:** the installed workflow (`docs/workflows/`, generic 1.4.1 / claude 0.2.0), run on #140 from brainstorm and M2 to M9. The branch diff against `main` for `docs/workflows/` and `workflow.yaml` is empty.
+
+**Checks:**
+- M2 → M3 → M4 → M5 → M6 ran in order:
+  - M3 accepted the spec on its first pass, after the design-review conditions were applied in the Draft;
+  - M5 returned the plan on its first pass with eight items, all resolved before the second-pass Accept.
+- §2.5 was honoured: the M5 acceptance `0efb41d` precedes every M6 action.
+- Both outward-facing actions had their own owner confirmation at execution time, as the spec requires.
+- `workflow.providers` (GitHub) was honoured for issue #140, the branch and PR #141. The ruleset was applied through the same provider.
+- §2.8 was honoured: one PR carries the spec, plan, docs and gate records.
+- Slice Completion Reports were emitted at M6 and at M7–M9.
+
+**Blocking findings:** none.
+
+**Non-blocking observations:**
+1. **Settings-only slices.** The M6 prompt's TDD and characterization rules assume code. Here the plan declared TDD N/A and used preflight assertions, payload validation and live read-back and enforcement probes instead, and M5 accepted that. The workflow could name this "configuration change" pattern explicitly, so future settings slices don't have to argue it from scratch.
+2. **M7 self-review recurs.** This is #138's M10 observation 1 again. The owner has not given a standing instruction on whether M7 may dispatch a fresh reviewer, so M7 was again a labelled self-review.
+3. **`task-done` with no commits.** The `executing-plans` helper assumes each task commits. Tasks 1–3 here were remote-only and used their read-back commands as test commands. The evidence was unaffected.

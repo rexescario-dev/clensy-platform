@@ -105,6 +105,8 @@ These suites are metadata checks that complement, not replace, the per-module tw
 - Spec (Accepted): [2026-09-23-multi-tenant-architecture-design.md](superpowers/specs/2026-09-23-multi-tenant-architecture-design.md)
 - Plan (Accepted): [2026-10-01-tenant-aware-audit-security-sweep-plan.md](superpowers/plans/2026-10-01-tenant-aware-audit-security-sweep-plan.md)
 - Plan (Accepted, #135): [2026-10-06-tenant-read-sweep-and-guard-hardening-plan.md](superpowers/plans/2026-10-06-tenant-read-sweep-and-guard-hardening-plan.md)
+- Spec (Accepted, #140): [2026-10-06-required-ci-checks-design.md](superpowers/specs/2026-10-06-required-ci-checks-design.md)
+- Plan (Accepted, #140): [2026-10-06-required-ci-checks-plan.md](superpowers/plans/2026-10-06-required-ci-checks-plan.md)
 
 ## Legacy REST & surface cleanup (#91)
 
