@@ -91,11 +91,15 @@ const CUSTOM_OBJECT_FIELDS: Record<string, string> = {
     'JobResolver @ResolveField via JobRelationLoaders keyed by the principal tenant (#86).',
   'CleaningJob.team':
     'JobResolver @ResolveField via JobRelationLoaders keyed by the principal tenant (#86).',
+  'CurrentAdmin.tenantLabelOverrides':
+    "CurrentAdminLabelOverridesResolver @ResolveField; its parent is built only from the principal, so it reads the principal's own tenant's labels (#118).",
   'LaundryOrderLine.pricingSnapshot':
     'TypeORM embeddable stored on the line row.',
   'LoginResult.admin': "The caller's own principal, returned by login.",
   'Service.activePricing':
     'ServiceResolver @ResolveField via request-scoped ActivePricingLoader keyed by the principal tenant (#84).',
+  'TenantLabelOverrides.roles':
+    'Plain value object that CurrentAdmin.tenantLabelOverrides builds from those same labels; no resolver of its own (#118).',
 };
 
 const PROBE_TENANT = 'tenant-probe';
