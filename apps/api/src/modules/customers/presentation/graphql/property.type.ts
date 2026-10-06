@@ -14,19 +14,7 @@ import {
   PLATFORM_PAGE_MAX,
 } from '../../../../platform/graphql/paging';
 import { tenantReadAuthorizer } from '../../../../platform/auth/authorization/tenant-read.authorizer';
-import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
-import { Role } from '../../../../platform/auth/domain/role';
-import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
 import type { BookingDTO as BookingDTOClass } from '../../../bookings/presentation/graphql/booking.dto';
-
-const BOOKING_VIEW_ROLES = [
-  Role.TENANT_OWNER,
-  Role.OPS_MANAGER,
-  Role.SCHEDULER,
-  Role.CUSTOMER_SUPPORT,
-  Role.FINANCE,
-  Role.ANALYST,
-];
 
 /* eslint-disable @typescript-eslint/no-require-imports -- Lazy thunk below:
    BookingDTO already imports PropertyType, so this must stay a runtime
@@ -64,14 +52,12 @@ const PROPERTY_SORT = [
   pagingStrategy: PagingStrategies.OFFSET,
 })
 @OffsetConnection('bookings', bookingDto, {
-  decorators: [Roles(...BOOKING_VIEW_ROLES)],
   defaultResultSize: PLATFORM_PAGE_DEFAULT,
   defaultSort: [
     { direction: SortDirection.DESC, field: 'scheduledAt' },
     { direction: SortDirection.ASC, field: 'id' },
   ],
   enableTotalCount: false,
-  guards: [AuthGuard],
   maxResultsSize: PLATFORM_PAGE_MAX,
   nullable: false,
   relationName: 'bookings',

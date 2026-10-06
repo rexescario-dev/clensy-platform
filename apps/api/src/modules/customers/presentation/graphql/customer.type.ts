@@ -13,9 +13,7 @@ import {
   PLATFORM_PAGE_MAX,
 } from '../../../../platform/graphql/paging';
 import { tenantReadAuthorizer } from '../../../../platform/auth/authorization/tenant-read.authorizer';
-import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
 import { Role } from '../../../../platform/auth/domain/role';
-import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
 import { PropertyType } from './property.type';
 
 const VIEW_ROLES = [
@@ -46,14 +44,12 @@ const VIEW_ROLES = [
   pagingStrategy: PagingStrategies.OFFSET,
 })
 @OffsetConnection('properties', () => PropertyType, {
-  decorators: [Roles(...VIEW_ROLES)],
   defaultResultSize: PLATFORM_PAGE_DEFAULT,
   defaultSort: [
     { direction: SortDirection.DESC, field: 'createdAt' },
     { direction: SortDirection.ASC, field: 'id' },
   ],
   enableTotalCount: false,
-  guards: [AuthGuard],
   maxResultsSize: PLATFORM_PAGE_MAX,
   nullable: false,
   relationName: 'properties',

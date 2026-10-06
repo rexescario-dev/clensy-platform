@@ -199,4 +199,4 @@ Package-specific commands can be run directly, e.g. `pnpm --filter api test:e2e`
 
 The interim rule "do not provision a second production tenant" (program [#81](https://github.com/rexescario-dev/clensy-platform/issues/81)) is lifted by the #92 PR merging with this gate passing; a local pass alone does not lift it. Before provisioning another production tenant after later changes, run the gate again.
 
-Update `role-matrix.ts` only when an Accepted authorization spec changes. The gate does not cover relation-field role checks ([#106](https://github.com/rexescario-dev/clensy-platform/issues/106), still open), the web UI, or query counts.
+Update `role-matrix.ts` only when an Accepted authorization spec changes. The gate does not cover relation-field authorization ([#106](https://github.com/rexescario-dev/clensy-platform/issues/106); pinned by `apps/api/test/relation-field-authorization.e2e-spec.ts`), the web UI, or query counts.

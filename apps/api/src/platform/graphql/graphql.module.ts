@@ -32,8 +32,10 @@ const isProduction = process.env.NODE_ENV === 'production';
       // skips interceptors on field resolvers unless enabled here, so
       // without this a relation reached from a plain `@Query` (e.g.
       // `job(id) { booking }`) ran with no tenant filter at all (#85).
-      // Guards stay root-only: enabling them would re-run `AuthGuard` on
-      // every relation field of every row.
+      // Guards stay root-only: the root operation is the unit of role
+      // authorization, and relation fields are authorized by it (RFC §4.2
+      // relation-field rules, #106). nestjs-query relation fields re-apply
+      // the tenant predicate through these interceptors.
       fieldResolverEnhancers: ['interceptors'],
       // playground: false (not a manually-passed `plugins` array) — @nestjs/apollo
       // concatenates any `plugins` we pass with its own dev-mode default (the

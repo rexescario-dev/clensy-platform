@@ -14,9 +14,7 @@ import {
   PLATFORM_PAGE_MAX,
 } from '../../../../platform/graphql/paging';
 import { tenantReadAuthorizer } from '../../../../platform/auth/authorization/tenant-read.authorizer';
-import { Roles } from '../../../../platform/auth/decorators/roles.decorator';
 import { Role } from '../../../../platform/auth/domain/role';
-import { AuthGuard } from '../../../../platform/auth/guards/auth.guard';
 import { CustomerType } from '../../../customers/presentation/graphql/customer.type';
 import { LaundryOrderType } from '../../../laundry/presentation/graphql/laundry-order.type';
 import { InvoicePaymentStatus } from '../../domain/invoice-payment-status';
@@ -36,9 +34,11 @@ export const VIEW_ROLES = [
   Role.ANALYST,
 ];
 
+// No relation-level guards or `@Roles()`: a relation field is authorized
+// by the root operation that reaches it, and its target's authorizer
+// re-applies the tenant predicate (multi-tenant RFC §4.2 relation-field
+// rules, #106).
 const relationReadOpts = {
-  decorators: [Roles(...VIEW_ROLES)],
-  guards: [AuthGuard],
   remove: { enabled: false },
   update: { enabled: false },
 };
@@ -78,14 +78,12 @@ const relationReadOpts = {
   ...relationReadOpts,
 })
 @OffsetConnection('lines', () => InvoiceLineType, {
-  decorators: [Roles(...VIEW_ROLES)],
   defaultResultSize: PLATFORM_PAGE_DEFAULT,
   defaultSort: [
     { direction: SortDirection.ASC, field: 'createdAt' },
     { direction: SortDirection.ASC, field: 'id' },
   ],
   enableTotalCount: false,
-  guards: [AuthGuard],
   maxResultsSize: PLATFORM_PAGE_MAX,
   nullable: false,
   relationName: 'lines',
