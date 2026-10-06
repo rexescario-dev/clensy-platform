@@ -526,3 +526,74 @@ Not run, because they cannot run before M6: the Task 1 Step 9 commit and the Tas
 | API unit tests / lint / `tsc` / build | 987 passed / clean / clean / passed |
 
 Every mutation was reverted with `git checkout`, and the tree was clean after each. Characterization-test evidence (the M6 rule for tests of already-correct behavior): MC, ME, MF and MG are failing runs against mutations that were never committed. Execution note: the `executing-plans` `task-done` helper was blocked by a harness safety check, so the same test command was run directly and the ledger line was written by hand.
+
+### M7 — Approved for merge, self-review (2026-10-06)
+
+```text
+Decision: Approved for merge
+Subject: PR #139 (fix/138-deterministic-pricing-rule-race-tests), M6 head 012e52b, merge-base 7f93ffb (main)
+Accepted specification: M2/M3 N/A (owner decision); behavior under test: docs/superpowers/specs/2026-09-06-laundry-catalog-foundation-design.md §4.4, §4.7 (Accepted, unchanged)
+Accepted implementation plan: this document (M5 Accepted at fed28bd, recorded in 21a7cb1)
+
+M6 gate: the M5 acceptance commit 21a7cb1 is the parent of the implementation commit 012e52b.
+
+Plan tasks reviewed:
+- Task 1 (helper, pre-warm removal, barrier wiring, ConflictException assertions): ✓. The diff is identical to the pre-validated diff, and the helper is byte-for-byte the plan's Step 2 code. No change outside apps/api/test/catalog.service.e2e-spec.ts.
+- Task 2 (MA–MG): ✓. All match Expected (M6 record); never committed.
+- Task 3 Steps 1–3 (loop, suites, lint, PR): ✓. Step 4 (post-merge main run) is pending the merge.
+
+Verification evidence:
+- CI on PR #139, run 37420309837: API e2e, Lint, Release gate and Test all pass. The API e2e log shows "PASS test/catalog.service.e2e-spec.ts" and 48 suites / 446 tests passed, the same counts as the local CI-scoped run.
+- Local: the M6 table (mutations, 50/50 loop, 458 e2e, 446 CI-scoped e2e, 987 unit, lint, tsc, build).
+
+Review summary: Checked against Constraints 1–10 and Review Focus 1–6.
+- Release happens only in watch() after conditionMet().
+- Every failure path rejects the paused saves through fail(), and restore() awaits the watcher.
+- The waiter query matches Constraint 3 exactly.
+- The shape check rejects every PricingRuleEntity-carrying save except the single-instance form, so a recursive internal save would also fail loudly; none occurs (all races pass).
+- The pool needs at most 4 connections (two transactions, the poller and the file's advisory-lock connection), within the TypeORM default of 10.
+- No scope expansion; no production, CI or schema change.
+Blocking findings: None (no merge blockers)
+
+Non-blocking observations (optional):
+- blockedOnCloseWaiters selects wait_event, which conditionMet does not use. Kept: it is harmless and mirrors the diagnostic query.
+(These MUST NOT affect the merge decision.)
+
+Gate: Merge per human/project norms. M8/M9 may follow when appropriate.
+```
+
+**Review basis: self-review.** The M6 implementer did this review, so it is not independent. No fresh-agent reviewer was dispatched, because this session's standing rule is not to spawn subagents unless the owner asks. The owner may require an independent review before merging.
+
+### M8 — N/A (2026-10-06)
+
+There is no worthwhile maintainability change. The slice is one test helper plus wiring, delivered exactly as M5 accepted it. Restructuring it now would only risk the validated synchronization behavior.
+
+### M9 — Complete (2026-10-06)
+
+- **Scope:** `docs/README.md` (the Catalog tenant isolation (#84) section) and this plan's records.
+- **Content:** a paragraph on the #138 synchronization of the concurrent pricing-rule races, plus a link to this plan as Accepted. Caused by: this plan's completion (M6/M7).
+- **Editorial verification:**
+  - both new relative links resolve;
+  - the heading hierarchy is unchanged;
+  - no section contradicts the spec, which the paragraph cites rather than restates;
+  - the plan's Status is Accepted, consistent with M5.
+- The root `README.md` needs no change. Its API e2e paragraph (#135) is still accurate, and making the job a required check stays deferred.
+
+### M10 — Accepted, workflow validated (2026-10-06)
+
+**Subject:** the installed workflow (`docs/workflows/`, generic 1.4.1 / claude 0.2.0), run on #138 from M4 to M9 with M2/M3 N/A. The branch diff against `main` for `docs/workflows/` and `workflow.yaml` is empty.
+
+**Checks:**
+- §2.5 was honoured: the M5 acceptance `21a7cb1` precedes the implementation `012e52b`.
+- M5 returned on its first pass with three items. All were resolved and re-validated before the second-pass Accept.
+- M6 step 3 (characterization evidence) was honoured: MC, ME, MF and MG are uncommitted mutations.
+- `workflow.providers` (GitHub) was honoured for the issue, the branch and PR #139.
+- §2.8 was honoured: one PR carries the plan, implementation and docs.
+- Slice Completion Reports were emitted at M6 and at M7–M9.
+
+**Blocking findings:** none.
+
+**Non-blocking observations:**
+1. **M7 was a self-review.** The M7 prompt allows this when it is labelled, and it is. But the `executing-plans` skill expects a fresh reviewer, and this session's standing rule withholds subagents unless the owner asks. The two only conflict when the owner has not said which applies. A standing owner instruction (for example, "M7 may dispatch a fresh reviewer") would settle it.
+2. **The M2/M3 N/A path recurs.** This is the same observation as #135's M10 observation 1. A second slice has used an owner-recorded N/A for M2/M3. It may be worth adding to the process spec.
+3. **Helper tooling vs. harness safety.** The `executing-plans` `task-done` helper was blocked by a harness safety check (a `bash -c` wrapper), and the ledger line was written by hand. This had no effect on the evidence.
