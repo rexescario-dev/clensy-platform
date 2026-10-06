@@ -565,4 +565,41 @@ The acceptance criteria are semantic. Counts are recorded in the M6 record, not 
 
 ## Gate outcomes
 
-*(M5–M10 records are appended here.)*
+### M6 — Implementation complete (2026-10-06)
+
+Executed natively (inline), in plan order. There was one return to M5, during Task 3 (recorded in the M5 decision row). Apart from that return there was no deviation from the plan.
+
+- **Task 1** (`da2bbed`).
+  - **RED:** "accounts for every object-typed field" failed on `CurrentAdmin.tenantLabelOverrides`, 1 failed / 8 passed.
+  - **GREEN:** both entries added, 9/9. This is a regression fix: the test failed before the change.
+- **Task 2** (`66bb300`).
+  - **Step 1:** the metadata sources are as recorded. This was checked at planning time in this session, with no dependency change since.
+  - **Step 3, old guard:** M1a, M1b, M1c and M2 passed; M3 failed with `getter invoked`.
+  - **Step 4:** the edits applied. The result is byte-identical to the pre-validated file.
+  - **Step 5, real code:** 20/20.
+  - **Step 6, new guard:**
+    - M1a, M1b, M1c and M1d failed, listing `CurrentAdminLabelOverridesResolver.tenantLabelOverrides`;
+    - M2 failed with `ProbeResolver -> NoSuchType`;
+    - M3 passed.
+
+    Each mutation was reverted with the two-file checkout, and afterwards `git status --short -- apps/api/src` was empty. The hardenings are guard-strengthening changes shown against uncommitted mutations; no mutation was committed.
+  - **Step 7:** prettier and eslint clean.
+- **Task 3** (`6cf58d0`, then `83ee084` after the M5 revision `06ee9d3`).
+  - **Step 1:** the live `release-gate` job is unchanged since `0e50831`, with no `defaults` or `working-directory`.
+  - **First CI run** ([37407171837](https://github.com/rexescario-dev/clensy-platform/actions/runs/37407171837)): `API e2e` failed 4 `app.e2e-spec.ts` tests with 404 on `/graphiql-static/*.js`. Lint, Test and Release gate passed.
+  - **Root cause:** the gitignored GraphiQL bundle. Reproduced locally: with `apps/api/public` moved aside, 4 failed / 4 passed; after `pnpm --filter api build:graphiql`, 8/8. The rebuilt bundle was byte-identical to the previous one.
+  - Returned to M5. The owner chose the explicit CI step. The step was then added.
+  - **Step 3 parity:** `env`, `runs-on`, `services` and `steps[:-1] without build` were all `same`. The only extra step is `build:graphiql`, after install and before migrations.
+  - **Step 4:** `--listTests` dropped only `two-tenant-release-gate.e2e-spec.ts` (49 → 48). The CI-scoped run passed 48 suites, 446/446.
+  - **Step 5, clean checkout:** a `git worktree` at `6cf58d0` with no `apps/api/public` and no `.env`, `DB_*` only, and a fresh database (`clensy_clean_probe`, dropped). Install, build, migrations and the e2e suites (48 suites, 446/446) all ran. The probe worktree was removed.
+- **Final verification.**
+  - `pnpm --filter api test:e2e`: 49 suites, 458/458, so the #135 baseline failure is gone.
+  - `tsc --noEmit`: clean. `pnpm run lint`: exit 0. `pnpm --filter api test`: 73 suites, 987/987.
+  - `git status --short`: empty.
+  - `git diff --stat main`: only `ci.yml`, the two e2e suites and this plan.
+- **CI on the PR head `83ee084`** ([37412263668](https://github.com/rexescario-dev/clensy-platform/actions/runs/37412263668)): Lint, Test, Release gate and API e2e all passed.
+  - The `API e2e` log shows 48 suites passing, 446/446, and no `two-tenant-release-gate` suite. It also shows `GraphiQL bundle built`.
+  - `API e2e` is not a required status check (branch protection is unchanged).
+- **PR:** [#137](https://github.com/rexescario-dev/clensy-platform/pull/137).
+
+*(M7–M10 records are appended here.)*
