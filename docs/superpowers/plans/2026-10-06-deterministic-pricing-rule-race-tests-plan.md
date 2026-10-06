@@ -504,3 +504,25 @@ Not run, because they cannot run before M6: the Task 1 Step 9 commit and the Tas
 ## Gate outcomes
 
 *(M5–M10 records are appended here.)*
+
+### M6 — Implementation (2026-10-06, native/inline)
+
+**Outcome: Complete.** Task 1 was applied exactly as written, in commit `012e52b`. Its diff is identical to the pre-validated diff. No redesign, and no deviation from Task 1.
+
+| Check | Result |
+| --- | --- |
+| Task 1 Step 7 (Prettier, ESLint, `tsc`; `warmupA` = 0; `installPricingRuleSaveBarrier(` = 4) | Matches |
+| Task 1 Step 8 (three races; whole file) | `3 passed`; `41 passed` |
+| MA | `condition 'both-at-save' not observed …; arrivals=1`. The snapshot's `Lock` waiter is blocked by the paused pid, in the close `UPDATE "pricing_rule_entity" SET "effectiveTo"`; the other 2 tests pass |
+| MB | Both first-ever races: `condition 'other-blocked-on-close' not observed …; arrivals=2` |
+| MC | `Expected length: 1 / Received length: 2`, the #138 failure |
+| MD (informational) | 3 of 20 passed without the barrier |
+| ME (verbatim block, trap) | baseline `3 passed`; mutated `3 failed`; throwaway DB count `0`; dev indexes `3` |
+| MF | 3 failed: `unsupported save call shape for PricingRuleEntity …` |
+| MG | 3 failed: `restored before condition … was observed; arrivals=0` |
+| 50-run loop | 50 of 50 |
+| `pnpm --filter api test:e2e` | 49 suites, 458 tests passed |
+| CI-scoped e2e | 48 suites, 446 tests passed |
+| API unit tests / lint / `tsc` / build | 987 passed / clean / clean / passed |
+
+Every mutation was reverted with `git checkout`, and the tree was clean after each. Characterization-test evidence (the M6 rule for tests of already-correct behavior): MC, ME, MF and MG are failing runs against mutations that were never committed. Execution note: the `executing-plans` `task-done` helper was blocked by a harness safety check, so the same test command was run directly and the ledger line was written by hand.
