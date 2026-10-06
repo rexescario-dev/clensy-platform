@@ -134,6 +134,10 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # `apps/api/public/graphiql/` is gitignored, so a fresh checkout lacks
+      # it, and app.e2e-spec.ts serves those files (#135).
+      - run: pnpm --filter api build:graphiql
+
       - run: pnpm --filter api migration:run
 
       - run: pnpm --filter api test:e2e --testPathIgnorePatterns two-tenant-release-gate
