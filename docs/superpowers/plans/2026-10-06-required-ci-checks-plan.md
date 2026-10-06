@@ -482,3 +482,32 @@ Not run:
 - Task 5.
 
 ## Gate outcomes
+
+### M6 — Implementation (2026-10-06, native/inline)
+
+**Outcome: Complete.** Tasks 1–5 were executed as written. Both outward-facing gates were confirmed explicitly by the owner at the moment they ran ("yes" for the POST, "yes" for the V4 push). The Task 3 Step 4 correction gate was not triggered, and no `PUT` was sent.
+
+| Check | Result |
+| --- | --- |
+| Task 1 Step 1 | `rexescario`, `ADMIN` |
+| Task 1 Step 2 | rulesets (incl. parents) `0`, effective rules `0`, classic protection `Branch not protected` |
+| Task 1 Step 3 | `origin/main` `56a4b2a`. Check runs from app 15368: `["API e2e","Lint","Release gate","Test"]`, all completed |
+| Task 1 Step 4 | provider docs line 310: `` `admin` -> `5` `` |
+| Task 1 Steps 5–7 | payload extracted verbatim from this plan; §4.1 filter `true`; `WORK outside repo`; clean tree; `no payload in documentation surfaces` |
+| Task 2 | `POST …/rulesets` → **`RULESET_ID` 24586942**, `enforcement: active` |
+| V1 (Task 3 Step 1) | read-back vs payload filter: `true` (`source_type: Repository`) |
+| V1b (Task 3 Step 2) | `true`: one `required_status_checks` rule; `ruleset_source_type: Repository`, `ruleset_source: rexescario-dev/clensy-platform`, `ruleset_id: 24586942`. The endpoint behaved as documented |
+| Admin role (Task 3 Step 3) | `true`: `repositoryRoleName: "admin"`, `repositoryRoleDatabaseId: 5`, `bypassMode: PULL_REQUEST` |
+| V4 (Task 3 Step 6) | probe `a826766` → exit 1: `remote: error: GH013: Repository rule violations found for refs/heads/main. … - 4 of 4 required status checks are expected. … ! [remote rejected] … -> main (push declined due to repository rule violations)`. `main` was `56a4b2a` before and after |
+| Task 3 Step 7 | clean tree; `0` branches contain the probe; nothing created on the remote |
+| V5 (Task 4 Step 4) | `non-comment workflow changes: none`; `yaml equal: True`; `not a required status check` `0`; `main: required CI checks` `1` in `README.md` and `1` in `ci.yml`; `issues/140` in `docs/README.md` `1`; `no payload in documentation surfaces`. Commit `899b02a` |
+| PR | [#141](https://github.com/rexescario-dev/clensy-platform/pull/141), opened after the ruleset existed |
+| V2 (Task 5 Step 2) | head `899b02a`: `BLOCKED` with no check reported yet (the "never reports" case), then `BLOCKED` with all four `QUEUED` |
+| V3 (Task 5 Step 3) | run `37479969370` on head `899b02a`: `Lint`, `Test`, `Release gate`, `API e2e` all `COMPLETED`/`SUCCESS`. Assertion `true`, `mergeStateStatus` `CLEAN`. No `BEHIND` occurred |
+
+**Rulings** (from the ledger):
+1. **Shell state.** Shell variables do not persist between this harness's tool calls, so `WORK` was fixed to one `mktemp -d` path outside the repository, and `RULESET_ID` was carried in the ledger. Values are identical; no effect on the evidence.
+2. **V4 rejection wording.** GitHub's rejection gives the number of required checks ("4 of 4 required status checks are expected"), not their names. This was accepted as matching Task 3 Step 6, because `GH013` is the ruleset violation and the count equals the four configured checks.
+3. **PR description.** Task 5 Step 1's attribution line in the PR description was omitted, because the owner's global instructions forbid that line, and they take precedence.
+
+Execution note: Task 1, 2 and 3 have no commits. Their `task-done` ledger lines record the read-back commands as their test commands.
