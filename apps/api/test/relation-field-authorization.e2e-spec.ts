@@ -46,6 +46,12 @@ interface FieldResolverRecord {
   roles: Role[] | undefined;
 }
 
+interface FieldResolverInventory {
+  // `@Resolver(...)` classes whose type name is not a schema object type.
+  nonObjectResolverTypes: string[];
+  records: FieldResolverRecord[];
+}
+
 describe('Relation-field authorization (#106, RFC §4.2)', () => {
   let app: INestApplication<App>;
   let dataSource: DataSource;
@@ -67,14 +73,16 @@ describe('Relation-field authorization (#106, RFC §4.2)', () => {
     return (body.errors ?? []).map((error) => error.extensions?.code);
   }
 
-  // Every live @ResolveField() handler whose schema field is
+  // Every discovered @ResolveField() handler whose schema field is
   // object-typed, read from the metadata Nest and nestjs-query attach to
-  // the method. This includes the methods nestjs-query generates for
-  // relations. It is not claimed to be exhaustive over the RFC §3
-  // relation-field definition.
-  function objectFieldResolvers(): FieldResolverRecord[] {
+  // the method and its resolver class. This includes the methods
+  // nestjs-query generates for relations. It is not claimed to be
+  // exhaustive over the RFC §3 relation-field definition. A typed resolver
+  // whose type is not a schema object type is reported, not skipped (#135).
+  function objectFieldResolvers(): FieldResolverInventory {
     const { schema } = app.get(GraphQLSchemaHost);
     const records: FieldResolverRecord[] = [];
+    const nonObjectResolverTypes: string[] = [];
     for (const wrapper of app.get(DiscoveryService).getProviders()) {
       const instance = wrapper.instance as object | undefined;
       if (typeof instance !== 'object' || instance === null) continue;
@@ -83,8 +91,22 @@ describe('Relation-field authorization (#106, RFC §4.2)', () => {
         RESOLVER_NAME_METADATA,
         resolverClass,
       ) as string | undefined;
-      const parentType = typeName ? schema.getType(typeName) : undefined;
-      if (!isObjectType(parentType)) continue;
+      if (!typeName) continue;
+      const parentType = schema.getType(typeName);
+      if (!isObjectType(parentType)) {
+        nonObjectResolverTypes.push(`${resolverClass.name} -> ${typeName}`);
+        continue;
+      }
+      // Class-level @UseGuards() / @Roles() apply to every handler (#135).
+      // Read as Nest does: `Reflect.getMetadata` on the class, so metadata
+      // inherited from a base class counts too. Guards are class + method
+      // (Nest's guard context); roles are method ?? class (`AuthGuard`'s
+      // getAllAndOverride([handler, class])).
+      const classGuards =
+        (Reflect.getMetadata(GUARDS_METADATA, resolverClass) as
+          unknown[] | undefined) ?? [];
+      const classRoles = Reflect.getMetadata(ROLES_KEY, resolverClass) as
+        Role[] | undefined;
       const seen = new Set<string>();
       for (
         let proto = Object.getPrototypeOf(instance) as object | null;
@@ -93,7 +115,9 @@ describe('Relation-field authorization (#106, RFC §4.2)', () => {
       ) {
         for (const key of Object.getOwnPropertyNames(proto)) {
           if (seen.has(key)) continue;
-          const handler = (proto as Record<string, unknown>)[key];
+          // Read the descriptor, so a getter is never invoked (#135).
+          const handler = Object.getOwnPropertyDescriptor(proto, key)
+            ?.value as unknown;
           if (typeof handler !== 'function') continue;
           if (Reflect.getMetadata(RESOLVER_PROPERTY_METADATA, handler) !== true)
             continue;
@@ -110,17 +134,20 @@ describe('Relation-field authorization (#106, RFC §4.2)', () => {
             continue;
           records.push({
             field: `${typeName}.${field}`,
-            guards:
-              (Reflect.getMetadata(GUARDS_METADATA, handler) as
-                unknown[] | undefined) ?? [],
+            guards: [
+              ...classGuards,
+              ...((Reflect.getMetadata(GUARDS_METADATA, handler) as
+                unknown[] | undefined) ?? []),
+            ],
             owner: `${resolverClass.name}.${key}`,
-            roles: Reflect.getMetadata(ROLES_KEY, handler) as
-              Role[] | undefined,
+            roles:
+              (Reflect.getMetadata(ROLES_KEY, handler) as Role[] | undefined) ??
+              classRoles,
           });
         }
       }
     }
-    return records;
+    return { nonObjectResolverTypes, records };
   }
 
   beforeAll(async () => {
@@ -346,7 +373,8 @@ describe('Relation-field authorization (#106, RFC §4.2)', () => {
 
   // Required verification 7 (rule 6).
   it('declares no guards or @Roles() on any relation field resolver', () => {
-    const records = objectFieldResolvers();
+    const { nonObjectResolverTypes, records } = objectFieldResolvers();
+    expect(nonObjectResolverTypes).toEqual([]);
     // Sentinels: both resolver kinds are inventoried, so an empty or
     // one-sided inventory cannot pass vacuously.
     expect(records.map((r) => r.field)).toEqual(
