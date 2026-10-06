@@ -97,9 +97,9 @@ jobs:
   api-e2e:
     # #135: every API e2e suite except the release gate, which keeps its own
     # job above. The #90 / #106 guard suites run here, so a field added
-    # without being classified fails CI instead of only local runs. Not a
-    # required status check: `main` has no branch protection, and making
-    # this check required is a separate decision.
+    # without being classified fails CI instead of only local runs. Required
+    # on `main` by the `main: required CI checks` ruleset (#140): do not
+    # change `name:` without updating the ruleset in the same change.
     name: API e2e
     runs-on: ubuntu-latest
     env:
