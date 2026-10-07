@@ -10,6 +10,7 @@
 | Related (not a dependency) | The #89 shell slice introduced `landingTarget` (`apps/web/lib/landing-target.ts`), which this spec changes (§4.4). The Staff Administration UI (#88) owns `/app/admin`, whose page-local redirect this spec retires (§4.5). |
 | Followed by | None. |
 | M3 decision | Pending. |
+| M3 history | First pass (2026-10-07, at `5f5192f`): the owner approved the architecture and design direction and returned the spec with nine clarifications. None of them reopens options A/B/C or the signal-plus-check decision. All were applied: (1) a latched redirect runs to completion across unmount (§4.3); (2) the unmount rule covers only new evidence (§4.3, §5 invariant 10); (3) the null and absent `currentAdmin` semantics are defined as deliberately defensive (§3, §4.2); (4) the cold-load example states the single-flight path (§4.7); (5) the error link's placement is not prescribed (§4.1); (6) a multiple-errors notification test is added (§8 item 1); (7) the Apollo deduplication aside is removed (§7); (8) the goal is worded as "when evidence is observed" (§6); (9) the #114 amendment is trimmed to cross-references (§9). |
 
 ## 1. Primary question and thesis
 
@@ -64,7 +65,7 @@ On evidence, the guard performs one redirect: `clearStore()`, then `router.repla
 
 - **Session evidence:** a result that positively shows there is no valid session. Exactly two results count:
   1. any GraphQL operation result carrying a GraphQL error with `extensions.code === 'UNAUTHENTICATED'`;
-  2. a session check that **settles successfully** with `data.currentAdmin` null or absent and no error.
+  2. a session check that **settles successfully**, with no GraphQL or network error, and `data.currentAdmin == null`. That covers an explicitly null field and, as deliberately defensive client behavior, an absent field. The API declares `currentAdmin` non-null (§1.1), so neither case is expected. Both are treated as "no principal", matching what `landingTarget` and the admin page do today.
 - **Not session evidence:**
   - a network failure or HTTP 5xx;
   - a GraphQL error with any other code, including `FORBIDDEN`;
@@ -81,7 +82,7 @@ On evidence, the guard performs one redirect: `clearStore()`, then `router.repla
 ### 4.1 Session signal (`packages/client`)
 
 - `packages/client` exports `onSessionInvalid(listener: () => void): () => void`. It registers a listener and returns its unsubscribe function.
-- The shared `apolloClient`'s link chain gains an Apollo error link before the existing `HttpLink`. For every operation, query or mutation, whose result carries at least one GraphQL error with `extensions.code === 'UNAUTHENTICATED'`, it notifies every currently registered listener. It notifies once per result, however many such errors that result carries.
+- The shared `apolloClient` gains an error link in its link chain, ahead of the transport, so it observes every operation's GraphQL errors. Its exact position in the composition is an M4 decision. For every operation, query or mutation, whose result carries at least one GraphQL error with `extensions.code === 'UNAUTHENTICATED'`, it notifies every currently registered listener. It notifies once per result, however many such errors that result carries.
 - The link does not change the result. Errors still reach the operation's caller, so page error handling is unaffected.
 - **Subscriber-scoped.** The signal only notifies. It MUST NOT redirect, clear or reset the store, or reference routing, `/login`, or `next/*`. With no registered listener it does nothing.
   - So the `login` mutation's `UNAUTHENTICATED` for bad credentials on `/login` has no effect: `/login` is outside the `/app` layout, so no guard is mounted.
@@ -110,7 +111,7 @@ On evidence, the guard performs one redirect: `clearStore()`, then `router.repla
 - A change to search parameters alone is not a pathname change and starts no check.
 - The check runs in the background. It is not awaited before rendering anything.
 - The check's outcome:
-  - It settles successfully with `currentAdmin` null or absent and no error: trigger the session redirect.
+  - It settles successfully with `data.currentAdmin == null` and no error (evidence (2), §3): trigger the session redirect.
   - It returns `UNAUTHENTICATED`: the signal (§4.1) has already notified, so the guard needn't act on this outcome. If it does, the latch (§4.3) folds it into the same single sequence.
   - Any other error: ignore it. No redirect, retry, or UI.
   - It settles with a principal: nothing. A principal result never cancels a session redirect that has already started.
@@ -124,7 +125,10 @@ On evidence, the guard performs one redirect: `clearStore()`, then `router.repla
 2. On evidence from either source, if the latch is closed, do nothing. Otherwise close it, then `await apolloClient.clearStore()`, then call `router.replace('/login')`.
    - If `clearStore()` rejects, the guard still calls `router.replace('/login')`.
 3. Across the guard's lifetime, **at most one** `clearStore()` → `router.replace('/login')` sequence runs, however many signals and check results arrive and in whatever order. This includes a signal and a null check result arriving together.
-4. After unmount, the guard ignores late check results and signals. Its listener is gone, and pending checks do not act.
+4. **Unmount stops new evidence, not a committed redirect.**
+   - After unmount, no **new** evidence may start a session redirect. That covers a check result that settles after unmount, and a signal delivered after unmount. The listener is unregistered on unmount.
+   - A sequence whose latch closed before unmount is already committed, and it **runs to completion** even if the guard unmounts mid-sequence. For example, `clearStore()` is pending when the layout unmounts: `router.replace('/login')` is still called when it settles. Implementations MUST NOT put a "still mounted?" check between `clearStore()` and `router.replace('/login')`.
+   - Evidence that arrives after the latch closed, whether before or after unmount, joins the existing sequence and starts nothing new.
 5. The order `clearStore()` before navigation matches logout. `clearStore()` discards in-flight queries and does not refetch, so mounted pages may briefly render without data before the route changes. This is existing logout behavior, not a new rendering contract.
 
 Logout is independent of the guard. If a check or signal arrives while logout is already navigating to `/login`, the worst case is the same navigation that logout is performing. That is accepted.
@@ -165,7 +169,7 @@ The copy deliberately doesn't claim the session is invalid. When it is invalid, 
 | Session expired mid-session; page visible to the cached role | `/app/cleaners/teams` (any data page) | The page's query → `UNAUTHENTICATED` (signal) | The page's error may flash, then one session redirect |
 | Session expired mid-session; page hidden from the cached role | `/app/admin` as `OPS_MANAGER` | Pathname change → check → `UNAUTHENTICATED` (signal) | The unavailable state shows briefly, then one session redirect |
 | Account disabled by its owner mid-session | Any `/app/*` | The next operation or navigation check → `UNAUTHENTICATED` | One session redirect |
-| Cold load with an expired cookie | `/app` | The landing's read and the guard's check → `UNAUTHENTICATED` | `nav.landing.error` may flash, then one session redirect |
+| Cold load with an expired cookie | `/app` | The landing's read and/or the guard's check → `UNAUTHENTICATED` → the first signal closes the guard's latch; any further signal joins it | `nav.landing.error` may flash, then one session redirect |
 | The API is unreachable | `/app` | Check fails with a network error: not evidence | The landing shows `nav.landing.error`; no redirect |
 | The API is unreachable | `/app/bookings` | Not evidence | The page's own load error; no redirect |
 | Role denied by the API | Any | `FORBIDDEN`: not evidence | The page's own error; no redirect |
@@ -184,7 +188,7 @@ The copy deliberately doesn't claim the session is invalid. When it is invalid, 
 7. The guard MUST NOT make page-visibility or authorization decisions, and MUST NOT use `isGatedPath`, `canViewPath`, `landingHref`, `visibleNavGroups` or `viewRoles`.
 8. The guard MUST be mounted exactly once, in `apps/web/app/app/layout.tsx`. No page mounts its own.
 9. The session check MUST use `fetchPolicy: 'network-only'`, MUST start on mount and on each pathname change, and MUST NOT start on a change to search parameters alone.
-10. After unmount, the guard MUST NOT act on late check results or signals.
+10. After unmount, no new evidence (a check result or signal arriving after unmount) may start a session redirect. A sequence whose latch closed before unmount MUST run to completion, including `router.replace('/login')`.
 11. `PageVisibilityGate`'s contract (#114 §4.2, §5 invariants 4–7) is unchanged. In particular the gate MUST NOT import the session signal or the guard, redirect, or inspect API errors.
 12. Apart from logout in `components/layout/user-menu.tsx` and the session redirect in `components/layout/session-guard.tsx`, no `apps/web/app/app/**` or `apps/web/components/**` source file may navigate to `/login`. `app/login/page.tsx` and `middleware.ts` are outside this rule.
 13. `middleware.ts` MUST NOT decode, verify, or trust the JWT (Admin Foundation §4.8).
@@ -193,7 +197,7 @@ The copy deliberately doesn't claim the session is invalid. When it is invalid, 
 
 **Goals**
 
-- Every `/app/*` page sends a user with a positively invalid session to `/login`, including when a mid-session expiry is followed by navigation to a page the gate denies from the cached principal.
+- On every `/app/*` page, the user is redirected to `/login` when session evidence (§3) is observed: an operation returns `UNAUTHENTICATED`, or a navigation-time check finds no principal. This includes a mid-session expiry followed by navigation to a page the gate denies from the cached principal. An invalid session that produces no evidence, for example while idle on one page, is deferred (§11).
 - One place owns that rule. The `/app` and `/app/admin` copies are retired, not duplicated a third time.
 - An API outage or a role denial never looks like a logout.
 - Rendering is never serialized behind session validation.
@@ -218,7 +222,7 @@ The copy deliberately doesn't claim the session is invalid. When it is invalid, 
   - The signal alone misses the headline case, because a gate-denied page sends no request.
   - The navigation check alone would miss a failure in a mutation or refetch while the user stays on a page.
   - A check triggered only on deny would put session logic in the gate.
-  - The price of the chosen design is one small `currentAdmin` request per `/app` pathname change. Apollo may deduplicate it with an identical in-flight read.
+  - The price of the chosen design is one small `currentAdmin` request per `/app` pathname change.
 - **Non-blocking, accepting a brief flash.** A blocking guard would put session validation on every page's rendering path and add a second loading state. Briefly showing the page's error or the unavailable state before the redirect is accepted: both are correct for the last known principal.
 - **Only positive evidence.** The current landing treats any `currentAdmin` failure as logout, so an outage signs everyone out. `UNAUTHENTICATED` is the API's explicit statement that the session is invalid. Anything else means "unknown", which the page's own error UI already handles.
 - **Signal in `packages/client`, routing in `apps/web`.** The client package owns the link chain but has no router. A subscriber-scoped notification keeps routing in the app. It also makes the `/login` wrong-password case safe without special-casing the `login` operation.
@@ -230,6 +234,7 @@ These are acceptance anchors for M4–M7. Test file names are planning decisions
 
 1. **Session signal** (unit, `packages/client`):
    - A result with an `UNAUTHENTICATED` GraphQL error notifies every registered listener once.
+   - A single result carrying several GraphQL errors, including more than one `UNAUTHENTICATED` error, notifies each listener exactly once.
    - `FORBIDDEN`, another GraphQL error code, a network error, and a successful result do not notify.
    - With no listener registered, an `UNAUTHENTICATED` result has no effect and still reaches the caller unchanged.
    - Unsubscribe stops notifications.
@@ -242,7 +247,8 @@ These are acceptance anchors for M4–M7. Test file names are planning decisions
    - **Principal result:** a check settling with a principal gives no redirect, and doesn't cancel one already started.
    - **Triggers:** mount starts one `network-only` check. A pathname change starts another. A search-parameter-only change starts none.
    - **Out of order:** a null result from a check started for an earlier pathname still redirects.
-   - **Unmount:** after unmount, a late null result and a late notification give no `clearStore()` and no `replace()`, and the listener is unregistered.
+   - **Unmount, new evidence:** with the latch still open, a null result settling after unmount and a notification after unmount give no `clearStore()` and no `replace()`. The listener is unregistered.
+   - **Unmount, committed redirect:** evidence closes the latch, the guard unmounts while `clearStore()` is pending, and when `clearStore()` resolves, `replace('/login')` is still called exactly once.
    - **`clearStore()` rejection:** `replace('/login')` is still called once.
 3. **Landing** (unit, `landing-target.test.ts`, and the page):
    - `landingTarget` never returns `'/login'`: `undefined` while loading, on error, and on an absent principal; `landingHref` otherwise.
@@ -264,7 +270,7 @@ These are acceptance anchors for M4–M7. Test file names are planning decisions
 | Admin Foundation §4.8, §6 item 6 | **Relied upon** unchanged. Middleware stays a cookie-presence UX hint. This spec moves the "downstream" catch for a present but invalid cookie from two pages into one layout guard. |
 | Multi-Tenant Architecture §5 invariant 13 | **Relied upon** unchanged. The guard is navigation-level UX, never a security boundary. |
 | Role-Aware Typed URLs (#114) §4.2, §5 invariants 4–7 | **Relied upon** unchanged. The gate's file, cache-first read, rendering rows and "not a session boundary" rule are untouched. |
-| Role-Aware Typed URLs (#114) §2 Informative, §4.2 "role staleness", §4.5 redirect lifecycle, §4.6 expired-session rows, §6, §11 | **Constrained.** The page-level session behavior those passages describe changes. The admin page no longer redirects itself, and the guard redirects on evidence for every page. The cached principal is refreshed at each `/app` navigation. A cross-reference amendment under #131 records this in the #114 spec without changing any locked decision there. |
+| Role-Aware Typed URLs (#114) §2 Informative, §4.5 redirect lifecycle, §4.6 expired-session rows, §11 | **Constrained.** Responsibility for the session redirect described in those passages moves to this spec: the admin page no longer redirects itself, and the guard redirects on evidence for every page. A cross-reference amendment under #131 records only that move in the #114 spec. It makes no second design decision, and §4.2, including its role-staleness note, is unchanged. Any freshening of the shared cache by the session check (§2 Informative) is a side effect owned here. |
 | Web Shell and Design System | **Relied upon**: the single `/app` layout. One render-less component is added inside it, and shell chrome is unchanged. |
 | #89 shell slice (`landing-target.ts`) | **Changed**: `landingTarget` loses its `/login` outcome (§4.4). `landingHref` is unchanged. |
 | Staff Administration UI (#88) | **Changed** for the session redirect only (§4.5). The console's queries, mutations and error mapping are unchanged. |
@@ -275,7 +281,7 @@ This specification may move from Draft to Accepted at M3 when the reviewer agree
 
 1. The decision is locked and justified (§1, §7): a single non-blocking layout guard beside the gate, with a subscriber-scoped `UNAUTHENTICATED` signal and a navigation-time `network-only` check.
 2. Session evidence vs. non-evidence is unambiguous (§3, §5 invariant 2). This includes "settled null is evidence; a failed check is not", and that `FORBIDDEN`, network failures and 5xx never redirect.
-3. The single-flight redirect, its `clearStore()`-first order, its unmount behavior, and its independence from logout are unambiguous (§4.3, §5 invariants 3–4, 10).
+3. The single-flight redirect, its `clearStore()`-first order, its unmount behavior (new evidence stopped; a committed sequence completes), and its independence from logout are unambiguous (§4.3, §5 invariants 3–4, 10).
 4. The guard is shown to make no visibility decision, and `PageVisibilityGate`'s #114 contract is unchanged (§4.2, §5 invariants 7, 11).
 5. The retirement of the `/app` and `/app/admin` redirects, the new landing and admin error states, and the `nav.landing.error` copy leave no product decision to M4 (§4.4–§4.6).
 6. The worked examples and verification contract cover the hidden-page case, the outage case, the `FORBIDDEN` case and the `/login` wrong-password case (§4.7, §8).
