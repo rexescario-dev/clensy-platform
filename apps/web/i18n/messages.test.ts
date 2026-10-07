@@ -10,6 +10,7 @@ describe('getMessages', () => {
     const { nav } = getMessages();
     expect(nav.landing).toEqual({
       empty: 'No areas are available for your account.',
+      error: 'Unable to load your account.',
       loading: 'Loading…',
     });
     expect(nav.platform).toEqual({

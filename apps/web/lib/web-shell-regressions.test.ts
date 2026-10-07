@@ -53,6 +53,8 @@ describe('web shell regressions', () => {
     const landing = readWebSource('app/app/page.tsx');
 
     expect(landing).toContain('landingTarget({ currentAdmin, error, loading })');
+    // Session routing spec §4.4: the landing never routes to /login itself.
+    expect(landing).not.toContain('/login');
     expect(landing).not.toContain('/app/customers');
     expect(landing).not.toMatch(/tenantId/);
   });

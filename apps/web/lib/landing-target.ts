@@ -6,12 +6,12 @@ export interface LandingState {
   loading: boolean;
 }
 
-// The /app landing decision (plan decision 5): wait while loading; an errored
-// or missing session goes to /login (middleware only checks the cookie
-// exists); otherwise the shared landingHref rule. Undefined after loading
-// means a principal with nothing visible. UX only (multi-tenant spec §5.13).
+// The /app landing decision (plan decision 5): wait while loading; no target
+// on an error or a missing principal; otherwise the shared landingHref rule.
+// An invalid session is the layout SessionGuard's to route (session routing
+// spec §4.4), so this never targets the sign-in page. UX only (multi-tenant
+// spec §5.13).
 export function landingTarget({ currentAdmin, error, loading }: LandingState): string | undefined {
-  if (loading) return undefined;
-  if (error || !currentAdmin) return '/login';
+  if (loading || error || !currentAdmin) return undefined;
   return landingHref(currentAdmin);
 }
