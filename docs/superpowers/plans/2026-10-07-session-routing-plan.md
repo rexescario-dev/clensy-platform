@@ -4,8 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
-| M5 decision | Pending. |
+| Status | Accepted |
+| M5 decision | **Accepted** — 2026-10-07, at `17df9f6`, by the owner, on the second pass, with no further changes. Executed natively in this session, task by task. M6 MUST stay bounded to this plan: the subscriber-scoped signal; the single-flight latch; `runSessionCheck` bound to the redirector captured at check start; one render-less `SessionGuard` with a `network-only` check on mount and pathname changes only; the landing and admin retirements; and the `/login` navigation scan. M7 MUST use a fresh, independent reviewer (application-code and session-routing slice). |
 | M5 history | First pass (2026-10-07, at `52d26b6`): the owner found the architecture and sequencing sound and requested two changes, both applied. (1) **Out-of-order and stale-check lifecycle pinned directly.** The check-to-report step moves into a pure `runSessionCheck(query, redirector)` in Task 2, bound to the redirector captured when the check starts. Four unit tests cover an out-of-order null after a later principal, a later principal not undoing a started redirect, a stale check not acting through a newer redirector, and a rejected check. Task 3 adds a source regression: the guard passes the captured `current`, reads the ref only synchronously at effect start, and has no `.then(` callback. (2) **The `isNoPrincipalResult` comment** now states that a null or absent `currentAdmin` (including an absent `data`) is deliberate defensive evidence under the Accepted spec. One optional rename was applied: the render test is now `renders nothing and does not delay its sibling page`. No product semantics changed. |
 | Date | 2026-10-07 |
 | Tracking issue | [#131](https://github.com/rexescario-dev/clensy-platform/issues/131) |
