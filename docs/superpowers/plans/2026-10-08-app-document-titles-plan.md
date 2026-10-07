@@ -5,6 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Status | Draft |
+| M5 history | First pass (2026-10-08) returned two required changes and three improvements, all applied without changing the approach. **Required:** `NAV_ITEMS` is stated as a derived view of `NAV_GROUPS`, not a configuration source (Architecture, Task 2 Step 3); the `/app` and `/login` metadata regressions read exported names from the syntax tree, so every export form counts and `export *` fails closed (Task 4 Steps 1 and 3). **Improvements:** one-contribution versus one-effective-title wording (Global Constraints); the root-title regression reads the `metadata` object's properties from the syntax tree instead of a formatting-dependent regex (Task 4 Step 1); Task 5 records the title and announcer text before and after the navigation. Task 4 was re-pre-validated after the change (Pre-validation). |
 | Date | 2026-10-08 |
 | Tracking issue | [#143](https://github.com/rexescario-dev/clensy-platform/issues/143). Program [#81](https://github.com/rexescario-dev/clensy-platform/issues/81). |
 | Scope | `apps/web` only: `messages/en/nav.json`, `i18n/messages.test.ts`, `lib/nav-groups.ts`, `lib/nav-groups.test.ts`, `components/layout/page-visibility-gate.tsx`, `lib/page-visibility-gate.test.tsx`, `app/layout.tsx`, a new `app/login/layout.tsx`, and `lib/web-shell-regressions.test.ts`. No `apps/api`, `packages/*`, middleware, `next.config.ts`, page or `/app` layout changes. |
@@ -18,7 +19,7 @@
 **Architecture:**
 
 - **Copy (Task 1).** `nav.documentTitle.app` (`Clensy`), `nav.documentTitle.page` (`{page} · Clensy`) and `nav.unavailable.title` (`Page unavailable`).
-- **Resolver (Task 2).** `pageTitleKey(pathname)` in `lib/nav-groups.ts`: `findActiveHref` → that item's `labelKey`; else a platform path → `platform.title`; else `undefined`. A module-local `NAV_ITEMS` (the flattened `NAV_GROUPS` items) is introduced, and `ALL_HREFS` is derived from it, so no new path data exists.
+- **Resolver (Task 2).** `pageTitleKey(pathname)` in `lib/nav-groups.ts`: `findActiveHref` → that item's `labelKey`; else a platform path → `platform.title`; else `undefined`. A module-local `NAV_ITEMS` is introduced as a **derived view of `NAV_GROUPS`** (its items, flattened), not an independent configuration source or mapping, and `ALL_HREFS` is derived from it so the flattening happens once. `findActiveHref`'s contract is unchanged; `pageTitleKey` looks up the item for the href it returns.
 - **Gate (Task 3).** The gate computes the requested path's title once, `nav.documentTitle.page` with `t(pageTitleKey)` or `nav.documentTitle.app`, and wraps every row's existing output in a module-local `Titled` component: a fragment of `<title>{title}</title>` plus the row. The denied row uses `nav.documentTitle.page` with `nav.unavailable.title`. The gate's branches, hooks, decision and visible output are unchanged.
 - **Root and `/login` (Task 4).** `metadata.title` is removed from `app/layout.tsx`. **`/login` mechanism (the M4 decision the spec delegates, §4.4):** a new server `app/login/layout.tsx` exports `generateMetadata` returning `title: t('documentTitle.app')` through `next-intl/server` `getTranslations('nav')`. This is chosen over a React `<title>` in the client login page because it keeps `<title>` JSX unique to the gate (spec §8 item 3), is Next-native, and adds no layout under `/app`.
 
@@ -29,7 +30,7 @@
 - `pnpm --filter web exec vitest run i18n/messages.test.ts` (RED 2 failed / 3 passed, then GREEN 5)
 - `pnpm --filter web exec vitest run lib/nav-groups.test.ts` (RED 18 failed / 226 passed, then GREEN 244)
 - `pnpm --filter web exec vitest run lib/page-visibility-gate.test.tsx` (RED 13 failed / 21 passed, then GREEN 34)
-- `pnpm --filter web exec vitest run lib/web-shell-regressions.test.ts` (RED 2 failed / 182 passed; both mutations 1 failed / 183 passed; GREEN 184)
+- `pnpm --filter web exec vitest run lib/web-shell-regressions.test.ts` (RED 2 failed / 182 passed; GREEN 184). After the M5 first pass the Task 4 test block was replaced with the syntax-tree version and re-run: RED 2 failed / 182 passed; GREEN 184; the declaration, export-list, star and root-spread mutations each 1 failed / 183 passed; the `<title>` mutation 1 failed / 183 passed in the first run. With it, the full suite (547), tsc and lint were re-run and passed.
 - `pnpm --filter web test` (17 files, 547 tests passed)
 - `pnpm --filter web exec tsc --noEmit`, `pnpm --filter web lint`, `pnpm --filter web build` (exit 0)
 - The Final verification diff (empty)
@@ -42,7 +43,7 @@ The client-navigation half (Task 5 Step 2) needs a running API with a seeded ses
 Copied from the Accepted spec. Every task's requirements implicitly include this section.
 
 - `NAV_GROUPS` and `PLATFORM_HOME_HREF` are the only page-specific title sources. `pageTitleKey` adds no list, map or table of paths or titles, shares `canViewPath`'s path matching only, and never inspects or calls the principal decision. It returns `undefined` when nothing resolves; only the gate turns that into `nav.documentTitle.app` (§4.1, §5 invariant 1).
-- For every gate row, `PageVisibilityGate` renders exactly one React `<title>`, and no other `/app` source contributes a title (§4.3, §5 invariant 2).
+- For every gate row, `PageVisibilityGate` renders exactly one React `<title>` **contribution**, and no other `/app` source contributes a title (§4.3, §5 invariant 2). React hoists it into `<head>`, so it has no DOM relationship to the row. The **effective document** then has exactly one title, after React's head processing, with no root-layout title competing (§5 invariant 4, verified by Task 5).
 - The title describes the rendered row: the denied row is always the unavailable title; the loading row uses the requested path's title from the same resolver as the allowed row (§4.3, §5 invariant 3).
 - Titles come only from the §4.2 patterns; no code concatenates a page name, separator and app name (§4.2, §5 invariant 5).
 - The visibility rule, the gate decision, its visible rows, hooks and mount rules, and API behavior are unchanged (§4.3, §5 invariant 7).
@@ -51,7 +52,7 @@ Copied from the Accepted spec. Every task's requirements implicitly include this
 ## Review Focus
 
 1. **Gate behavior drift.** Task 3 only wraps each existing return value in `Titled`. Every pre-existing gate test (mounting, `LoadingState`, unavailable heading, home link) must still pass unchanged.
-2. **A second title source.** The Task 4 regressions fail if any other non-test source contains `<title`, or if any `/app` source exports `metadata`/`generateMetadata`. Their mutation checks prove both can fail. (A comment containing the literal text `<title` also trips the first, so comments say "title element".)
+2. **A second title source.** The Task 4 regressions fail if any other non-test source contains `<title`, or if any `/app` source exports `metadata`/`generateMetadata` in any export form (read from the syntax tree; `export *` fails closed). Their mutation checks prove each form is caught. (A comment containing the literal text `<title` also trips the first, so comments say "title element".)
 3. **The loading row.** Its title must equal the allowed row's for the same path (a dedicated Task 3 test).
 
 ---
@@ -178,7 +179,7 @@ describe('pageTitleKey', () => {
 Run: `pnpm --filter web exec vitest run lib/nav-groups.test.ts`
 Expected: FAIL, 18 failed and 226 passed: every new test (10 nav items + 1 + 1 + 6 paths), with `pageTitleKey is not a function`.
 
-- [ ] **Step 3: Add the resolver.** In `apps/web/lib/nav-groups.ts`:
+- [ ] **Step 3: Add the resolver.** In `apps/web/lib/nav-groups.ts`. `NAV_ITEMS` is a derived view of `NAV_GROUPS`, not a second configuration source; don't add data to it or build it from anything else.
 
   - Replace `const ALL_HREFS = NAV_GROUPS.flatMap((group) => group.items.map((item) => item.href));` with:
 
@@ -386,14 +387,69 @@ git commit -m "feat(web): render the /app document title from the visibility gat
 ```ts
 
 // Document titles spec §4.3, §4.4 and §8 item 3 (#143).
+const METADATA_EXPORTS = ['metadata', 'generateMetadata'];
+
+// Every name a module exports, read from its syntax tree so any export form
+// counts: exported declarations, export lists (renames and re-exports
+// included) and default exports. An `export * from`, or an exported
+// destructuring, can't be named without resolving it, so it yields '*' and
+// fails closed.
+function exportedNames(source: ts.SourceFile): string[] {
+  return source.statements.flatMap((statement) => {
+    if (ts.isExportDeclaration(statement)) {
+      const clause = statement.exportClause;
+      if (!clause) return ['*'];
+      return ts.isNamedExports(clause) ? clause.elements.map((element) => element.name.text) : [clause.name.text];
+    }
+    if (ts.isExportAssignment(statement)) return ['default'];
+    const modifiers = ts.canHaveModifiers(statement) ? (ts.getModifiers(statement) ?? []) : [];
+    if (!modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)) return [];
+    if (modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword)) return ['default'];
+    if (ts.isVariableStatement(statement)) {
+      return statement.declarationList.declarations.map((declaration) =>
+        ts.isIdentifier(declaration.name) ? declaration.name.text : '*',
+      );
+    }
+    const named = ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement) || ts.isEnumDeclaration(statement);
+    return named && statement.name ? [statement.name.text] : [];
+  });
+}
+
+function exportsMetadata(path: string, text: string) {
+  return exportedNames(parseSource(path, text)).some((name) => name === '*' || METADATA_EXPORTS.includes(name));
+}
+
+// The property names of the root layout's `metadata` object, or undefined
+// when it declares none. A spread or computed property yields '*'.
+function rootMetadataProperties(): string[] | undefined {
+  const source = parseSource('app/layout.tsx', readWebSource('app/layout.tsx'));
+  for (const statement of source.statements) {
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (!ts.isIdentifier(declaration.name) || declaration.name.text !== 'metadata') continue;
+      let value = declaration.initializer;
+      while (value && (ts.isSatisfiesExpression(value) || ts.isAsExpression(value) || ts.isParenthesizedExpression(value))) {
+        value = value.expression;
+      }
+      if (!value || !ts.isObjectLiteralExpression(value)) return ['*'];
+      return value.properties.map((property) =>
+        property.name && (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) ? property.name.text : '*',
+      );
+    }
+  }
+  return undefined;
+}
+
 describe('document title ownership', () => {
   const sources = () => nonTestSources(webRoot).map((path) => ({ path: relative(webRoot, path), text: readFileSync(path, 'utf8') }));
 
   it('sets no title in the root layout metadata', () => {
-    const metadata = readWebSource('app/layout.tsx').match(/export const metadata: Metadata = \{([^}]*)\}/);
+    const properties = rootMetadataProperties();
 
-    expect(metadata?.[1]).toBeDefined();
-    expect(metadata?.[1]).not.toMatch(/\btitle\s*:/);
+    expect(properties).toBeDefined();
+    expect(properties).not.toContain('title');
+    expect(properties).not.toContain('*');
+    expect(exportedNames(parseSource('app/layout.tsx', readWebSource('app/layout.tsx')))).not.toContain('generateMetadata');
   });
 
   it('renders <title> only in the page-visibility gate', () => {
@@ -404,10 +460,10 @@ describe('document title ownership', () => {
     expect(owners).toEqual(['components/layout/page-visibility-gate.tsx']);
   });
 
-  it('exports no metadata from any /app source', () => {
+  it('exports no metadata from any /app source, in any export form', () => {
     const exporters = sources()
       .filter(({ path }) => path.startsWith(`app${sep}app${sep}`))
-      .filter(({ text }) => /export\s+(const\s+metadata|(async\s+)?function\s+generateMetadata)\b/.test(text))
+      .filter(({ path, text }) => exportsMetadata(path, text))
       .map(({ path }) => path);
 
     expect(exporters).toEqual([]);
@@ -416,7 +472,7 @@ describe('document title ownership', () => {
   it('gives /login exactly one title source, the bare app title', () => {
     const exporters = sources()
       .filter(({ path }) => path.startsWith(`app${sep}login${sep}`))
-      .filter(({ text }) => /export\s+(const\s+metadata|(async\s+)?function\s+generateMetadata)\b/.test(text))
+      .filter(({ path, text }) => exportsMetadata(path, text))
       .map(({ path }) => path);
 
     expect(exporters).toEqual([`app${sep}login${sep}layout.tsx`]);
@@ -430,10 +486,14 @@ describe('document title ownership', () => {
 Run: `pnpm --filter web exec vitest run lib/web-shell-regressions.test.ts`
 Expected: FAIL, 2 failed and 182 passed: `sets no title in the root layout metadata` and `gives /login exactly one title source, the bare app title`. The other two new tests pass already. They are **characterization tests**: after Task 3 the gate is already the only `<title>` source, and no `/app` source exports metadata.
 
-- [ ] **Step 3: Mutation checks for the two characterization tests (not committed).**
-  - Temporarily insert `export const metadata = { title: 'x' };` above `export default function` in `apps/web/app/app/jobs/page.tsx`, run `pnpm --filter web exec vitest run lib/web-shell-regressions.test.ts`, and expect 1 failed (`exports no metadata from any /app source`) and 183 passed. Revert with `git checkout -- apps/web/app/app/jobs/page.tsx`.
-  - Temporarily change `apps/web/app/app/platform/page.tsx`'s `return <PageHeader … />;` to `return <><title>x</title><PageHeader … /></>;`, run the same command, and expect 1 failed (`renders <title> only in the page-visibility gate`) and 183 passed. Revert with `git checkout -- apps/web/app/app/platform/page.tsx`.
+- [ ] **Step 3: Mutation checks for the two characterization tests (not committed).** For each mutation, run `pnpm --filter web exec vitest run lib/web-shell-regressions.test.ts`, check the result, then revert with `git checkout -- <file>`:
+  - **Declaration export:** append `export const metadata = { title: 'x' };` to `apps/web/app/app/jobs/page.tsx`. Expect 1 failed (`exports no metadata from any /app source, in any export form`) and 183 passed.
+  - **Export list with a rename:** append `const pageMetadata = { title: 'x' };` and `export { pageMetadata as metadata };` to the same file. Expect the same single failure.
+  - **Star re-export:** append `export * from '../../../lib/nav-groups';` to the same file. Expect the same single failure (fails closed).
+  - **A second `<title>`:** in `apps/web/app/app/platform/page.tsx`, change `return <PageHeader title={t('platform.title')} description={t('platform.description')} />;` to `return <><title>x</title><PageHeader title={t('platform.title')} description={t('platform.description')} /></>;`, keeping the quotes as they are. Expect 1 failed (`renders <title> only in the page-visibility gate`) and 183 passed.
   - Confirm `git status --short -- apps/web/app/app` is empty.
+
+  The root-layout test is pinned by its RED run in Step 2 and, after Step 4, by its syntax-tree property check. A spread in the root `metadata` object (`...{ title: 'x' }`) also fails it (pre-validated).
 
 - [ ] **Step 4: Remove the root title.** In `apps/web/app/layout.tsx`, replace:
 
@@ -505,9 +565,9 @@ curl -s -b clensy_admin_session=x http://localhost:3999/app/customers | grep -c 
 
 Expected: exactly one `<title>` per route: `/app` `Clensy`, `/app/customers` `Customers · Clensy`, `/app/platform` `Platform · Clensy`, `/app/catalog` `Services · Clensy`, `/login` `Clensy`. The last command prints a non-zero count, confirming that the server rendered the gated route's loading row. Record which row was rendered, as the spec requires.
 
-- [ ] **Step 2: Client navigation.** Run the stack (`docker compose up -d --build`, then `pnpm db:seed` with `ADMIN_SEED_EMAIL`/`ADMIN_SEED_PASSWORD` set, as `README.md` describes) and sign in as the seeded `TENANT_OWNER` in a real browser. Through the sidebar, navigate between two pages with distinct titles, for example Bookings → Customers. Record:
-  - that `document.title` changes from `Bookings · Clensy` to `Customers · Clensy`;
-  - that the text of Next's route-announcer region (`next-route-announcer`) equals the new title.
+- [ ] **Step 2: Client navigation.** Run the stack (`docker compose up -d --build`, then `pnpm db:seed` with `ADMIN_SEED_EMAIL`/`ADMIN_SEED_PASSWORD` set, as `README.md` describes) and sign in as the seeded `TENANT_OWNER` in a real browser. Through the sidebar, navigate between two pages with distinct titles, for example Bookings → Customers. Record a transition, not only the end state:
+  - **before** the navigation, on Bookings: `document.title` (`Bookings · Clensy`) and the text of Next's route-announcer region (`next-route-announcer`);
+  - **after** navigating to Customers through the sidebar: `document.title` (`Customers · Clensy`) and the announcer region's text, which must now equal the new title.
 
   Where practical, also record a gate-state transition into the unavailable state: for example, as a `FINANCE` account (created through `/app/admin`), a cold load of `/app/customers` showing `Customers · Clensy` and then `Page unavailable · Clensy`.
 
