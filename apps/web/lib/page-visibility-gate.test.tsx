@@ -70,6 +70,18 @@ function expectUnavailableHeading(html: string) {
   expect(headings).toEqual([['h1', UNAVAILABLE]]);
 }
 
+// Spec §4.3 (#134): the home link is the anchor itself, rendered through
+// Button's link variant by asChild, with no wrapping <button>. Complements
+// homeLink(), which checks the same anchor's href and text.
+function expectButtonLink(html: string, href: string) {
+  const anchors = [...html.matchAll(/<a\b[^>]*>/g)].map(([tag]) => tag);
+  expect(anchors).toHaveLength(1);
+  expect(anchors[0]).toContain(`href="${href}"`);
+  expect(anchors[0]).toContain('data-slot="button"');
+  expect(anchors[0]).toContain('data-variant="link"');
+  expect(html).not.toContain('<button');
+}
+
 function expectMounted(html: string) {
   expect(html).toContain('page-probe');
   expect(pageRenders).toBe(1);
@@ -130,6 +142,7 @@ describe('PageVisibilityGate', () => {
       expectNotMounted(html);
       expectUnavailableHeading(html);
       expect(html).toMatch(homeLink('/app/bookings'));
+      expectButtonLink(html, '/app/bookings');
     });
 
     it('denies a deep link beneath a hidden page', () => {
@@ -145,6 +158,7 @@ describe('PageVisibilityGate', () => {
       expectNotMounted(html);
       expectUnavailableHeading(html);
       expect(html).toMatch(homeLink('/app/platform'));
+      expectButtonLink(html, '/app/platform');
     });
 
     it('denies a tenant principal the platform page', () => {
@@ -153,6 +167,7 @@ describe('PageVisibilityGate', () => {
       expectNotMounted(html);
       expectUnavailableHeading(html);
       expect(html).toMatch(homeLink('/app/bookings'));
+      expectButtonLink(html, '/app/bookings');
     });
 
     it('omits the home link when the principal has no landing', () => {
