@@ -218,3 +218,19 @@ The slice consumes the existing, Accepted `@clensy/ui` `Button` contract without
 - **Task independence.** Tasks 1 and 2 touch different files and can run in either order. The plan orders the test-only task first.
 
 ## Gate outcomes
+
+### M6 — Implementation complete (2026-10-07)
+
+Executed natively, in plan order, on `feat/134-unavailable-link-trailing-slash`. Plan Accept `bb21c1a` is the parent of the first implementation commit.
+
+| Task | Commit | RED observed | GREEN |
+| --- | --- | --- | --- |
+| 1. The `/app/admin/` trailing-slash row | `69a36ac` | **Characterization test**: passed on first run (226). Mutation check, not committed: with `segmentMatches` rejecting a trailing slash, 14 failed and 212 passed (the `resolves /app/admin/ …` test plus the 13 principals that cannot view `/app/admin`); reverted, and `git diff --quiet -- apps/web/lib/nav-groups.ts` exited 0 | `lib/nav-groups.test.ts` 226/226 |
+| 2. The home link through `Button asChild variant="link"` | `18c0f0f` | Exactly the three Step 2 tests, each `expected '<a class="text-sm font-medium text-sl…' to contain 'data-slot="button"'`; 18 passed | `lib/page-visibility-gate.test.tsx` 21/21 |
+
+- **Characterization tests:** Task 1's 15 tests, with mutation evidence as above.
+- **Deviations from the plan:** none. The test and code edits are the plan's text verbatim.
+- **Final verification**, all exit 0 or empty as the plan expects:
+  - `pnpm --filter web test`: 17 files, 511/511.
+  - `pnpm --filter web exec tsc --noEmit`, `pnpm --filter web lint` and `pnpm --filter web build`: exit 0.
+  - `git diff --stat main -- apps/api packages apps/web/middleware.ts apps/web/messages apps/web/next.config.ts apps/web/lib/nav-groups.ts apps/web/app`: empty.
