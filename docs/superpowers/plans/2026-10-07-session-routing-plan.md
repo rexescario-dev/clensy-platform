@@ -6,12 +6,13 @@
 | --- | --- |
 | Status | Draft |
 | M5 decision | Pending. |
+| M5 history | First pass (2026-10-07, at `52d26b6`): the owner found the architecture and sequencing sound and requested two changes, both applied. (1) **Out-of-order and stale-check lifecycle pinned directly.** The check-to-report step moves into a pure `runSessionCheck(query, redirector)` in Task 2, bound to the redirector captured when the check starts. Four unit tests cover an out-of-order null after a later principal, a later principal not undoing a started redirect, a stale check not acting through a newer redirector, and a rejected check. Task 3 adds a source regression: the guard passes the captured `current`, reads the ref only synchronously at effect start, and has no `.then(` callback. (2) **The `isNoPrincipalResult` comment** now states that a null or absent `currentAdmin` (including an absent `data`) is deliberate defensive evidence under the Accepted spec. One optional rename was applied: the render test is now `renders nothing and does not delay its sibling page`. No product semantics changed. |
 | Date | 2026-10-07 |
 | Tracking issue | [#131](https://github.com/rexescario-dev/clensy-platform/issues/131) |
 | Scope | `packages/client`: the session signal, the link wiring, an export, and a Vitest setup for the package's first tests. `apps/web`: a new layout component, a pure redirect helper, the `/app` layout, the `/app` landing, `/app/admin`, one `nav` copy key, one ESLint test exception, and tests. `pnpm-lock.yaml`: the `vitest` devDependency for `packages/client`. No `apps/api`, `middleware.ts`, `PageVisibilityGate`, `user-menu.tsx`, `app/login` or `packages/ui`/`packages/web` source changes. |
 | Implements (Accepted) | [Consistent `/login` Routing for Missing or Invalid Sessions Across `/app` — Design](../specs/2026-10-07-session-routing-design.md), Status **Accepted** (M3, 2026-10-07, `0e81e98`) |
 | Relies on (Accepted) | [Role-Aware Typed URLs](../specs/2026-10-04-role-aware-typed-urls-design.md) §4.2, §5 invariants 4–7, plus its #131 cross-reference amendment (Accepted 2026-10-07); [Admin Foundation](../specs/2026-08-14-admin-foundation-design.md) §4.8; [Multi-Tenant Architecture](../specs/2026-09-23-multi-tenant-architecture-design.md) §5 invariant 13; [Web Shell and Design System](../specs/2026-09-10-web-shell-and-design-system-design.md) |
-| Authority | Where this plan and the Accepted spec disagree, the **spec wins** and this plan must be revised. File layout, task grouping, order, helper names (`sessionErrorLink`, `createSessionRedirector`, `isNoPrincipalResult`, `SessionCheckResult`), test names and CSS classes are planning decisions, not product semantics. |
+| Authority | Where this plan and the Accepted spec disagree, the **spec wins** and this plan must be revised. File layout, task grouping, order, helper names (`sessionErrorLink`, `createSessionRedirector`, `isNoPrincipalResult`, `runSessionCheck`, `SessionCheckResult`), test names and CSS classes are planning decisions, not product semantics. |
 | Edit anchors | New files are given in full. Edits to existing files are given as unified diffs against the branch base, `61b6fb8` (`main`). The spec commits on top touch no code. |
 | Pre-validation | **Full.** See below. |
 
@@ -27,9 +28,10 @@
   - `createSessionRedirector({ clearStore, navigateToLogin })` returns `{ report, dispose }`. The first `report()` commits one `clearStore()` → `navigateToLogin()` sequence (spec §4.3), and later reports join it.
   - `dispose()` stops new evidence but never cancels a committed sequence.
   - `isNoPrincipalResult(result)` is spec §3 evidence (2).
+  - `runSessionCheck(query, redirector)` runs one check and reports only to the redirector it was given, the one captured when the check started. So a check that outlives its guard can't act through a newer one. Out-of-order results need no cancellation.
 - **Guard (`apps/web/components/layout/session-guard.tsx`).** It renders `null`, with two effects:
   - **Mount:** create the redirector with `client.clearStore()` and `router.replace('/login')`, subscribe to the signal, and on unmount unsubscribe and dispose.
-  - **Session check:** keyed on `[client, pathname]`, so it runs on mount and on each pathname change. It runs `client.query({ query: CurrentAdminDocument, fetchPolicy: 'network-only' })`. A no-principal result reports; a rejection is ignored, because an `UNAUTHENTICATED` rejection has already raised the signal.
+  - **Session check:** keyed on `[client, pathname]`, so it runs on mount and on each pathname change. It reads the ref once, synchronously, and calls `runSessionCheck(() => client.query({ query: CurrentAdminDocument, fetchPolicy: 'network-only' }), current)`. A no-principal result reports; a rejection is ignored, because an `UNAUTHENTICATED` rejection has already raised the signal.
   - The guard is mounted beside `PageVisibilityGate` in `app/app/layout.tsx`.
 - **Retirements.**
   - `landingTarget` loses its `'/login'` outcome. The landing page shows `nav.landing.error` on a failed read.
@@ -39,12 +41,12 @@
 
 **Spec:** [`docs/superpowers/specs/2026-10-07-session-routing-design.md`](../specs/2026-10-07-session-routing-design.md). Executors read both.
 
-**Pre-validation (full).** Before M5, on 2026-10-07, every code block and diff in Tasks 1–5 was applied to a working tree at `a0f0e46`, and every command named by an `Expected:` line ran with the stated result.
+**Pre-validation (full).** Before M5, on 2026-10-07, every code block and diff in Tasks 1–5 was applied to a working tree at `a0f0e46`. The M5 first-pass revisions were applied the same way and re-validated at `52d26b6`, and every command named by an `Expected:` line ran with the stated result.
 
 - **Gaps found and folded in.** The first application found two gaps, both now part of the plan:
   1. Task 3 must also update #114's existing gate-mount regression in `web-shell-regressions.test.ts` (Task 3 Step 5).
   2. Task 5's `/login` scan must match navigation, not prose. An existing layout comment quotes `` `/login` `` (Task 5 Step 1).
-- **Mutation check.** Planting `// router.replace('/login');` in `app/app/page.tsx` makes the Task 5 scan fail. It was then reverted.
+- **Mutation checks.** Planting `// router.replace('/login');` in `app/app/page.tsx` makes the Task 5 scan fail. Changing the guard to pass `redirector.current ?? current` to `runSessionCheck` makes the Task 3 binding regression fail. Both were then reverted.
 - **Commands run:**
   - `pnpm install`
   - `pnpm --filter @clensy/client test`
@@ -55,10 +57,10 @@
   - `pnpm --filter web exec tsc --noEmit`
   - `pnpm --filter web lint`
   - Final verification: `pnpm run lint`, `pnpm --filter web exec tsc --noEmit`, `pnpm --filter api exec tsc --noEmit`, `pnpm run test`.
-- **Final counts:** `@clensy/client` 10 tests, `web` 516 tests (baseline 496), and every other workspace green.
+- **Final counts:** `@clensy/client` 10 tests, `web` 521 tests (baseline 496), and every other workspace green.
 
-- **Replay from the plan text.** After the plan was written, the tree was reset to `a0f0e46`, and Tasks 1–5 were re-applied **from this document's own code blocks and diffs**, in order, mechanically. Every RED and GREEN `Expected:` line was re-run, and every result matched.
-  - The first replay caught one plan-assembly defect: Task 5's "append" block began with a stray fragment of Task 4's tests. It was corrected, and the full replay re-run clean.
+- **Replay from the plan text.** After each revision, the tree was reset and Tasks 1–5 were re-applied **from this document's own code blocks and diffs**, in order, mechanically. Every RED and GREEN `Expected:` line was re-run, and every result matched.
+  - The first replay caught one plan-assembly defect: Task 5's "append" block began with a stray fragment of Task 4's tests. It was corrected before the first M5 pass.
   - Final verification steps 1–4 and the mutation check then passed on the replayed tree.
 
 The tree was then reverted. Only this plan is committed.
@@ -82,7 +84,7 @@ These are behaviors no single task's tests can fully exercise, because of the no
 1. **A real expired session in a browser:** the page's error may flash, then exactly one navigation to `/login` happens. Pinned by the latch unit tests (Task 2) and the guard's source wiring (Task 3), not by an end-to-end test. M7 should read the guard's two effects against spec §4.2 line by line.
 2. **The hidden-page case:** a cached principal and a gate-denied page, with the guard's check producing the redirect. Pinned by Task 3's wiring regressions (the check runs on mount and on each pathname change).
 3. **Search-parameter-only navigation (bookings paging)** must not re-check. Pinned by Task 3's source assertions (`[client, pathname]`, no `useSearchParams`).
-4. **React strict-mode double mount in dev:** mount, unmount, mount. Dispose stops the first redirector, and the second subscribes afresh. A check started under the disposed redirector does not act. Pinned by Task 2's dispose tests.
+4. **React strict-mode double mount in dev:** mount, unmount, mount. Dispose stops the first redirector, and the second subscribes afresh. A check started under the disposed redirector does not act, and it cannot reach the new one. Pinned by Task 2's dispose and `runSessionCheck` tests and Task 3's binding regression.
 5. **The wrong password on `/login`:** the guard isn't mounted there, so nothing listens. Pinned by Task 1's "no listener" test and the layout-only mount (Task 3).
 
 ## File Map
@@ -403,7 +405,7 @@ git commit -m "feat(131): add the subscriber-scoped UNAUTHENTICATED session sign
 
 ---
 
-### Task 2: Single-flight redirect latch (spec §3 evidence (2), §4.3; §5 invariants 3, 4, 10; §8 item 2)
+### Task 2: Single-flight redirect latch and session check (spec §3 evidence (2), §4.2 proactive evidence, §4.3; §5 invariants 3, 4, 10; §8 item 2)
 
 **Files:**
 - Create: `apps/web/lib/session-redirect.ts`, `apps/web/lib/session-redirect.test.ts`
@@ -412,13 +414,14 @@ git commit -m "feat(131): add the subscriber-scoped UNAUTHENTICATED session sign
 - Produces:
   - `createSessionRedirector(effects: SessionRedirectEffects): SessionRedirector`, where `SessionRedirectEffects = { clearStore: () => Promise<unknown>; navigateToLogin: () => void }` and `SessionRedirector = { dispose: () => void; report: () => Promise<void> }`.
   - `isNoPrincipalResult(result: SessionCheckResult): boolean`, where `SessionCheckResult = { data?: { currentAdmin?: unknown } | null; error?: unknown; errors?: readonly unknown[] }`.
+  - `runSessionCheck(query: () => Promise<SessionCheckResult>, redirector: SessionRedirector): Promise<void>`.
 
 - [ ] **Step 1: Write the failing tests.** Create `apps/web/lib/session-redirect.test.ts`:
 
 ```ts
 import { describe, expect, it, vi } from 'vitest';
 
-import { createSessionRedirector, isNoPrincipalResult } from './session-redirect';
+import { createSessionRedirector, isNoPrincipalResult, runSessionCheck, type SessionCheckResult } from './session-redirect';
 
 // A clearStore whose settlement the test controls, recording call order.
 function harness() {
@@ -524,6 +527,85 @@ describe('isNoPrincipalResult', () => {
     expect(isNoPrincipalResult({ data: null, errors: [{ message: 'Forbidden resource' }] })).toBe(false);
   });
 });
+
+// A query whose settlement the test controls, standing in for one
+// network-only currentAdmin check.
+function deferredQuery() {
+  let settle: { reject: (reason: unknown) => void; resolve: (result: SessionCheckResult) => void } | undefined;
+  const promise = new Promise<SessionCheckResult>((resolve, reject) => {
+    settle = { reject, resolve };
+  });
+  return {
+    query: () => promise,
+    reject: (reason: unknown) => settle?.reject(reason),
+    resolve: (result: SessionCheckResult) => settle?.resolve(result),
+  };
+}
+
+function immediateRedirector() {
+  const navigateToLogin = vi.fn();
+  const redirector = createSessionRedirector({ clearStore: () => Promise.resolve(), navigateToLogin });
+  return { navigateToLogin, redirector };
+}
+
+// Spec §4.2 proactive evidence, §4.3 item 4, §5 invariant 10: out-of-order
+// checks and checks that outlive their redirector.
+describe('runSessionCheck', () => {
+  it('redirects on an out-of-order null result after a later check found a principal', async () => {
+    const { navigateToLogin, redirector } = immediateRedirector();
+    const earlier = deferredQuery();
+    const later = deferredQuery();
+
+    const earlierCheck = runSessionCheck(earlier.query, redirector);
+    const laterCheck = runSessionCheck(later.query, redirector);
+    later.resolve({ data: { currentAdmin: { id: 'admin-1' } } });
+    await laterCheck;
+    expect(navigateToLogin).not.toHaveBeenCalled();
+    earlier.resolve({ data: { currentAdmin: null } });
+    await earlierCheck;
+
+    expect(navigateToLogin).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not undo a started redirect when a later principal result arrives', async () => {
+    const { navigateToLogin, redirector } = immediateRedirector();
+    const first = deferredQuery();
+    const second = deferredQuery();
+
+    const firstCheck = runSessionCheck(first.query, redirector);
+    const secondCheck = runSessionCheck(second.query, redirector);
+    first.resolve({ data: { currentAdmin: null } });
+    second.resolve({ data: { currentAdmin: { id: 'admin-1' } } });
+    await Promise.all([firstCheck, secondCheck]);
+
+    expect(navigateToLogin).toHaveBeenCalledTimes(1);
+  });
+
+  it('acts only through the redirector it started with, never a newer one', async () => {
+    const old = immediateRedirector();
+    const current = immediateRedirector();
+    const pending = deferredQuery();
+
+    const staleCheck = runSessionCheck(pending.query, old.redirector);
+    old.redirector.dispose();
+    pending.resolve({ data: { currentAdmin: null } });
+    await staleCheck;
+
+    expect(old.navigateToLogin).not.toHaveBeenCalled();
+    expect(current.navigateToLogin).not.toHaveBeenCalled();
+  });
+
+  it('treats a rejected check as no evidence', async () => {
+    const { navigateToLogin, redirector } = immediateRedirector();
+    const failing = deferredQuery();
+
+    const check = runSessionCheck(failing.query, redirector);
+    failing.reject(new Error('Failed to fetch'));
+    await check;
+
+    expect(navigateToLogin).not.toHaveBeenCalled();
+  });
+});
 ```
 
 - [ ] **Step 2: Run to verify RED.**
@@ -575,13 +657,34 @@ export function createSessionRedirector(effects: SessionRedirectEffects): Sessio
   };
 }
 
-// Session evidence (2) (spec §3): the check settled successfully with no
-// principal. An explicitly null or absent currentAdmin both count, as
-// deliberately defensive client behavior; the API declares it non-null. Any
-// error on the result means the check failed, which is not evidence.
+// Session evidence (2) (spec §3). The Accepted spec deliberately treats any
+// successful, error-free result whose currentAdmin is null OR absent as
+// no-principal evidence — including an absent `data` — as defensive client
+// behavior; the API declares currentAdmin non-null, so neither is expected.
+// Any error on the result means the check failed, which is never evidence.
 export function isNoPrincipalResult(result: SessionCheckResult): boolean {
   if (result.error || result.errors?.length) return false;
   return result.data?.currentAdmin == null;
+}
+
+// One session check (spec §4.2). It reports to the redirector captured when
+// the check started — never to whichever redirector is current when it
+// settles — so a check outliving its guard (unmount, strict-mode remount)
+// cannot act through a newer one. Checks are not cancelled: an out-of-order
+// null still reports, and a later principal result never undoes a report. A
+// rejection is not evidence (an UNAUTHENTICATED rejection has already raised
+// the session signal).
+export async function runSessionCheck(
+  query: () => Promise<SessionCheckResult>,
+  redirector: SessionRedirector,
+): Promise<void> {
+  let result: SessionCheckResult;
+  try {
+    result = await query();
+  } catch {
+    return;
+  }
+  if (isNoPrincipalResult(result)) await redirector.report();
 }
 
 async function runSessionRedirect(effects: SessionRedirectEffects): Promise<void> {
@@ -597,13 +700,13 @@ async function runSessionRedirect(effects: SessionRedirectEffects): Promise<void
 - [ ] **Step 4: Verify GREEN.**
 
 Run: `pnpm --filter web exec vitest run lib/session-redirect.test.ts`
-Expected: 8 passed.
+Expected: 12 passed.
 
 - [ ] **Step 5: Commit.**
 
 ```bash
 git add apps/web/lib/session-redirect.ts apps/web/lib/session-redirect.test.ts
-git commit -m "feat(131): add the single-flight session redirect latch"
+git commit -m "feat(131): add the single-flight session redirect latch and session check"
 ```
 
 ---
@@ -615,7 +718,7 @@ git commit -m "feat(131): add the single-flight session redirect latch"
 - Modify: `apps/web/app/app/layout.tsx`, `apps/web/lib/web-shell-regressions.test.ts` (the #114 gate-mount regex)
 
 **Interfaces:**
-- Consumes: `onSessionInvalid` and `CurrentAdminDocument` from `@clensy/client` (Task 1, generated); `createSessionRedirector`, `isNoPrincipalResult` and `SessionRedirector` from `lib/session-redirect` (Task 2).
+- Consumes: `onSessionInvalid` and `CurrentAdminDocument` from `@clensy/client` (Task 1, generated); `createSessionRedirector`, `runSessionCheck` and `SessionRedirector` from `lib/session-redirect` (Task 2).
 - Produces: `SessionGuard(): null`, a named export.
 
 - [ ] **Step 1: Write the failing render test.** Create `apps/web/lib/session-guard.test.tsx`:
@@ -655,7 +758,7 @@ function PageProbe() {
 // in session-routing-regressions.test.ts; the latch it drives is unit-tested in
 // session-redirect.test.ts.
 describe('SessionGuard rendering', () => {
-  it('renders nothing and never delays the page beside it', () => {
+  it('renders nothing and does not delay its sibling page', () => {
     const html = renderToStaticMarkup(
       <>
         <SessionGuard />
@@ -718,7 +821,22 @@ describe('session routing regressions', () => {
     expect(guard).toContain('createSessionRedirector(');
     expect(guard).toContain("navigateToLogin: () => router.replace('/login')");
     expect(guard).toContain('clearStore: () => client.clearStore()');
-    expect(guard).toContain('isNoPrincipalResult(');
+  });
+
+  // Spec §4.2 / §4.3 item 4: a check acts only through the redirector captured
+  // when it started (behavior unit-tested in session-redirect.test.ts). The ref
+  // is read once, synchronously, at the start of each effect — never inside an
+  // async callback, where it could name a newer redirector.
+  it('binds each session check to the redirector captured when it starts', () => {
+    const guard = readWebSource('components/layout/session-guard.tsx');
+
+    expect(guard).toContain(
+      "void runSessionCheck(() => client.query({ query: CurrentAdminDocument, fetchPolicy: 'network-only' }), current);",
+    );
+    expect(guard.match(/redirector\.current\b/g)).toHaveLength(2);
+    expect(guard).toContain('redirector.current = current;');
+    expect(guard).toContain('const current = redirector.current;');
+    expect(guard).not.toMatch(/\.then\(/);
   });
 
   it('makes no visibility decision in the guard', () => {
@@ -732,7 +850,7 @@ describe('session routing regressions', () => {
 - [ ] **Step 3: Run to verify RED.**
 
 Run: `pnpm --filter web exec vitest run lib/session-guard.test.tsx lib/session-routing-regressions.test.ts`
-Expected: FAIL. `session-guard.test.tsx` cannot find `../components/layout/session-guard`, and 4 of the 5 regressions fail. The characterization test passes.
+Expected: FAIL. `session-guard.test.tsx` cannot find `../components/layout/session-guard`, and 5 of the 6 regressions fail. The characterization test passes.
 
 - [ ] **Step 4: Implement the guard and mount it.** Create `apps/web/components/layout/session-guard.tsx`:
 
@@ -744,7 +862,7 @@ import { CurrentAdminDocument, onSessionInvalid } from '@clensy/client';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 
-import { createSessionRedirector, isNoPrincipalResult, type SessionRedirector } from '../../lib/session-redirect';
+import { createSessionRedirector, runSessionCheck, type SessionRedirector } from '../../lib/session-redirect';
 
 // The one /app session rule (session routing spec §4.2), mounted once by
 // app/app/layout.tsx beside PageVisibilityGate. It renders nothing and never
@@ -775,15 +893,12 @@ export function SessionGuard() {
     };
   }, [client, router]);
 
+  // Each check is bound to the redirector current when it starts, never read
+  // from the ref when it settles (spec §4.2, §4.3 item 4).
   useEffect(() => {
     const current = redirector.current;
     if (!current) return;
-    client.query({ query: CurrentAdminDocument, fetchPolicy: 'network-only' }).then(
-      (result) => {
-        if (isNoPrincipalResult(result)) void current.report();
-      },
-      () => undefined,
-    );
+    void runSessionCheck(() => client.query({ query: CurrentAdminDocument, fetchPolicy: 'network-only' }), current);
   }, [client, pathname]);
 
   return null;
@@ -1311,7 +1426,7 @@ diff --git a/apps/web/app/app/admin/page.tsx b/apps/web/app/app/admin/page.tsx
 - [ ] **Step 4: Verify GREEN.**
 
 Run: `pnpm --filter web test && pnpm --filter web exec tsc --noEmit && pnpm --filter web lint`
-Expected: 516 passed, with `tsc` and ESLint clean.
+Expected: 521 passed, with `tsc` and ESLint clean.
 
 - [ ] **Step 5: Commit.**
 
@@ -1328,7 +1443,7 @@ Run each and record the result:
 
 1. `pnpm run lint`: all workspaces succeed.
 2. `pnpm --filter web exec tsc --noEmit` and `pnpm --filter api exec tsc --noEmit`: clean.
-3. `pnpm run test`: all workspaces succeed, including `@clensy/client` (10) and `web` (516).
+3. `pnpm run test`: all workspaces succeed, including `@clensy/client` (10) and `web` (521).
 4. `git diff --stat 61b6fb8 -- apps/api apps/web/middleware.ts apps/web/components/layout/page-visibility-gate.tsx apps/web/components/layout/user-menu.tsx apps/web/app/login packages/ui packages/web`: empty.
 
 ## Traceability
