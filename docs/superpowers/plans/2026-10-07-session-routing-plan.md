@@ -1475,4 +1475,37 @@ As in the spec §11:
 
 ## Gate outcomes
 
-*(Appended after M5.)*
+### M6 — Implementation complete (2026-10-07)
+
+Executed natively (superpowers:executing-plans), task by task, in plan order, on `feat/131-session-routing`. Each task's steps were applied from this plan's own code blocks and diffs.
+
+| Task | Commit | RED observed | GREEN |
+| --- | --- | --- | --- |
+| 1. Session signal | `9b21216` | `Cannot find module './session-signal'`; then 9/1, with only the wiring test failing | `@clensy/client` 10/10; `build`, `lint` clean |
+| 2. Latch and session check | `22cc1f0` | `Cannot find module './session-redirect'` | 12/12 |
+| 3. Guard and mount | `90a4345` | Guard module missing; 5 of 6 regressions failing; the characterization test passing | Targeted 187/187; `apps/web` 515/515; `tsc`, lint clean |
+| 4. Landing | `bf63efa` | Exactly the four Step 2 failures | `apps/web` 518/518; `tsc`, lint clean |
+| 5. Admin and `/login` scan | `60fd374` | Exactly the four Step 2 failures | `apps/web` 521/521; `tsc`, lint clean |
+
+- **Characterization tests** (M6 step 3.6). Each one failed against a mutation made outside the commit, and the code was then restored:
+  - `keeps the gate free of session handling` failed with `// onSessionInvalid` appended to `page-visibility-gate.tsx`.
+  - `keeps loading on a settled missing principal …` failed with the landing's `currentAdmin &&` guard removed.
+  - `shows the empty message …` failed with `landing.empty` swapped for `landing.loading`.
+- **Deviations from the plan:** none. No rulings were needed.
+- **Final verification** (plan steps 1–4), all as expected:
+  - `pnpm run lint` 6/6;
+  - web and API `tsc --noEmit` clean;
+  - `pnpm run test` 10/10 tasks, with `@clensy/client` 10/10 and `web` 521/521;
+  - the protected-area diff against `61b6fb8` is empty;
+  - `pnpm --filter web build` exits 0.
+
+**Integration with `main`** (after M6). #134 (PR #144) merged into `main` after this branch was cut, as the plan's execution risks anticipated. `origin/main` was merged in.
+- **Conflicts.** The only conflicts were in the #114 spec's Status, Date and M3-decision rows and its acceptance criteria. They were resolved as a union: #134's §4.3 amendment keeps criterion 9, and the #131 cross-reference amendment follows it as criterion 10.
+- **No code conflicts.** #134 changed the gate's link rendering, not its session contract, and the guard is untouched.
+- **Merged tree:**
+  - `pnpm install --frozen-lockfile` passes;
+  - lint 6/6;
+  - web and API `tsc` clean;
+  - `pnpm run test` 10/10, with `web` 536/536 (521 plus #134's 15) and `@clensy/client` 10/10;
+  - `next build` exits 0;
+  - the protected-area diff against `origin/main` is empty.
