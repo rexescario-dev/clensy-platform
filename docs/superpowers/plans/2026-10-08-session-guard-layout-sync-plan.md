@@ -457,4 +457,26 @@ git commit -m "fix(148): sync SessionGuard's latest ref in the layout phase"
 
 ## Gate outcomes
 
-*(Appended after M5.)*
+### M6 — Implementation complete (2026-10-08)
+
+Executed natively (superpowers:executing-plans) on `feat/148-session-guard-layout-sync`, applying the plan's own code blocks and diffs.
+
+| Step | Observed |
+| --- | --- |
+| 2 RED | 1 failed (`redirects through the current client and router after an identity change`: `expected "vi.fn()" to be called 1 times, but got 0 times`), 4 passed |
+| 3 RED | 1 failed (`keeps the redirector mount-scoped … (source)`: `Expected: "useLayoutEffect"`, `Received: "useEffect"`), 6 passed |
+| 5 GREEN | 12 passed; `tsc` and ESLint clean |
+| Commit | `960a01e` |
+
+- **Characterization tests** (M6 step 3.6). Each one failed against a mutation made outside the commit. The guard was restored byte for byte after each:
+  - redirector dependencies `[client, router]` failed `keeps one redirector and one listener across an identity change` (`… called 1 times, but got 2 times`);
+  - dropping `unsubscribe()` failed `leaves exactly one live listener after a strict-mode double mount`;
+  - `console.warn('probe')` in render failed `renders on the server without any console warning or error`.
+- **Deviations from the plan:** none. No rulings were needed.
+- **Final verification** (steps 1–5), all as expected:
+  - `pnpm run lint` 6/6;
+  - web and API `tsc` clean;
+  - `pnpm run test` 10/10, with `web` 554/554 and `@clensy/client` 10/10;
+  - `pnpm --filter web build` exits 0, with no `warning` or `useLayoutEffect` text in its output;
+  - `git diff --name-only 78c071f -- . ':(exclude)docs'` lists exactly the four planned files.
+  - `main` had not moved since the branch was cut.
