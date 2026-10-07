@@ -279,3 +279,28 @@ The change replaces one link's JSX with a three-line `Button` wrapper and adds t
 - Status is consistent: the spec and its #134 amendment are Accepted, this plan is Accepted, and PR #144 is open.
 - Terminology follows spec §3 and §4.3 (shell-hidden, unavailable state, shell-link convention).
 - No heading changes, contradictions or stale references.
+
+### M10 — Accepted, workflow validated (2026-10-07)
+
+**Subject:** the installed workflow prompt library (`docs/workflows/`, generic 1.4.1 / claude 0.2.0), against `docs/workflows/specs/agent-workflow-design.md` §2.10. This slice ran it on #134 from M2 (a slice-local amendment) to M9.
+
+**Asset inventory:** unchanged, and the branch diff against `main` for `docs/workflows/` and `workflow.yaml` is empty. Nine prompts (`specification`, `design-review`, `implementation-planning`, `plan-review`, `implementation-execution`, `code-review`, `refactoring`, `documentation-execution`, `workflow-validation`) map to M2–M10. `conventions/` holds M1 and the reporting conventions; the governing process spec is under `specs/`.
+
+**Checks:**
+- All nine prompts cite the governing contract. There are no orphan assets.
+- All 61 relative links under `docs/workflows/` resolve, as do those in the #114 spec, this plan and `apps/web/README.md` (scripted scan).
+- The slice-local amendment procedure (M2 prompt) was followed: the amendment was made in place with its own Draft → Accepted lifecycle against #134, the remainder stayed Accepted, the delta is stated, and §10 criterion 9 was added.
+- §2.4 was honoured: amendment Accept `4c23e5c` is an ancestor of the M4 draft `95e5ae6`.
+- §2.5 was honoured: plan Accept `bb21c1a` is the parent of the first implementation commit `69a36ac`.
+- M5 returned one wording correction before Accept, applied at `bb21c1a`. M3 accepted on the first pass with an M4 condition, which the plan and M7 both honoured.
+- M7 followed the project rule in `CLAUDE.md`: a fresh, independent reviewer for an application-code slice, cited in the record.
+- Characterization tests (Task 1) carry uncommitted mutation evidence, as M6 step 3 requires; M7 reproduced it.
+- Providers were honoured: GitHub for the issues (#134, and the split-out #143), branch and PR (`workflow.providers`).
+- Slice Completion Reports were emitted at M6 and at M7–M9.
+- §2.8 was honoured: one PR (#144) carries the amendment, plan, implementation and docs.
+
+**Blocking findings:** none.
+
+**Non-blocking observations:**
+1. **Splitting a multi-item issue.** #134 bundled one architectural item with two bounded ones. Splitting the architectural item out to #143 before M2 kept the amendment slice-local. The workflow has no explicit step for that split; it was handled as an owner scope decision recorded on the issue, which worked without friction. No change to the workflow is suggested.
+2. **M5 correction about package suites.** The plan's first wording justified skipping the `@clensy/ui` suite only by "no package changes", although the slice consumes `Button`. The accepted wording points to CI's repo-wide test run instead. Future plans that consume a shared component should cite the repository's validation policy in the same way.
