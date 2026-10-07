@@ -1552,7 +1552,7 @@ Executed natively (superpowers:executing-plans), task by task, in plan order, on
 **Editorial changes:** none.
 
 **Unchanged, with reason:**
-- **The `apps/web/middleware.ts` header comment.** It still says that other `/app/*` routes have no downstream redirect for an invalid session "yet", which is now stale. It was **not** edited: the Accepted plan locks `middleware.ts` byte-identical, and M9 MUST NOT change implementation files. It is raised with the owner as a follow-up (a comment-only change).
+- **The `apps/web/middleware.ts` header comment** *(owner-authorized, 2026-10-07)*. It said other `/app/*` routes had no downstream redirect for an invalid session "yet", which was stale after Task 3. M9 first left it untouched, because the Accepted plan locks `middleware.ts` byte-identical. The owner then explicitly asked for it to be edited. It now names the layout's `SessionGuard` as the downstream catch on every `/app/*` page. The change is comment-only: the code, the matcher and the cookie-presence check are unchanged, so spec §2 Out of scope and invariant 13 still hold.
 - **The README's `nav` catalog list.** It already lists `landing`.
 - **Earlier slice plans and specs that describe the page-local redirects** (#88, #89, #114). They are historical records. The #114 spec carries its Accepted cross-reference amendment.
 
@@ -1583,4 +1583,4 @@ Executed natively (superpowers:executing-plans), task by task, in plan order, on
 
 **Non-blocking observations:**
 1. **A slice-local spec amendment can race another slice's amendment of the same spec.** #131's cross-reference amendment and #134's §4.3 amendment both edited the #114 spec's Status, Date and M3-decision rows and appended acceptance criterion "9". The conflict was predicted in the plan's execution risks and resolved mechanically at the `main` merge, with #131's criterion renumbered to 10. Numbering amendment criteria by issue (e.g. "#131-1") would remove that renumbering.
-2. **M9 cannot fix stale comments in plan-locked files.** The `middleware.ts` comment is documentation in a file the plan locks byte-identical. The prompts give no route other than a follow-up.
+2. **M9 cannot fix stale comments in plan-locked files on its own authority.** The `middleware.ts` comment is documentation in a file the plan locks byte-identical. It was fixed here only on the owner's explicit request. The prompts give no other route.
