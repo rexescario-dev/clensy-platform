@@ -1,7 +1,7 @@
 'use client';
 
 import { useCurrentAdminQuery } from '@clensy/client';
-import { LoadingState } from '@clensy/ui';
+import { Button, LoadingState } from '@clensy/ui';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -33,7 +33,9 @@ export function PageVisibilityGate({ children }: { children: ReactNode }) {
 
 // The shared state for every denied path (spec §4.3): no roles or scopes
 // named, one way home through the same landing rule as /app. Its message is
-// the page's single <h1>, styled as the former EmptyState message.
+// the page's single <h1>, styled as the former EmptyState message. The home
+// link follows the shell-link convention (#134): Button's link variant,
+// as-is, rendered onto the Link by asChild.
 function UnavailableState({ principal }: { principal: NavPrincipal }) {
   const t = useTranslations('nav');
   const home = landingHref(principal);
@@ -43,9 +45,9 @@ function UnavailableState({ principal }: { principal: NavPrincipal }) {
       <h1 className="text-sm">{t('unavailable.message')}</h1>
       {home ? (
         <div>
-          <Link href={home} className="text-sm font-medium text-slate-900 underline underline-offset-4">
-            {t('unavailable.action')}
-          </Link>
+          <Button asChild variant="link">
+            <Link href={home}>{t('unavailable.action')}</Link>
+          </Button>
         </div>
       ) : null}
     </div>
