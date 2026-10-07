@@ -80,8 +80,10 @@ describe('web shell regressions', () => {
   it('mounts the page-visibility gate once, directly inside DashboardLayout', () => {
     const layout = readWebSource('app/app/layout.tsx');
 
+    // Its only sibling is the render-less SessionGuard (session routing spec
+    // §4.2), which never wraps or replaces the page.
     expect(layout).toMatch(
-      /<DashboardLayout>\s*<PageVisibilityGate>\{children\}<\/PageVisibilityGate>\s*<\/DashboardLayout>/,
+      /<DashboardLayout>\s*<SessionGuard \/>\s*<PageVisibilityGate>\{children\}<\/PageVisibilityGate>\s*<\/DashboardLayout>/,
     );
     const mounts = nonTestSources(webRoot)
       .filter((path) => readFileSync(path, 'utf8').includes('<PageVisibilityGate'))
