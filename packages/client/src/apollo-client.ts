@@ -1,4 +1,6 @@
-import { ApolloClient, HttpLink, InMemoryCache } from '@apollo/client';
+import { ApolloClient, ApolloLink, HttpLink, InMemoryCache } from '@apollo/client';
+
+import { sessionErrorLink } from './session-signal';
 
 // URL of apps/api's GraphQL endpoint (default Apollo path mounted by
 // platform/graphql/graphql.module.ts). `NEXT_PUBLIC_` so Next.js inlines it
@@ -10,12 +12,17 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000/graphq
 
 export const apolloClient = new ApolloClient({
   cache: new InMemoryCache(),
-  link: new HttpLink({
-    // Required so the browser sends the HttpOnly session cookie set by
-    // apps/api's `login` mutation across the apps/web <-> apps/api origin
-    // boundary (spec §4; matches apps/api/src/main.ts's
-    // `enableCors({ credentials: true, ... })`).
-    credentials: 'include',
-    uri: API_URL,
-  }),
+  // The session error link observes every operation's GraphQL errors ahead
+  // of the transport (session routing spec §4.1).
+  link: ApolloLink.from([
+    sessionErrorLink,
+    new HttpLink({
+      // Required so the browser sends the HttpOnly session cookie set by
+      // apps/api's `login` mutation across the apps/web <-> apps/api origin
+      // boundary (spec §4; matches apps/api/src/main.ts's
+      // `enableCors({ credentials: true, ... })`).
+      credentials: 'include',
+      uri: API_URL,
+    }),
+  ]),
 });
