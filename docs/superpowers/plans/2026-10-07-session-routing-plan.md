@@ -1509,3 +1509,78 @@ Executed natively (superpowers:executing-plans), task by task, in plan order, on
   - `pnpm run test` 10/10, with `web` 536/536 (521 plus #134's 15) and `@clensy/client` 10/10;
   - `next build` exits 0;
   - the protected-area diff against `origin/main` is empty.
+
+### M7 — Approved for merge (2026-10-07)
+
+- **Subject:** PR [#145](https://github.com/rexescario-dev/clensy-platform/pull/145), head `7fac4f9`. It carries the spec, this Accepted plan, the M6 change set and the `main` integration merge (process spec §2.8).
+- **Accepted specification:** `docs/superpowers/specs/2026-10-07-session-routing-design.md`, plus the #114 spec's cross-reference amendment (criterion 10).
+- **Accepted implementation plan:** this document.
+- **M6 gate:** plan Accept `94cb9d7` is an ancestor of the first implementation commit `9b21216`.
+- **Plan tasks reviewed:** Tasks 1–5 (`9b21216`, `22cc1f0`, `90a4345`, `bf63efa`, `60fd374`) ✓. No reordering, no skipped task, and no extras beyond the recorded `main` merge.
+- **Review basis:** an **independent review** by a fresh Opus agent context that did not implement the change, as CLAUDE.md requires for application-code slices. This record was written by the implementer and is based on that review.
+  - The reviewer re-ran `@clensy/client` test (10/10), `web` test (536/536), web `tsc`, both lints, client `build` and `next build`, all exit 0.
+  - It confirmed by script that the three implementation files are byte-identical to the plan's code blocks.
+  - It found the protected-area diff empty.
+  - It checked all five Review Focus items against the Apollo 3.14.1 and Next 16.3.1 sources.
+- **Verification evidence:** CI run [37647157494](https://github.com/rexescario-dev/clensy-platform/actions/runs/37647157494) on `7fac4f9`: Lint, Test, Release gate and API e2e all passed. Local runs and the M6 RED/GREEN and mutation evidence are recorded above.
+- **Blocking findings:** none (0 Critical, 0 Important).
+- **Non-blocking observations** (deferred Minors; these MUST NOT affect the merge decision):
+  1. `session-guard.tsx`'s `[client, router]` effect dependencies would reset the latch within one mounted lifetime if either identity changed. This is unreachable today, because both are module singletons.
+  2. The `/login` navigation scan matches literal `'/login'` navigation only. A path constant or `window.location` would evade it. This is the plan's chosen trade-off: match navigation, not prose.
+  3. The landing's `nav.landing.error` renders without `role="alert"`, unlike the admin page's error. The spec doesn't specify it, and the landing keeps its existing plain-text style.
+- **Gate:** merge per human/project norms.
+
+### M8 — N/A (2026-10-07)
+
+- The slice adds three small single-purpose modules (`session-signal.ts`, `session-redirect.ts`, `session-guard.tsx`). It removes code from the landing and admin pages. M7 found no duplication or complexity to refactor.
+- None of the deferred Minors is a behavior-preserving refactor:
+  - (1) changes effect semantics;
+  - (2) changes a test's matching rule;
+  - (3) changes markup.
+
+  They belong to a follow-up, not to M8.
+
+### M9 — Complete (2026-10-07)
+
+**Documentation scope:** `apps/web/README.md` (the shell paragraph), the spec's Tracking cell, and this section.
+
+**Content updates:**
+- `apps/web/README.md`, shell paragraph. "…and an invalid session to `/login`" (the landing) was no longer true after Task 4. It is replaced by a description of the one `SessionGuard` in `app/app/layout.tsx`: it sends an invalid session to `/login` from any `/app` page, on positive evidence only, so an outage shows the page's own error and the landing shows "Unable to load your account.". Caused by Tasks 3–4 and spec §4.2–§4.4.
+- The spec's Tracking cell links PR #145. Caused by the PR being opened.
+- This section. Caused by the M7–M9 gate outcomes.
+
+**Editorial changes:** none.
+
+**Unchanged, with reason:**
+- **The `apps/web/middleware.ts` header comment.** It still says that other `/app/*` routes have no downstream redirect for an invalid session "yet", which is now stale. It was **not** edited: the Accepted plan locks `middleware.ts` byte-identical, and M9 MUST NOT change implementation files. It is raised with the owner as a follow-up (a comment-only change).
+- **The README's `nav` catalog list.** It already lists `landing`.
+- **Earlier slice plans and specs that describe the page-local redirects** (#88, #89, #114). They are historical records. The #114 spec carries its Accepted cross-reference amendment.
+
+**Verification:**
+- The relative links in the README, this spec, this plan and the #114 spec all resolve (scripted scan: 0 broken).
+- Status is consistent: spec and plan Accepted, M7 Approved, PR open with CI green.
+- Terminology follows spec §3 (session evidence, session check, session redirect).
+- No heading changes, contradictions or stale references in scope.
+
+### M10 — Accepted, workflow validated (2026-10-07)
+
+**Subject:** the installed workflow prompt library (`docs/workflows/`, generic 1.4.1 / claude 0.2.0), against `docs/workflows/specs/agent-workflow-design.md` §2.10. This slice ran it on #131 from M2 to M9.
+
+**Asset inventory:** unchanged. Nine prompts map to M2–M10; `conventions/` holds M1 and the reporting conventions. There are no orphan assets.
+
+**Checks:**
+- §2.4 was honoured: spec Accept `a0f0e46` (recorded at `0e81e98`) precedes the M4 draft `52d26b6`.
+- §2.5 was honoured: plan Accept `94cb9d7` is an ancestor of the first implementation commit `9b21216`.
+- Both review gates recorded explicit Returns before Accept:
+  - M3 returned nine clarifications on its first pass.
+  - M5 returned two required changes on its first pass.
+- Providers were honoured: GitHub for the issue, branch and PR (`workflow.providers`).
+- CLAUDE.md's M7 rule was honoured: a fresh, independent reviewer on the most capable model for an application-code slice.
+- Slice Completion Reports were emitted at M6 and at M7–M9.
+- §2.8 was honoured: one PR (#145) carries the spec, plan, implementation and docs.
+
+**Blocking findings:** none.
+
+**Non-blocking observations:**
+1. **A slice-local spec amendment can race another slice's amendment of the same spec.** #131's cross-reference amendment and #134's §4.3 amendment both edited the #114 spec's Status, Date and M3-decision rows and appended acceptance criterion "9". The conflict was predicted in the plan's execution risks and resolved mechanically at the `main` merge, with #131's criterion renumbered to 10. Numbering amendment criteria by issue (e.g. "#131-1") would remove that renumbering.
+2. **M9 cannot fix stale comments in plan-locked files.** The `middleware.ts` comment is documentation in a file the plan locks byte-identical. The prompts give no route other than a follow-up.
