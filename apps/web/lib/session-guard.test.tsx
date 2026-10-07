@@ -27,10 +27,10 @@ function PageProbe() {
   return <p>page-probe</p>;
 }
 
-// No DOM test environment exists in this repo, so this pins rendering only:
-// static rendering runs no effects. The effect wiring is pinned at source level
-// in session-routing-regressions.test.ts; the latch it drives is unit-tested in
-// session-redirect.test.ts.
+// Static rendering runs no effects, so this file pins rendering only. The
+// effect wiring is proven at runtime (jsdom) in session-guard-runtime.test.tsx
+// and pinned at source level in session-routing-regressions.test.ts; the latch
+// it drives is unit-tested in session-redirect.test.ts.
 describe('SessionGuard rendering', () => {
   it('renders nothing and does not delay its sibling page', () => {
     const html = renderToStaticMarkup(

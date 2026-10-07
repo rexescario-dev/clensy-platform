@@ -480,3 +480,68 @@ Executed natively (superpowers:executing-plans) on `feat/148-session-guard-layou
   - `pnpm --filter web build` exits 0, with no `warning` or `useLayoutEffect` text in its output;
   - `git diff --name-only 78c071f -- . ':(exclude)docs'` lists exactly the four planned files.
   - `main` had not moved since the branch was cut.
+
+### M7 — Approved for merge (2026-10-08)
+
+- **Subject:** PR [#149](https://github.com/rexescario-dev/clensy-platform/pull/149), head `b671e86`. It carries this Accepted plan and the M6 change set (process spec §2.8). `main` had not moved (`78c071f`).
+- **Accepted specification:** `docs/superpowers/specs/2026-10-07-session-routing-design.md` §4.3 item 1 (#146). No spec change; the reviewer judged that correct.
+- **Accepted implementation plan:** this document.
+- **M6 gate:** plan Accept `8881eb2` (recorded `0f99122`) is an ancestor of the implementation commit `960a01e`.
+- **Plan tasks reviewed:** Task 1, steps 1–7 ✓. The runtime test file is byte-identical to the plan's code block, and every diff matches.
+- **Review basis:** an **independent review** by a fresh Opus agent context that did not implement the change, as CLAUDE.md requires for application-code slices. This record was written by the implementer and is based on that review. The reviewer:
+  - re-ran `web` test (554/554), web `tsc` and lint, and the four-file scope check;
+  - reproduced the RED by restoring the pre-#148 guard. The fresh-identity test failed, and a call-count probe showed the stale client A received `clearStore()`.
+  - checked the **real Next.js server path**, as the owner required:
+    - `next build`: every `/app/*` route prerendered through Next's server renderer, with no warning;
+    - `next start`, with a session cookie: `/app`, `/app/bookings` and `/app/admin` returned 200, and the log was clean;
+    - `next dev --webpack` (React's development server renderer, per request): 200s, and no warning beyond the pre-existing "middleware file convention is deprecated" notice.
+  - reasoned that hydration can't produce a mismatch: the guard renders `null`, and `latest` is seeded from the same render.
+  - checked the central invariant against React 19's commit phases: layout creates run depth-first, children before parents and siblings in order, before passive effects.
+- **Verification evidence:** CI run [37657205016](https://github.com/rexescario-dev/clensy-platform/actions/runs/37657205016) on `b671e86`: Lint, Test, Release gate and API e2e all passed. The M6 RED/GREEN and mutation evidence is recorded above.
+- **Blocking findings:** none (0 Critical, 0 Important).
+- **Non-blocking observations:**
+  1. `session-guard.test.tsx`'s comment "No DOM test environment exists in this repo…" was stale. It is fixed in M9 below: a comment-only edit in a file this slice already changes.
+  2. A deferred Minor: the invariant covers *later* siblings. An earlier sibling's descendant that raised the session signal synchronously from its own layout effect, during the identity-change commit, would still see the stale objects. That can't happen, because `onSessionInvalid` is raised from Apollo's error link on an async network response.
+- **Environment note.** The reviewer's dev-server run rewrote the gitignored, auto-generated `apps/web/next-env.d.ts` (`./.next/types/` → `./.next/dev/types/`) in the worktree, and its attempt to restore it was denied by the permission system. The file is not tracked, and the next `next build` regenerates it. No tracked file changed.
+- **Gate:** merge per human/project norms.
+
+### M8 — N/A (2026-10-08)
+
+The change is one hook swap plus tests. M7 found nothing to refactor. Deferred Minor 2 is about effect timing, not a behavior-preserving refactor.
+
+### M9 — Complete (2026-10-08)
+
+**Documentation scope:** the comment at the head of `apps/web/lib/session-guard.test.tsx`'s render tests, the spec's Followed-by row, and this section.
+
+**Content updates:**
+- `apps/web/lib/session-guard.test.tsx` comment. "No DOM test environment exists in this repo" was false after this slice. It now points to the jsdom runtime test (`session-guard-runtime.test.tsx`) as well as the source regression and the latch unit tests. Comment-only, in a file already in this slice's change set. Caused by M7 observation 1.
+- The #131 spec's Followed-by row now records #148 (PR #149) as code conformance to §4.3 item 1, with no spec change. Caused by the PR being opened.
+- This section. Caused by the M7–M9 gate outcomes.
+
+**Editorial changes:** none.
+
+**Unchanged:** `apps/web/README.md`. It doesn't describe the guard's internal effect ordering, and nothing it describes changed.
+
+**Verification:**
+- `session-guard.test.tsx` passes 2/2 and web lint is clean after the comment edit.
+- Relative links resolve (scripted scan).
+- Status is consistent: the plan is Accepted, M7 is Approved, and the PR is open with CI green.
+
+### M10 — Accepted, workflow validated (2026-10-08)
+
+**Subject:** the installed workflow prompt library (`docs/workflows/`, generic 1.4.1 / claude 0.2.0), against `docs/workflows/specs/agent-workflow-design.md` §2.10. This slice ran it on #148.
+
+**Checks:**
+- **Entry at M4.** The workflow skill's selection rule held: an Accepted spec already required the behavior, so the slice entered at M4 with no amendment. The plan states that explicitly, and M7 confirmed it was correct.
+- §2.5 was honoured: plan Accept `0f99122` is an ancestor of the implementation commit `960a01e`.
+- M5 recorded an explicit Return before Accept. The first pass removed an unsupported premise about React's server warnings and replaced it with a test.
+- Providers were honoured: GitHub for the issue (#148), branch and PR (#149).
+- CLAUDE.md's M7 rule was honoured: a fresh, independent reviewer on the most capable model, citing CI.
+- Slice Completion Reports were emitted at M6 and at M7–M9.
+- §2.8 was honoured: one PR (#149) carries the plan, implementation and docs.
+
+**Blocking findings:** none.
+
+**Non-blocking observations:**
+1. **Premises about framework behavior should be verified, not asserted.** M5 caught a plan stating React behavior as fact. Converting it into a test, plus the M7 real-server check, was the right pattern for future plans.
+2. **Reviewer probes can touch gitignored generated files.** Running a dev server rewrote `next-env.d.ts` in the worktree. Reviewer prompts could ask for production-mode checks first, or say which generated files may be regenerated.
