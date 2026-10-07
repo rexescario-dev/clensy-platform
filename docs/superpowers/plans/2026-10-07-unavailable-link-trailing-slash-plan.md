@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Accepted |
+| M5 decision | **Accepted** — 2026-10-07, at `95e5ae6`, by the owner, on the first pass, with one wording correction applied: Final verification no longer uses the absence of package changes as the sole reason for not running the `@clensy/ui`/`@clensy/web` suites locally, and points to CI's repo-wide `pnpm run test`. The optional manual smoke stays as written. M6 MUST implement Tasks 1–2 as written; M7 MUST be a fresh independent review (`CLAUDE.md`). |
 | Date | 2026-10-07 |
 | Tracking issue | [#134](https://github.com/rexescario-dev/clensy-platform/issues/134) (items 2 and 3; item 1, page titles, moved to [#143](https://github.com/rexescario-dev/clensy-platform/issues/143)). Program [#81](https://github.com/rexescario-dev/clensy-platform/issues/81). |
 | Scope | `apps/web` only: `components/layout/page-visibility-gate.tsx`, `lib/page-visibility-gate.test.tsx` and `lib/nav-groups.test.ts`. No `apps/api`, `packages/*`, middleware, `next.config.ts` or message changes. |
@@ -190,7 +191,7 @@ Run each command and record its result in the M6 Slice Completion Report's Valid
 | `pnpm --filter web build` | exit 0 |
 | `git diff --stat main -- apps/api packages apps/web/middleware.ts apps/web/messages apps/web/next.config.ts apps/web/lib/nav-groups.ts apps/web/app` | empty: no API, shared-package, middleware, copy, config, path-rule or page change (§4.1, §4.3, §6, §9) |
 
-`@clensy/ui` and `@clensy/web` suites aren't run, because neither package changes. The empty diff above is the evidence for that.
+The slice consumes the existing, Accepted `@clensy/ui` `Button` contract without modifying the package, so this plan doesn't require the `@clensy/ui` or `@clensy/web` suites locally. The empty diff above is the evidence that neither package changes. The repository's normal validation still covers them: CI's Test job runs `pnpm run test` across every workspace, and M7 cites that run.
 
 **Optional manual smoke**, at M6's discretion and not a gate: sign in as a `FINANCE` seed user and open `/app/customers`. Check that the home link shows in `text-primary` with an underline on hover only, shows Button's focus ring on keyboard focus, and still navigates to `/app/bookings`.
 
