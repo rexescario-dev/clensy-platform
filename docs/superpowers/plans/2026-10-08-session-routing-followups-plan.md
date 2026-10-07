@@ -443,4 +443,27 @@ None from #146. The #131 spec §11 deferrals stand.
 
 ## Gate outcomes
 
-*(Appended after M5.)*
+### M6 — Implementation complete (2026-10-08)
+
+Executed natively (superpowers:executing-plans), task by task, in plan order, on `feat/146-session-routing-followups`. Each task's diffs were applied from this plan's own text.
+
+| Task | Commit | RED observed | GREEN |
+| --- | --- | --- | --- |
+| 1. One redirector per mount | `a1725a0` | 1 failed (`keeps the redirector mount-scoped … (source)`), 6 passed | 189/189; `tsc`, lint clean |
+| 2. Landing error alert | `4078ed6` | 1 failed (`announces the account load error …`), 8 passed | 9/9 |
+| 3. Literal-based `/login` scan | `54f7dca` | `Failed Tests 10`, each `ReferenceError: loginLiteralsIn is not defined` | 190/190; `tsc`, lint clean |
+
+- **Characterization tests** (M6 step 3.6). Each one failed against a mutation made outside the commit, and the code was then restored:
+  - `role="alert"` added to the `landing.loading` `<p>` failed `renders no alert for loading` and `… a settled missing principal`;
+  - added to the `landing.empty` `<p>`, it failed `… a principal with no destination`;
+  - `page.tsx` was restored byte for byte.
+- **Scan mutation:** appending `const LOGIN_PATH = '/login';` to `app/app/page.tsx` failed the invariant 12 scan. It was then removed.
+- **Deviations from the plan:** none. No rulings were needed.
+- **Final verification** (steps 1–6), all as expected:
+  - `pnpm run lint` 6/6;
+  - web and API `tsc` clean;
+  - `pnpm run test` 10/10, with `web` 550/550 and `@clensy/client` 10/10;
+  - `pnpm --filter web build` exits 0;
+  - the protected-area diff is empty;
+  - `git diff --name-only 4f84a4e -- . ':(exclude)docs'` lists exactly the five planned files.
+  - `main` had not moved since the branch was cut.
