@@ -467,3 +467,71 @@ Executed natively (superpowers:executing-plans), task by task, in plan order, on
   - the protected-area diff is empty;
   - `git diff --name-only 4f84a4e -- . ':(exclude)docs'` lists exactly the five planned files.
   - `main` had not moved since the branch was cut.
+
+### M7 — Approved for merge (2026-10-08)
+
+- **Subject:** PR [#147](https://github.com/rexescario-dev/clensy-platform/pull/147), head `a6c9803`. It carries the #146 spec amendment, this Accepted plan and the M6 change set (process spec §2.8). `main` had not moved (`0a8d87a`).
+- **Accepted specification:** the #146 amendment in `docs/superpowers/specs/2026-10-07-session-routing-design.md`. The rest of that spec (#131) is unchanged.
+- **Accepted implementation plan:** this document.
+- **M6 gate:** plan Accept `3ab7dd6` (recorded `298377a`) is an ancestor of the first implementation commit `a1725a0`.
+- **Plan tasks reviewed:** Tasks 1–3 (`a1725a0`, `4078ed6`, `54f7dca`) ✓. No reordering, no skipped task, no extras.
+- **Review basis:** an **independent review** by a fresh Opus agent context that did not implement the change, as CLAUDE.md requires for application-code slices. This record was written by the implementer and is based on that review. The reviewer:
+  - re-ran `web` test (550/550), web `tsc` and lint, the five-file scope check and the protected-area diff;
+  - checked all five owner-required points;
+  - wrote a temporary jsdom runtime probe under `<StrictMode>`, since deleted. It passed on HEAD: a strict-mode double mount leaves one listener; an identity change while mounted creates no new redirector; a later signal reaches only the new client and router, exactly once. Against the #131 guard it failed (`expected 3 to be 2`).
+  - mutation-checked the AST regression, the landing tests and the scan. None of the new tests is vacuous.
+- **Verification evidence:** CI run [37651795446](https://github.com/rexescario-dev/clensy-platform/actions/runs/37651795446) on `a6c9803`: Lint, Test, Release gate and API e2e all passed. Local runs and the M6 RED/GREEN and mutation evidence are recorded above.
+- **Blocking findings:** none (0 Critical, 0 Important).
+- **Non-blocking observations** (deferred Minors; these MUST NOT affect the merge decision):
+  1. The `latest` ref is synced by a passive effect, so it lags one commit after a client or router identity change. A redirect step in that window would use the previous object. Nothing in the app changes these identities. `useLayoutEffect` or `useEffectEvent` would close the window; that is a preference.
+  2. The `/login` scan's declared literal-only blind spots: `${base}/login` (pinned), concatenation, and computed paths. These are in scope as specified.
+  3. The sync-effect assertion is an exact match on the compacted body. A harmless rewrite fails it (fails safe: churn, never false confidence).
+- **Gate:** merge per human/project norms.
+
+### M8 — N/A (2026-10-08)
+
+- The change is three small, targeted edits: one ref and one effect-dependency change, one markup branch, and one test-local detector. M7 found no duplication or complexity to refactor.
+- None of the deferred Minors is a behavior-preserving refactor:
+  - (1) changes effect timing;
+  - (2) changes a test's detection rule;
+  - (3) changes a test assertion.
+
+### M9 — Complete (2026-10-08)
+
+**Documentation scope:** the spec's Tracking cell, and this section.
+
+**Content updates:**
+- The #131 spec's Tracking cell now links PR #147 from its #146 amendment note. Caused by the PR being opened.
+- This section. Caused by the M7–M9 gate outcomes.
+
+**Editorial changes:** none.
+
+**Unchanged, with reason:**
+- `apps/web/README.md`. Its shell paragraph says the landing shows "Unable to load your account." on a failed read. That is still true. Neither the alert role nor the guard's internal ref change alters any behavior the README describes.
+- `apps/web/middleware.ts`. Its comment already names `SessionGuard` (#131 M9).
+
+**Verification:**
+- Relative links in the spec and this plan resolve (scripted scan).
+- Status is consistent: the #146 amendment and this plan are Accepted, M7 is Approved, and the PR is open with CI green.
+- Terminology follows the spec (session redirect, latch, session check).
+
+### M10 — Accepted, workflow validated (2026-10-08)
+
+**Subject:** the installed workflow prompt library (`docs/workflows/`, generic 1.4.1 / claude 0.2.0), against `docs/workflows/specs/agent-workflow-design.md` §2.10. This slice ran it on #146 from M2 (a slice-local amendment) to M9.
+
+**Asset inventory:** unchanged. Nine prompts map to M2–M10. There are no orphan assets.
+
+**Checks:**
+- §2.4 and the slice-local amendment rules were honoured. The amendment was made in place, with its own Draft → Accepted lifecycle, a stated delta, and criterion 8. The #131 remainder stayed Accepted throughout.
+- M3 Accept `4f84a4e` (recorded) precedes the M4 draft `3d5fb65`.
+- §2.5 was honoured: plan Accept `298377a` is an ancestor of the first implementation commit `a1725a0`.
+- M5 recorded an explicit Return before Accept: five changes and wording on its first pass.
+- Providers were honoured: GitHub for the issue (#146), branch and PR (#147).
+- CLAUDE.md's M7 rule was honoured: a fresh, independent reviewer on the most capable model, citing CI.
+- Slice Completion Reports were emitted at M6 and at M7–M9.
+- §2.8 was honoured: one PR (#147) carries the amendment, plan, implementation and docs.
+
+**Blocking findings:** none.
+
+**Non-blocking observations:**
+1. **Review minors become their own slice cheaply.** The #131 M7 Minors became a complete M2–M10 slice through a slice-local amendment. That path worked well for a small, bounded follow-up, and it kept the original spec's acceptance intact.
