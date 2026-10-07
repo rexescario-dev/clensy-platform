@@ -53,6 +53,8 @@ describe('web shell regressions', () => {
     const landing = readWebSource('app/app/page.tsx');
 
     expect(landing).toContain('landingTarget({ currentAdmin, error, loading })');
+    // Session routing spec §4.4: the landing never routes to /login itself.
+    expect(landing).not.toContain('/login');
     expect(landing).not.toContain('/app/customers');
     expect(landing).not.toMatch(/tenantId/);
   });
@@ -80,13 +82,30 @@ describe('web shell regressions', () => {
   it('mounts the page-visibility gate once, directly inside DashboardLayout', () => {
     const layout = readWebSource('app/app/layout.tsx');
 
+    // Its only sibling is the render-less SessionGuard (session routing spec
+    // §4.2), which never wraps or replaces the page.
     expect(layout).toMatch(
-      /<DashboardLayout>\s*<PageVisibilityGate>\{children\}<\/PageVisibilityGate>\s*<\/DashboardLayout>/,
+      /<DashboardLayout>\s*<SessionGuard \/>\s*<PageVisibilityGate>\{children\}<\/PageVisibilityGate>\s*<\/DashboardLayout>/,
     );
     const mounts = nonTestSources(webRoot)
       .filter((path) => readFileSync(path, 'utf8').includes('<PageVisibilityGate'))
       .map((path) => relative(webRoot, path));
     expect(mounts).toEqual(['app/app/layout.tsx']);
+  });
+
+  // Session routing spec §5 invariant 12: one session redirect and logout are
+  // the only /app routes to the sign-in page. Scoped exactly to app/app/** and
+  // components/**; app/login and middleware.ts are outside the rule. Matches
+  // navigation (router calls, redirect(), links), not prose mentions.
+  it('routes to /login only from the session guard and logout', () => {
+    const NAVIGATES_TO_LOGIN = /(?:\b(?:push|redirect|replace)\(\s*|href=\{?\s*)['"`]\/login['"`]/;
+    const routesToLogin = [resolve(webRoot, 'app/app'), resolve(webRoot, 'components')]
+      .flatMap((dir) => nonTestSources(dir))
+      .filter((path) => NAVIGATES_TO_LOGIN.test(readFileSync(path, 'utf8')))
+      .map((path) => relative(webRoot, path))
+      .sort();
+
+    expect(routesToLogin).toEqual(['components/layout/session-guard.tsx', 'components/layout/user-menu.tsx']);
   });
 
   it('reads currentAdmin in the gate with the default cache-first policy and never redirects', () => {
