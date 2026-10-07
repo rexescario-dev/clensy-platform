@@ -7,6 +7,7 @@ import {
   findActiveHref,
   isGatedPath,
   landingHref,
+  pageTitleKey,
   visibleNavGroups,
   type NavPrincipal,
 } from './nav-groups';
@@ -213,6 +214,30 @@ describe('trailing slash', () => {
 
   it.each(ALL_PRINCIPALS)('gives %s the same answer for /app/admin/ as for /app/admin', (_label, principal) => {
     expect(canViewPath(principal, STAFF_TRAILING)).toBe(canViewPath(principal, STAFF));
+  });
+});
+
+// Document titles spec §4.1 and §8 item 1 (#143).
+describe('pageTitleKey', () => {
+  it.each(NAV_GROUPS.flatMap((group) => group.items))('names $href and the paths beneath it by $labelKey', ({ href, labelKey }) => {
+    expect(pageTitleKey(href)).toBe(labelKey);
+    expect(pageTitleKey(`${href}/nested`)).toBe(labelKey);
+  });
+
+  it('shares findActiveHref segment matching', () => {
+    expect(pageTitleKey(SERVICES)).toBe('items.services');
+    expect(pageTitleKey(ADD_ONS)).toBe('items.addOns');
+    expect(pageTitleKey('/app/cleaners/teams-extra')).toBe('items.cleaners');
+    expect(pageTitleKey(`${STAFF}/`)).toBe('items.staff');
+  });
+
+  it('names the platform path and the paths beneath it by platform.title', () => {
+    expect(pageTitleKey(PLATFORM_HOME_HREF)).toBe('platform.title');
+    expect(pageTitleKey(`${PLATFORM_HOME_HREF}/x`)).toBe('platform.title');
+  });
+
+  it.each(UNGATED_PATHS)('has no page title key for %j', (pathname) => {
+    expect(pageTitleKey(pathname)).toBeUndefined();
   });
 });
 
