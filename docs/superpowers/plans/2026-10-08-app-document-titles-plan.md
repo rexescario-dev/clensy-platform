@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Accepted |
+| M5 decision | **Accepted** — 2026-10-08, at `5f766df`, by the owner, on the second pass, with no further revision. M6 MUST implement Tasks 1–4 as written, including the syntax-tree ownership regressions and their mutation checks, and record Task 5's server-render and before/after client-navigation evidence; M7 MUST be a fresh independent review (`CLAUDE.md`). |
 | M5 history | First pass (2026-10-08) returned two required changes and three improvements, all applied without changing the approach. **Required:** `NAV_ITEMS` is stated as a derived view of `NAV_GROUPS`, not a configuration source (Architecture, Task 2 Step 3); the `/app` and `/login` metadata regressions read exported names from the syntax tree, so every export form counts and `export *` fails closed (Task 4 Steps 1 and 3). **Improvements:** one-contribution versus one-effective-title wording (Global Constraints); the root-title regression reads the `metadata` object's properties from the syntax tree instead of a formatting-dependent regex (Task 4 Step 1); Task 5 records the title and announcer text before and after the navigation. Task 4 was re-pre-validated after the change (Pre-validation). |
 | Date | 2026-10-08 |
 | Tracking issue | [#143](https://github.com/rexescario-dev/clensy-platform/issues/143). Program [#81](https://github.com/rexescario-dev/clensy-platform/issues/81). |
