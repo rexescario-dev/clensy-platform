@@ -10,6 +10,7 @@
 | Related (not a dependency) | The #89 tenant-aware shell slice introduced `NAV_GROUPS[].labelKey` and `findActiveHref` in `apps/web/lib/nav-groups.ts`, reused here. |
 | Followed by | None. |
 | M3 decision | Pending. |
+| M3 history | First pass (2026-10-08) kept the architecture and returned four required changes and three hardening items, all applied without changing a decision. **Required:** `pageTitleKey`'s `undefined` is intentional and becomes the app title only at the gate (§4.1, §4.3, §5 invariant 1); title ownership is stated as one React `<title>` contribution per gate row, which React hoists into `<head>`, with no DOM relationship to the row's body (§3, §4.3, §5 invariant 2); the effective-title invariant has an explicit lifecycle, so a server loading title may legitimately change once the gate settles (§5 invariant 4); the announcement goal and the recorded browser check are limited to navigations whose resolved title changes (§2, §6, §8 item 5). **Hardening:** `pageTitleKey` shares `canViewPath`'s path matching, not its principal decision (§4.1); the server-loading property is a verification target, and the title contract doesn't depend on it (§4.3, §7, §8 item 5); M4 decides only `/login`'s mechanism (§4.4). |
 
 ## 1. Primary question and thesis
 
@@ -41,7 +42,7 @@
 
 ### Informative
 
-- The resolved titles also become the text Next's route announcer reads on client-side navigation. This spec fixes the title; it does not change the announcer.
+- The resolved titles also become the text Next's route announcer reads on client-side navigation. This spec fixes the title; it does not change the announcer. The announcer announces only when `document.title` changes, so a navigation between two paths with the same title (for example two paths beneath `/app/catalog`, or two denied paths) is not announced.
 
 ### Out of scope (normative)
 
@@ -57,7 +58,7 @@
 - **Page title key** — the `nav` message key that names a page: a `NAV_GROUPS` item's `labelKey`, or `platform.title`.
 - **Resolved title** — the title for a path when the requested page (or nothing page-specific) is rendered: `nav.documentTitle.page` with the page title key's text, or `nav.documentTitle.app` when there is no page title key.
 - **Unavailable title** — `nav.documentTitle.page` with `nav.unavailable.title`'s text.
-- **Title contribution** — a `<title>` element rendered by a component or emitted from route `metadata`.
+- **Title contribution** — a React `<title>` element rendered by a component, or a `title` emitted from route `metadata`. React hoists a rendered `<title>` into the document `<head>`, so a contribution has no DOM relationship to the component's other output.
 - Other terms (*gated path*, *platform path*, *shell-hidden page*, *unavailable state*) are as defined in role-aware typed-URL spec §3.
 
 ## 4. Contracts
@@ -70,10 +71,12 @@
 2. **Platform path.** If `pathname` is a platform path, the result is `platform.title`.
 3. **Otherwise** the result is `undefined`. This covers `/app`, the empty pathname, and any path no rule resolves.
 
+`undefined` is intentional: it means "no page-specific title". `pageTitleKey` never returns the fallback key. The gate turns `undefined` into `nav.documentTitle.app` when it formats the title (§4.3), so the resolver stays a pure path-to-page-name function.
+
 Requirements:
 
 - **Single source.** It reads only `NAV_GROUPS` (through `findActiveHref`) and `PLATFORM_HOME_HREF`. It MUST NOT introduce any new list, map or table of paths, page names or titles. A future nav entry gets its title from its `labelKey` alone.
-- **Same resolution as the gate.** Rules 1 and 2 are the same resolution `canViewPath` uses (role-aware typed-URL spec §4.1), so segment-match, longest-match and trailing-slash behavior are inherited unchanged. A path beneath a nav href resolves to that href's key.
+- **Shared path matching, not a shared decision.** Its path-to-navigation matching uses the same `findActiveHref` and platform-path rules as `canViewPath` (role-aware typed-URL spec §4.1), so segment-match, longest-match and trailing-slash behavior are inherited unchanged, and a path beneath a nav href resolves to that href's key. It does not inspect, call or reproduce `canViewPath`'s principal, role or scope decision.
 - **Not authorization.** Like `isGatedPath` and `canViewPath`, it is a client-side presentation rule. Its documentation MUST say so.
 
 ### 4.2 Title copy
@@ -94,9 +97,9 @@ Requirements:
 
 ### 4.3 Ownership: `PageVisibilityGate` renders the title
 
-`PageVisibilityGate` (role-aware typed-URL spec §4.2) renders exactly one title contribution, a React `<title>` element, in every gate row, alongside that row's existing output:
+For every gate row, `PageVisibilityGate` (role-aware typed-URL spec §4.2) renders exactly one React `<title>` contribution, and no other `/app` source contributes a title. React hoists it into `<head>`; it has no DOM relationship to the row's body. The title text for each row is:
 
-| Gate row | Rendered body (unchanged) | Title |
+| Gate row | Rendered body (unchanged) | Title text |
 | --- | --- | --- |
 | 0. Ungated path | the page (`children`) | resolved title |
 | Allowed | the page | resolved title |
@@ -107,16 +110,17 @@ Requirements:
 
 Requirements:
 
+- **Resolved title.** The resolved title is `nav.documentTitle.page` with the text of `pageTitleKey(pathname)` when it returns a key, and `nav.documentTitle.app` when it returns `undefined` (§4.1).
 - **Rendered state, not requested route.** The title describes the row actually rendered. In the denied row it MUST be the unavailable title, never the requested page's name.
-- **Loading row.** While a gated path is loading, the title is the resolved title of the requested path. It does not imply that the principal may view the page. Once the gate settles, the title is that of the settled row. The loading and allowed titles MUST come from the same `pageTitleKey` resolution, not a loading-specific mapping.
-- **Sole owner.** The gate is the only title contribution in the `/app` subtree. No page, shell component (`DashboardLayout`, `AppHeader`, sidebar) or `/app` layout renders a `<title>` or exports `metadata`/`generateMetadata` with a `title`.
+- **Loading row.** While a gated path is loading, the title is the resolved title of the requested path. It does not imply that the principal may view the page. Once the gate settles, the title is that of the settled row. The loading and allowed titles MUST come from the same `pageTitleKey` resolution, not a loading-specific mapping. This contract is per row. It doesn't depend on which row the server renders: if server data provisioning changes and the server renders a settled row, the server title is that row's title.
+- **Sole owner.** The gate's contribution is the only one in the `/app` subtree. No page, shell component (`DashboardLayout`, `AppHeader`, sidebar) or `/app` layout renders a `<title>` or exports `metadata`/`generateMetadata` with a `title`.
 - **Body unchanged.** Every row's visible output, the gate's visibility decision, its hooks and its mount rules (role-aware typed-URL spec §4.2, §5 invariants 4–6, 10) are unchanged. The `<title>` is the only addition.
 - **Locale.** The gate formats the title with the same next-intl `nav` translations it already uses for the unavailable state.
 
 ### 4.4 Root layout and `/login`
 
 - The root layout's `metadata` (`apps/web/app/layout.tsx`) MUST NOT set `title`, so it contributes no title that competes with the gate's (§1.1). `description` is unchanged.
-- `/login` MUST keep a document title whose text equals `nav.documentTitle.app` ("Clensy"), exactly one title contribution, as it does today. The mechanism (for example a React `<title>` in the login page, or `metadata` in a server layout under `app/login/`) is an M4 decision. It MUST NOT add a layout under `/app`.
+- `/login` MUST have exactly one title contribution, and its text MUST equal `nav.documentTitle.app` ("Clensy"), as it does today. That boundary is fixed here. M4 decides only the mechanism, for example a React `<title>` in the login page or `metadata` in a server layout under `app/login/`. No mechanism may add a layout under `/app`.
 - `/` and Next's not-found and error pages are out of scope (§2). With no root title, they keep whatever Next or their own files provide. The not-found page keeps Next's own title (§1.1).
 
 ### 4.5 Worked examples
@@ -136,10 +140,15 @@ Requirements:
 
 ## 5. Invariants (MUST / MUST NOT)
 
-1. **One mapping.** `NAV_GROUPS` and `PLATFORM_HOME_HREF` are the only page-specific title sources. Every other `/app` route resolves to `nav.documentTitle.app`. No second page-to-title mapping exists in `apps/web`.
-2. **One owner.** `PageVisibilityGate` is the only title contribution in the `/app` subtree, and it renders exactly one per row.
+1. **One mapping.** `NAV_GROUPS` and `PLATFORM_HOME_HREF` are the only page-specific title sources. For every other `/app` route, `pageTitleKey` returns `undefined` and the gate renders `nav.documentTitle.app` as the effective title. No second page-to-title mapping exists in `apps/web`.
+2. **One owner.** For every gate row, `PageVisibilityGate` renders exactly one React `<title>` contribution, and no other `/app` source contributes a title.
 3. **Rendered state.** The title always describes the gate row actually rendered (§4.3).
-4. **Effective title.** For a route rendered by the `/app` layout, both the server-rendered HTML and `document.title` after hydration and after every client-side navigation equal that row's title, with no competing root-layout title.
+4. **Effective title.** For a route rendered by the `/app` layout, with no competing root-layout title:
+   - the server-rendered HTML contains the title for the server-rendered gate row;
+   - after hydration, `document.title` equals the title for the currently rendered gate row;
+   - after each client-side navigation or gate-state transition, it equals the title for the newly rendered row.
+
+   So a cold load of `/app/customers` by a denied user legitimately moves from `Customers · Clensy` (loading, server) to `Page unavailable · Clensy` (denied).
 5. **Message-owned format.** Titles are produced only from the §4.2 patterns.
 6. **No disclosure.** The unavailable title names no role, scope or page.
 7. **Unchanged visibility.** The visibility rule, the gate decision, the gate's visible rows and API behavior are unchanged. `pageTitleKey` is not authorization (role-aware typed-URL spec §5 invariant 1 applies to it).
@@ -150,7 +159,7 @@ Requirements:
 **Goals**
 
 - Tab and screen-reader users can tell `/app` pages apart by title.
-- Client-side navigation between `/app` pages changes `document.title`, so Next's route announcer announces the new page or state.
+- Client-side navigation that changes the resolved gate title changes `document.title`, allowing Next's route announcer to announce the new page or state (§2 Informative).
 - A user who reaches a shell-hidden page hears and sees "Page unavailable" in the title, matching the unavailable state's `<h1>`.
 - A new nav entry gets its title from its `labelKey`, with no extra step.
 
@@ -169,7 +178,7 @@ Requirements:
 - **React `<title>`, not server `metadata`.** Pages are client components and can't export `metadata`. Server wrappers per page would add eleven files and a mapping, and the unavailable state is decided on the client anyway, so a client title mechanism is needed regardless. Next's own documentation points client components to React's `<title>`.
 - **Nav labels as the page name.** `NAV_GROUPS` already maps routes to labels for the sidebar and the gate, so titles cost no new mapping and match what the user clicked ("Services" for `/app/catalog`). Using page headings would need a second mapping and first moving hard-coded headings into catalogs.
 - **Bare "Clensy" fallback.** `/app` is a transient landing redirect and has no page of its own. A defined fallback makes the resolver total, without new copy or a route table.
-- **Path-derived title while loading.** No principal is known during the server render: `apolloClient` (`packages/client`, provided by `app/apollo-provider.tsx`) has no server-side data fetching, so the gate's `useCurrentAdminQuery()` renders as loading on the server. Every gated page's server HTML is therefore the loading row (§8 item 5 records it). A path-derived title gives the initial load, which the browser announces itself, the requested page's name in the common allowed case. "Clensy" would leave the original problem in place on full loads. A denied user sees it change to "Page unavailable" once the principal loads. In-session navigation reads the cached principal and decides in the same commit (role-aware typed-URL spec §4.2), so the announcer reads the settled title.
+- **Path-derived title while loading.** No principal is known during the server render: `apolloClient` (`packages/client`, provided by `app/apollo-provider.tsx`) has no server-side data fetching, so the gate's `useCurrentAdminQuery()` renders as loading on the server. Every gated page's server HTML is therefore the loading row today. That is an observed property of the current Apollo setup, not a contract: §8 item 5 verifies it, and the per-row title contract holds whichever row the server renders (§4.3). A path-derived title gives the initial load, which the browser announces itself, the requested page's name in the common allowed case. "Clensy" would leave the original problem in place on full loads. A denied user sees it change to "Page unavailable" once the principal loads. In-session navigation reads the cached principal and decides in the same commit (role-aware typed-URL spec §4.2), so the announcer reads the settled title.
 - **"Page unavailable" as the unavailable page name.** It matches the rendered state, is short enough for a tab, and is the same on every denied path. Reusing the sentence-length message would make an awkward title.
 - **Removing the root title.** The probe showed the root `metadata.title` is server-rendered before the gate's `<title>` and wins `document.title` until hydration (§1.1). Removing it is the only way to make the server HTML correct without moving the gate's output. `/login` would then have no title, so it gets its own (§4.4).
 - **Message-owned format.** Order and separator are locale concerns. Keeping them in `nav.documentTitle.page` avoids hard-coding English punctuation in the resolver.
@@ -199,8 +208,8 @@ These are acceptance anchors for M4–M7. Test file names are planning decisions
    - `/login` has exactly one title source.
 4. **Copy:** the three §4.2 keys exist in `apps/web/messages/en/nav.json` with the §4.2 text.
 5. **Recorded acceptance evidence** (run at M6 and cited at M7; not a CI job). These are evidence for invariant 4, which Vitest can't fully reproduce:
-   - **Server render.** Build and start the app, then fetch with a session cookie present. The server HTML for `/app` contains exactly one `<title>`, `Clensy`. For `/app/customers` and `/app/platform` it contains exactly one, the loading-row resolved title (`Customers · Clensy`, `Platform · Clensy`). For `/login` it contains exactly one, `Clensy`.
-   - **Client navigation.** In a real browser with a seeded session, navigate between two `/app` pages through the sidebar. Record that `document.title` changes to the new page's title, and that Next's route-announcer region text equals it. Where practical, also record a transition into the unavailable state.
+   - **Server render.** Build and start the app, then fetch with a session cookie present. The server HTML for `/app` contains exactly one `<title>`, `Clensy`. For representative gated routes, at least `/app/customers` and `/app/platform`, it contains exactly one, and the record states which gate row the server rendered. Today that is expected to be the loading row, with the resolved title (`Customers · Clensy`, `Platform · Clensy`). For `/login` it contains exactly one, `Clensy`.
+   - **Client navigation.** In a real browser with a seeded session, navigate through the sidebar between two `/app` pages with **distinct** resolved titles. Record that `document.title` changes to the new page's title, and that Next's route-announcer region text equals it. Where practical, also record a gate-state transition into the unavailable state, for example a cold load of a shell-hidden page moving from the loading title to `Page unavailable · Clensy`.
 6. **Existing suites stay green:** `apps/web` unit/component tests, typecheck, lint and build. No API, `@clensy/ui` or `@clensy/web` source changes.
 
 ## 9. Traceability
