@@ -42,6 +42,22 @@ describe('/app landing states', () => {
     expect(html).toContain('Unable to load your account.');
   });
 
+  // Spec §4.4 (#146): the error is announced, with the admin page's
+  // staff.loadError visual classes; the loading and empty states are not alerts.
+  it('announces the account load error as an alert in the admin error style', () => {
+    const html = render(<AppIndexPage />, { error: new Error('Failed to fetch'), loading: false });
+
+    expect(html).toBe('<p role="alert" class="text-sm text-red-600">Unable to load your account.</p>');
+  });
+
+  it.each([
+    ['loading', { loading: true }],
+    ['a settled missing principal', { data: { currentAdmin: null }, loading: false }],
+    ['a principal with no destination', { data: { currentAdmin: { id: 'admin-1', role: 'SUPER_ADMIN', scope: 'TENANT' } }, loading: false }],
+  ] as const)('renders no alert for %s', (_name, query) => {
+    expect(render(<AppIndexPage />, query)).not.toContain('role="alert"');
+  });
+
   it('keeps loading on a settled missing principal while the guard redirects', () => {
     const html = render(<AppIndexPage />, { data: { currentAdmin: null }, loading: false });
 

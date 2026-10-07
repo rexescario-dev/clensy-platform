@@ -27,7 +27,12 @@ export default function AppIndexPage() {
   }, [target, router]);
 
   if (!loading && error) {
-    return <p className="text-sm text-slate-500">{t('landing.error')}</p>;
+    // Announced, in the admin page's staff.loadError style (spec §4.4, #146).
+    return (
+      <p role="alert" className="text-sm text-red-600">
+        {t('landing.error')}
+      </p>
+    );
   }
   if (!loading && currentAdmin && !target) {
     return <p className="text-sm text-slate-500">{t('landing.empty')}</p>;
