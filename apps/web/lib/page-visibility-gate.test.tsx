@@ -82,6 +82,12 @@ function expectButtonLink(html: string, href: string) {
   expect(html).not.toContain('<button');
 }
 
+// Document titles spec §4.3 (#143): the gate's output holds exactly one
+// <title>, whose text describes the row actually rendered.
+function expectTitle(html: string, title: string) {
+  expect([...html.matchAll(/<title>(.*?)<\/title>/g)].map(([, text]) => text)).toEqual([title]);
+}
+
 function expectMounted(html: string) {
   expect(html).toContain('page-probe');
   expect(pageRenders).toBe(1);
@@ -222,5 +228,57 @@ describe('PageVisibilityGate', () => {
     renderGate('/app/bookings', admin('FINANCE', 'TENANT'));
 
     expect(inputs.queryCalls).toEqual([[]]);
+  });
+
+  // Document titles spec §4.3, §4.5 and §8 item 2 (#143).
+  describe('document title', () => {
+    const UNAVAILABLE_TITLE = 'Page unavailable · Clensy';
+
+    it.each([
+      ['/app', 'Clensy'],
+      ['/app/does-not-exist', 'Clensy'],
+      [null, 'Clensy'],
+    ])('titles the ungated path %j as %j', (pathname, title) => {
+      expectTitle(renderGate(pathname, { loading: true }), title);
+    });
+
+    it('titles an allowed page by its nav label', () => {
+      expectTitle(renderGate('/app/catalog', admin('OPS_MANAGER', 'TENANT')), 'Services · Clensy');
+      expectTitle(renderGate('/app/cleaners/teams/x', admin('ANALYST', 'TENANT')), 'Teams · Clensy');
+      expectTitle(renderGate('/app/admin', admin('TENANT_OWNER', 'TENANT')), 'Staff · Clensy');
+    });
+
+    it('titles the platform page for a platform principal', () => {
+      expectTitle(renderGate('/app/platform', admin('SUPER_ADMIN', 'PLATFORM')), 'Platform · Clensy');
+    });
+
+    it.each([
+      ['a denied role', '/app/customers', admin('FINANCE', 'TENANT')],
+      ['a platform principal on a tenant page', '/app/bookings', admin('SUPER_ADMIN', 'PLATFORM')],
+      ['a tenant principal on the platform page', '/app/platform', admin('SCHEDULER', 'TENANT')],
+      ['a principal with no landing', '/app/bookings', admin('SUPER_ADMIN', 'TENANT')],
+    ] as [string, string, QueryState][])('titles the unavailable state for %s', (_label, pathname, query) => {
+      expectTitle(renderGate(pathname, query), UNAVAILABLE_TITLE);
+    });
+
+    it('titles the loading row by the requested page, as the allowed row', () => {
+      const loading = renderGate('/app/customers', { loading: true });
+      const allowed = renderGate('/app/customers', admin('ANALYST', 'TENANT'));
+
+      expectTitle(loading, 'Customers · Clensy');
+      expectTitle(allowed, 'Customers · Clensy');
+    });
+
+    it.each([
+      ['an error', { error: new Error('session expired'), loading: false }],
+      ['a settled null', { data: { currentAdmin: null }, loading: false }],
+    ] as [string, QueryState][])('titles the passed-through page on %s', (_label, query) => {
+      expectTitle(renderGate('/app/bookings', query), 'Bookings · Clensy');
+    });
+
+    it('titles a cached principal during a refetch by the settled row', () => {
+      expectTitle(renderGate('/app/customers', { ...admin('ANALYST', 'TENANT'), loading: true }), 'Customers · Clensy');
+      expectTitle(renderGate('/app/customers', { ...admin('FINANCE', 'TENANT'), loading: true }), UNAVAILABLE_TITLE);
+    });
   });
 });

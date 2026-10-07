@@ -7,14 +7,16 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 
-import { canViewPath, isGatedPath, landingHref, type NavPrincipal } from '../../lib/nav-groups';
+import { canViewPath, isGatedPath, landingHref, pageTitleKey, type NavPrincipal } from '../../lib/nav-groups';
 
 // The one /app page-visibility gate (role-aware typed URLs spec §4.2),
 // mounted by app/app/layout.tsx. A client-side presentation rule derived from
 // the shell navigation policy, not authorization: the API stays the boundary
 // (multi-tenant spec §4.2, §5.13). It never redirects and makes no session
 // decision; with no principal the page mounts and keeps its own behavior. A
-// denied page is never rendered, so its hooks and queries never run.
+// denied page is never rendered, so its hooks and queries never run. It also
+// owns the /app document title (document titles spec §4.3): every row renders
+// exactly one <title>, describing the row actually rendered.
 export function PageVisibilityGate({ children }: { children: ReactNode }) {
   const t = useTranslations('nav');
   const pathname = usePathname() ?? '';
@@ -22,13 +24,40 @@ export function PageVisibilityGate({ children }: { children: ReactNode }) {
   // on every render (rules of hooks) even where the result is unused.
   const { data, error, loading } = useCurrentAdminQuery();
   const principal = data?.currentAdmin;
+  // The requested path's title, shared by every row except the unavailable
+  // state; the loading row uses it too, without implying the page is viewable.
+  const titleKey = pageTitleKey(pathname);
+  const title = titleKey ? t('documentTitle.page', { page: t(titleKey) }) : t('documentTitle.app');
 
-  if (!isGatedPath(pathname)) return children;
+  if (!isGatedPath(pathname)) return <Titled title={title}>{children}</Titled>;
   if (principal) {
-    return canViewPath(principal, pathname) ? children : <UnavailableState principal={principal} />;
+    return canViewPath(principal, pathname) ? (
+      <Titled title={title}>{children}</Titled>
+    ) : (
+      <Titled title={t('documentTitle.page', { page: t('unavailable.title') })}>
+        <UnavailableState principal={principal} />
+      </Titled>
+    );
   }
-  if (!error && loading) return <LoadingState message={t('landing.loading')} />;
-  return children;
+  if (!error && loading) {
+    return (
+      <Titled title={title}>
+        <LoadingState message={t('landing.loading')} />
+      </Titled>
+    );
+  }
+  return <Titled title={title}>{children}</Titled>;
+}
+
+// One React <title> contribution, which React hoists into <head>; it has no
+// DOM relationship to the row it accompanies (document titles spec §4.3).
+function Titled({ children, title }: { children: ReactNode; title: string }) {
+  return (
+    <>
+      <title>{title}</title>
+      {children}
+    </>
+  );
 }
 
 // The shared state for every denied path (spec §4.3): no roles or scopes
