@@ -43,23 +43,27 @@ describe('session routing regressions', () => {
     expect(guard).toContain('createSessionRedirector(');
   });
 
-  // Spec §4.3 item 1 (#146): one redirector per mounted guard. A structural
-  // source regression, not a runtime proof (no DOM environment): parsed with
-  // the TypeScript AST, so formatting changes don't break it. The effect that
-  // creates the redirector has no dependencies, so a client or router identity
-  // change cannot replace the latch. Its effects reach the current client and
-  // router through `latest`, kept in sync by an earlier [client, router]
-  // effect that only updates the ref.
+  // Spec §4.3 item 1 (#146, #148): one redirector per mounted guard. A
+  // structural source regression, parsed with the TypeScript AST so formatting
+  // changes don't break it; the runtime behavior is proven in
+  // session-guard-runtime.test.tsx. The passive effect that creates the
+  // redirector has no dependencies, so a client or router identity change
+  // cannot replace the latch. Its effects reach the current client and router
+  // through `latest`, kept in sync by an earlier [client, router] LAYOUT effect
+  // that only updates the ref, so the ref is current before any passive effect
+  // or later signal of the same commit.
   it('keeps the redirector mount-scoped while routing through the latest client and router (source)', () => {
-    const effects = useEffectCalls(readWebSource('components/layout/session-guard.tsx'));
+    const effects = effectCalls(readWebSource('components/layout/session-guard.tsx'));
     const redirectorIndex = effects.findIndex((effect) => effect.body.includes('createSessionRedirector('));
     const syncIndex = effects.findIndex((effect) => effect.body === '{latest.current={client,router};}');
 
     expect(redirectorIndex).toBeGreaterThanOrEqual(0);
+    expect(effects[redirectorIndex]?.hook).toBe('useEffect');
     expect(effects[redirectorIndex]?.deps).toBe('[]');
     expect(effects[redirectorIndex]?.body).toContain('clearStore:()=>latest.current.client.clearStore()');
     expect(effects[redirectorIndex]?.body).toContain("navigateToLogin:()=>latest.current.router.replace('/login')");
     expect(syncIndex).toBeGreaterThanOrEqual(0);
+    expect(effects[syncIndex]?.hook).toBe('useLayoutEffect');
     expect(effects[syncIndex]?.deps).toBe('[client,router]');
     expect(syncIndex).toBeLessThan(redirectorIndex);
   });
@@ -87,18 +91,26 @@ describe('session routing regressions', () => {
   });
 });
 
-// Each useEffect(callback, deps) call in a component, in source order. The
+// Each useEffect / useLayoutEffect(callback, deps) call in a component, in
+// source order, with which hook it is. The
 // callback body and dependency list are compacted (all whitespace and trailing
-// commas removed), so formatting never changes what the assertions see.
-function useEffectCalls(text: string) {
+// commas removed), so ordinary whitespace and trailing-comma formatting
+// changes do not affect the assertions.
+function effectCalls(text: string) {
   const source = ts.createSourceFile('component.tsx', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const normalize = (node: ts.Node | undefined) =>
     node ? node.getText(source).replace(/\s+/g, '').replace(/,(?=[\])}])/g, '') : undefined;
-  const calls: Array<{ body: string; deps: string | undefined }> = [];
+  const calls: Array<{ body: string; deps: string | undefined; hook: string }> = [];
   const visit = (node: ts.Node) => {
-    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'useEffect') {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      (node.expression.text === 'useEffect' || node.expression.text === 'useLayoutEffect')
+    ) {
       const [callback, deps] = node.arguments;
-      if (callback && ts.isArrowFunction(callback)) calls.push({ body: normalize(callback.body) ?? '', deps: normalize(deps) });
+      if (callback && ts.isArrowFunction(callback)) {
+        calls.push({ body: normalize(callback.body) ?? '', deps: normalize(deps), hook: node.expression.text });
+      }
     }
     ts.forEachChild(node, visit);
   };

@@ -45,4 +45,21 @@ describe('SessionGuard rendering', () => {
     expect(mocks.query).not.toHaveBeenCalled();
     expect(mocks.onSessionInvalid).not.toHaveBeenCalled();
   });
+
+  // #148: the guard's ref sync is a useLayoutEffect, which never runs during
+  // server rendering. The guard renders null, so its server markup can't
+  // change. This pins that rendering it on the server logs no React warning
+  // or error.
+  it('renders on the server without any console warning or error', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect(renderToStaticMarkup(<SessionGuard />)).toBe('');
+      expect(error).not.toHaveBeenCalled();
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      error.mockRestore();
+      warn.mockRestore();
+    }
+  });
 });
