@@ -199,6 +199,23 @@ describe('canViewPath', () => {
   });
 });
 
+// Characterization (already true on main): spec §4.1 and §8 item 1 (#134)
+// pin a trailing slash as segment-matching its nav href. next.config.ts sets
+// no trailingSlash, so Next's 308 normalizes this today; these rows stop a
+// future `trailingSlash: true` from silently changing gating.
+describe('trailing slash', () => {
+  const STAFF_TRAILING = `${STAFF}/`;
+
+  it('resolves /app/admin/ to /app/admin and gates it', () => {
+    expect(findActiveHref(STAFF_TRAILING)).toBe(STAFF);
+    expect(isGatedPath(STAFF_TRAILING)).toBe(true);
+  });
+
+  it.each(ALL_PRINCIPALS)('gives %s the same answer for /app/admin/ as for /app/admin', (_label, principal) => {
+    expect(canViewPath(principal, STAFF_TRAILING)).toBe(canViewPath(principal, STAFF));
+  });
+});
+
 describe('PLATFORM_HOME_HREF reservation', () => {
   // Spec §5 invariant 9: rule 1 (nav items) can never shadow rule 2
   // (platform path), or the reverse.
