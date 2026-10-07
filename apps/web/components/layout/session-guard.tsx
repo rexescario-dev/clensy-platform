@@ -3,7 +3,7 @@
 import { useApolloClient } from '@apollo/client';
 import { CurrentAdminDocument, onSessionInvalid } from '@clensy/client';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 
 import { createSessionRedirector, runSessionCheck, type SessionRedirector } from '../../lib/session-redirect';
 
@@ -24,8 +24,10 @@ export function SessionGuard() {
   const redirector = useRef<SessionRedirector | null>(null);
 
   // Keeps the redirect calling the current client and router (spec §4.3
-  // item 1) without re-creating the latch when their identity changes.
-  useEffect(() => {
+  // item 1) without re-creating the latch when their identity changes. A
+  // layout effect (#148): the ref is current before any passive effect or
+  // later signal of the same commit can run a redirect step.
+  useLayoutEffect(() => {
     latest.current = { client, router };
   }, [client, router]);
 

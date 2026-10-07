@@ -27,10 +27,10 @@ function PageProbe() {
   return <p>page-probe</p>;
 }
 
-// No DOM test environment exists in this repo, so this pins rendering only:
-// static rendering runs no effects. The effect wiring is pinned at source level
-// in session-routing-regressions.test.ts; the latch it drives is unit-tested in
-// session-redirect.test.ts.
+// Static rendering runs no effects, so this file pins rendering only. The
+// effect wiring is proven at runtime (jsdom) in session-guard-runtime.test.tsx
+// and pinned at source level in session-routing-regressions.test.ts; the latch
+// it drives is unit-tested in session-redirect.test.ts.
 describe('SessionGuard rendering', () => {
   it('renders nothing and does not delay its sibling page', () => {
     const html = renderToStaticMarkup(
@@ -44,5 +44,22 @@ describe('SessionGuard rendering', () => {
     expect(pageRenders).toBe(1);
     expect(mocks.query).not.toHaveBeenCalled();
     expect(mocks.onSessionInvalid).not.toHaveBeenCalled();
+  });
+
+  // #148: the guard's ref sync is a useLayoutEffect, which never runs during
+  // server rendering. The guard renders null, so its server markup can't
+  // change. This pins that rendering it on the server logs no React warning
+  // or error.
+  it('renders on the server without any console warning or error', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect(renderToStaticMarkup(<SessionGuard />)).toBe('');
+      expect(error).not.toHaveBeenCalled();
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      error.mockRestore();
+      warn.mockRestore();
+    }
   });
 });
