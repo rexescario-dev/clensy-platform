@@ -4,8 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
-| M5 decision | Pending. |
+| Status | Accepted |
+| M5 decision | **Accepted** — 2026-10-08, at `3ab7dd6`, by the owner, on the second pass, with no further changes. To be executed natively. M7 MUST use a fresh, independent reviewer (application-code slice), and MUST specifically verify five things: (1) the mount-scoped redirector and the current `client` and `router` ref behavior; (2) that #131's session-check binding semantics are preserved; (3) the exact landing error markup, with the loading and empty branches unchanged; (4) the literal-based, comment-blind `/login` detection and its declared template-head semantics; and (5) the exact five-file scope, with no protected-area changes. |
 | M5 history | First pass (2026-10-08, at `3d5fb65`): the owner found the scope and approach sound and returned the plan with these changes, all applied with no design change. (1) Task 1's regression is renamed to what it proves: a structural source regression, `… (source)`. (2) The regression now locates the `useEffect` calls through the TypeScript AST, with bodies and dependencies compacted, instead of a formatting-dependent multiline regex. It still fails against the #131 guard and against `[client, router]` dependencies, and still passes on a reformatted guard. (3) The sync effect's purpose is stated: it only updates the ref and never triggers the redirector effect. (4) Task 3's contract states that templates are judged by their head text only. A `${base}/login` detector case now pins that blind spot as intentional, so there are 9 cases. (5) Final verification gains an exact five-file `git diff --name-only` scope check. (6) The wording separates pre-validation evidence from execution criteria, and the Task 2 test comment claims the admin error's visual classes rather than "style". |
 | Date | 2026-10-08 |
 | Tracking issue | [#146](https://github.com/rexescario-dev/clensy-platform/issues/146) (follow-ups to #131's M7 minors) |
