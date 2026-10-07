@@ -4,8 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
-| M5 decision | Pending. |
+| Status | Accepted |
+| M5 decision | **Accepted** — 2026-10-08, at `8881eb2`, by the owner, on the second pass, with no further changes. To be executed natively. The architecture is locked: `useLayoutEffect` for the `[client, router]` ref sync, and `useEffect([])` for the single mount-scoped redirector. No spec amendment. M7 MUST use a fresh, independent reviewer (application-code slice) and MUST confirm there's no warning on the real Next.js server path. |
 | M5 history | First pass (2026-10-08, at `414ffb4`): the owner found the mechanism and test strategy sound and requested changes, all applied with no design change. (1) The unsupported premise "React 19 doesn't warn about `useLayoutEffect` during server rendering" is removed. The plan now says only that the guard renders `null`, so its server markup can't change, and **verifies** the absence of warnings with a new test: `renders on the server without any console warning or error` in `session-guard.test.tsx`. That is a characterization test, with mutation evidence. (2) The runtime test ties `SignalInLayoutPhase`'s next-sibling position to React's tree-order layout effects, which is why its RED is deterministic. (3) It asserts the guard's listener is registered before the identity change. (4) The comment on the `effectCalls` normalization claims only whitespace and trailing-comma insensitivity. (5) The two runtime characterization tests are described as characterizing #146's existing mount-lifetime behavior. (6) The central invariant is stated concretely: before a later sibling's layout-phase signal, and before passive effects. |
 | Date | 2026-10-08 |
 | Tracking issue | [#148](https://github.com/rexescario-dev/clensy-platform/issues/148) (raised from #146's M7 Minor 1) |
