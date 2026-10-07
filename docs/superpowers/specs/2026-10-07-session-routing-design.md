@@ -2,14 +2,14 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted |
-| Date | 2026-10-07 |
+| Status | Accepted. **#146 amendment: Accepted** 2026-10-08. |
+| Date | 2026-10-07 (#146 amendment drafted 2026-10-08) |
 | Document kind | Architecture RFC |
-| Tracking issue | [#131](https://github.com/rexescario-dev/clensy-platform/issues/131) — surfaced by #114 (role-aware typed URLs spec §11 deferral) and its final review. Program [#81](https://github.com/rexescario-dev/clensy-platform/issues/81). Implemented in PR [#145](https://github.com/rexescario-dev/clensy-platform/pull/145). |
+| Tracking issue | [#131](https://github.com/rexescario-dev/clensy-platform/issues/131) — surfaced by #114 (role-aware typed URLs spec §11 deferral) and its final review. Program [#81](https://github.com/rexescario-dev/clensy-platform/issues/81). Implemented in PR [#145](https://github.com/rexescario-dev/clensy-platform/pull/145). *(#146)* Amendment: [#146](https://github.com/rexescario-dev/clensy-platform/issues/146), the follow-ups to the three non-blocking M7 minors, implemented in PR [#147](https://github.com/rexescario-dev/clensy-platform/pull/147). |
 | Depends on (Accepted) | [Admin Foundation](2026-08-14-admin-foundation-design.md) — **relied upon** unchanged: the API is the sole authentication authority, and route middleware MAY use cookie presence only as a UX hint and MUST NOT decode or trust the JWT (§4.8, §6 item 6). [Multi-Tenant Architecture](2026-09-23-multi-tenant-architecture-design.md) — **relied upon** unchanged: navigation and middleware MUST NOT be the security boundary (§5 invariant 13). [Role-Aware Experience for Typed URLs](2026-10-04-role-aware-typed-urls-design.md) (#114) — **constrained**: `PageVisibilityGate`'s contract is unchanged, and this spec takes over the session behavior that #114 left to individual pages (§9). The #114 spec receives a minimal cross-reference amendment under this issue. [Web Shell and Design System](2026-09-10-web-shell-and-design-system-design.md) — **relied upon**: the single `/app` layout. |
 | Related (not a dependency) | The #89 shell slice introduced `landingTarget` (`apps/web/lib/landing-target.ts`), which this spec changes (§4.4). The Staff Administration UI (#88) owns `/app/admin`, whose page-local redirect this spec retires (§4.5). |
-| Followed by | None. |
-| M3 decision | **Accepted** — 2026-10-07, at `0e81e98`, by the owner, on the second pass, with no further changes. M4 implements it mechanically and MUST keep the locked decisions: (1) a subscriber-scoped `UNAUTHENTICATED` signal in `packages/client`; (2) one non-blocking, render-less `SessionGuard` in the `/app` layout, beside `PageVisibilityGate`; (3) a `network-only` `currentAdmin` check on mount and on pathname changes only; (4) only session evidence (§3) redirects; (5) a single-flight `clearStore()` → `replace('/login')`; (6) a latched redirect completes across unmount; (7) no session responsibility in `PageVisibilityGate`; (8) the `/app` and `/app/admin` page-local `/login` redirects retired; (9) no middleware, API, or session-lifetime changes. Boundary: #131 owns session-validity detection and `/login` routing, #114 owns page visibility, and the API remains the authentication and authorization authority. |
+| Followed by | [#146](https://github.com/rexescario-dev/clensy-platform/issues/146) (amended in place). |
+| M3 decision | **Accepted** — 2026-10-07, at `0e81e98`, by the owner, on the second pass, with no further changes. M4 implements it mechanically and MUST keep the locked decisions: (1) a subscriber-scoped `UNAUTHENTICATED` signal in `packages/client`; (2) one non-blocking, render-less `SessionGuard` in the `/app` layout, beside `PageVisibilityGate`; (3) a `network-only` `currentAdmin` check on mount and on pathname changes only; (4) only session evidence (§3) redirects; (5) a single-flight `clearStore()` → `replace('/login')`; (6) a latched redirect completes across unmount; (7) no session responsibility in `PageVisibilityGate`; (8) the `/app` and `/app/admin` page-local `/login` redirects retired; (9) no middleware, API, or session-lifetime changes. Boundary: #131 owns session-validity detection and `/login` routing, #114 owns page visibility, and the API remains the authentication and authorization authority. **#146 amendment — Accepted 2026-10-08, at `95157b8`, by the owner, on the first pass, with no changes.** M4 implements it mechanically and MUST keep these: one redirector per mounted guard, never replaced on client or router identity changes, with its effects calling the current client and router; the landing error with `role="alert"` and the admin error's red style, the loading and empty states unchanged; and the literal-based, comment-blind `/login` scan. It hardens three points the #131 M7 review raised as non-blocking. Its delta is confined to the Status, Date, Tracking, Followed-by and M3-decision rows, §4.3 item 1, §4.4, §8 items 2, 3 and 5, and §10. It changes no locked decision. Session evidence, the signal, the check, the single-flight latch, the retirements, invariants 1–13 and acceptance criteria 1–7 are unchanged. |
 | M3 history | First pass (2026-10-07, at `5f5192f`): the owner approved the architecture and design direction and returned the spec with nine clarifications. None of them reopens options A/B/C or the signal-plus-check decision. All were applied: (1) a latched redirect runs to completion across unmount (§4.3); (2) the unmount rule covers only new evidence (§4.3, §5 invariant 10); (3) the null and absent `currentAdmin` semantics are defined as deliberately defensive (§3, §4.2); (4) the cold-load example states the single-flight path (§4.7); (5) the error link's placement is not prescribed (§4.1); (6) a multiple-errors notification test is added (§8 item 1); (7) the Apollo deduplication aside is removed (§7); (8) the goal is worded as "when evidence is observed" (§6); (9) the #114 amendment is trimmed to cross-references (§9). |
 
 ## 1. Primary question and thesis
@@ -121,7 +121,7 @@ On evidence, the guard performs one redirect: `clearStore()`, then `router.repla
 
 ### 4.3 Session redirect (single-flight)
 
-1. The guard holds one latch per guard lifetime, initially open.
+1. The guard holds one latch per guard lifetime, initially open. *(#146)* The latch is created once when the guard mounts. It MUST NOT be replaced while the guard stays mounted, even if the Apollo client or router object identity changes. The redirect's effects call the current client and router.
 2. On evidence from either source, if the latch is closed, do nothing. Otherwise close it, then `await apolloClient.clearStore()`, then call `router.replace('/login')`.
    - If `clearStore()` rejects, the guard still calls `router.replace('/login')`.
 3. Across the guard's lifetime, **at most one** `clearStore()` → `router.replace('/login')` sequence runs, however many signals and check results arrive and in whatever order. This includes a signal and a null check result arriving together.
@@ -140,7 +140,7 @@ Logout is independent of the guard. If a check or signal arrives while logout is
   - when `error` is set or `currentAdmin` is absent: `undefined`;
   - otherwise: `landingHref(currentAdmin)`.
 - `apps/web/app/app/page.tsx` keeps its `network-only` `currentAdmin` read and its `router.replace(target)` when there is a target. When it has no target after loading:
-  - `error` is set: it renders `nav.landing.error`. If the error was `UNAUTHENTICATED`, the guard is already redirecting.
+  - `error` is set: it renders `nav.landing.error`. If the error was `UNAUTHENTICATED`, the guard is already redirecting. *(#146)* The message is rendered with `role="alert"`, so screen readers announce it, and with the same red text style as `/app/admin`'s `staff.loadError` (§4.5). The loading and empty states keep their style. `@clensy/ui`'s `ErrorState` is not used or changed.
   - `currentAdmin` is absent and there is no error: it renders `nav.landing.loading`, because the guard's own check settles the same result and redirects.
   - otherwise (a principal with no visible destination): it renders `nav.landing.empty`, as today.
 - The landing page MUST NOT call `router.replace('/login')`.
@@ -250,14 +250,16 @@ These are acceptance anchors for M4–M7. Test file names are planning decisions
    - **Unmount, new evidence:** with the latch still open, a null result settling after unmount and a notification after unmount give no `clearStore()` and no `replace()`. The listener is unregistered.
    - **Unmount, committed redirect:** evidence closes the latch, the guard unmounts while `clearStore()` is pending, and when `clearStore()` resolves, `replace('/login')` is still called exactly once.
    - **`clearStore()` rejection:** `replace('/login')` is still called once.
+   - *(#146)* **One latch per mount:** a source regression pins that the effect creating the redirector runs once per mount (no `client` or `router` dependency), and that its `clearStore` and `navigateToLogin` call through refs to the current client and router.
 3. **Landing** (unit, `landing-target.test.ts`, and the page):
    - `landingTarget` never returns `'/login'`: `undefined` while loading, on error, and on an absent principal; `landingHref` otherwise.
    - The page renders `nav.landing.error` on error, and `nav.landing.empty` for a principal with no destination.
+   - *(#146)* The error renders inside an element with `role="alert"`. The loading and empty states do not.
 4. **Admin page:** with `currentAdmin` errored or absent, it renders the `staff.loadError` text and calls no router method.
 5. **Source regressions**, in the style of `web-shell-regressions.test.ts` / `tenant-role-regressions.test.ts`:
    - `app/app/layout.tsx` mounts `SessionGuard` exactly once, inside `DashboardLayout`, as a sibling of `PageVisibilityGate`.
    - `components/layout/page-visibility-gate.tsx` does not reference `onSessionInvalid`, `SessionGuard`, or `/login`.
-   - Navigation to `'/login'` appears in no `apps/web/app/app/**` or `apps/web/components/**` non-test source file except `components/layout/session-guard.tsx` and `components/layout/user-menu.tsx` (invariant 12). The scan is scoped exactly to these trees.
+   - Navigation to `'/login'` appears in no `apps/web/app/app/**` or `apps/web/components/**` non-test source file except `components/layout/session-guard.tsx` and `components/layout/user-menu.tsx` (invariant 12). The scan is scoped exactly to these trees. *(#146)* The scan is literal-based, not call-based. Any string or template literal (parsed with the TypeScript AST, so comments are ignored) whose value is `/login`, or starts with `/login?` or `/login/`, counts. So a path constant or a `window.location` call is caught too.
    - `components/layout/session-guard.tsx` does not reference `canViewPath`, `isGatedPath`, `landingHref`, `visibleNavGroups` or `viewRoles` (invariant 7).
    - `packages/client` source does not reference `/login`, `next/`, `clearStore` or `resetStore` (invariant 5).
 6. **Copy:** `nav.landing.error` exists in `apps/web/messages/en/nav.json` with the §4.6 text.
@@ -286,6 +288,10 @@ This specification may move from Draft to Accepted at M3 when the reviewer agree
 5. The retirement of the `/app` and `/app/admin` redirects, the new landing and admin error states, and the `nav.landing.error` copy leave no product decision to M4 (§4.4–§4.6).
 6. The worked examples and verification contract cover the hidden-page case, the outage case, the `FORBIDDEN` case and the `/login` wrong-password case (§4.7, §8).
 7. Nothing here changes API authentication or authorization, middleware, or the Accepted Admin Foundation, multi-tenant and #114 contracts beyond the cross-reference amendment (§5, §9).
+
+**#146 amendment.** Criteria 1–7 are unaffected and stay met. The amendment may move from Draft to Accepted at M3 when the reviewer agrees that:
+
+8. Three points are unambiguous: the one-latch-per-mount rule regardless of client or router identity (§4.3 item 1); the landing error's `role="alert"` and its admin-matching style (§4.4); and the literal-based `/login` scan (§8 item 5). They change no session semantics, no copy, no `@clensy/ui` component, and no #114 contract.
 
 ## 11. Explicit deferrals
 
