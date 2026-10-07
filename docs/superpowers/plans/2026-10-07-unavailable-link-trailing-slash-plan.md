@@ -234,3 +234,48 @@ Executed natively, in plan order, on `feat/134-unavailable-link-trailing-slash`.
   - `pnpm --filter web test`: 17 files, 511/511.
   - `pnpm --filter web exec tsc --noEmit`, `pnpm --filter web lint` and `pnpm --filter web build`: exit 0.
   - `git diff --stat main -- apps/api packages apps/web/middleware.ts apps/web/messages apps/web/next.config.ts apps/web/lib/nav-groups.ts apps/web/app`: empty.
+
+### M7 — Approved for merge (2026-10-07)
+
+- **Subject:** PR [#144](https://github.com/rexescario-dev/clensy-platform/pull/144), head `947b9da`, base `main` (`61b6fb8`). It carries the spec amendment, this Accepted plan and the M6 change set (process spec §2.8).
+- **Accepted specification:** `docs/superpowers/specs/2026-10-04-role-aware-typed-urls-design.md`, §4.3 amendment (#134).
+- **Accepted implementation plan:** this document.
+- **Review basis: an independent review.** Per `CLAUDE.md` (application-code slice), a fresh agent context on the most capable model, which did not implement the change, reviewed it. It was given the Accepted spec, the Accepted plan and the branch diff. This record is written by the implementer and cites that review.
+- **M6 gate:** plan Accept `bb21c1a` is the direct parent of the first implementation commit `69a36ac`.
+- **Plan tasks reviewed:**
+  - Task 1, the `/app/admin/` trailing-slash row (`69a36ac`) ✓
+  - Task 2, the home link through `Button asChild variant="link"` (`18c0f0f`) ✓
+
+  Both match the plan text verbatim. No reordering, no skipped task, no extras; the diff touches only the File Map plus the spec and plan.
+- **Spec conformance:** amended §4.1, §4.3, §6 and §9 ✓. No `className` on `Button` or `Link`; href, label and omission unchanged; heading, container, copy and gate rows byte-identical; `Button` imported from `@clensy/ui` (UI boundary held); billing, laundry and `@clensy/ui` untouched.
+- **Verification evidence:**
+  - The reviewer re-ran `pnpm --filter web test` (511/511), `tsc --noEmit` and `lint` (exit 0).
+  - The reviewer reproduced the Task 1 mutation check (14 failed, 212 passed, restored) and the Task 2 RED state (3 failed with main's component). A second mutation dropping `asChild` also failed the same 3 tests, confirming that `expectButtonLink` catches a wrapping `<button>`.
+  - CI run [37641998918](https://github.com/rexescario-dev/clensy-platform/actions/runs/37641998918) on `947b9da`: Lint, Test (repo-wide `pnpm run test`, covering `@clensy/ui` and `@clensy/web`) and Release gate passed. API e2e was pending at review time; it is unrelated to this web-only diff but must finish green before merge.
+  - `pnpm --filter web build` was not re-run by the reviewer; the M6 record has it at exit 0.
+- **Blocking findings:** none.
+- **Non-blocking observations:** the accepted visual change (Button box, `text-primary`, hover-only underline) is verified only by the plan's optional manual smoke, which M6 did not perform. `expectButtonLink` doesn't assert `data-size="default"`, which the plan doesn't require.
+- **Gate:** merge per human/project norms once API e2e is green.
+
+### M8 — N/A (2026-10-07)
+
+The change replaces one link's JSX with a three-line `Button` wrapper and adds two small test blocks. There's no duplication or complexity worth a behavior-preserving refactor, and risk would exceed benefit.
+
+### M9 — Complete (2026-10-07)
+
+**Documentation scope:** `apps/web/README.md` (the shell paragraph), the spec's Tracking issue cell, and this section.
+
+**Content updates:**
+- `apps/web/README.md`, shell paragraph: after the #132 heading sentence, one sentence says the home link is a `@clensy/ui` `Button` link rendered onto the `Link`, the convention for standalone shell actions, linking #134. Caused by Task 2 and amended spec §4.3.
+- The spec's Tracking issue cell links PR #144 for the #134 amendment. Caused by the PR being opened.
+- This section. Caused by the M7–M9 gate outcomes.
+
+**Editorial changes:** none.
+
+**Unchanged:** the #132 plan's Deferred section, which lists these two items. It's a historical record, and spec §11 now marks both resolved by #134.
+
+**Verification:**
+- Links in the spec, this plan and the README resolve (scripted scan).
+- Status is consistent: the spec and its #134 amendment are Accepted, this plan is Accepted, and PR #144 is open.
+- Terminology follows spec §3 and §4.3 (shell-hidden, unavailable state, shell-link convention).
+- No heading changes, contradictions or stale references.
