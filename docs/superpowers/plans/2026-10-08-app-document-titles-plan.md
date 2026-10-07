@@ -609,3 +609,30 @@ Per spec §11: per-record titles, heading/label alignment, titles for `/`, not-f
 - **Port for Task 5.** Use a free port (3999 above) and stop the server by PID, not `pkill -f`, which can match the invoking shell.
 
 ## Gate outcomes
+
+### M6 — In progress (2026-10-08)
+
+Executed natively, in plan order, on `feat/143-app-document-titles`. Plan Accept `e8d8385` is the parent of the first implementation commit.
+
+| Task | Commit | RED observed | GREEN |
+| --- | --- | --- | --- |
+| 1. Title copy | `9b45f4b` | 2 failed / 3 passed | 5/5 |
+| 2. `pageTitleKey` | `5f8da63` | 18 failed / 226 passed, `pageTitleKey is not a function` | 244/244 |
+| 3. Gate owns the title | `3fa62d5` | 13 failed / 21 passed, `expected [] to deeply equal [ 'Clensy' ]` | 34/34 |
+| 4. Root and `/login` | `4152553` | 2 failed / 182 passed (root title, `/login` source) | 184/184 |
+
+- **Characterization tests (Task 4):** in Step 3 order, the declaration, export-list, `export *` and second-`<title>` mutations each failed their targeted test. They showed 3 failed rather than the plan's "1 failed / 183 passed", because the two Step 2 RED tests were still failing at that point. Repeated after GREEN, each gave exactly 1 failed / 183 passed. All were reverted, and `apps/web/app/app` is clean.
+- **Deviations:** none in code; the test and code edits are the plan's text verbatim.
+- **Final verification:** `pnpm --filter web test` 17 files, 547/547; tsc, lint and build exit 0; the out-of-scope diff is empty.
+- **Task 5 Step 1 (server render), recorded:** exactly one `<title>` per route:
+
+  | Route | Title |
+  | --- | --- |
+  | `/app` | `Clensy` |
+  | `/app/customers` | `Customers · Clensy` |
+  | `/app/platform` | `Platform · Clensy` |
+  | `/app/catalog` | `Services · Clensy` |
+  | `/login` | `Clensy` |
+
+  `/app/customers`'s HTML contains the `LoadingState` markup, so the server rendered the **loading row**.
+- **Task 5 Step 2 (client navigation): pending.** The running API only accepts `WEB_ORIGIN=http://localhost:3001`, which the existing `web` container occupies. This build has to be served on 3001 (stop the `web` container temporarily, or rebuild it from this branch), and the seeded `TENANT_OWNER` signs in, before the before/after title and announcer evidence can be recorded.
