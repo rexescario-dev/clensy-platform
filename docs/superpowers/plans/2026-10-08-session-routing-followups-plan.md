@@ -6,6 +6,7 @@
 | --- | --- |
 | Status | Draft |
 | M5 decision | Pending. |
+| M5 history | First pass (2026-10-08, at `3d5fb65`): the owner found the scope and approach sound and returned the plan with these changes, all applied with no design change. (1) Task 1's regression is renamed to what it proves: a structural source regression, `… (source)`. (2) The regression now locates the `useEffect` calls through the TypeScript AST, with bodies and dependencies compacted, instead of a formatting-dependent multiline regex. It still fails against the #131 guard and against `[client, router]` dependencies, and still passes on a reformatted guard. (3) The sync effect's purpose is stated: it only updates the ref and never triggers the redirector effect. (4) Task 3's contract states that templates are judged by their head text only. A `${base}/login` detector case now pins that blind spot as intentional, so there are 9 cases. (5) Final verification gains an exact five-file `git diff --name-only` scope check. (6) The wording separates pre-validation evidence from execution criteria, and the Task 2 test comment claims the admin error's visual classes rather than "style". |
 | Date | 2026-10-08 |
 | Tracking issue | [#146](https://github.com/rexescario-dev/clensy-platform/issues/146) (follow-ups to #131's M7 minors) |
 | Scope | `apps/web` only: `components/layout/session-guard.tsx`, `app/app/page.tsx`, and three test files. No `packages/*`, `apps/api`, `middleware.ts`, `PageVisibilityGate`, `user-menu.tsx`, `app/login`, copy, or lockfile changes. |
@@ -22,41 +23,42 @@
 
 **Architecture:**
 
-- **Guard (Task 1).** A `latest` ref holds `{ client, router }`. An effect keyed on `[client, router]` keeps it in sync. The redirector effect now has `[]` dependencies, and its `clearStore` and `navigateToLogin` call `latest.current.client` and `latest.current.router`. The check effect (`[client, pathname]`) and `runSessionCheck` binding are unchanged. Effect order: sync, redirector, check, all in declaration order, so the latch exists before the mount check.
+- **Guard (Task 1).** A `latest` ref holds `{ client, router }`. An effect keyed on `[client, router]` keeps it in sync. That effect's only purpose is to update the ref before future redirector callbacks run. It never triggers the redirector effect, which has no dependencies. The redirector effect now has `[]` dependencies, and its `clearStore` and `navigateToLogin` call `latest.current.client` and `latest.current.router`. The check effect (`[client, pathname]`) and `runSessionCheck` binding are unchanged. Effect order: sync, redirector, check, all in declaration order, so the latch exists before the mount check. On a later identity change, only the sync and check effects re-run. The check stays bound to the existing redirector through `runSessionCheck`.
 - **Landing (Task 2).** Only the error branch of `app/app/page.tsx` changes, to `<p role="alert" className="text-sm text-red-600">`. The loading and empty branches are untouched.
-- **Scan (Task 3).** A test-local `loginLiteralsIn(fileName, text)` walks the TypeScript AST through the file's existing `parseSource` helper. It collects string and no-substitution template literals whose text matches `/^\/login(?:$|[?/])/`, plus the head text of template expressions. The invariant 12 test filters on it. An `it.each` pins what it catches and what it ignores.
+- **Scan (Task 3).** A test-local `loginLiteralsIn(fileName, text)` walks the TypeScript AST through the file's existing `parseSource` helper. It collects string and no-substitution template literals whose text matches `/^\/login(?:$|[?/])/`. For a template with substitutions it examines **only the head text**, so `` `/login?next=${x}` `` is caught but `` `${base}/login` `` deliberately is not. The invariant 12 test filters on it. An `it.each` pins what it catches and what it ignores.
 
 **Tech Stack:** Next.js 16, React 19, Apollo Client 3.14, TypeScript 5's compiler API (already imported by `web-shell-regressions.test.ts`), and Vitest 5 in `node` with `renderToStaticMarkup`. There's no DOM environment, so effect wiring is pinned at source level.
 
 **Spec:** [`docs/superpowers/specs/2026-10-07-session-routing-design.md`](../specs/2026-10-07-session-routing-design.md), the *(#146)*-marked passages.
 
-**Pre-validation (full).** On 2026-10-08, every diff in Tasks 1–3 was applied to a working tree at `4f84a4e`, and every command named by an `Expected:` line ran with the stated result, including each RED state.
+**Pre-validation evidence (full).** This is evidence the author gathered before M5. It is not a record of the M6 execution, which must re-run every `Expected:` command itself. On 2026-10-08, the author applied every diff in Tasks 1–3 to a working tree at `4f84a4e` and independently ran every command named by an `Expected:` line. Each result, including each RED state, is quoted below as observed. The plan was re-validated the same way after the M5 first-pass revisions.
 - **Mutation checks:**
   - adding `role="alert"` to the loading branch fails `renders no alert for loading` and `… a settled missing principal`;
   - adding it to the empty branch fails `… a principal with no destination`;
   - appending `const LOGIN_PATH = '/login';` to `app/app/page.tsx` fails the invariant 12 scan. The previous regex didn't catch that.
+  - restoring the #131 guard, or giving the redirector effect `[client, router]` dependencies, fails Task 1's regression. Reformatting the guard (line-broken dependency arrays, trailing commas) does not.
 - **Final verification:**
   - `pnpm run lint` 6/6;
   - web and API `tsc` clean;
-  - `pnpm run test` 10/10, with `web` 549/549 (baseline 536) and `@clensy/client` 10/10;
+  - `pnpm run test` 10/10, with `web` 550/550 (baseline 536) and `@clensy/client` 10/10;
   - `pnpm --filter web build` exit 0;
-  - the protected-area diff is empty.
+  - the protected-area diff is empty, and exactly the five planned files change.
 
-After the plan was written, the tree was reset and Tasks 1–3 were replayed from this document's diffs. Every `Expected:` line matched. The tree was then reverted, and only this plan is committed.
+After the plan was written, and again after the M5 revisions, the tree was reset and Tasks 1–3 were replayed from this document's diffs. Every `Expected:` line matched. The tree was then reverted, and only this plan is committed.
 
 ## Global Constraints
 
 - One redirector per mounted guard. Its creating effect has no dependencies and is never re-run by a `client` or `router` identity change. Its effects call the **current** client and router (spec §4.3 item 1).
 - The session check effect stays `[client, pathname]`, bound to the captured redirector through `runSessionCheck` (unchanged #131 behavior).
 - Landing error markup: exactly `<p role="alert" className="text-sm text-red-600">{t('landing.error')}</p>`. The loading and empty states are unchanged, with no `role="alert"`. No `@clensy/ui` change, and `ErrorState` is not used (spec §4.4).
-- The `/login` scan counts string and template literals whose value is `/login` or starts with `/login?` or `/login/`. Comments and JSX text never count. The allowed set stays exactly `components/layout/session-guard.tsx` and `components/layout/user-menu.tsx` (spec §8 item 5, invariant 12).
+- The `/login` scan counts string and no-substitution template literals whose value is `/login` or starts with `/login?` or `/login/`. A template with substitutions counts only if its **head text** does: a `/login` in a later span (`` `${base}/login` ``) is intentionally not detected. Comments and JSX text never count. The allowed set stays exactly `components/layout/session-guard.tsx` and `components/layout/user-menu.tsx` (spec §8 item 5, invariant 12).
 - No change to session evidence, the signal, the latch, `runSessionCheck`, copy, or any protected area.
 
 ## Review Focus
 
 1. **A real identity change while mounted.** Nothing in the app changes `client` or `router` today, so the fix is pinned at source level only. M7 should confirm that the redirector effect really has `[]` dependencies, and that the sync effect is declared before it.
 2. **Strict-mode double mount** still disposes the first redirector and creates a second. The `[]` effect re-runs on remount, as #131 already relied on.
-3. **The scan's blind spots.** A `/login` route assembled from pieces (`'/log' + 'in'`) or read from config is not caught. This is acceptable: the spec targets literals.
+3. **The scan's blind spots.** These are not caught: a `/login` route assembled from pieces (`'/log' + 'in'`), one read from config, or a `/login` in a later template span (`` `${base}/login` ``), which a detector case pins as intentional. This is acceptable: the spec targets route literals.
 4. **The alert's announcement** in a real screen reader. Static markup pins only the role.
 
 ## File Map
@@ -64,7 +66,7 @@ After the plan was written, the tree was reset and Tasks 1–3 were replayed fro
 | File | Task | Change |
 | --- | --- | --- |
 | `apps/web/components/layout/session-guard.tsx` | 1 | `latest` ref, sync effect, `[]` redirector effect |
-| `apps/web/lib/session-routing-regressions.test.ts` | 1 | One-redirector-per-mount regression; old client/router literal assertions moved into it |
+| `apps/web/lib/session-routing-regressions.test.ts` | 1 | AST-based one-redirector-per-mount regression and its `useEffectCalls` helper; the old client/router literal assertions are replaced by it |
 | `apps/web/app/app/page.tsx` | 2 | Error branch markup |
 | `apps/web/lib/session-routing-pages.test.tsx` | 2 | Alert and no-alert render tests |
 | `apps/web/lib/web-shell-regressions.test.ts` | 3 | `loginLiteralsIn`, `LOGIN_ROUTE`, the invariant 12 scan rewired, detector `it.each` |
@@ -79,13 +81,20 @@ Commit messages carry no `Co-Authored-By: Claude` trailer (owner's global instru
 
 **Interfaces:** No exported surface changes. `SessionGuard(): null` as before.
 
-- [ ] **Step 1: Write the failing regression.** It replaces the two direct `client.clearStore()` / `router.replace('/login')` assertions with the ref-based ones. Apply:
+- [ ] **Step 1: Write the failing regression.** It replaces the two direct `client.clearStore()` / `router.replace('/login')` assertions with a structural source regression, named `… (source)` because it proves source structure, not runtime behavior. It reads the guard's `useEffect` calls through the TypeScript AST, with each callback body and dependency list compacted, so formatting doesn't matter. It asserts three things: the redirector effect's dependencies are `[]`; its effects call through `latest`; and the `[client, router]` sync effect, which only assigns `latest.current`, comes before it. Apply:
 
 ```diff
 diff --git a/apps/web/lib/session-routing-regressions.test.ts b/apps/web/lib/session-routing-regressions.test.ts
 --- a/apps/web/lib/session-routing-regressions.test.ts
 +++ b/apps/web/lib/session-routing-regressions.test.ts
-@@ -40,8 +40,20 @@ describe('session routing regressions', () => {
+@@ -1,5 +1,6 @@
+ import { readFileSync } from 'node:fs';
+ import { resolve } from 'node:path';
++import ts from 'typescript';
+ import { describe, expect, it } from 'vitest';
+ 
+ const webRoot = resolve(import.meta.dirname, '..');
+@@ -40,8 +41,27 @@ describe('session routing regressions', () => {
  
      expect(guard).toContain('onSessionInvalid(');
      expect(guard).toContain('createSessionRedirector(');
@@ -93,27 +102,57 @@ diff --git a/apps/web/lib/session-routing-regressions.test.ts b/apps/web/lib/ses
 -    expect(guard).toContain('clearStore: () => client.clearStore()');
 +  });
 +
-+  // Spec §4.3 item 1 (#146): one redirector per mounted guard. It is created
-+  // by an effect with no dependencies, so a client or router identity change
-+  // cannot replace the latch, and its effects reach the current client and
-+  // router through a ref kept in sync by its own effect.
-+  it('creates one redirector per mount that calls the current client and router', () => {
-+    const guard = readWebSource('components/layout/session-guard.tsx');
-+    const redirectorEffect = /useEffect\(\(\) => \{\s*const current = createSessionRedirector\([\s\S]*?\n {2}\}, (\[[^\]]*\])\);/.exec(guard);
++  // Spec §4.3 item 1 (#146): one redirector per mounted guard. A structural
++  // source regression, not a runtime proof (no DOM environment): parsed with
++  // the TypeScript AST, so formatting changes don't break it. The effect that
++  // creates the redirector has no dependencies, so a client or router identity
++  // change cannot replace the latch. Its effects reach the current client and
++  // router through `latest`, kept in sync by an earlier [client, router]
++  // effect that only updates the ref.
++  it('keeps the redirector mount-scoped while routing through the latest client and router (source)', () => {
++    const effects = useEffectCalls(readWebSource('components/layout/session-guard.tsx'));
++    const redirectorIndex = effects.findIndex((effect) => effect.body.includes('createSessionRedirector('));
++    const syncIndex = effects.findIndex((effect) => effect.body === '{latest.current={client,router};}');
 +
-+    expect(redirectorEffect?.[1]).toBe('[]');
-+    expect(redirectorEffect?.[0]).toContain('clearStore: () => latest.current.client.clearStore()');
-+    expect(redirectorEffect?.[0]).toContain("navigateToLogin: () => latest.current.router.replace('/login')");
-+    expect(guard).toMatch(/useEffect\(\(\) => \{\s*latest\.current = \{ client, router \};\s*\}, \[client, router\]\);/);
++    expect(redirectorIndex).toBeGreaterThanOrEqual(0);
++    expect(effects[redirectorIndex]?.deps).toBe('[]');
++    expect(effects[redirectorIndex]?.body).toContain('clearStore:()=>latest.current.client.clearStore()');
++    expect(effects[redirectorIndex]?.body).toContain("navigateToLogin:()=>latest.current.router.replace('/login')");
++    expect(syncIndex).toBeGreaterThanOrEqual(0);
++    expect(effects[syncIndex]?.deps).toBe('[client,router]');
++    expect(syncIndex).toBeLessThan(redirectorIndex);
    });
  
    // Spec §4.2 / §4.3 item 4: a check acts only through the redirector captured
+@@ -66,3 +86,22 @@ describe('session routing regressions', () => {
+     expect(guard).not.toMatch(/canViewPath|isGatedPath|landingHref|visibleNavGroups|viewRoles|nav-groups/);
+   });
+ });
++
++// Each useEffect(callback, deps) call in a component, in source order. The
++// callback body and dependency list are compacted (all whitespace and trailing
++// commas removed), so formatting never changes what the assertions see.
++function useEffectCalls(text: string) {
++  const source = ts.createSourceFile('component.tsx', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
++  const normalize = (node: ts.Node | undefined) =>
++    node ? node.getText(source).replace(/\s+/g, '').replace(/,(?=[\])}])/g, '') : undefined;
++  const calls: Array<{ body: string; deps: string | undefined }> = [];
++  const visit = (node: ts.Node) => {
++    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'useEffect') {
++      const [callback, deps] = node.arguments;
++      if (callback && ts.isArrowFunction(callback)) calls.push({ body: normalize(callback.body) ?? '', deps: normalize(deps) });
++    }
++    ts.forEachChild(node, visit);
++  };
++  visit(source);
++  return calls;
++}
 ```
 
 - [ ] **Step 2: Run to verify RED.**
 
 Run: `pnpm --filter web exec vitest run lib/session-routing-regressions.test.ts`
-Expected: 1 failed (`creates one redirector per mount that calls the current client and router`), 6 passed.
+Expected: 1 failed (`keeps the redirector mount-scoped while routing through the latest client and router (source)`), 6 passed.
 
 - [ ] **Step 3: Implement.** Apply:
 
@@ -188,8 +227,8 @@ diff --git a/apps/web/lib/session-routing-pages.test.tsx b/apps/web/lib/session-
      expect(html).toContain('Unable to load your account.');
    });
  
-+  // Spec §4.4 (#146): the error is announced and styled like the admin
-+  // page's staff.loadError; the loading and empty states are not alerts.
++  // Spec §4.4 (#146): the error is announced, with the admin page's
++  // staff.loadError visual classes; the loading and empty states are not alerts.
 +  it('announces the account load error as an alert in the admin error style', () => {
 +    const html = render(<AppIndexPage />, { error: new Error('Failed to fetch'), loading: false });
 +
@@ -260,13 +299,15 @@ git commit -m "fix(146): announce the landing's account load error as an alert"
 
 **Interfaces:** Consumes the file's existing `parseSource(fileName, text)` and `nonTestSources(dir)`. Produces the test-local `loginLiteralsIn(fileName: string, text: string): string[]`.
 
+**Contract:** a literal counts when its value is `/login` or starts with `/login?` or `/login/`. For a template expression, the detector evaluates **only the template's head text**, so a `/login` in a later template span (`` `${base}/login` ``) is intentionally not detected. The `it.each` pins that case as `false`.
+
 - [ ] **Step 1: Write the failing tests.** Rewire the invariant 12 scan to `loginLiteralsIn`, and add the detector `it.each`. Apply:
 
 ```diff
 diff --git a/apps/web/lib/web-shell-regressions.test.ts b/apps/web/lib/web-shell-regressions.test.ts
 --- a/apps/web/lib/web-shell-regressions.test.ts
 +++ b/apps/web/lib/web-shell-regressions.test.ts
-@@ -95,19 +95,33 @@ describe('web shell regressions', () => {
+@@ -95,19 +95,34 @@ describe('web shell regressions', () => {
  
    // Session routing spec §5 invariant 12: one session redirect and logout are
    // the only /app routes to the sign-in page. Scoped exactly to app/app/** and
@@ -297,6 +338,7 @@ diff --git a/apps/web/lib/web-shell-regressions.test.ts b/apps/web/lib/web-shell
 +    ['a JSX href', 'const link = <a href="/login">Sign in</a>;', true],
 +    ['a comment only', '// sends the user to `/login`\nconst x = 1;', false],
 +    ['a different route', "const help = '/login-help';", false],
++    ['a later template span (head text only)', 'const url = `${base}/login`;', false],
 +  ] as const)('detects a /login literal in %s: %s', (_name, source, expected) => {
 +    expect(loginLiteralsIn('probe.tsx', source).length > 0).toBe(expected);
 +  });
@@ -309,7 +351,7 @@ diff --git a/apps/web/lib/web-shell-regressions.test.ts b/apps/web/lib/web-shell
 - [ ] **Step 2: Run to verify RED.**
 
 Run: `pnpm --filter web exec vitest run lib/web-shell-regressions.test.ts`
-Expected: 9 failed, with `ReferenceError: loginLiteralsIn is not defined` (the scan plus 8 detector cases).
+Expected: `Failed Tests 10`, each with `ReferenceError: loginLiteralsIn is not defined`: the invariant 12 scan plus the 9 detector cases. That was the observed output during pre-validation.
 
 - [ ] **Step 3: Implement the detector** below `parseSource`. Apply:
 
@@ -317,7 +359,7 @@ Expected: 9 failed, with `ReferenceError: loginLiteralsIn is not defined` (the s
 diff --git a/apps/web/lib/web-shell-regressions.test.ts b/apps/web/lib/web-shell-regressions.test.ts
 --- a/apps/web/lib/web-shell-regressions.test.ts
 +++ b/apps/web/lib/web-shell-regressions.test.ts
-@@ -209,6 +223,25 @@ function parseSource(fileName: string, text: string) {
+@@ -209,6 +224,27 @@ function parseSource(fileName: string, text: string) {
    return ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, scriptKindFor(fileName));
  }
  
@@ -325,7 +367,9 @@ diff --git a/apps/web/lib/web-shell-regressions.test.ts b/apps/web/lib/web-shell
 +
 +// Every string or template literal whose value is a /login route (session
 +// routing spec §8 item 5, #146). Parsed with the TypeScript AST, so comments
-+// and JSX text never count; a template counts by its leading text.
++// and JSX text never count. For a template with substitutions only its head
++// text is examined, so `${base}/login` (/login in a later span) is
++// deliberately not detected; the scan targets route literals, not built URLs.
 +function loginLiteralsIn(fileName: string, text: string) {
 +  const found: string[] = [];
 +  const visit = (node: ts.Node) => {
@@ -365,9 +409,18 @@ git commit -m "test(146): make the /login navigation scan literal-based and comm
 
 1. `pnpm run lint`: 6/6 succeed.
 2. `pnpm --filter web exec tsc --noEmit` and `pnpm --filter api exec tsc --noEmit`: clean.
-3. `pnpm run test`: 10/10, with `web` 549/549 and `@clensy/client` 10/10.
+3. `pnpm run test`: 10/10, with `web` 550/550 and `@clensy/client` 10/10.
 4. `pnpm --filter web build`: exit 0.
 5. `git diff --stat 4f84a4e -- apps/api packages apps/web/middleware.ts apps/web/components/layout/page-visibility-gate.tsx apps/web/components/layout/user-menu.tsx apps/web/app/login apps/web/messages pnpm-lock.yaml`: empty.
+6. `git diff --name-only 4f84a4e -- . ':(exclude)docs'`: exactly these five lines, in this order:
+
+   ```text
+   apps/web/app/app/page.tsx
+   apps/web/components/layout/session-guard.tsx
+   apps/web/lib/session-routing-pages.test.tsx
+   apps/web/lib/session-routing-regressions.test.ts
+   apps/web/lib/web-shell-regressions.test.ts
+   ```
 
 ## Traceability
 
@@ -378,7 +431,7 @@ git commit -m "test(146): make the /login navigation scan literal-based and comm
 | §4.4 (landing error `role="alert"`, admin style; loading and empty unchanged) | 2 |
 | §8 item 3 (alert / no-alert tests) | 2 |
 | §8 item 5 (literal-based, comment-blind scan), invariant 12 | 3 |
-| Criterion 8 (no session-semantics, copy, `@clensy/ui` or #114 change) | Final verification step 5 |
+| Criterion 8 (no session-semantics, copy, `@clensy/ui` or #114 change) | Final verification steps 5–6 |
 
 ## Deferred (not in this plan)
 
