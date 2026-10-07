@@ -4,7 +4,9 @@ import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
+import AdminPage from '../app/app/admin/page';
 import AppIndexPage from '../app/app/page';
+import { AppI18nProvider } from '../components/layout/app-i18n-provider';
 import { getMessages } from '../i18n/messages';
 
 interface QueryState {
@@ -54,5 +56,26 @@ describe('/app landing states', () => {
     });
 
     expect(html).toContain('No areas are available for your account.');
+  });
+});
+
+// Session routing spec §4.5 / §8 item 4. The page renders inside the app i18n
+// boundary for its @clensy/web staff copy.
+describe('/app/admin session states', () => {
+  it.each([
+    ['a failed currentAdmin read', { error: new Error('Failed to fetch'), loading: false }],
+    ['a settled missing principal', { data: { currentAdmin: null }, loading: false }],
+  ] as const)('shows the staff load error and does not route on %s', (_name, query) => {
+    inputs.replace.mockClear();
+
+    const html = render(
+      <AppI18nProvider>
+        <AdminPage />
+      </AppI18nProvider>,
+      query,
+    );
+
+    expect(html).toContain('Unable to load staff accounts.');
+    expect(inputs.replace).not.toHaveBeenCalled();
   });
 });

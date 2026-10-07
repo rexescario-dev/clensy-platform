@@ -93,6 +93,21 @@ describe('web shell regressions', () => {
     expect(mounts).toEqual(['app/app/layout.tsx']);
   });
 
+  // Session routing spec §5 invariant 12: one session redirect and logout are
+  // the only /app routes to the sign-in page. Scoped exactly to app/app/** and
+  // components/**; app/login and middleware.ts are outside the rule. Matches
+  // navigation (router calls, redirect(), links), not prose mentions.
+  it('routes to /login only from the session guard and logout', () => {
+    const NAVIGATES_TO_LOGIN = /(?:\b(?:push|redirect|replace)\(\s*|href=\{?\s*)['"`]\/login['"`]/;
+    const routesToLogin = [resolve(webRoot, 'app/app'), resolve(webRoot, 'components')]
+      .flatMap((dir) => nonTestSources(dir))
+      .filter((path) => NAVIGATES_TO_LOGIN.test(readFileSync(path, 'utf8')))
+      .map((path) => relative(webRoot, path))
+      .sort();
+
+    expect(routesToLogin).toEqual(['components/layout/session-guard.tsx', 'components/layout/user-menu.tsx']);
+  });
+
   it('reads currentAdmin in the gate with the default cache-first policy and never redirects', () => {
     const gate = readWebSource('components/layout/page-visibility-gate.tsx');
 
