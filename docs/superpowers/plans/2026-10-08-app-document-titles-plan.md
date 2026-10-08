@@ -610,7 +610,7 @@ Per spec §11: per-record titles, heading/label alignment, titles for `/`, not-f
 
 ## Gate outcomes
 
-### M6 — In progress (2026-10-08)
+### M6 — Implementation complete (2026-10-08)
 
 Executed natively, in plan order, on `feat/143-app-document-titles`. Plan Accept `e8d8385` is the parent of the first implementation commit.
 
@@ -635,4 +635,14 @@ Executed natively, in plan order, on `feat/143-app-document-titles`. Plan Accept
   | `/login` | `Clensy` |
 
   `/app/customers`'s HTML contains the `LoadingState` markup, so the server rendered the **loading row**.
-- **Task 5 Step 2 (client navigation): pending.** The running API only accepts `WEB_ORIGIN=http://localhost:3001`, which the existing `web` container occupies. This build has to be served on 3001 (stop the `web` container temporarily, or rebuild it from this branch), and the seeded `TENANT_OWNER` signs in, before the before/after title and announcer evidence can be recorded.
+- **Task 5 Step 2 (client navigation), recorded.** The stack was rebuilt from this branch with `docker compose up -d --build`. The previous API image predated the tenant-label-overrides field, and `migrate` exited 0. `pnpm db:seed` was run with the owner's approval, because the dev database's account didn't match `ADMIN_SEED_*`. A throwaway script (headless Chromium via `playwright-core`, kept outside the repo; it reads the seed credentials from `apps/api/.env` and never prints them) signed in as the seeded `TENANT_OWNER` and navigated through the sidebar:
+
+  | Point | URL | `document.title` | Announcer region | `<title>` elements |
+  | --- | --- | --- | --- | --- |
+  | `/login` | `/login` | `Clensy` | — | 1 |
+  | before (landing) | `/app/bookings` | `Bookings · Clensy` | `Bookings · Clensy` | 1 |
+  | after sidebar → Customers | `/app/customers` | `Customers · Clensy` | `Customers · Clensy` | 1 |
+  | after sidebar → Services | `/app/catalog` | `Services · Clensy` | `Services · Clensy` | 1 |
+
+  The title changed on each navigation with a distinct resolved title, and the announcer text equalled the new title. The optional transition into the unavailable state was **not** recorded: it needs a `FINANCE` account, which would add data to the dev database, and the spec marks it "where practical". The gate's denied-row title is covered by the Task 3 component tests.
+- **Dev stack note:** the local stack now runs this branch's build.
