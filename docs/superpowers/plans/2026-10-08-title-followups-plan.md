@@ -214,3 +214,45 @@ Executed natively, in plan order, on `feat/151-title-followups`. Plan Accept `c1
 
 - **Deviations:** none.
 - **Final verification:** `pnpm --filter web test` 22 files, 592/592; tsc and lint exit 0; the production-code diff (`apps`, `packages`, excluding the test file) is empty.
+
+### M7 — Approved for merge (2026-10-08) — **self-review**
+
+- **Review basis: a self-review.** The implementer performed the review and wrote this record in the same session; no independent reviewer was used. This is permitted by the `CLAUDE.md` M7 rule for a tests-and-docs-only slice, and the owner accepted it at M5.
+- **Subject:** PR [#152](https://github.com/rexescario-dev/clensy-platform/pull/152), head `cce207b`, `MERGEABLE`.
+- **Accepted plan:** this document (M5 `9e8ed5d`, recorded `c1b8d87`). **Accepted spec:** `docs/superpowers/specs/2026-10-08-app-document-titles-design.md`, §5 invariants 2 and 8 (unchanged).
+- **M6 gate:** `c1b8d87` is the parent of the first implementation commit `f3f8a8e`.
+- **Plan tasks reviewed:**
+  - Task 1 (`f3f8a8e`) ✓. Both code blocks match the plan verbatim. The only removed code line is the `node:path` import, which is replaced to add `basename`.
+  - Task 2 (`df9388c`) ✓. The acknowledgement and both evidence sections match the plan text. The spec change is a single appended sentence in the #143 M3 record.
+
+  No extras, no reordering.
+- **Scope:** `git diff --stat main...HEAD` lists the File Map's four files plus this plan, and there is no production code.
+- **Invariants:**
+  - The detector is syntactic and fails closed, as documented.
+  - The layout matcher covers exactly the Next layout source extensions.
+  - Neither test reads or changes runtime behavior.
+- **Verification evidence:**
+  - CI run [37719788752](https://github.com/rexescario-dev/clensy-platform/actions/runs/37719788752) on `cce207b`: API e2e, Lint, Release gate and Test passed.
+  - The M6 record has the local suite (592), tsc and lint, and the mutation evidence.
+- **Blocking findings:** none.
+- **Non-blocking observations:** the detector doesn't follow aliases, for example `const d = document; d.title = 'x'`. That is acceptable for a regression guard, and no source does it.
+- **Gate:** merge per human/project norms.
+
+### M8 — N/A (2026-10-08)
+
+The change is two focused tests and one helper. There is nothing to refactor.
+
+### M9 — Complete (2026-10-08)
+
+The documentation updates were themselves this slice's Task 2: the #114 spec's #143 M3 record, the #134 plan and the #143 plan, plus this section. `apps/web/README.md` already describes title ownership (#143) and needs no change, because the tests add no behavior. Relative links in the touched docs resolve (scripted scan).
+
+### M10 — Accepted, workflow validated (2026-10-08)
+
+- **Workflow assets:** the branch diff against `main` for `docs/workflows/` and `workflow.yaml` is empty.
+- **Gate order:** plan Accept `c1b8d87` is the parent of the implementation commit.
+- **M5:** one return (three corrections), then Accept.
+- **M7:** a labelled self-review, as `CLAUDE.md` permits and the owner confirmed.
+- **Characterization tests:** they carry uncommitted mutation evidence.
+- **Providers and PRs:** GitHub providers were honoured, and one PR carries the plan, the tests and the docs.
+- **Blocking findings:** none.
+- **Non-blocking observation:** a follow-up slice that only pins already-Accepted invariants needed no M2/M3. The M4 plan citing the invariants was enough, and the owner agreed at M5.
