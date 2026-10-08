@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
@@ -934,6 +934,41 @@ function rootMetadataProperties(): string[] | undefined {
   return undefined;
 }
 
+// #151: a title set without JSX: `createElement('title', …)`, called bare or
+// as a member, or an assignment to `document.title` (including compound and
+// element-access forms). Deliberately syntactic and fail-closed: any
+// `x.createElement('title', …)` counts, React or not (document.createElement
+// included), since any alternative title producer breaks the one-owner rule.
+function setsTitleWithoutJsx(source: ts.SourceFile): boolean {
+  let found = false;
+  const isDocumentTitle = (node: ts.Expression) =>
+    (ts.isPropertyAccessExpression(node) && node.name.text === 'title' && ts.isIdentifier(node.expression) && node.expression.text === 'document') ||
+    (ts.isElementAccessExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'document' &&
+      ts.isStringLiteralLike(node.argumentExpression) &&
+      node.argumentExpression.text === 'title');
+  const visit = (node: ts.Node) => {
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      const name = ts.isIdentifier(callee) ? callee.text : ts.isPropertyAccessExpression(callee) ? callee.name.text : '';
+      const [first] = node.arguments;
+      if (name === 'createElement' && first && ts.isStringLiteralLike(first) && first.text === 'title') found = true;
+    }
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+      node.operatorToken.kind <= ts.SyntaxKind.LastAssignment &&
+      isDocumentTitle(node.left)
+    ) {
+      found = true;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return found;
+}
+
 describe('document title ownership', () => {
   const sources = () => nonTestSources(webRoot).map((path) => ({ path: relative(webRoot, path), text: readFileSync(path, 'utf8') }));
 
@@ -952,6 +987,25 @@ describe('document title ownership', () => {
       .map(({ path }) => path);
 
     expect(owners).toEqual(['components/layout/page-visibility-gate.tsx']);
+  });
+
+  // #151: titles set without JSX would slip past the '<title' text scan.
+  it('creates no title element and assigns no document.title outside JSX', () => {
+    const offenders = sources()
+      .filter(({ path, text }) => setsTitleWithoutJsx(parseSource(path, text)))
+      .map(({ path }) => path);
+
+    expect(offenders).toEqual([]);
+  });
+
+  // #151, document titles spec §5 invariant 8: no additional Next-recognized
+  // layout source file (layout.{js,jsx,ts,tsx} and m/c variants) under /app.
+  it('keeps app/app/layout.tsx the only layout under /app', () => {
+    const layouts = sources()
+      .filter(({ path }) => path.startsWith(`app${sep}app${sep}`) && /^layout\.(m|c)?[jt]sx?$/.test(basename(path)))
+      .map(({ path }) => path);
+
+    expect(layouts).toEqual([`app${sep}app${sep}layout.tsx`]);
   });
 
   it('exports no metadata from any /app source, in any export form', () => {
