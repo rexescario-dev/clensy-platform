@@ -1,4 +1,8 @@
 {
+  "documentTitle": {
+    "app": "Clensy",
+    "page": "{page} · Clensy"
+  },
   "groups": {
     "operations": "Operations",
     "people": "People",
@@ -31,7 +35,8 @@
   },
   "unavailable": {
     "action": "Go to your home page",
-    "message": "This page isn't available to you."
+    "message": "This page isn't available to you.",
+    "title": "Page unavailable"
   },
   "platform": {
     "description": "Platform administration is not available yet.",

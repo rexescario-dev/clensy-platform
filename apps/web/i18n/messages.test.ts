@@ -23,6 +23,15 @@ describe('getMessages', () => {
     expect(getMessages().nav.unavailable).toEqual({
       action: 'Go to your home page',
       message: "This page isn't available to you.",
+      title: 'Page unavailable',
+    });
+  });
+
+  // Document titles spec §4.2 (#143): the format is message-owned.
+  it('carries the document title patterns in nav.documentTitle', () => {
+    expect(getMessages().nav.documentTitle).toEqual({
+      app: 'Clensy',
+      page: '{page} · Clensy',
     });
   });
 

@@ -879,3 +879,97 @@ describe('app i18n boundary structure', () => {
     },
   );
 });
+
+// Document titles spec §4.3, §4.4 and §8 item 3 (#143).
+const METADATA_EXPORTS = ['metadata', 'generateMetadata'];
+
+// Every name a module exports, read from its syntax tree so any export form
+// counts: exported declarations, export lists (renames and re-exports
+// included) and default exports. An `export * from`, or an exported
+// destructuring, can't be named without resolving it, so it yields '*' and
+// fails closed.
+function exportedNames(source: ts.SourceFile): string[] {
+  return source.statements.flatMap((statement) => {
+    if (ts.isExportDeclaration(statement)) {
+      const clause = statement.exportClause;
+      if (!clause) return ['*'];
+      return ts.isNamedExports(clause) ? clause.elements.map((element) => element.name.text) : [clause.name.text];
+    }
+    if (ts.isExportAssignment(statement)) return ['default'];
+    const modifiers = ts.canHaveModifiers(statement) ? (ts.getModifiers(statement) ?? []) : [];
+    if (!modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)) return [];
+    if (modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword)) return ['default'];
+    if (ts.isVariableStatement(statement)) {
+      return statement.declarationList.declarations.map((declaration) =>
+        ts.isIdentifier(declaration.name) ? declaration.name.text : '*',
+      );
+    }
+    const named = ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement) || ts.isEnumDeclaration(statement);
+    return named && statement.name ? [statement.name.text] : [];
+  });
+}
+
+function exportsMetadata(path: string, text: string) {
+  return exportedNames(parseSource(path, text)).some((name) => name === '*' || METADATA_EXPORTS.includes(name));
+}
+
+// The property names of the root layout's `metadata` object, or undefined
+// when it declares none. A spread or computed property yields '*'.
+function rootMetadataProperties(): string[] | undefined {
+  const source = parseSource('app/layout.tsx', readWebSource('app/layout.tsx'));
+  for (const statement of source.statements) {
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (!ts.isIdentifier(declaration.name) || declaration.name.text !== 'metadata') continue;
+      let value = declaration.initializer;
+      while (value && (ts.isSatisfiesExpression(value) || ts.isAsExpression(value) || ts.isParenthesizedExpression(value))) {
+        value = value.expression;
+      }
+      if (!value || !ts.isObjectLiteralExpression(value)) return ['*'];
+      return value.properties.map((property) =>
+        property.name && (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) ? property.name.text : '*',
+      );
+    }
+  }
+  return undefined;
+}
+
+describe('document title ownership', () => {
+  const sources = () => nonTestSources(webRoot).map((path) => ({ path: relative(webRoot, path), text: readFileSync(path, 'utf8') }));
+
+  it('sets no title in the root layout metadata', () => {
+    const properties = rootMetadataProperties();
+
+    expect(properties).toBeDefined();
+    expect(properties).not.toContain('title');
+    expect(properties).not.toContain('*');
+    expect(exportedNames(parseSource('app/layout.tsx', readWebSource('app/layout.tsx')))).not.toContain('generateMetadata');
+  });
+
+  it('renders <title> only in the page-visibility gate', () => {
+    const owners = sources()
+      .filter(({ text }) => text.includes('<title'))
+      .map(({ path }) => path);
+
+    expect(owners).toEqual(['components/layout/page-visibility-gate.tsx']);
+  });
+
+  it('exports no metadata from any /app source, in any export form', () => {
+    const exporters = sources()
+      .filter(({ path }) => path.startsWith(`app${sep}app${sep}`))
+      .filter(({ path, text }) => exportsMetadata(path, text))
+      .map(({ path }) => path);
+
+    expect(exporters).toEqual([]);
+  });
+
+  it('gives /login exactly one title source, the bare app title', () => {
+    const exporters = sources()
+      .filter(({ path }) => path.startsWith(`app${sep}login${sep}`))
+      .filter(({ path, text }) => exportsMetadata(path, text))
+      .map(({ path }) => path);
+
+    expect(exporters).toEqual([`app${sep}login${sep}layout.tsx`]);
+    expect(readWebSource('app/login/layout.tsx')).toContain("title: t('documentTitle.app')");
+  });
+});

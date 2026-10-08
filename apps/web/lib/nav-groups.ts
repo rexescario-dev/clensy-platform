@@ -108,7 +108,8 @@ export const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-const ALL_HREFS = NAV_GROUPS.flatMap((group) => group.items.map((item) => item.href));
+const NAV_ITEMS = NAV_GROUPS.flatMap((group) => group.items);
+const ALL_HREFS = NAV_ITEMS.map((item) => item.href);
 
 // Whether the principal may be shown the page at pathname (role-aware typed
 // URLs spec §4.1). A client-side presentation rule derived from the shell
@@ -138,6 +139,18 @@ export function findActiveHref(pathname: string): string | undefined {
 // principal. Presentation only, like canViewPath.
 export function isGatedPath(pathname: string): boolean {
   return findActiveHref(pathname) !== undefined || isPlatformPath(pathname);
+}
+
+// The nav message key naming a path's page, for its document title (document
+// titles spec §4.1): the nav item's labelKey, then the platform title, else
+// undefined, which the gate renders as the bare app title. It shares
+// canViewPath's path matching only, never its principal decision: a
+// client-side presentation rule, not authorization.
+export function pageTitleKey(pathname: string): string | undefined {
+  const href = findActiveHref(pathname);
+  if (href !== undefined) return NAV_ITEMS.find((item) => item.href === href)?.labelKey;
+  if (isPlatformPath(pathname)) return 'platform.title';
+  return undefined;
 }
 
 // The one landing rule, derived from visibleNavGroups so the sidebar and the
