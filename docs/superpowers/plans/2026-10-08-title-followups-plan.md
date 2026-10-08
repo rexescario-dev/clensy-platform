@@ -5,6 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Status | Draft |
+| M5 history | First pass (2026-10-08) returned three corrections, all applied without changing the approach: the M7 rationale now follows the `CLAUDE.md` risk rule, so a self-review is permitted for this test-and-docs slice (Final verification); the `createElement` detector is documented as deliberately failing closed on any `createElement('title', …)` call, React or not (Goal, Task 1 Step 2); the layout invariant is worded as "no additional Next-recognized layout source file", matching the matcher (Goal, Task 1 Step 3). Optional: the throwaway account's email is no longer named in the records (Task 2). |
 | Date | 2026-10-08 |
 | Tracking issue | [#151](https://github.com/rexescario-dev/clensy-platform/issues/151). Follow-up to [#143](https://github.com/rexescario-dev/clensy-platform/issues/143) (PR [#150](https://github.com/rexescario-dev/clensy-platform/pull/150)) and [#134](https://github.com/rexescario-dev/clensy-platform/issues/134) (PR [#144](https://github.com/rexescario-dev/clensy-platform/pull/144)). Program [#81](https://github.com/rexescario-dev/clensy-platform/issues/81). |
 | Scope | Test and documentation only: `apps/web/lib/web-shell-regressions.test.ts`; records in `docs/superpowers/specs/2026-10-04-role-aware-typed-urls-design.md`, `docs/superpowers/plans/2026-10-07-unavailable-link-trailing-slash-plan.md` and `docs/superpowers/plans/2026-10-08-app-document-titles-plan.md`. No production code. |
@@ -14,8 +15,8 @@
 
 **Goal:** Close the non-blocking findings of #143's M7 review and the open records:
 
-1. **Non-JSX titles.** A regression fails if any non-test `apps/web` source creates a `title` element with `createElement`, called bare or as a member, or assigns `document.title`, including compound and element-access forms. Today only JSX `<title>` exists, in the gate.
-2. **Invariant 8.** A regression fails if any `layout.*` file other than `app/app/layout.tsx` exists under `apps/web/app/app/`.
+1. **Non-JSX titles.** A regression fails if any non-test `apps/web` source calls `createElement('title', …)`, bare or as a member, or assigns `document.title`, including compound and element-access forms. Today only JSX `<title>` exists, in the gate. The `createElement` check is **deliberately syntactic and fails closed**: it flags *any* `x.createElement('title', …)`, whether or not `x` is React (for example `document.createElement('title')`). The invariant guards against any alternative way of producing a title, not only React's, so the check doesn't try to prove where the call comes from.
+2. **Invariant 8.** A regression fails if any **additional Next-recognized layout source file** exists under `apps/web/app/app/`, that is, any file named `layout` with a JS/TS source extension (`.js`, `.jsx`, `.ts`, `.tsx`, and their `m`/`c` variants) other than `app/app/layout.tsx`. Files named `layout` with other extensions are not layouts to Next, and are out of scope.
 3. **Records.**
    - The owner's acknowledgement of the clerical 10 → 11 renumbering of the #143 criterion in the role-aware typed-URL spec.
    - Post-merge evidence for #134 (the Button-link visual check) and for #143 (the cold-load transition into the unavailable state), recorded in their plans.
@@ -53,8 +54,10 @@
 
 ```ts
 // #151: a title set without JSX: `createElement('title', …)`, called bare or
-// as a member (`React.createElement`), or an assignment to `document.title`
-// (including compound and element-access forms).
+// as a member, or an assignment to `document.title` (including compound and
+// element-access forms). Deliberately syntactic and fail-closed: any
+// `x.createElement('title', …)` counts, React or not (document.createElement
+// included), since any alternative title producer breaks the one-owner rule.
 function setsTitleWithoutJsx(source: ts.SourceFile): boolean {
   let found = false;
   const isDocumentTitle = (node: ts.Expression) =>
@@ -99,7 +102,8 @@ function setsTitleWithoutJsx(source: ts.SourceFile): boolean {
     expect(offenders).toEqual([]);
   });
 
-  // #151, document titles spec §5 invariant 8: the single /app layout.
+  // #151, document titles spec §5 invariant 8: no additional Next-recognized
+  // layout source file (layout.{js,jsx,ts,tsx} and m/c variants) under /app.
   it('keeps app/app/layout.tsx the only layout under /app', () => {
     const layouts = sources()
       .filter(({ path }) => path.startsWith(`app${sep}app${sep}`) && /^layout\.(m|c)?[jt]sx?$/.test(basename(path)))
@@ -118,6 +122,7 @@ Expected: PASS, 196 tests (194 before plus the 2 new).
 - [ ] **Step 5: Mutation checks (not committed).** For each, run the Step 4 command, check the result, then revert with `git checkout -- apps/web/app/app/jobs/page.tsx`, or `rm` for the new layout:
   - Append `import { createElement } from 'react';` and `export const t = () => createElement('title', null, 'x');` to `apps/web/app/app/jobs/page.tsx` → 1 failed (`creates no title element …`), 195 passed.
   - Append `import React from 'react';` and `export const t = () => React.createElement("title", null, 'x');` → the same single failure.
+  - **Fail-closed (non-React):** append `export const t = () => document.createElement('title');` → the same single failure (pre-validated after the M5 first pass).
   - Append `export function setTitle() { document.title = 'x'; }` → the same single failure.
   - Append `export function setTitle() { document['title'] += 'x'; }` → the same single failure.
   - Create `apps/web/app/app/jobs/layout.tsx` containing `export default function L({ children }: { children: React.ReactNode }) { return children; }` → 1 failed (`keeps app/app/layout.tsx the only layout under /app`), 195 passed.
@@ -143,7 +148,7 @@ git commit -m "test(web): pin non-JSX title sources and the single /app layout (
 
 ### Post-merge evidence (2026-10-08, #151)
 
-The optional visual check that M7 noted was not performed. It was run against the stack rebuilt from `main` (`docker compose up -d --build`), signed in as a dev `FINANCE` account (`finance.titles-check@clensy.local`, created for this check) on `/app/customers`. A throwaway headless-Chromium script (`playwright-core`) ran it, with screenshots kept outside the repo:
+The optional visual check that M7 noted was not performed. It was run against the stack rebuilt from `main` (`docker compose up -d --build`), signed in as a throwaway dev `FINANCE` account created for this check, on `/app/customers`. A throwaway headless-Chromium script (`playwright-core`) ran it, with screenshots kept outside the repo:
 
 - **At rest:** the home link is `text-primary` (near-black), with no underline. Its anchor carries `data-slot="button"` and `data-variant="link"`, and it is 32px tall (Button's default box).
 - **Hover:** underlined.
@@ -159,7 +164,7 @@ This matches the presentation that spec §4.3 accepted for #134.
 
 ### Post-merge evidence and follow-ups (2026-10-08, #151)
 
-- **Unavailable-state transition** (the optional part of Task 5 Step 2). It was recorded against the stack rebuilt from `main`, as the dev `FINANCE` account `finance.titles-check@clensy.local`, which was created for this check. On a cold load of `/app/customers`:
+- **Unavailable-state transition** (the optional part of Task 5 Step 2). It was recorded against the stack rebuilt from `main`, as a throwaway dev `FINANCE` account created for this check. On a cold load of `/app/customers`:
   - The server HTML had exactly one `<title>`: `Customers · Clensy` (the loading row).
   - Sampled `document.title` went `Customers · Clensy` → `Page unavailable · Clensy`.
   - The page then showed the unavailable `<h1>`, with exactly one `<title>` element.
@@ -184,7 +189,7 @@ git commit -m "docs(151): record the renumbering acknowledgement and post-merge 
 | `pnpm --filter web lint` | exit 0 |
 | `git diff --stat main -- apps packages ':!apps/web/lib/web-shell-regressions.test.ts'` | empty |
 
-M7 cites CI's repo-wide run. Per `CLAUDE.md`, M7 uses a fresh independent reviewer, because the slice touches `apps/web` (test code).
+M7 cites CI's repo-wide run. Under the `CLAUDE.md` M7 rule (risk-based), a fresh independent reviewer is required only for slices that change application code, authorization, tenant isolation, or schema/database. This slice changes only regression tests and documentation, so a **self-review is permitted**, and the M7 record MUST label it **self-review**. The owner may still request a fresh reviewer, which would override this.
 
 ## Traceability
 
