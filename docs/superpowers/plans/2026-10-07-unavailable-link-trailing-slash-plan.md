@@ -304,3 +304,14 @@ The change replaces one link's JSX with a three-line `Button` wrapper and adds t
 **Non-blocking observations:**
 1. **Splitting a multi-item issue.** #134 bundled one architectural item with two bounded ones. Splitting the architectural item out to #143 before M2 kept the amendment slice-local. The workflow has no explicit step for that split; it was handled as an owner scope decision recorded on the issue, which worked without friction. No change to the workflow is suggested.
 2. **M5 correction about package suites.** The plan's first wording justified skipping the `@clensy/ui` suite only by "no package changes", although the slice consumes `Button`. The accepted wording points to CI's repo-wide test run instead. Future plans that consume a shared component should cite the repository's validation policy in the same way.
+
+### Post-merge evidence (2026-10-08, #151)
+
+The optional visual check that M7 noted was not performed. It was run against the stack rebuilt from `main` (`docker compose up -d --build`), signed in as a throwaway dev `FINANCE` account created for this check, on `/app/customers`. A throwaway headless-Chromium script (`playwright-core`) ran it, with screenshots kept outside the repo:
+
+- **At rest:** the home link is `text-primary` (near-black), with no underline. Its anchor carries `data-slot="button"` and `data-variant="link"`, and it is 32px tall (Button's default box).
+- **Hover:** underlined.
+- **Keyboard focus:** `:focus-visible` matches, and Button's focus ring is visible around the link.
+- **Activation:** it navigates to `landingHref` (`/app/bookings`).
+
+This matches the presentation that spec §4.3 accepted for #134.

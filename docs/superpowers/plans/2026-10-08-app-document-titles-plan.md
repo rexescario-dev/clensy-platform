@@ -741,3 +741,13 @@ The change adds one small resolver, one title wrapper and its tests. The ownersh
 **Non-blocking observations:**
 1. **Base drift during a long slice.** `main` moved 34 commits during this slice, and the M7 return was purely about integration. A merge of `main` before the M6 handoff, and a confirmed CI run, would have avoided the round trip. No workflow change is required: M6's "repository coherent / reviewable" check already covers it.
 2. **Recorded evidence needed a current stack.** The browser check found the local API image older than the client's schema. Plans that record real-stack evidence should say to rebuild the stack from the branch first; this plan's Task 5 did.
+
+### Post-merge evidence and follow-ups (2026-10-08, #151)
+
+- **Unavailable-state transition** (the optional part of Task 5 Step 2). It was recorded against the stack rebuilt from `main`, as a throwaway dev `FINANCE` account created for this check. On a cold load of `/app/customers`:
+  - The server HTML had exactly one `<title>`: `Customers · Clensy` (the loading row).
+  - Sampled `document.title` went `Customers · Clensy` → `Page unavailable · Clensy`.
+  - The page then showed the unavailable `<h1>`, with exactly one `<title>` element.
+  - The home link returned to `/app/bookings`, titled `Bookings · Clensy`.
+- **Review gaps closed by #151:** regressions now fail on `createElement('title', …)` and on `document.title` assignments, and on any additional `layout.*` under `apps/web/app/app/` (spec §5 invariants 2 and 8).
+- **Criterion renumbering:** the owner acknowledged it. It is recorded in the role-aware typed-URL spec's #143 M3 record.
