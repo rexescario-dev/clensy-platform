@@ -663,3 +663,81 @@ Executed natively, in plan order, on `feat/143-app-document-titles`. Plan Accept
   - renumbered the #143 acceptance criterion from 10 to **11**, after #131's criterion 10. This is a clerical renumbering, flagged for the owner.
 - **Merged tree:** `pnpm --filter web test` 22 files, 590/590; tsc, lint and build exit 0.
 - **Server render re-checked on the merged build:** unchanged. Exactly one `<title>` per route (`/app` `Clensy`, `/app/customers` `Customers · Clensy`, `/app/platform` `Platform · Clensy`, `/app/catalog` `Services · Clensy`, `/login` `Clensy`), and `/app/customers` still renders the loading row. #131's `SessionGuard` adds no title.
+
+### M7 — Approved for merge (2026-10-08, second pass)
+
+- **Subject:** PR [#150](https://github.com/rexescario-dev/clensy-platform/pull/150), head `c5fea59`, based on `main` `b2a4b2a`, `MERGEABLE`/`CLEAN`. It carries the spec, the #114 title amendment, this Accepted plan and the M6 change set (process spec §2.8).
+- **Accepted specification:** `docs/superpowers/specs/2026-10-08-app-document-titles-design.md`, with the role-aware typed-URL spec's title amendment (#143).
+- **Accepted implementation plan:** this document.
+- **Review basis: an independent review.** Per `CLAUDE.md`, a fresh agent context on the most capable model, which did not implement the change, reviewed both passes. It was given the Accepted spec, the Accepted plan and the branch diff. This record is written by the implementer and cites that review.
+- **Plan tasks reviewed:**
+  - Task 1 (`9b45f4b`) ✓
+  - Task 2 (`5f8da63`) ✓
+  - Task 3 (`3fa62d5`) ✓
+  - Task 4 (`4152553`) ✓
+  - Task 5, recorded evidence ✓
+- **Spec conformance:**
+  - one `<title>` per row;
+  - the unavailable title only in the denied row;
+  - the loading, error and null rows share the resolved title;
+  - no concatenation; no root title; one `/login` source; no new `/app` layout;
+  - mount and remount behavior identical to `main`.
+- **Merge resolution:** both amendments' records are intact and correctly ordered, and the splice is fixed. The merge added no code beyond `main`'s own: the `apps` diff content is identical to the first-pass review.
+- **Verification evidence:**
+  - CI run [37712892061](https://github.com/rexescario-dev/clensy-platform/actions/runs/37712892061) on `c5fea59`: API e2e, Lint, Release gate and Test passed.
+  - The reviewer re-ran `pnpm --filter web test` (22 files, 590), tsc and lint.
+  - In the first pass, the reviewer reproduced the Task 3 RED and nine Task 4 mutations.
+- **Blocking findings:** none.
+- **Non-blocking observations:**
+  - the clerical renumbering of the #143 criterion to 11, flagged for the owner;
+  - non-JSX titles (`createElement('title')`, `document.title =`) are not caught by the scan, and none exist;
+  - invariant 8 has no dedicated test;
+  - the reviewer did not reproduce the merged-build server-render re-check; M6 recorded it.
+- **Gate:** merge per human/project norms.
+
+### M8 — N/A (2026-10-08)
+
+The change adds one small resolver, one title wrapper and its tests. The ownership-regression helpers are new, focused code, with nothing duplicated. A refactor has no worthwhile target. The reviewer's two gaps (non-JSX titles, invariant 8) would add new coverage, not restructure existing code, so they are out of scope for M8.
+
+### M9 — Complete (2026-10-08)
+
+**Documentation scope:** `apps/web/README.md` (the shell paragraph), the Tracking issue cells of both specs, and this section.
+
+**Content updates:**
+- `apps/web/README.md`: one sentence after the #134 link sentence. It says the gate owns the document title (nav label, the unavailable title, `Clensy` for `/app`), the format is message-owned, the root layout sets no title, and `/login` keeps `Clensy`. It links the #143 spec. Caused by Tasks 1–4 and spec §4.
+- The document titles spec's Tracking issue cell, and the role-aware typed-URL spec's title-amendment link, now cite PR #150. Caused by the PR.
+- This section. Caused by the M7–M9 gate outcomes.
+
+**Editorial changes:** none.
+
+**Verification:**
+- Relative links in both specs, this plan and the README resolve (scripted scan).
+- Status is consistent: the spec and the #143 amendment are Accepted, this plan is Accepted, and PR #150 is open with CI green.
+- Terminology follows spec §3.
+- No contradictions or stale references.
+
+### M10 — Accepted, workflow validated (2026-10-08)
+
+**Subject:** the installed workflow prompt library (`docs/workflows/`, generic 1.4.1 / claude 0.2.0), against `docs/workflows/specs/agent-workflow-design.md` §2.10. This slice ran it on #143 from M2 (a new spec plus a slice-local amendment) to M9.
+
+**Asset inventory:** unchanged, and the branch diff against `main` for `docs/workflows/` and `workflow.yaml` is empty. Nine prompts map to M2–M10.
+
+**Checks:**
+- Every relative link under `docs/workflows/` resolves (scripted scan).
+- §2.4 was honoured: spec Accept `ac8e101` precedes the plan draft `5705be5`.
+- §2.5 was honoured: plan Accept `e8d8385` is the parent of the first implementation commit `9b45f4b`.
+- Each review gate recorded its passes:
+  - M3: one return (four required changes, three hardening), then Accept.
+  - M5: one return (two required changes), then Accept.
+  - M7: one return (mergeability, CI), then Approve after the M6 resumption.
+- M7 followed `CLAUDE.md`: a fresh, independent reviewer for an application-code slice, cited in the record for both passes.
+- Characterization tests carry uncommitted mutation evidence.
+- Providers were honoured: GitHub for the issue, branch and PR (`workflow.providers`).
+- Slice Completion Reports were emitted at M6 and at M7–M9.
+- §2.8 was honoured: one PR (#150) carries the spec, amendment, plan, implementation and docs.
+
+**Blocking findings:** none.
+
+**Non-blocking observations:**
+1. **Base drift during a long slice.** `main` moved 34 commits during this slice, and the M7 return was purely about integration. A merge of `main` before the M6 handoff, and a confirmed CI run, would have avoided the round trip. No workflow change is required: M6's "repository coherent / reviewable" check already covers it.
+2. **Recorded evidence needed a current stack.** The browser check found the local API image older than the client's schema. Plans that record real-stack evidence should say to rebuild the stack from the branch first; this plan's Task 5 did.
