@@ -646,3 +646,20 @@ Executed natively, in plan order, on `feat/143-app-document-titles`. Plan Accept
 
   The title changed on each navigation with a distinct resolved title, and the announcer text equalled the new title. The optional transition into the unavailable state was **not** recorded: it needs a `FINANCE` account, which would add data to the dev database, and the spec marks it "where practical". The gate's denied-row title is covered by the Task 3 component tests.
 - **Dev stack note:** the local stack now runs this branch's build.
+
+### M7 — Returned for Revision (2026-10-08, first pass)
+
+- **Reviewer:** a fresh, independent agent context on the most capable model (`CLAUDE.md`). It found no code-level defects: Tasks 1–4 match the plan text verbatim. It reproduced the Task 3 RED (13 failed / 21 passed) and nine Task 4 mutations, each 1 failed / 183 passed. Mount and remount behavior is unchanged from `main`.
+- **Blocking 1 (mergeability, record integrity):** PR #150 conflicted with `main` (`b2a4b2a`, 34 commits ahead) in the role-aware typed-URL spec, against #131's cross-reference amendment. In that spec's M3 decision row, the #143 record had also been spliced inside the #134 record.
+- **Blocking 2 (verification):** no CI run existed for the PR.
+- **Non-blocking:** non-JSX titles (`createElement('title')`, `document.title =`) are not caught by the ownership scan, and none exist. Invariant 8 has no dedicated test. A post-merge server-render re-check was suggested.
+
+### M6 — Resumed after the M7 return (2026-10-08)
+
+- Merged `origin/main` into the branch and resolved the conflict without changing meaning:
+  - kept both amendments' Status and Date entries;
+  - took `main`'s #131 Followed-by text, adding the #143 link (the branch's outdated "session/expiry routing is not opened" text is gone);
+  - moved the #143 M3 record after the #134 record's closing sentence;
+  - renumbered the #143 acceptance criterion from 10 to **11**, after #131's criterion 10. This is a clerical renumbering, flagged for the owner.
+- **Merged tree:** `pnpm --filter web test` 22 files, 590/590; tsc, lint and build exit 0.
+- **Server render re-checked on the merged build:** unchanged. Exactly one `<title>` per route (`/app` `Clensy`, `/app/customers` `Customers · Clensy`, `/app/platform` `Platform · Clensy`, `/app/catalog` `Services · Clensy`, `/login` `Clensy`), and `/app/customers` still renders the loading row. #131's `SessionGuard` adds no title.
