@@ -11,9 +11,10 @@ import { landingTarget } from '../../lib/landing-target';
 // the shell. The decision lives in lib/landing-target.ts and uses the same
 // visibility rule as the sidebar (lib/nav-groups.ts): Super Admin to the
 // platform placeholder, tenant users to their first visible nav item. A
-// missing or invalid session (middleware only checks the cookie exists)
-// goes to /login, as on the admin page. UX only — the API remains the
-// authorization boundary (multi-tenant spec §4.2, §5.13).
+// missing or invalid session is the layout SessionGuard's to route (session
+// routing spec §4.4): a failed read shows the account load error, and a
+// settled missing principal keeps loading while the guard redirects. UX only —
+// the API remains the authorization boundary (multi-tenant spec §4.2, §5.13).
 export default function AppIndexPage() {
   const t = useTranslations('nav');
   const router = useRouter();
@@ -25,7 +26,15 @@ export default function AppIndexPage() {
     if (target) router.replace(target);
   }, [target, router]);
 
-  if (!loading && !target) {
+  if (!loading && error) {
+    // Announced, in the admin page's staff.loadError style (spec §4.4, #146).
+    return (
+      <p role="alert" className="text-sm text-red-600">
+        {t('landing.error')}
+      </p>
+    );
+  }
+  if (!loading && currentAdmin && !target) {
     return <p className="text-sm text-slate-500">{t('landing.empty')}</p>;
   }
   return <p className="text-sm text-slate-500">{t('landing.loading')}</p>;

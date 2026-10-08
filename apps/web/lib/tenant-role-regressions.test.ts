@@ -14,9 +14,10 @@ function readWebSource(relativePath: string) {
 // API enforces RBAC independently.
 describe('tenant role contract in the staff console', () => {
   // Role-aware typed URLs spec §4.5: the /app layout's PageVisibilityGate
-  // decides whether the staff page is shown; the page keeps its own session
-  // handling and its own currentAdmin read.
-  it('leaves staff page visibility to the layout gate and keeps its session handling', () => {
+  // decides whether the staff page is shown. Session routing spec §4.5: the
+  // layout's SessionGuard owns the /login redirect; the page keeps its own
+  // currentAdmin read and shows the load error when it fails.
+  it('leaves visibility to the layout gate and the session redirect to the layout guard', () => {
     const adminPage = readWebSource('app/app/admin/page.tsx');
 
     expect(adminPage).not.toContain('canManageStaff');
@@ -24,7 +25,9 @@ describe('tenant role contract in the staff console', () => {
     expect(adminPage).not.toMatch(/role === 'TENANT_OWNER'/);
     expect(adminPage).not.toMatch(/tenantId === null/);
     expect(adminPage).toContain("useCurrentAdminQuery({ fetchPolicy: 'network-only' })");
-    expect(adminPage).toContain("router.replace('/login')");
+    expect(adminPage).not.toContain('/login');
+    expect(adminPage).not.toContain('useRouter');
+    expect(adminPage).toContain("t('loadError')");
     expect(adminPage).toContain('<StaffConsole currentAdminId={currentAdmin.id} />');
   });
 

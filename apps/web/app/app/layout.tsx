@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { AppI18nProvider } from '../../components/layout/app-i18n-provider';
 import { DashboardLayout } from '../../components/layout/dashboard-layout';
 import { PageVisibilityGate } from '../../components/layout/page-visibility-gate';
+import { SessionGuard } from '../../components/layout/session-guard';
 
 // The only layout file for the entire `/app/*` tree (Task 5 brief, Step 6).
 // Tasks 6-8 add pages under this layout, not new layout files.
@@ -26,10 +27,15 @@ import { PageVisibilityGate } from '../../components/layout/page-visibility-gate
 // `PageVisibilityGate` is the one page-visibility gate (role-aware typed URLs
 // spec §4.2): inside DashboardLayout, so shell chrome renders on every path
 // and only the page body is replaced. UX only, never authorization.
+//
+// `SessionGuard` is the one /app session rule (session routing spec §4.2): a
+// render-less sibling of the gate that sends a user with an invalid session
+// to /login. It never blocks the page and makes no visibility decision.
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <AppI18nProvider>
       <DashboardLayout>
+        <SessionGuard />
         <PageVisibilityGate>{children}</PageVisibilityGate>
       </DashboardLayout>
     </AppI18nProvider>

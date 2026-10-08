@@ -53,6 +53,8 @@ describe('web shell regressions', () => {
     const landing = readWebSource('app/app/page.tsx');
 
     expect(landing).toContain('landingTarget({ currentAdmin, error, loading })');
+    // Session routing spec §4.4: the landing never routes to /login itself.
+    expect(landing).not.toContain('/login');
     expect(landing).not.toContain('/app/customers');
     expect(landing).not.toMatch(/tenantId/);
   });
@@ -80,13 +82,45 @@ describe('web shell regressions', () => {
   it('mounts the page-visibility gate once, directly inside DashboardLayout', () => {
     const layout = readWebSource('app/app/layout.tsx');
 
+    // Its only sibling is the render-less SessionGuard (session routing spec
+    // §4.2), which never wraps or replaces the page.
     expect(layout).toMatch(
-      /<DashboardLayout>\s*<PageVisibilityGate>\{children\}<\/PageVisibilityGate>\s*<\/DashboardLayout>/,
+      /<DashboardLayout>\s*<SessionGuard \/>\s*<PageVisibilityGate>\{children\}<\/PageVisibilityGate>\s*<\/DashboardLayout>/,
     );
     const mounts = nonTestSources(webRoot)
       .filter((path) => readFileSync(path, 'utf8').includes('<PageVisibilityGate'))
       .map((path) => relative(webRoot, path));
     expect(mounts).toEqual(['app/app/layout.tsx']);
+  });
+
+  // Session routing spec §5 invariant 12: one session redirect and logout are
+  // the only /app routes to the sign-in page. Scoped exactly to app/app/** and
+  // components/**; app/login and middleware.ts are outside the rule. Literal
+  // based, not call based (spec §8 item 5, #146): any string or template
+  // literal with a /login value counts, so constants and window.location are
+  // caught; comments never are.
+  it('routes to /login only from the session guard and logout', () => {
+    const routesToLogin = [resolve(webRoot, 'app/app'), resolve(webRoot, 'components')]
+      .flatMap((dir) => nonTestSources(dir))
+      .filter((path) => loginLiteralsIn(path, readFileSync(path, 'utf8')).length > 0)
+      .map((path) => relative(webRoot, path))
+      .sort();
+
+    expect(routesToLogin).toEqual(['components/layout/session-guard.tsx', 'components/layout/user-menu.tsx']);
+  });
+
+  it.each([
+    ['a navigation call', "router.replace('/login');", true],
+    ['a path constant', "const LOGIN_PATH = '/login';", true],
+    ['window.location', "window.location.assign('/login');", true],
+    ['a template with a query string', 'router.push(`/login?next=${encodeURIComponent(path)}`);', true],
+    ['a nested path', "const href = '/login/reset';", true],
+    ['a JSX href', 'const link = <a href="/login">Sign in</a>;', true],
+    ['a comment only', '// sends the user to `/login`\nconst x = 1;', false],
+    ['a different route', "const help = '/login-help';", false],
+    ['a later template span (head text only)', 'const url = `${base}/login`;', false],
+  ] as const)('detects a /login literal in %s: %s', (_name, source, expected) => {
+    expect(loginLiteralsIn('probe.tsx', source).length > 0).toBe(expected);
   });
 
   it('reads currentAdmin in the gate with the default cache-first policy and never redirects', () => {
@@ -188,6 +222,27 @@ function scriptKindFor(fileName: string) {
 
 function parseSource(fileName: string, text: string) {
   return ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, scriptKindFor(fileName));
+}
+
+const LOGIN_ROUTE = /^\/login(?:$|[?/])/;
+
+// Every string or template literal whose value is a /login route (session
+// routing spec §8 item 5, #146). Parsed with the TypeScript AST, so comments
+// and JSX text never count. For a template with substitutions only its head
+// text is examined, so `${base}/login` (/login in a later span) is
+// deliberately not detected; the scan targets route literals, not built URLs.
+function loginLiteralsIn(fileName: string, text: string) {
+  const found: string[] = [];
+  const visit = (node: ts.Node) => {
+    if ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && LOGIN_ROUTE.test(node.text)) {
+      found.push(node.text);
+    } else if (ts.isTemplateExpression(node) && LOGIN_ROUTE.test(node.head.text)) {
+      found.push(node.head.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(parseSource(fileName, text));
+  return found;
 }
 
 function clensyProviderBindings(source: ts.SourceFile) {

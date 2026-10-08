@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { landingTarget } from './landing-target';
 
-// Characterizes the /app landing decision as shipped in #89 (plan decision 5).
+// The /app landing decision: #89 plan decision 5, minus its /login outcome,
+// which the layout's SessionGuard owns (session routing spec §4.4).
 describe('landingTarget', () => {
   it('waits while currentAdmin is loading, even if stale data or an error is present', () => {
     expect(landingTarget({ currentAdmin: undefined, error: undefined, loading: true })).toBeUndefined();
@@ -10,12 +11,12 @@ describe('landingTarget', () => {
     ).toBeUndefined();
   });
 
-  it('sends an errored or missing session to /login', () => {
-    expect(landingTarget({ currentAdmin: undefined, error: new Error('unauthenticated'), loading: false })).toBe('/login');
-    expect(landingTarget({ currentAdmin: null, error: undefined, loading: false })).toBe('/login');
+  it('has no target on an error or a missing principal, and never /login', () => {
+    expect(landingTarget({ currentAdmin: undefined, error: new Error('unauthenticated'), loading: false })).toBeUndefined();
+    expect(landingTarget({ currentAdmin: null, error: undefined, loading: false })).toBeUndefined();
     expect(
       landingTarget({ currentAdmin: { role: 'TENANT_OWNER', scope: 'TENANT' }, error: new Error('x'), loading: false }),
-    ).toBe('/login');
+    ).toBeUndefined();
   });
 
   it('otherwise lands the principal via landingHref', () => {

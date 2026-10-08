@@ -15,8 +15,7 @@ import {
   type StaffErrorKey,
   type StaffMember,
 } from '@clensy/web';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { disableConfirmDescription, staffMutationErrorKey } from '../../../lib/staff-console';
 
 const EMPTY_FORM: CreateStaffFormValues = { email: '', password: '', role: 'CUSTOMER_SUPPORT' };
@@ -27,32 +26,31 @@ const EMPTY_FORM: CreateStaffFormValues = { email: '', password: '', role: 'CUST
 // GraphQL and routes (multi-tenant spec §4.8).
 //
 // Spec §4.1 (Admin Foundation): `middleware.ts` only checks that the session
-// cookie is present, not that it's still valid — an expired, invalid, or
-// disabled-account session lands here, where the guarded `currentAdmin`
-// surfaces it as an error (or a missing `currentAdmin`) and we send the user
-// back to `/login`. Whether this page is shown at all is the /app layout's
+// cookie is present, not that it's still valid. An expired, invalid, or
+// disabled-account session is routed to sign-in by the /app layout's
+// SessionGuard (session routing spec §4.5), not by this page: a failed or
+// missing `currentAdmin` here shows the staff load error. Whether this page
+// is shown at all is the /app layout's
 // PageVisibilityGate (role-aware typed URLs spec §4.2, §4.5), a UX rule only
 // — the API independently enforces Tenant-Owner-only, same-tenant access on
 // `admins`/`createAdmin`/`disableAdmin` (multi-tenant spec §4.2).
 export default function AdminPage() {
   const t = useClensyTranslations('staff');
-  const router = useRouter();
   const { data, loading, error } = useCurrentAdminQuery({ fetchPolicy: 'network-only' });
   const currentAdmin = data?.currentAdmin;
-
-  useEffect(() => {
-    if (!loading && (error || !currentAdmin)) {
-      router.replace('/login');
-    }
-  }, [loading, error, currentAdmin, router]);
 
   if (loading) {
     return <p className="text-sm text-slate-500">{t('page.loading')}</p>;
   }
 
   if (error || !currentAdmin) {
-    // Redirect already dispatched in the effect above.
-    return null;
+    // If the session is invalid, the layout's SessionGuard is already
+    // redirecting; otherwise this is a plain load failure.
+    return (
+      <p role="alert" className="text-sm text-red-600">
+        {t('loadError')}
+      </p>
+    );
   }
 
   return <StaffConsole currentAdminId={currentAdmin.id} />;
