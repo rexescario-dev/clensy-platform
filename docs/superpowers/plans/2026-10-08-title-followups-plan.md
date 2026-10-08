@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Accepted |
+| M5 decision | **Accepted** — 2026-10-08, at `9e8ed5d`, by the owner, on the second pass, with no further revision. M6 implements Tasks 1–2 as written; M7 is a labelled **self-review** under the `CLAUDE.md` risk rule, verifying against this plan and the #143/#134 follow-up invariants. |
 | M5 history | First pass (2026-10-08) returned three corrections, all applied without changing the approach: the M7 rationale now follows the `CLAUDE.md` risk rule, so a self-review is permitted for this test-and-docs slice (Final verification); the `createElement` detector is documented as deliberately failing closed on any `createElement('title', …)` call, React or not (Goal, Task 1 Step 2); the layout invariant is worded as "no additional Next-recognized layout source file", matching the matcher (Goal, Task 1 Step 3). Optional: the throwaway account's email is no longer named in the records (Task 2). |
 | Date | 2026-10-08 |
 | Tracking issue | [#151](https://github.com/rexescario-dev/clensy-platform/issues/151). Follow-up to [#143](https://github.com/rexescario-dev/clensy-platform/issues/143) (PR [#150](https://github.com/rexescario-dev/clensy-platform/pull/150)) and [#134](https://github.com/rexescario-dev/clensy-platform/issues/134) (PR [#144](https://github.com/rexescario-dev/clensy-platform/pull/144)). Program [#81](https://github.com/rexescario-dev/clensy-platform/issues/81). |
