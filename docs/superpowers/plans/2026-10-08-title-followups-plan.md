@@ -202,3 +202,15 @@ M7 cites CI's repo-wide run. Under the `CLAUDE.md` M7 rule (risk-based), a fresh
 | #134 M7 observation (visual check); titles spec §8 item 5 (optional transition) | Task 2 Steps 2–3 |
 
 ## Gate outcomes
+
+### M6 — Implementation complete (2026-10-08)
+
+Executed natively, in plan order, on `feat/151-title-followups`. Plan Accept `c1b8d87` is the parent of the first implementation commit.
+
+| Task | Commit | Evidence |
+| --- | --- | --- |
+| 1. Non-JSX title and single-`/app`-layout regressions | `f3f8a8e` | **Characterization tests:** they passed on first run (196). Mutations, not committed, each failed exactly the targeted test (1 failed / 195 passed): bare `createElement('title')`, `React.createElement("title")`, `document.createElement('title')`, `document.title =`, `document['title'] +=`, and a new `app/app/jobs/layout.tsx`. The read-only `document.title` control passed (196). `apps/web/app` was clean afterwards. Both plan code blocks match the committed file verbatim. |
+| 2. Records | `df9388c` | The owner acknowledgement is appended to the #143 M3 record. The post-merge evidence sections are appended verbatim from the plan. |
+
+- **Deviations:** none.
+- **Final verification:** `pnpm --filter web test` 22 files, 592/592; tsc and lint exit 0; the production-code diff (`apps`, `packages`, excluding the test file) is empty.
