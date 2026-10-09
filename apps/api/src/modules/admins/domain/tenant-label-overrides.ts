@@ -44,10 +44,8 @@ export const MAX_LABEL_CODE_POINTS = 64;
 export const TENANT_LABEL_LOCALE = 'en';
 
 const SUPPORTED_NAMESPACE = 'roles';
-const ROLES_PATH = appendPathSegment(
-  appendPathSegment('', TENANT_LABEL_LOCALE),
-  SUPPORTED_NAMESPACE,
-);
+const LOCALE_PATH = appendPathSegment('', TENANT_LABEL_LOCALE);
+const ROLES_PATH = appendPathSegment(LOCALE_PATH, SUPPORTED_NAMESPACE);
 const CONTROL_CHARACTER = /\p{Cc}/u;
 
 export function validateTenantLabelOverrides(
@@ -141,10 +139,5 @@ function rolesNode(
   }
   const locale = onlyChild(raw, TENANT_LABEL_LOCALE, '', rejections);
   if (!locale) return null;
-  return onlyChild(
-    locale,
-    SUPPORTED_NAMESPACE,
-    TENANT_LABEL_LOCALE,
-    rejections,
-  );
+  return onlyChild(locale, SUPPORTED_NAMESPACE, LOCALE_PATH, rejections);
 }
