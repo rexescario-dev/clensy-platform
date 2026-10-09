@@ -2,15 +2,15 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted |
-| Date | 2026-10-03 |
-| M3 decision | **Accepted** — 2026-10-03, at `f78c36a`, by the owner, with no further clarification. M4 implements it mechanically and MUST keep the locked decisions: a typed, roles-only, `en`-only `CurrentAdmin.tenantLabelOverrides` field with no arguments; a single service read path through the validator; a data-only web mapper; `deepMerge(APP_I18N_OVERRIDES, tenantLayer)` precedence; and no write path. |
+| Status | Accepted. **#129 amendment: Draft** 2026-10-09. |
+| Date | 2026-10-03 (#129 amendment drafted 2026-10-09) |
+| M3 decision | **Accepted** — 2026-10-03, at `f78c36a`, by the owner, with no further clarification. M4 implements it mechanically and MUST keep the locked decisions: a typed, roles-only, `en`-only `CurrentAdmin.tenantLabelOverrides` field with no arguments; a single service read path through the validator; a data-only web mapper; `deepMerge(APP_I18N_OVERRIDES, tenantLayer)` precedence; and no write path. **#129 amendment — Draft, pending M3.** It makes warning paths safe to log. A stored key that is not a short identifier is rendered in brackets as an escaped, ASCII-only, length-bounded string. The amendment changes only how a path is written, never what is validated, kept, rejected or logged. Its delta is confined to the Status, Date, Tracking, Followed-by and M3-decision rows, §4.2 (*Logging* and the new *Path rendering*), §4.7 item 6, §5, §6.1, §7 and §9. Every locked decision above is unchanged, and so is every existing path built from identifier-shaped keys, such as `$`, `fr`, `en.staff` and `en.roles.FINANCE`. |
 | M3 history | First pass (2026-10-03) returned eleven clarifications without reopening the design, all applied: read-path ownership (§4.2, §4.7 item 3), the meaning of *object* (§4.2), log-once structural logging (§4.2), `locale` as a catalog identifier (§4.3), Apollo loading and cached-data behavior (§4.4, §4.5), the session-transition term and step order (§3, §4.5, §4.7 item 9), an explicit cross-identity isolation test (§6.2), scoped acceptance wording (§9), migration `NULL` and `down()` assertions (§6.1), a same-function `deepMerge` export test (§6.2), and a pinned `deepMerge` argument order (§4.5, §6.2). |
 | Document kind | Architecture RFC |
-| Tracking issue | [#118](https://github.com/rexescario-dev/clensy-platform/issues/118) — deferred from #115 ([single app i18n provider spec](2026-10-02-single-app-i18n-provider-design.md) §8). Implemented in PR [#128](https://github.com/rexescario-dev/clensy-platform/pull/128). |
+| Tracking issue | [#118](https://github.com/rexescario-dev/clensy-platform/issues/118) — deferred from #115 ([single app i18n provider spec](2026-10-02-single-app-i18n-provider-design.md) §8). Implemented in PR [#128](https://github.com/rexescario-dev/clensy-platform/pull/128). *(#129)* Amendment: [#129](https://github.com/rexescario-dev/clensy-platform/issues/129), escaping and bounding stored keys in warning paths (deferred minor 1 of the #118 M7 review). |
 | Depends on (Accepted) | [Single App-Level `ClensyI18nProvider`](2026-10-02-single-app-i18n-provider-design.md) — the app i18n boundary, its one mount in `/app`, and `/login` outside it. This spec **amends** its §4.5 items 5, 6, 8 and 9 (§4.6 here) and fulfils its §8 deferral. Everything else in it stays as written. [Multi-Tenant Architecture](2026-09-23-multi-tenant-architecture-design.md) — tenant context comes only from the authenticated principal, each tenant user belongs to exactly one tenant, there is no tenant switching, and Super Admin has no tenant. This spec **relies upon** it unchanged and adds no tenant lookup. [App Router i18n Architecture (next-intl)](2026-09-13-web-i18n-architecture-design.md) — next-intl's `useLocale()` is `apps/web`'s only locale source. This spec **relies upon** it unchanged. [Reusable-Component `errorMessage` API](2026-09-20-component-error-message-api-design.md) — the provider's `locale` + `overrides` contract. **Relies upon**, unchanged. |
 | Related (not a dependency) | [Admin Foundation](2026-08-14-admin-foundation-design.md) — owns `Query.currentAdmin`. This spec adds one nullable field to its `CurrentAdmin` type, and no root operation. |
-| Followed by | A separate, future issue for the **write path** (a `TENANT_OWNER` mutation and a settings UI, §8). Not opened by this spec. |
+| Followed by | A separate, future issue for the **write path** (a `TENANT_OWNER` mutation and a settings UI, §8). Not opened by this spec. [#129](https://github.com/rexescario-dev/clensy-platform/issues/129) (amended in place). |
 | Governing references | This document. It does not change `ClensyI18nProvider`, `useClensyTranslations`, any message catalog, next-intl configuration, `/login`, or the structural guard rules of the single app i18n provider spec §6.1. |
 
 ## 1. Thesis
@@ -120,8 +120,28 @@ Arbitrary keys MUST NOT be preserved just because the column is `jsonb`.
 
 - Each rejected structural node or leaf is logged **once**, at warning level, at the point where it is rejected. The validator does not descend into a rejected node, so nothing beneath it is logged. For example, a `roles` value that is an array of 100 items produces one `en.roles` warning, not 100.
 - Each warning carries the tenant id, the path of the rejected node or leaf, and a reason. The path is the rejected node's own path (e.g. `en.roles` for a non-object `roles`, `fr` for an unknown locale, `en.roles.FINANCE` for a bad leaf), never an invented child path. A non-object top level uses the path `$`. Reasons include `not-an-object`, `unknown-key`, `not-a-string`, `blank`, `too-long` and `control-character`.
+- *(#129)* The path is written as *Path rendering* (below) specifies. The validator returns it already rendered, so a rejection stays `{ path, reason }`, and the service logs it unchanged.
 - The log MUST NOT contain the stored value.
 - A `NULL` column is "no overrides", not a rejection, and is not logged.
+
+**Path rendering.** *(#129)* A path is a sequence of key segments, rendered as follows. The root of a non-object top level stays the bare `$`. It is not a segment.
+
+1. **Bare segment.** A segment is written as it is when its key matches `^[A-Za-z_][A-Za-z0-9_]*$` and has at most 64 code points. It is joined to the segment before it with `.`, and the first segment has no leading `.`. `en`, `roles` and every role name are always bare.
+2. **Bracketed segment.** Any other key, including the empty key, a key containing `.`, a key named `$`, and an identifier-shaped key longer than 64 code points, is written as `[` `"` *escaped prefix* `"` *marker* `]`. It is appended directly, with no `.` before it. Examples: `en.roles["a.b"]`, and `["$"]` for a top-level key named `$`.
+3. **Order of operations.** The renderer MUST follow these steps in this order:
+   1. Split the raw key into Unicode code points, counted as JavaScript string iteration counts them. A lone surrogate is one code point.
+   2. Keep the first 64 code points as the *prefix*. *Dropped* is the raw key's code-point count minus 64, or 0 if that is negative.
+   3. Escape the prefix one UTF-16 code unit at a time:
+      - a printable ASCII unit (U+0020–U+007E) other than `"` and `\` is written as it is;
+      - `"` is written `\"`, and `\` is written `\\`;
+      - every other unit is written `\u` followed by exactly four uppercase hexadecimal digits. This covers control characters, U+2028, U+2029, bidirectional controls, every other non-ASCII character, and each half of a surrogate pair.
+   4. The *marker* is empty when *dropped* is 0. Otherwise it is `...(+`*dropped*`)`, with *dropped* in decimal. It sits outside the quotes and inside the brackets. For example, an unknown `roles` key of 10,000 `x` characters renders as `en.roles["`, then 64 `x` characters, then `"...(+9936)]`.
+4. **No `JSON.stringify`.** The renderer MUST NOT rely on `JSON.stringify` for safety, because it leaves C1 controls, U+2028/U+2029 and bidirectional controls unescaped.
+5. **Guarantees.**
+   - Every rendered path is a single line of printable ASCII. A whole warning is therefore single-line printable ASCII, because the tenant id and reason are fixed ASCII.
+   - A rejection path contains at most one segment from a stored key, and its prefix renders in at most 768 characters (64 code points × 12). So a path's length is bounded however long the stored key is.
+   - Two different keys that are not truncated always render differently. Bare and bracketed segments cannot be confused, and the escaping is reversible.
+   - Two different truncated keys share a rendered path only if they have the same first 64 code points and the same code-point length. This is an accepted diagnostic limitation. It does not change validation.
 
 **Failure isolation.** A dropped value never makes the `currentAdmin` query fail. The affected key falls back to the package default on the client (§4.5).
 
@@ -213,7 +233,7 @@ The same section's §4.1 sentence "No runtime, build-time, or environment-depend
 3. The §4.2 service method MUST be the only application code that reads `TenantEntity.labelOverrides`, and it MUST pass every value through the validator before interpreting or returning it. No unvalidated value MAY reach a GraphQL response.
 4. Only `en` → `roles` → relabelable role → bounded string is interpreted. Everything else MUST be dropped, not preserved.
 5. The relabelable roles MUST be derived from `Role` minus `SUPER_ADMIN`, and `RoleLabelOverrides`' fields MUST equal that set.
-6. Each rejected node or leaf MUST be logged once, at its own path, and the log MUST NOT contain the stored value.
+6. Each rejected node or leaf MUST be logged once, at its own path, and the log MUST NOT contain the stored value. *(#129)* Each path MUST be rendered as §4.2 *Path rendering* specifies: as a single line of printable ASCII, with a bounded length, never as a raw stored key.
 7. The web MUST apply the tenant layer only when its `locale` equals next-intl's locale, and MUST never forward `null` role values.
 8. Precedence MUST be tenant layer > static app layer > package default, composed as `deepMerge(APP_I18N_OVERRIDES, tenantLayer)` with `@clensy/web`'s exported `deepMerge`. The tenant layer MUST be derived from `currentAdmin` data only, not from the query's `loading` or `error` flags.
 9. Every session-transition path MUST, in order, complete and confirm the server-side session change, call `apolloClient.clearStore()`, and only then navigate.
@@ -232,6 +252,8 @@ The same section's §4.1 sentence "No runtime, build-time, or environment-depend
 **Why locale-keyed storage when only `en` exists?** It costs one level of nesting. It means a future second locale needs no reshape of stored data, and an English override can never be applied to a different catalog. The `locale` field in the response lets the client enforce the same rule on its side.
 
 **Why export `deepMerge` instead of merging locally?** `deepMerge` already defines how overrides combine with defaults. A second implementation in `apps/web` could drift from it, for example on `null`, arrays or nested objects. The mapper already removes `null`, so no tenant-specific merge semantics are needed.
+
+**Why bracketed, ASCII-only, bounded paths?** *(#129)* A stored key is untrusted text. Written raw, a key containing `\n` splits a warning, and it can forge a line that looks like a separate Nest log entry. A key many KB long is written in full on every `currentAdmin` read. Keeping identifier-shaped keys bare means that ordinary paths, and every existing assertion, do not change. Brackets make a key containing `.` distinct from nesting. Escaping everything outside printable ASCII also closes the routes that `JSON.stringify` leaves open: C1 controls, line and paragraph separators, and bidirectional overrides that could make a path display as something it is not. Keeping the 64-code-point cap from the leaf rule gives one bound to reason about. The marker records how much was cut without recording any of it.
 
 **Why `clearStore()` as the isolation mechanism?** The multi-tenant RFC forbids tenant switching, so a different tenant can appear in the same browser only after a session-transition path. Both current paths already clear the Apollo store, and `/login` unmounts the boundary. Making that a MUST, with a regression guard, protects it without adding cache machinery.
 
@@ -253,6 +275,14 @@ The same section's §4.1 sentence "No runtime, build-time, or environment-depend
   - each rejection is logged once with tenant id, its own path and a reason, and the log output does not contain the dropped value;
   - a `roles` array of many items produces exactly one `en.roles` warning, and nothing beneath a rejected node is logged;
   - a `NULL` input logs nothing.
+  - *(#129)* path rendering (§4.2):
+    - a key containing `\n` produces exactly one rejection, with a single-line path such as `en.roles["A\u000AB"]`;
+    - a key over 64 code points produces exactly one rejection, whose path is bounded and ends with the `...(+`*dropped*`)]` marker;
+    - a 64-code-point identifier key stays bare, and a 65-code-point one is bracketed with `...(+1)`;
+    - `"`, `\`, a C1 control, U+2028, U+202E and a non-BMP character are escaped as §4.2 specifies;
+    - a key containing `.` renders as one bracketed segment, and a top-level key `$` renders as `["$"]`, distinct from the root `$`;
+    - the existing identifier paths (`$`, `en`, `en.roles`, `fr`, `en.staff`, `en.roles.FINANCE`, `en.roles.SUPER_ADMIN`) are unchanged;
+    - no rendered path contains the stored value or a character outside printable ASCII.
 - **Drift tests:**
   - the derived relabelable-role set equals `Role` minus `SUPER_ADMIN`;
   - `RoleLabelOverrides`' declared field set equals the relabelable-role set.
@@ -262,6 +292,7 @@ The same section's §4.1 sentence "No runtime, build-time, or environment-depend
   - A tenant whose column is `NULL` receives `null`.
   - A tenant whose column holds a **structurally malformed JSONB** value with no valid leaf (a scalar, an array, only an unknown locale, or only wrong value types) receives `null`.
   - A tenant whose value mixes valid and invalid leaves receives only the valid ones.
+  - *(#129)* A tenant whose stored keys include one containing `\n` and one over 64 code points gets exactly one warning for each. Each warning is a single line of printable ASCII, has a bounded length, and contains no stored value.
   - In every case above, the query succeeds.
   - Schema introspection shows that `CurrentAdmin.tenantLabelOverrides` takes no arguments.
   - The root-operation inventory is unchanged.
@@ -304,6 +335,7 @@ The same section's §4.1 sentence "No runtime, build-time, or environment-depend
 - Blocking `/app` rendering until overrides load.
 - Client-side revalidation of API values.
 - Any change to `/login`, next-intl, `ClensyI18nProvider`, message catalogs, or the §6.1 guard rules.
+- *(#129)* Rate-limiting or de-duplicating warnings across reads, and any change to what is validated, kept or rejected. The #129 amendment changes only how a path is written.
 
 ## 8. Follow-ons (explicit deferrals)
 
@@ -321,3 +353,11 @@ The same section's §4.1 sentence "No runtime, build-time, or environment-depend
 - Defines API, web and structural tests that prove tenant isolation, validation and the boundary (§6).
 - Keeps the write path, further namespaces and locale negotiation out of scope with explicit deferrals (§7, §8).
 - Covers #118's acceptance bullets. A tenant override is available through the app i18n boundary, so existing role-label consumers under `/app` resolve the same tenant-specific value; the behavioral test covers `UserMenu`, `StaffDataTable` and `CreateStaffForm`. The override never leaks to another tenant. It also covers the issue's four decisions: data source, loading and fallback, validation, and cache invalidation.
+
+**#129 amendment.** The criteria above are unaffected and stay met. The amendment may move from Draft to Accepted at M3 when the reviewer agrees that:
+
+- §4.2 *Path rendering* fixes one deterministic rendering: the bare-segment rule, the bracketed form, the order of truncating, counting, escaping and adding the marker, and the escape set. Two implementations cannot produce different paths.
+- Every warning is a single line of printable ASCII with a bounded length, and identifier-shaped paths are unchanged (§4.2, §4.7 item 6).
+- Paths are unambiguous, except for the stated limitation on truncated keys (§4.2).
+- The validator stays pure, a rejection stays `{ path, reason }`, the service still owns logging, there is one warning per rejected node at its own path, no stored value is logged, and nothing about what is validated or kept changes (§4.2, §7).
+- §6.1 covers #129's acceptance bullets: a key containing `\n` and an over-length key each produce exactly one single-line, bounded warning; existing ASCII paths are unchanged; and no stored value appears in any warning.
