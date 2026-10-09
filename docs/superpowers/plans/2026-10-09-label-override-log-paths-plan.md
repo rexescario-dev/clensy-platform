@@ -609,4 +609,26 @@ Expected: no output. `JSON.stringify` appears only in the explanatory comment.
 
 ## Gate outcomes
 
-*(M5–M10 records are appended here as they arrive.)*
+### M6 — Implementation complete (2026-10-09)
+
+Executed natively (superpowers:executing-plans), task by task, in plan order, on `feat/129-label-override-log-paths`. Each task's code and diffs were applied from this plan's own text, extracted by script so the `\u` escapes reached the source unchanged.
+
+| Task | Commit | RED observed | GREEN |
+| --- | --- | --- | --- |
+| 1. Path formatter | `225068e` | `Test Suites: 1 failed`: `Cannot find module '../../domain/label-override-path'` | 38/38 |
+| 2. Validator integration | `81ac867` | unit: 4 failed, 27 passed, 31 total (exactly the four new *rejection paths* tests); e2e: 1 failed, 8 passed, 9 total (only `logs one single-line, bounded warning per hostile stored key`) | unit 69/69 (both domain suites); e2e 9/9 |
+
+- **Characterization tests** (M6 step 3.6). The existing identifier-path assertions pin already-correct behavior.
+  - A mutation made outside the commit disabled the bare-segment branch of `appendPathSegment`, so every key was bracketed.
+  - The validator unit suite then failed 22 of 31, including `en`, `en.roles`, `en.roles.FINANCE`, `en.roles.NOT_A_ROLE` and `en.roles.SUPER_ADMIN`. The label-overrides e2e suite failed 5 of 9.
+  - The file was then restored with `git restore`.
+- **Deviations from the plan:** none. No rulings were needed.
+- **Final verification** (Task 3), all as expected:
+  - `pnpm run lint` 6/6, leaving no working-tree changes;
+  - `pnpm --filter api exec tsc --noEmit -p tsconfig.json` exits 0;
+  - `pnpm --filter api test`: 74 suites, 1029/1029 (baseline 73 suites, 987);
+  - `pnpm --filter api test:e2e:release-gate` 12/12;
+  - `git diff --name-only bf696be` lists exactly the five planned files plus this plan;
+  - the corrected non-ASCII scan printed nothing (exit 0), and the `JSON.stringify` scan printed nothing.
+- **Beyond the plan:** `pnpm run test` (whole repository) 10/10 turbo tasks, exit 0.
+- `main` had not moved since the branch was cut (`origin/main` = `1f76ad4`).
