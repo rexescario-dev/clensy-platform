@@ -1,7 +1,10 @@
 import { Role } from '../../../platform/auth/domain/role';
+import { appendPathSegment } from './label-override-path';
 
 // Tenant label overrides spec §4.1, §4.2. Pure: returns the kept labels and
-// every rejection (path + reason, never the stored value).
+// every rejection (path + reason, never the stored value). Each path is
+// rendered by appendPathSegment (§4.2 Path rendering, #129), so a stored key
+// never reaches it raw.
 // TenantLabelOverridesService, the only reader of the column, owns logging.
 
 export type RelabelableRole = Exclude<Role, Role.SUPER_ADMIN>;
@@ -41,6 +44,8 @@ export const MAX_LABEL_CODE_POINTS = 64;
 export const TENANT_LABEL_LOCALE = 'en';
 
 const SUPPORTED_NAMESPACE = 'roles';
+const LOCALE_PATH = appendPathSegment('', TENANT_LABEL_LOCALE);
+const ROLES_PATH = appendPathSegment(LOCALE_PATH, SUPPORTED_NAMESPACE);
 const CONTROL_CHARACTER = /\p{Cc}/u;
 
 export function validateTenantLabelOverrides(
@@ -50,7 +55,7 @@ export function validateTenantLabelOverrides(
   const roles = rolesNode(raw, rejections);
   const labels: Partial<Record<RelabelableRole, string>> = {};
   for (const [key, value] of Object.entries(roles ?? {})) {
-    const path = `${TENANT_LABEL_LOCALE}.${SUPPORTED_NAMESPACE}.${key}`;
+    const path = appendPathSegment(ROLES_PATH, key);
     if (!isRelabelableRole(key)) {
       rejections.push({ path, reason: 'unknown-key' });
       continue;
@@ -93,21 +98,28 @@ function isRelabelableRole(key: string): key is RelabelableRole {
 // Rejects every key of `node` other than `key` as unknown, then returns
 // `node[key]` if it is an object. A missing key is absence, not a rejection.
 // A rejected node is never descended into, so nothing beneath it is reported.
+// `parent` is the node's rendered path, or '' for the top level.
 function onlyChild(
   node: JsonObject,
   key: string,
-  prefix: string,
+  parent: string,
   rejections: LabelOverrideRejection[],
 ): JsonObject | null {
   for (const other of Object.keys(node)) {
     if (other !== key) {
-      rejections.push({ path: `${prefix}${other}`, reason: 'unknown-key' });
+      rejections.push({
+        path: appendPathSegment(parent, other),
+        reason: 'unknown-key',
+      });
     }
   }
   if (!Object.hasOwn(node, key)) return null;
   const child = node[key];
   if (!isJsonObject(child)) {
-    rejections.push({ path: `${prefix}${key}`, reason: 'not-an-object' });
+    rejections.push({
+      path: appendPathSegment(parent, key),
+      reason: 'not-an-object',
+    });
     return null;
   }
   return child;
@@ -127,10 +139,5 @@ function rolesNode(
   }
   const locale = onlyChild(raw, TENANT_LABEL_LOCALE, '', rejections);
   if (!locale) return null;
-  return onlyChild(
-    locale,
-    SUPPORTED_NAMESPACE,
-    `${TENANT_LABEL_LOCALE}.`,
-    rejections,
-  );
+  return onlyChild(locale, SUPPORTED_NAMESPACE, LOCALE_PATH, rejections);
 }

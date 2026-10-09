@@ -155,6 +155,64 @@ describe('validateTenantLabelOverrides (spec §4.2)', () => {
     });
   });
 
+  describe('rejection paths (§4.2 Path rendering, #129)', () => {
+    it('renders a key containing a newline as one single-line rejection', () => {
+      expect(
+        validateTenantLabelOverrides(roles({ 'A\nB': 'Billing' })),
+      ).toEqual({
+        labels: null,
+        rejections: [{ path: 'en.roles["A\\u000AB"]', reason: 'unknown-key' }],
+      });
+    });
+
+    it('renders an over-length key as one bounded rejection', () => {
+      expect(
+        validateTenantLabelOverrides(
+          roles({ ['x'.repeat(10_000)]: 'Billing' }),
+        ),
+      ).toEqual({
+        labels: null,
+        rejections: [
+          {
+            path: `en.roles["${'x'.repeat(64)}"...(+9936)]`,
+            reason: 'unknown-key',
+          },
+        ],
+      });
+    });
+
+    it('renders stored keys at the top level and under en', () => {
+      expect(
+        validateTenantLabelOverrides({
+          $: {},
+          'en-US': {},
+          en: { 'a.b': {}, roles: { FINANCE: 'Billing' } },
+        }),
+      ).toEqual({
+        labels: { FINANCE: 'Billing' },
+        rejections: [
+          { path: '["$"]', reason: 'unknown-key' },
+          { path: '["en-US"]', reason: 'unknown-key' },
+          { path: 'en["a.b"]', reason: 'unknown-key' },
+        ],
+      });
+    });
+
+    it('produces only single-line printable ASCII paths for hostile keys', () => {
+      const { rejections } = validateTenantLabelOverrides({
+        'x\r\ny': {},
+        en: {
+          '\u2028': {},
+          roles: { '\u202EFINANCE': 'Billing', '"\\\u0085': 'Billing' },
+        },
+      });
+      expect(rejections).toHaveLength(4);
+      for (const { path } of rejections) {
+        expect(path).toMatch(/^[\x20-\x7E]+$/);
+      }
+    });
+  });
+
   it('never puts a stored value into a rejection', () => {
     const { rejections } = validateTenantLabelOverrides({
       en: {
