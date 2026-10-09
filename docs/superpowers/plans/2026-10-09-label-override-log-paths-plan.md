@@ -5,6 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Status | Draft |
+| M5 history | First pass (2026-10-09, at `cd6923a`): the owner found the formatter, truncation, validator integration, regression coverage, scope and gates sound, and returned the plan with one verification correction. It was applied with no design or scope change. The Task 3 non-ASCII scan used `grep … \| grep -v '§'`, which drops a whole line that contains `§`, so a hostile character on such a line went unseen. The scan now deletes `§` from each line before testing for non-ASCII bytes, reports the file and line of any hit, and always exits 0, so no output is the only passing signal. The owner also asked M6 to preserve one detail: the root `$` for a non-object top level stays unchanged, and `["$"]` is only for a stored key named `$`. |
 | Date | 2026-10-09 |
 | Tracking issue | [#129](https://github.com/rexescario-dev/clensy-platform/issues/129) (deferred minor 1 of the #118 M7 review) |
 | Scope | `apps/api` only. Two new files in `modules/admins` (`domain/label-override-path.ts` and its unit test), plus edits to `domain/tenant-label-overrides.ts`, its unit test, and `test/tenant-label-overrides.e2e-spec.ts`. No change to `TenantLabelOverridesService`, the resolver, GraphQL types, `schema.gql`, migrations, `apps/web`, `packages/*` or the lockfile. |
@@ -48,7 +49,10 @@ On 2026-10-09, the author applied Tasks 1–2 to a working tree at `bf696be` and
   - API `tsc --noEmit` clean;
   - `pnpm --filter api test`: `Test Suites: 74 passed` and `Tests: 1029 passed, 1029 total` (baseline 73 suites and 987 tests at `bf696be`);
   - `pnpm --filter api test:e2e:release-gate`: `Tests: 12 passed, 12 total`.
-  - after the plan was written, its three ```diff``` blocks were extracted and passed `git apply --check` at `bf696be`. They were then applied with the two new files and re-verified: `pnpm --filter api exec tsc --noEmit -p tsconfig.json` exit 0; `git diff --name-only bf696be` listed exactly the five files; the non-ASCII and `JSON.stringify` scans printed nothing; and the two domain suites gave `Tests: 69 passed, 69 total`.
+  - after the plan was written, its three ```diff``` blocks were extracted and passed `git apply --check` at `bf696be`. They were then applied with the two new files and re-verified: `pnpm --filter api exec tsc --noEmit -p tsconfig.json` exit 0; `git diff --name-only bf696be` listed exactly the five files; the non-ASCII and `JSON.stringify` scans printed nothing (the non-ASCII scan was re-run in its corrected form after the M5 first pass, see the M5 history row); and the two domain suites gave `Tests: 69 passed, 69 total`.
+- **Corrected non-ASCII scan (M5 first pass).**
+  - It was checked against a fixture with a U+2028 on a line that also contains `§`. The old `grep -v '§'` form printed nothing; the corrected form flagged the line.
+  - It was then re-run on the four files, with the plan applied at `bf696be`: no output, exit 0. Each file contains at least one `§` line.
 - **Hygiene finding.** In the first pre-validation pass, the hostile test keys U+2028, U+2029, U+202E and `é` were written into the source as literal characters instead of `\u` escapes. The tests passed either way, but invisible characters in source are a review hazard. The code below uses ASCII escapes only. Final verification now includes a non-ASCII scan (Task 3, step 5).
 
 ## Global Constraints
@@ -570,8 +574,20 @@ apps/api/src/modules/admins/tests/domain/tenant-label-overrides.spec.ts
 apps/api/test/tenant-label-overrides.e2e-spec.ts
 ```
 
-Run: `grep -nP '[^\x00-\x7F]' apps/api/src/modules/admins/domain/label-override-path.ts apps/api/src/modules/admins/tests/domain/label-override-path.spec.ts apps/api/src/modules/admins/tests/domain/tenant-label-overrides.spec.ts apps/api/test/tenant-label-overrides.e2e-spec.ts | grep -v '§'`
-Expected: no output. The only non-ASCII character allowed in these files is `§` in comments and test names.
+Run:
+
+```bash
+perl -ne 's/\xC2\xA7//g; print "$ARGV:$.: $_" if /[^\x00-\x7F]/; close ARGV if eof' \
+  apps/api/src/modules/admins/domain/label-override-path.ts \
+  apps/api/src/modules/admins/tests/domain/label-override-path.spec.ts \
+  apps/api/src/modules/admins/tests/domain/tenant-label-overrides.spec.ts \
+  apps/api/test/tenant-label-overrides.e2e-spec.ts
+```
+
+Expected: no output, exit 0. The only non-ASCII character allowed in these files is `§` (UTF-8 `C2 A7`), in comments and test names.
+- The filter deletes every `§` from a line, then prints the line, with its file and line number, if any non-ASCII byte remains.
+- So a hostile character is still caught on a line that also contains `§`.
+- `perl -n` exits 0 whether or not it prints. Pass/fail is decided by the output alone, never by the exit status.
 
 Run: `grep -n 'JSON.stringify' apps/api/src/modules/admins/domain/label-override-path.ts | grep -v '^[0-9]*:\s*//'`
 Expected: no output. `JSON.stringify` appears only in the explanatory comment.
