@@ -212,6 +212,38 @@ describe('Tenant label overrides (e2e, #118)', () => {
     expect(logged).not.toContain('Billing');
   });
 
+  // #129 (spec §4.2 Path rendering, §6.1): a hostile stored key yields one
+  // escaped, bounded, single-line warning and never its stored value.
+  it('logs one single-line, bounded warning per hostile stored key', async () => {
+    await store({
+      en: {
+        roles: {
+          'A\nB': 'Line-Value',
+          FINANCE: 'Billing',
+          ['x'.repeat(5_000)]: 'Long-Value',
+        },
+      },
+    });
+    expect(await currentAdminOverrides()).toEqual({
+      locale: 'en',
+      roles: { ...UNSET, FINANCE: 'Billing' },
+    });
+    expect(warnings()).toEqual(
+      expectedWarnings(
+        ['en.roles["A\\u000AB"]', 'unknown-key'],
+        [`en.roles["${'x'.repeat(64)}"...(+4936)]`, 'unknown-key'],
+      ),
+    );
+    for (const line of warnings()) {
+      expect(line).toMatch(/^[\x20-\x7E]+$/);
+      expect(line.length).toBeLessThan(256);
+    }
+    const logged = warnings().join('\n');
+    for (const stored of ['Line-Value', 'Long-Value', 'Billing']) {
+      expect(logged).not.toContain(stored);
+    }
+  });
+
   it('resolves the same tenant labels on the login result', async () => {
     await store({ en: { roles: { FINANCE: 'Billing' } } });
     const body = (await login(LOGIN_MUTATION)).body as GraphqlBody;
