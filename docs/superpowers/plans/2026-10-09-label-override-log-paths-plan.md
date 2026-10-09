@@ -658,10 +658,34 @@ Executed natively (superpowers:executing-plans), task by task, in plan order, on
   3. `onlyChild`'s not-an-object branch has no hostile-key test. That branch only ever receives fixed identifier keys, so this is not a real coverage gap.
 - **Gate:** merge per human/project norms.
 
-### M8 — N/A (2026-10-09)
+### M8 — Complete (2026-10-09)
 
-- The change is one small, pure formatter and a three-call-site integration. M7 found no duplication or complexity to refactor.
-- Of the deferred Minors, only (2) is behavior-preserving. Replacing one equal-valued literal with a formatter call isn't worth a refactor commit. (1) is a plan-verification note, and (3) is an equivalent mutant, not code.
+Originally recorded as N/A. The owner then asked for the deferred M7 Minors to be resolved in this PR, so M8 was re-entered for Minor 2.
+
+- **Gate:** M7 Approved for merge (`4657f06`, above).
+- **Scope:** `apps/api/src/modules/admins/domain/tenant-label-overrides.ts` only.
+- **Goal:** derive the locale path in one place. The literal `TENANT_LABEL_LOCALE` was passed as `onlyChild`'s rendered parent path, while `ROLES_PATH` was built separately with `appendPathSegment`.
+- **Transformation:** extract a private constant. `LOCALE_PATH = appendPathSegment('', TENANT_LABEL_LOCALE)` now builds `ROLES_PATH` and is passed as `onlyChild`'s parent. There is no public API change: `TENANT_LABEL_LOCALE` is still exported unchanged.
+- **Characterization evidence**, made outside the commit and restored with `git restore`:
+  - replacing that parent argument with `'xx'` failed 8 of 31 tests in `tenant-label-overrides.spec.ts`;
+  - those 8 include `drops unknown locales and unknown namespaces at their own path`, the five *at each level as not-an-object* cases, `renders stored keys at the top level and under en`, and `reports one rejection for a roles array of many items`.
+- **Before and after:** before, the unit tests passed 69/69 (both domain suites). After, in `3c911fb`:
+  - the domain suites 69/69 and the label-overrides e2e suite 9/9;
+  - `pnpm --filter api test` 74 suites, 1029/1029; release gate 12/12;
+  - `pnpm run lint` 6/6 with no working-tree changes; `tsc` exits 0; Prettier and eslint are clean.
+- **Review:** CLAUDE.md requires a fresh reviewer for application code, so a fresh, independent Opus agent context that did not write the change reviewed `3c911fb`. **Approved for merge**, with no Critical or Important findings. The reviewer:
+  - confirmed `appendPathSegment('', 'en') === 'en'`, so every rendered path is identical;
+  - re-ran the suites, `tsc` and eslint;
+  - mutation-tested in a removed worktree: parent `'xx'` gave 8/31 failures, parent `''` 8/31, and `LOCALE_PATH = 'xx'` 23/31.
+
+  Its one Minor, this record still saying N/A, is resolved by this section.
+- **Commit:** `3c911fb` (refactor only).
+
+### Resolution of the M7 deferred Minors (2026-10-09)
+
+1. **The non-ASCII scan omitted the validator.** Re-run over the scope-derived list `git diff --name-only bf696be -- apps` (all five code files), with no output, exit 0. Nothing changed in the Accepted plan's Task 3: the plan is executed history, and this record carries the corrected run.
+2. **The literal `TENANT_LABEL_LOCALE` parent.** Fixed by the M8 refactor `3c911fb`, above.
+3. **`onlyChild`'s not-an-object branch has no hostile-key test.** Ruling: no change. That branch only ever receives the fixed keys `en` and `roles`, so a template-string mutation there is equivalent, and no test can tell the two apart. Adding one would test an input the code cannot receive. Cost if wrong: if a future change passed a stored key to that branch, its path would still go through `appendPathSegment` today; only a later rewrite to a raw template string would go uncaught.
 
 ### M9 — Complete (2026-10-09)
 
@@ -671,6 +695,7 @@ Executed natively (superpowers:executing-plans), task by task, in plan order, on
 - this section.
 
 **Content updates:**
+- The M8 and Minor-resolution sections above (re-entered at the owner's request). Caused by `3c911fb` and its review.
 - The tenant label overrides spec's Tracking cell now links PR #153 from its #129 amendment note. Caused by the PR being opened.
 - The #118 plan's M7 deferred minor 1 ("Rejection paths include raw stored keys…") now points to #129 and PR #153. Caused by this slice addressing that minor.
 - This section. Caused by the M7–M9 gate outcomes.
@@ -701,7 +726,8 @@ Executed natively (superpowers:executing-plans), task by task, in plan order, on
 - Providers were honoured: GitHub for the issue (#129), branch and PR (#153).
 - CLAUDE.md's M7 rule was honoured: a fresh, independent reviewer on the most capable model, citing CI.
 - Slice Completion Reports were emitted at M6 and at M7–M9.
-- §2.8 was honoured: one PR (#153) carries the amendment, plan, implementation and docs.
+- §2.8 was honoured: one PR (#153) carries the amendment, plan, implementation and docs, including the M8 refactor that resolved the deferred Minors.
+- M8 was re-entered after an N/A record, at the owner's request. It followed the refactoring prompt: declared scope and goal, a characterization mutation outside the commit, before and after verification, and a refactor-only commit. CLAUDE.md's fresh-reviewer rule was applied again, because the refactor touches application code.
 
 **Blocking findings:** none.
 
