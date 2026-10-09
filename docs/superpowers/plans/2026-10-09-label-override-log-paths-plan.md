@@ -632,3 +632,79 @@ Executed natively (superpowers:executing-plans), task by task, in plan order, on
   - the corrected non-ASCII scan printed nothing (exit 0), and the `JSON.stringify` scan printed nothing.
 - **Beyond the plan:** `pnpm run test` (whole repository) 10/10 turbo tasks, exit 0.
 - `main` had not moved since the branch was cut (`origin/main` = `1f76ad4`).
+
+### M7 — Approved for merge (2026-10-09)
+
+- **Subject:** PR [#153](https://github.com/rexescario-dev/clensy-platform/pull/153), head `4657f06`. It carries the #129 spec amendment, this Accepted plan and the M6 change set (process spec §2.8). `main` had not moved (`1f76ad4`).
+- **Accepted specification:** the #129 amendment in `docs/superpowers/specs/2026-10-03-tenant-label-overrides-design.md`. The rest of that spec (#118) is unchanged.
+- **Accepted implementation plan:** this document.
+- **M6 gate:** plan Accept `6b827ae` (recorded `6641567`) is an ancestor of the first implementation commit `225068e`.
+- **Plan tasks reviewed:**
+  - Task 1 (`225068e`) ✓. Both files are byte-identical to the plan's code blocks.
+  - Task 2 (`81ac867`) ✓. Applying the plan's three diffs to `225068e` reproduces it exactly.
+  - Task 3 ✓, re-run independently.
+  - No reordering, no skipped task, no extras.
+- **Review basis:** an **independent review** by a fresh Opus agent context that did not implement the change, as CLAUDE.md requires for application-code slices. This record was written by the implementer and is based on that review. The reviewer:
+  - re-ran the API unit suite (74 suites, 1029/1029), `tsc`, eslint without `--fix`, the label-overrides e2e suite (9/9) and the release gate (12/12);
+  - re-ran the non-ASCII scan on all five code files and the `JSON.stringify` scan, both with no output, and the scope check;
+  - checked the four owner-required points and the five Review Focus items;
+  - ran a throwaway probe in a separate worktree, since removed. It covered the spec's 10,000-`x` example, `["$"]` vs the root `$`, a surrogate pair at the 64 boundary, `__proto__`, NUL and ESC keys at all three levels, and bare-vs-bracketed non-collision;
+  - mutation-tested the change. Eight of nine mutants were killed: escape-before-truncate, UTF-16 counting, `JSON.stringify` escaping, lowercase hex, a dropped marker, template-string paths at each level, and a bare limit of 65. The ninth, a template-string path in `onlyChild`'s not-an-object branch, is equivalent, because that branch only receives the fixed keys `en` and `roles`.
+- **Verification evidence:** CI run [37907899958](https://github.com/rexescario-dev/clensy-platform/actions/runs/37907899958) on `4657f06`: API e2e, Lint, Release gate and Test all passed. The M6 RED/GREEN and mutation evidence is recorded above.
+- **Blocking findings:** none (0 Critical, 0 Important).
+- **Non-blocking observations** (deferred Minors; these MUST NOT affect the merge decision). The implementer re-graded them by effect, and all three remain Minor.
+  1. Task 3's non-ASCII scan lists four of the five code files and omits `domain/tenant-label-overrides.ts`. The reviewer scanned it as well, with no output. Future plans should scan every touched file.
+  2. `tenant-label-overrides.ts` passes the literal `TENANT_LABEL_LOCALE` as `onlyChild`'s parent, while `ROLES_PATH` is built with `appendPathSegment`. The value is identical (`'en'`), and the plan prescribed this text. It is a consistency nit.
+  3. `onlyChild`'s not-an-object branch has no hostile-key test. That branch only ever receives fixed identifier keys, so this is not a real coverage gap.
+- **Gate:** merge per human/project norms.
+
+### M8 — N/A (2026-10-09)
+
+- The change is one small, pure formatter and a three-call-site integration. M7 found no duplication or complexity to refactor.
+- Of the deferred Minors, only (2) is behavior-preserving. Replacing one equal-valued literal with a formatter call isn't worth a refactor commit. (1) is a plan-verification note, and (3) is an equivalent mutant, not code.
+
+### M9 — Complete (2026-10-09)
+
+**Documentation scope:**
+- the spec's Tracking cell;
+- the #118 plan's deferred-minor 1 line (`docs/superpowers/plans/2026-10-03-tenant-label-overrides-plan.md`);
+- this section.
+
+**Content updates:**
+- The tenant label overrides spec's Tracking cell now links PR #153 from its #129 amendment note. Caused by the PR being opened.
+- The #118 plan's M7 deferred minor 1 ("Rejection paths include raw stored keys…") now points to #129 and PR #153. Caused by this slice addressing that minor.
+- This section. Caused by the M7–M9 gate outcomes.
+
+**Editorial changes:** none.
+
+**Unchanged, with reason:**
+- `docs/README.md` mentions the #118 fields only in the `tenant-read-authorizers` paragraph. It doesn't describe warnings or paths.
+- `apps/web/README.md` describes the web tenant layer, which this slice doesn't touch.
+- No README documents the warning format.
+
+**Verification:**
+- Relative links in the spec, the #118 plan and this plan resolve (scripted scan).
+- Status is consistent: the #129 amendment and this plan are Accepted, M7 is Approved, and the PR is open with CI green.
+- Terminology follows the spec: *path rendering*, *bare segment*, *bracketed segment*, *marker*.
+
+### M10 — Accepted, workflow validated (2026-10-09)
+
+**Subject:** the installed workflow prompt library (`docs/workflows/`, generic 1.4.1 / claude 0.2.0), against `docs/workflows/specs/agent-workflow-design.md` §2.10. This slice ran it on #129 from M2 (a slice-local amendment) to M9.
+
+**Asset inventory:** unchanged. Nine prompts map to M2–M10. There are no orphan assets.
+
+**Checks:**
+- §2.4 and the slice-local amendment rules were honoured. The amendment was made in place, with its own Draft → Accepted lifecycle, a stated delta, and its own §9 criteria block. The #118 remainder stayed Accepted throughout.
+- M3 Accept `a5f829d` (recorded `bf696be`) precedes the M4 draft `cd6923a`.
+- §2.5 was honoured: plan Accept `6b827ae` (recorded `6641567`) is an ancestor of the first implementation commit `225068e`.
+- M5 recorded an explicit Return before Accept: one verification correction on its first pass.
+- Providers were honoured: GitHub for the issue (#129), branch and PR (#153).
+- CLAUDE.md's M7 rule was honoured: a fresh, independent reviewer on the most capable model, citing CI.
+- Slice Completion Reports were emitted at M6 and at M7–M9.
+- §2.8 was honoured: one PR (#153) carries the amendment, plan, implementation and docs.
+
+**Blocking findings:** none.
+
+**Non-blocking observations:**
+1. **Pre-validation caught a hygiene defect before review.** Running the plan's code before M5 exposed literal invisible characters in test sources. That led to a scan, and M5 then hardened the scan. Writing code blocks from verified files, by script, kept the escapes intact through M6.
+2. **A verification command can have its own blind spot.** M5's correction (a line-dropping `grep -v`) and M7's Minor 1 (a file left out of the scan) both concern a check's coverage, not the code. Plans should derive scan file lists from the scope check, not list them by hand.

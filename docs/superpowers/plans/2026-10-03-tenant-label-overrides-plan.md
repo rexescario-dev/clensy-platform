@@ -2068,7 +2068,7 @@ Final verification: `pnpm run lint`, `tsc --noEmit` for `apps/api` and `apps/web
 - PR [#128](https://github.com/rexescario-dev/clensy-platform/pull/128), CI run [37137206774](https://github.com/rexescario-dev/clensy-platform/actions/runs/37137206774): Lint, Test and Release gate all passed.
 
 **Deferred minors** (none blocking):
-1. Rejection paths include raw stored keys. A key with a newline, or a very long key, reaches the warning line unescaped. Only operations staff write the column. A follow-up could escape or truncate the key.
+1. Rejection paths include raw stored keys. A key with a newline, or a very long key, reaches the warning line unescaped. Only operations staff write the column. A follow-up could escape or truncate the key. *(#129)* Tracked as [#129](https://github.com/rexescario-dev/clensy-platform/issues/129) and addressed in PR [#153](https://github.com/rexescario-dev/clensy-platform/pull/153), which renders each stored key as an escaped, bounded, ASCII-only path segment (spec §4.2 *Path rendering*).
 2. The other-locale boundary test asserts only that "Billing" is absent. It could also assert that "Finance" renders. The mapper unit test pins the rule.
 3. Adding `jsdom` let pnpm re-resolve `lru-cache` 11.5.2 → 11.5.3 for two unrelated packages (patch level).
 4. `apps/web/eslint.config.mjs` was outside the plan's file map. The change is a narrow named exception that follows precedent.
