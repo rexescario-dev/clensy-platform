@@ -4,7 +4,16 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Accepted |
+| M5 decision | **Accepted** — 2026-10-09, at `6b827ae`, by the owner, on the second pass, with no further changes. To be executed natively on `feat/129-label-override-log-paths`. Execution constraints:
+- Scope is fixed to the formatter, the validator integration and the specified unit and e2e tests: no service, resolver, schema, migration, web or package change.
+- The root `$` stays unchanged, and `["$"]` is only for a stored key named `$`.
+- Validation policy and logging behavior do not change beyond safe path rendering.
+- Every Task 3 check runs, and any unexpected failure is investigated rather than worked around by weakening tests or widening scope.
+- M7 MUST use a fresh, independent reviewer (application-code slice); a self-review is not sufficient.
+- Before M7 is requested, the M6 report gives the final commit, the test results, the scope diff and any deviations.
+
+This acceptance does not pre-approve the implementation or M7. |
 | M5 history | First pass (2026-10-09, at `cd6923a`): the owner found the formatter, truncation, validator integration, regression coverage, scope and gates sound, and returned the plan with one verification correction. It was applied with no design or scope change. The Task 3 non-ASCII scan used `grep … \| grep -v '§'`, which drops a whole line that contains `§`, so a hostile character on such a line went unseen. The scan now deletes `§` from each line before testing for non-ASCII bytes, reports the file and line of any hit, and always exits 0, so no output is the only passing signal. The owner also asked M6 to preserve one detail: the root `$` for a non-object top level stays unchanged, and `["$"]` is only for a stored key named `$`. |
 | Date | 2026-10-09 |
 | Tracking issue | [#129](https://github.com/rexescario-dev/clensy-platform/issues/129) (deferred minor 1 of the #118 M7 review) |
