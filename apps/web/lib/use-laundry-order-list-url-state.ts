@@ -10,6 +10,7 @@ import {
 } from '@clensy/web';
 import { useSearchParams } from 'next/navigation';
 import { useCallback } from 'react';
+import { drawerEntryState } from './use-detail-drawer';
 
 // `/app/laundry` list state, kept in the URL so a refresh, or back from an
 // order, restores it (lifecycle spec §8.4.4). Params the list does not own,
@@ -168,7 +169,9 @@ export function useLaundryOrderListUrlState() {
     (update: LaundryOrderListUpdate) => {
       const href = hrefFor(update);
       const live = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-      if (href !== live) window.history.replaceState(null, '', href);
+      // Keeps a drawer entry's marker (#173), so a list update made while the
+      // drawer is open does not turn its × into a replace.
+      if (href !== live) window.history.replaceState(drawerEntryState(), '', href);
     },
     [hrefFor],
   );
