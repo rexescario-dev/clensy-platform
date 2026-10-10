@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| **Status** | Accepted — 2026-09-06. The Accepted contract is §§1–7 as accepted that day. [Amendment #164](#8-amendment-164--focused-order-workspace-draft) is **Draft** and is not part of the Accepted contract until M3 accepts it. |
+| **Status** | Accepted — 2026-09-06. [Amendment #164](#8-amendment-164--focused-order-workspace) Accepted — 2026-10-10; where §8.4 replaces a sentence in §§1–7, §8.4 governs. |
 | **Kind** | Architecture RFC (product behavior/contracts for this slice, not a process specification) |
 | **Date** | 2026-09-06 |
 | **Tracking** | [#37](https://github.com/rexescario-dev/clensy-platform/issues/37) — milestone M11 (Laundry Orders & Lifecycle); first ticket of the Laundry epic after the #36 prerequisite |
@@ -11,7 +11,7 @@
 | **Source-material note** | Issue #37 (and #38–#45) cite a "Laundry Module Discovery report, §7/§8/§15/§19" as an architecture reference. That document does not exist as a retrievable artifact — it is absent from the repository (all branches, full history, deleted files, stashes), the ContextForge runtime tree, the GitHub wiki (never created), gists, and issue comments. Per the developer's instruction, this specification is reconstructed from the #37 ticket body, the Accepted #36 specification, and existing repository patterns; every lifecycle edge not literally present in the ticket text was resolved interactively with the project owner during M2 brainstorming (recorded as ratified decisions in §4.3 and §5). #36 followed the same interactive-resolution pattern for the same reason. |
 | **Revision note** | M3 round 1 (reviewer: project owner) returned the draft for four required corrections plus six precision items, not a redesign. Required: (1) `PAID → CANCELLED` removed — since `CANCELLED` is terminal it created a paid order with no path to `REFUNDED`, contradicting `REFUNDED`'s reason for existing; cancellation is now reachable only before payment is recorded, and every `PAID` order retains a path to `REFUNDED` (§4.3, §4.4, §5). (2) `minimumChargeMinorUnits` is now frozen into the per-line pricing snapshot, so a historical line is fully self-contained and re-derivable without reading `PricingRule` (§4.2, §4.5, §4.7, §4.10); `pricingRuleId` is demoted to a soft traceability pointer with no foreign key. (3) The snapshot's `quantity` is stated explicitly to store the canonical input in the unit's integer representation — grams for `PER_KG` — with the `÷1000` kilogram conversion confined to the amount calculation so no fractional value is ever persisted (§3, §4.2, §4.5). (4) The web action set is defined as `matrix-legal ∩ order-local branch predicate (fulfillmentType) ∩ actor RBAC`, with the server authoritative (§4.9). Precision items folded in: `WEIGHED → REJECTED`'s business meaning stated (§4.3 n.6); `REFUNDED` explicitly does not imply `LOST`/`DAMAGED` (§4.3 n.8a); the pre-transaction `getCustomer` read reframed as an error-shape choice with the FK as the correctness mechanism (§4.1); the `unit` Postgres enum is module-local (`laundry_order_line_unit_enum`), not a reuse of catalog's TypeORM-generated `pricing_rule_entity_unit_enum` (§4.10, §5); the concurrency acceptance test now requires a competing-valid-target race as the load-bearing case (§4.6, §6); `fulfillmentType` clarified as *return* fulfillment, not intake logistics (§3, §4.2). |
 | **M3 decision** | **Accepted** — 2026-09-06. M3 round 1's four required corrections and six precision items all verified present and consistent across the matrix (§4.3), the verb table (§4.4), pricing (§4.5), validation (§4.8), the migration (§4.10), and rationale (§5) — not merely asserted. Round 2 raised one final verification item — the `baseQuantity` × `unit` interaction — resolved by adding §4.5 step 3a: one quantity-resolution rule applied identically to the base-service line and every add-on line, keyed on the *resolved* `PricingRule.unit`, where `PER_KG` always prices on `order.weightGrams` and a supplied quantity there is silently ignored (not rejected, because the client cannot know the resolved unit in advance), `PER_ITEM` uses the caller's quantity, `FLAT`/`PER_SERVICE` use `1`, and the stored snapshot `quantity` is always the canonical value the amount was computed from. No remaining design blocker; no further design fork. Ready for M4 Implementation Planning. |
-| **Amendment #164** | **Draft** — 2026-10-10. Tracking [#164](https://github.com/rexescario-dev/clensy-platform/issues/164), parent [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Slice-local. Does not replace this specification. M3 has not accepted it. Two bullets inside it still need an explicit owner confirmation because they change validation or persistence: positive `weightGrams`, and a frozen line description column. |
+| **Amendment #164** | **Accepted** — 2026-10-10 (M3). Tracking [#164](https://github.com/rexescario-dev/clensy-platform/issues/164), parent [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Slice-local; does not replace this specification. The owner explicitly **confirmed** §8.4.1 (`weightGrams` ≥ 1) and §8.4.2 (frozen line `description`, with approval to plan an additive migration that backfills existing rows). M3 precision items folded in: §8.4.2 now states the backfill rule and `not null` for every row; the §2, §4.2, §4.4, §4.8 and §4.9 cross-references point at §8.4. No remaining design blocker. Ready for M4. |
 
 ---
 
@@ -32,7 +32,7 @@
 - **Application:** `LaundryOrdersService` with one command per verb operation (§4.4) — intake, record weight, resolve line pricing, and every status transition — each enforcing the transition matrix through the policy before any status write, inside a transaction, with audit.
 - **Infrastructure:** `LaundryOrderEntity`, `LaundryOrderLineEntity` (with the embedded `LaundryOrderLinePricingSnapshotEmbeddable`, `prefix: false`), a Postgres `enum` type per enum, an FK to `customer_entity` (`ON DELETE RESTRICT`), a `CHECK` enforcing one-of-`serviceId`/`addOnId` per line, and one additive migration creating both tables (no backfill — new tables).
 - **Presentation (GraphQL only):** a nestjs-query `ReadResolver` exposing `laundryOrders` as a root offset Connection (`totalCount`, default 20, max 100) and `laundryOrder(id)` as a single query; a nested `LaundryOrder.lines` offset Connection (no `totalCount`); a separate `@Resolver` mutation class holding the verb mutations (§4.4); `LaundryOrderType`, `LaundryOrderLineType`, `LaundryOrderLinePricingSnapshotType`, the input types, and `registerEnumType` for both enums; additions to `paginated-collections-allowlist.e2e-spec.ts` (root connection, nested connection, sort fields).
-- **Web:** `/app/laundry` — order list (`DataTable` + `StatusBadge`), order detail (`DetailDrawer` showing lines, per-line snapshot, and order total), an intake form (`FormDialog`: customer select + fulfillment type), and per-order action controls that offer exactly the transitions legal from the order's current status (destructive/financial ones behind `ConfirmDialog`). A nav entry under the existing "Operations" group. Built only from existing `packages/ui` primitives — no new list/detail component.
+- **Web** (superseded in part by Amendment #164 §8.4.4: detail moves to `/app/laundry/[id]`, intake gets a searchable customer picker): `/app/laundry` — order list (`DataTable` + `StatusBadge`), order detail (`DetailDrawer` showing lines, per-line snapshot, and order total), an intake form (`FormDialog`: customer select + fulfillment type), and per-order action controls that offer exactly the transitions legal from the order's current status (destructive/financial ones behind `ConfirmDialog`). A nav entry under the existing "Operations" group. Built only from existing `packages/ui` primitives — no new list/detail component.
 - **Tests:** unit (the transition policy — every illegal edge rejected, every legal edge allowed; `computeLaundryLineAmount` — weight × rate, minimum-charge floor, rounding); e2e against real Postgres (intake → priced golden path; a concurrent status-transition race); frontend list/detail smoke coverage consistent with existing module depth.
 
 ### Out of scope (normative)
@@ -96,7 +96,7 @@ Audit goes through the `AUDIT_LOGGER` port and `runAuditInTransaction`; `modules
 | `customerId` | `string` | required; references `Customer.id`; FK `ON DELETE RESTRICT`; immutable after creation |
 | `fulfillmentType` | `LaundryFulfillmentType` (`PICKUP \| DELIVERY`) | required; set at intake; immutable; describes how the **finished** laundry is returned to the customer (not intake logistics — §3); selects the `READY` branch (§4.3) |
 | `status` | `LaundryOrderStatus` | starts at `RECEIVED`; only ever changed through a §4.3 transition |
-| `weightGrams` | `number \| null` | `null` until the order is weighed; thereafter a non-negative integer (0 permitted). Locked once the order is `PRICED`. Amendment #164 §8.4.1 (Draft, not Accepted) proposes requiring an integer ≥ 1 |
+| `weightGrams` | `number \| null` | `null` until the order is weighed; thereafter an integer ≥ 1 (Amendment #164 §8.4.1; originally “non-negative, 0 permitted”). Locked once the order is `PRICED` |
 | `totalMinorUnits` | `number \| null` | `null` until `PRICED`; then the frozen sum of every line's `amountMinorUnits` (§4.5). Never recomputed |
 | `createdAt` | `Date` | `@CreateDateColumn` |
 | `updatedAt` | `Date` | `@UpdateDateColumn` |
@@ -194,7 +194,7 @@ Each row is one application command and one GraphQL mutation. All follow the §4
 | Mutation | Command effect | Extra precondition | RBAC (proposed) | Audit action |
 | --- | --- | --- | --- | --- |
 | `receiveLaundryOrder(input)` | create order at `RECEIVED`; capture `customerId`, `fulfillmentType` | `CustomersService.getCustomer` must resolve | OWNER, OPS_MANAGER, SCHEDULER, CUSTOMER_SUPPORT | `laundry_order.received` |
-| `weighLaundryOrder(input)` | if `RECEIVED`: transition `→ WEIGHED` and set `weightGrams`. If already `WEIGHED`: **state-preserving** — update `weightGrams` only, no transition | status ∈ {`RECEIVED`, `WEIGHED`}; `weightGrams` a non-negative integer | OWNER, OPS_MANAGER, SCHEDULER | `laundry_order.weighed` |
+| `weighLaundryOrder(input)` | if `RECEIVED`: transition `→ WEIGHED` and set `weightGrams`. If already `WEIGHED`: **state-preserving** — update `weightGrams` only, no transition | status ∈ {`RECEIVED`, `WEIGHED`}; `weightGrams` an integer ≥ 1 (Amendment #164 §8.4.1) | OWNER, OPS_MANAGER, SCHEDULER | `laundry_order.weighed` |
 | `priceLaundryOrder(input)` | create every `LaundryOrderLine` with a frozen snapshot (§4.5); set `totalMinorUnits`; transition `WEIGHED → PRICED` | status = `WEIGHED`; exactly one `baseServiceId`; each target resolves via `resolveEffectivePricing` (else `BadRequestException`, full rollback) | OWNER, OPS_MANAGER, SCHEDULER | `laundry_order.priced` |
 | `markLaundryOrderAwaitingPayment(input)` | transition `PRICED → AWAITING_PAYMENT` | — | OWNER, OPS_MANAGER, FINANCE, CUSTOMER_SUPPORT | `laundry_order.awaiting_payment` |
 | `markLaundryOrderPaid(input)` | transition `PRICED \| AWAITING_PAYMENT → PAID` | — | OWNER, OPS_MANAGER, FINANCE, CUSTOMER_SUPPORT | `laundry_order.paid` |
@@ -302,7 +302,7 @@ Audit failures inside the transaction propagate and roll back the whole operatio
 
 - **Line target exclusivity** — `CHECK (num_nonnulls("serviceId","addOnId") = 1)` on `laundry_order_line_entity`, hand-added to the migration (TypeORM cannot express a multi-column check), plus an application pre-check for a clean `BadRequestException`. Mirrors #36 §4.7.
 - **Exactly one base-service line** — `priceLaundryOrder` requires exactly one `baseServiceId`; enforced in the command (no DB constraint, since it is a per-order cardinality rule across rows).
-- **`weightGrams`** — non-negative integer; `null` only while status is `RECEIVED`; required for `priceLaundryOrder`.
+- **`weightGrams`** — integer ≥ 1 (Amendment #164 §8.4.1); `null` only while status is `RECEIVED`; required for `priceLaundryOrder`.
 - **`baseQuantity` / add-on `quantity` inputs** — integer `≥ 1` when provided; default 1; used only when that line's resolved `unit = PER_ITEM`, otherwise ignored (§4.5).
 - **`minimumChargeMinorUnits`** — consumed as resolved from the `PricingRule` (#36 already validates it `≥ 0`), then **frozen into the line snapshot** (§4.2). This ticket adds the *application* semantics (§4.5) and the snapshot column.
 - **Status / fulfillment / unit enums** — each a Postgres `enum` type (the `BookingStatus` mechanism). `LaundryOrderStatus` → `laundry_order_status_enum`; `LaundryFulfillmentType` → `laundry_fulfillment_type_enum`; the snapshot `unit` → a **module-local** `laundry_order_line_unit_enum` with the same four `PricingUnit` values (§4.10, §5) — *not* catalog's `pricing_rule_entity_unit_enum`. An out-of-range value is a driver error, not reachable through the typed GraphQL surface.
@@ -313,7 +313,7 @@ Audit failures inside the transaction propagate and roll back the whole operatio
 
 ### 4.9 Web — `/app/laundry`
 
-> **Amendment #164 (Draft), §8.4.4.** A dedicated order route and a searchable intake modal are proposed and are **not** Accepted. Until M3 accepts §8, this section remains the contract.
+> **Amended by #164 §8.4.4 (Accepted 2026-10-10).** The dedicated `/app/laundry/[id]` order page, the `?detail=` redirect, and the searchable intake picker replace this section’s single route, drawer, and 100-row customer `<select>`. The status-badge tones and the action-set rule below still apply.
 
 One route, built entirely from `packages/ui` primitives and the `/app/*` shell (the `/app/:path*` middleware matcher already covers it):
 
@@ -396,11 +396,11 @@ No backfill — both tables are new.
 
 ---
 
-## 8. Amendment #164 — Focused order workspace (Draft)
+## 8. Amendment #164 — Focused order workspace
 
 | Field | Value |
 | --- | --- |
-| **Status** | **Draft.** Not Accepted. Until M3 accepts this amendment, §§1–7 remain the contract, including “`weightGrams` … 0 permitted” (§4.2, §4.8) and §4.9’s drawer. |
+| **Status** | **Accepted** — 2026-10-10 (M3). §8.4.1 and §8.4.2 explicitly confirmed by the owner. |
 | **Date** | 2026-10-10 |
 | **Tracking** | [#164](https://github.com/rexescario-dev/clensy-platform/issues/164), under [#154](https://github.com/rexescario-dev/clensy-platform/issues/154) |
 | **Kind** | Slice-local amendment of this architecture RFC. Not a second specification. |
@@ -436,23 +436,23 @@ Investigated against the current model. No name is stored on a laundry line.
 
 `InvoiceLine.description` is the existing frozen-name pattern: a string copied at invoice generation (`Service.name`, or `AddOn.name + " (add-on)"`), with no foreign key back to the catalog. That string is not on the laundry line, so an invoice cannot be used as the order page’s source before an invoice exists, and it is not created until generation.
 
-A frozen name on the order line therefore needs a new column. This amendment does not add that column. M3 acceptance of §8.4.2 is the approval to plan an additive migration. Existing rows cannot be repaired to the name that was current at pricing time, because that name was never stored. A backfill can only copy the catalog name at migration time, and must say so.
+A frozen name on the order line therefore needs a new column. This amendment does not add that column. M3 acceptance of §8.4.2 is the approval to plan an additive migration. Existing rows cannot be repaired to the name that was current at pricing time, because that name was never stored. A backfill can only copy the catalog name at migration time, and must say so. The owner chose that backfill (§8.4.2).
 
-The fallback, if M3 rejects the column, is a live catalog label resolved from `serviceId` / `addOnId`. That label is allowed to change after a rename. Invoice descriptions stay frozen either way.
+M3 confirmed the column, so the live-label fallback is not used. Invoice descriptions stay frozen as before.
 
-### 8.4 Proposed replacements
+### 8.4 Replacements
 
-These are the only normative changes. Each one is in force only after M3 accepts this amendment. §8.4.1 and §8.4.2 additionally need the explicit confirmation named on each bullet. The other bullets are the working direction for the draft and are accepted or returned with the amendment as a whole.
+These are the only normative changes. They are in force since M3 accepted this amendment on 2026-10-10. The owner explicitly confirmed §8.4.1 and §8.4.2. The other bullets were accepted with the amendment as a whole.
 
-#### 8.4.1 Positive weight — confirmation required
+#### 8.4.1 Positive weight — confirmed
 
 Replace §4.2 `weightGrams` note “thereafter a non-negative integer (0 permitted)” and the §4.4 / §4.8 precondition “non-negative integer”.
 
-Proposed contract: `weightGrams` is `null` until the order is weighed, and thereafter an integer **≥ 1**. `weighLaundryOrder` rejects `0` and any negative or non-integer with `BadRequestException`. `WeighLaundryOrderInput.weightGrams` uses that same minimum. The UI rejects blank, non-numeric, zero, and negative entries and must not be the only check.
+Contract: `weightGrams` is `null` until the order is weighed, and thereafter an integer **≥ 1**. `weighLaundryOrder` rejects `0` and any negative or non-integer with `BadRequestException`. `WeighLaundryOrderInput.weightGrams` uses that same minimum. The UI rejects blank, non-numeric, zero, and negative entries and must not be the only check.
 
-M3 confirms this bullet only if every order that leaves `RECEIVED` must have a positive measured weight. If M3 declines it, the Accepted “0 permitted” rule stands and the rest of this amendment can still be accepted.
+Confirmed by the owner at M3 (2026-10-10): every order that leaves `RECEIVED` has a positive measured weight. Orders already stored with `weightGrams = 0` are not rewritten; the rule applies to `weighLaundryOrder` calls from acceptance on.
 
-#### 8.4.2 Frozen line description — confirmation required before any migration
+#### 8.4.2 Frozen line description — confirmed
 
 Add one field to `LaundryOrderLinePricingSnapshot`:
 
@@ -462,9 +462,11 @@ Add one field to `LaundryOrderLinePricingSnapshot`:
 
 `priceLaundryOrder` copies it inside the same transaction that inserts the line. If the catalog row cannot be read, the command fails and rolls back, matching invoice generation’s missing-name guard. The order page and the price preview show this frozen string after pricing. They do not re-read `Service.name` / `AddOn.name` for a priced line.
 
-Persistence is an additive column on `laundry_order_line_entity` (proposed name `pricingSnapshotDescription`, `text not null` for lines written after the migration). Rows already priced before the migration do not have a historical name to recover (§8.3). No migration is authored in this Draft. Planning it is allowed only after M3 accepts this bullet.
+Persistence is an additive column on `laundry_order_line_entity` (proposed name `pricingSnapshotDescription`, `text not null`). The migration backfills every existing line with the catalog name current **at migration time**, using the same string rule (`Service.name`, or `AddOn.name + " (add-on)"`), then enforces `not null`. A backfilled value is the name at migration, not the name at pricing (§8.3). The migration must say so in a comment. The snapshot's GraphQL type exposes `description`. Pricing amounts and authorization do not change.
 
-If M3 rejects the column, priced lines display the live catalog name and the order page must tolerate a later rename. Preview of a not-yet-priced order always uses the current catalog name, because nothing has been frozen yet.
+The migration is planned in M4 and authored in M6. Applying it to staging or production follows the project's established manual schema-change process.
+
+Preview of a not-yet-priced order always uses the current catalog name, because nothing has been frozen yet.
 
 #### 8.4.3 One line per add-on
 
@@ -521,4 +523,4 @@ M3 may accept the amendment only when all of the following are true:
 - Recording invoice payments ([#39](https://github.com/rexescario-dev/clensy-platform/issues/39)).
 - Persisted per-bag weights.
 - Editing a price after `PRICED`.
-- Implementation planning (M4) and any code or migration (M6). This Draft does not authorize either.
+- Implementation planning (M4) and any code or migration (M6) follow this acceptance through the workflow. M3 acceptance is not itself a code or schema change.
