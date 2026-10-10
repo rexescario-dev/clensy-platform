@@ -5,7 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Status | **Draft** |
-| M5 history | First pass (2026-10-10, owner): **Returned for Revision** with five P1 and three P2 findings. All eight are applied in this revision. **P1:** (1, 3, 7) progress now maps every status through one exhaustive record. A mismatched status/fulfillment pair still shows the recorded status as the single current step. `AWAITING_PAYMENT` is labeled and announced as the current "Awaiting payment" step, never as a completed Paid step, with before/after-payment coverage for both fulfillment types (Task 5). (2) Every verb is reconciled against the API source (Reconciliation section), and an API-shaped oracle checks all 210 status × fulfillment × role combinations (Task 4). **P2:** (4) the weight formatter's contract is written down, with boundary cases up to `Number.MAX_SAFE_INTEGER` (Task 3). (5) the baseline test is confirmed against the unchanged page (Task 1). (6) a changed-file allowlist replaces the forbidden-path diff (Final verification). (8) table-driven accessibility assertions cover every status and both fulfillment types (Task 5). The whole plan was re-pre-validated (Pre-validation). |
+| M5 history | First pass (2026-10-10, owner): **Returned for Revision** with five P1 and three P2 findings. All eight are applied in this revision. **P1:** (1, 3, 7) progress now maps every status through one exhaustive record. A mismatched status/fulfillment pair still shows the recorded status as the single current step. `AWAITING_PAYMENT` is labeled and announced as the current "Awaiting payment" step, never as a completed Paid step, with before/after-payment coverage for both fulfillment types (Task 5). (2) Every verb is reconciled against the API source (Reconciliation section), and an API-shaped oracle checks all 210 status × fulfillment × role combinations (Task 4). **P2:** (4) the weight formatter's contract is written down, with boundary cases up to `Number.MAX_SAFE_INTEGER` (Task 3). (5) the baseline test is confirmed against the unchanged page (Task 1). (6) a changed-file allowlist replaces the forbidden-path diff (Final verification). (8) table-driven accessibility assertions cover every status and both fulfillment types (Task 5). The whole plan was re-pre-validated (Pre-validation). Second pass (2026-10-10, owner): **Returned for Revision** with two P1 and two P2 findings, applied here. **P1:** (1) the scope check is an explicit `if`/`else` that ends in `false`, with a recorded negative case. The earlier `&& { …; exit 1; } || echo` form did exit 1 when run as a script, because `exit` in a brace group ends the shell before `||` runs. But it would close an interactive terminal, and it was hard to read. (2) `COMPLETED` now has one contract: every step is done, none is current, and there is no `aria-current`. The component sets `aria-current` from `state === 'current'`, matching the pure helper. **P2:** (3) every consistent status × fulfillment pair asserts the full ordered sequence against written-out paths, and the named cases assert full step lists. The mismatched pairs stay separate. (4) the API comparison is now a required, repeatable Task 4 step, a script that exits 1 on any difference, with recorded results and negative checks on both the oracle and the helper. |
 | Date | 2026-10-10 |
 | Tracking issue | [#157](https://github.com/rexescario-dev/clensy-platform/issues/157). Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). |
 | Scope | `packages/web` (new `laundry` i18n namespace, new `src/laundry/` module, `index.ts` exports) and two `apps/web/lib` tests. No `apps/api`, no `packages/ui`, no `packages/client`, no page or route change. |
@@ -31,7 +31,7 @@
   | `PAID` | current at slot 4, labeled "Paid" |
   | `PROCESSING`, `READY` | current at slots 5–6. The slot-4 Paid step is done. |
   | `AWAITING_PICKUP`, `AWAITING_DELIVERY` | current at slot 7. That slot shows the status itself, so a status that disagrees with `fulfillmentType` (which the server never writes) still has exactly one current step. |
-  | `COMPLETED` | every step done; `aria-current` on Completed |
+  | `COMPLETED` | every step done, none current, no `aria-current` |
   | `CANCELLED`, `REJECTED`, `LOST`, `DAMAGED`, `REFUNDED` | no steps: `StatusBadge` plus one sentence |
 
   Before `READY`, slot 7 follows `fulfillmentType`.
@@ -39,16 +39,17 @@
 
 **Tech Stack:** React 19, `@clensy/ui` (`StatusBadge`, `StatusTone`), `@clensy/web` i18n (`useClensyTranslations`, `ClensyI18nProvider`), Vitest 5 in the `node` environment with `react-dom/server` `renderToStaticMarkup`, and `expectTypeOf` type assertions checked by `tsc --noEmit`. No new dependency and no new test runner.
 
-**Pre-validation (full; re-run for the M5 revision).** On 2026-10-10 the code was applied to a working tree at `7c59b82`. The plan's code blocks are generated from those exact files, and the `index.ts` exports follow this plan's task order. Each RED state was reproduced by removing that task's implementation module while keeping its test. Every command named by an `Expected:` line ran with the stated result. The tree was then reverted. Commands run:
+**Pre-validation (full; re-run for each M5 revision).** On 2026-10-10 the code was applied to a working tree at `7c59b82`. The plan's code blocks are generated from those exact files, and the `index.ts` exports follow this plan's task order. Each RED state was reproduced by removing that task's implementation module while keeping its test. Every command named by an `Expected:` line ran with the stated result. The tree was then reverted. Commands run:
 
 - `pnpm --filter web exec vitest run lib/laundry-page-baseline.test.tsx`: 1 passed (characterization, green on first run)
 - `pnpm --filter @clensy/web exec vitest run src/laundry/format-weight-grams.test.ts`: RED (`Cannot find module './format-weight-grams'`), then GREEN 17 passed
-- `pnpm --filter @clensy/web exec vitest run src/laundry/laundry-order-actions.test.ts`: RED (`Cannot find module './laundry-order-actions'`), then GREEN 228 passed. The oracle's tables were also compared mechanically with the API source at `7c59b82` by a one-off script, which was not committed. The policy `MATRIX` matched (15 rows). So did all 15 resolver mutation → role-constant pairs, the six constants' members, and `generateInvoiceFromOrder`'s roles. `AuthGuard` has no `SUPER_ADMIN` bypass.
-- `pnpm --filter @clensy/web exec vitest run src/laundry/laundry-order-progress.test.tsx`: RED (`Cannot find module './laundry-order-progress'`), then GREEN 69 passed. Mutation check: deleting the status-follows-return-slot branch from `laundryProgressSteps` gave 6 failed / 63 passed. Restoring it gave 69 passed.
+- `pnpm --filter @clensy/web exec vitest run src/laundry/laundry-order-actions.test.ts`: RED (`Cannot find module './laundry-order-actions'`), then GREEN 228 passed.
+- `node "$TMPDIR/check-laundry-oracle.mjs"` (Task 4 Step 3): all 10 checks `ok`, `ORACLE: matches API source`, exit 0. Negative checks: an oracle `PAID` row with an extra `CANCELLED` gave `ORACLE: 1 difference(s)`, exit 1. `refundLaundryOrder` transcribed with `CANCEL` gave 1 difference. Helper mutations under the 210-combination test: `REFUND` widened with `SCHEDULER` gave 18 failed / 210 passed, and `PAID` gaining `cancel` gave 6 failed / 222 passed. Everything was restored and re-ran green.
+- `pnpm --filter @clensy/web exec vitest run src/laundry/laundry-order-progress.test.tsx`: RED (`Cannot find module './laundry-order-progress'`), then GREEN 68 passed. Mutation checks (Task 5 Step 3a): dropping the status-follows-return-slot rule gave 2 failed / 66 passed. Swapping `PROCESSING` and `READY` in the path gave 44 failed / 24 passed. Setting `aria-current` from `step.status === status` again (the earlier `COMPLETED` conflict) gave 2 failed / 66 passed. Each was restored and 68 passed.
 - `pnpm --filter web exec vitest run lib/laundry-presentation-contract.test.ts`: 2 passed. Mutation check: removing `VOID` from `invoicePaymentStatus` made `pnpm --filter web exec tsc --noEmit` report 1 error, and restoring it cleared the error.
-- `pnpm --filter @clensy/web test` (11 files, 377 tests passed), `pnpm --filter @clensy/web build` (tsc, exit 0), `pnpm --filter @clensy/web lint` (exit 0)
+- `pnpm --filter @clensy/web test` (11 files, 376 tests passed), `pnpm --filter @clensy/web build` (tsc, exit 0), `pnpm --filter @clensy/web lint` (exit 0)
 - `pnpm --filter web test` (24 files, 595 tests passed), `pnpm --filter web exec tsc --noEmit` (exit 0), `pnpm --filter web lint` (exit 0), `pnpm --filter web build` (exit 0)
-- The Final verification scope check printed `SCOPE: ok`. Adding a stray `packages/ui/src/stray.ts` made it list that file and exit 1.
+- The Final verification scope check printed `SCOPE: ok` with status 0. With a stray `packages/ui/src/stray.ts`, it printed `SCOPE: unexpected files:` and the file, returned status 1, and did not print `SCOPE: ok`.
 
 ## Global Constraints
 
@@ -58,14 +59,14 @@ Derived from the Accepted spec and amendment only. Every task's requirements imp
 - The action helper is the intersection of the §4.3 matrix, the fulfillment branch (`AWAITING_PICKUP` only for `PICKUP`, `AWAITING_DELIVERY` only for `DELIVERY`), and the role sets as implemented in `laundry-order.resolver.ts` and `invoice.resolver.ts`. Do not widen any set. `ANALYST` and `SUPER_ADMIN` get no verbs. It is presentation only, and the server stays authoritative (§4.9, §8.4.4).
 - The client matrix is a mirror, not a second state machine. It adds nothing the server policy does not allow. The only non-transition entries are the §4.4 re-weigh (`weigh` on `WEIGHED`) and `price` on `WEIGHED`.
 - Weight is displayed from integer grams with integer arithmetic only. A 1-gram weight must not render as `0.00 kg` (§8.4.4: "kilograms rendered from integer grams").
-- `AWAITING_PAYMENT` is a branch, not a required step. It is shown and announced as the current "Awaiting payment" step, never as a completed Paid step. Every non-terminal status, including a status/fulfillment pair that disagrees, renders exactly one current step. Terminal exceptions never render the happy path as complete.
+- `AWAITING_PAYMENT` is a branch, not a required step. It is shown and announced as the current "Awaiting payment" step, never as a completed Paid step. Every non-terminal status other than `COMPLETED`, including a status/fulfillment pair that disagrees, renders exactly one current step (`aria-current="step"`). `COMPLETED` renders every step as done with no current step. Terminal exceptions never render the happy path as complete.
 - Progress steps are never interactive: no buttons or links.
 - `@clensy/web` must not import `@clensy/client`.
 - Consuming screens (#155–#166), recorded here so they do not drift: success → `useToast().success(t(`success.${verb}`))`; a failure stays inline (`role="alert"`), with the server message when present and otherwise `t(`failure.${verb}`)`; never toast and inline the same error; destructive verbs (`LAUNDRY_DESTRUCTIVE_VERBS`) go through `ConfirmDialog` with `t(`confirm.${verb}`)` and `t(`actions.${verb}`)` as the confirm label; disable the submitting control while a mutation is in flight. No consumer forks a second status map.
 
 ## Review Focus
 
-1. **Reconciliation.** The table below and Task 4's oracle are independent transcriptions of the API source. Spot-check them against the cited files. The helper's verb-keyed tables are checked against the oracle for all 210 combinations.
+1. **Reconciliation.** The table below and Task 4's oracle are transcriptions of the API source. The 210-combination test only proves the helper agrees with the oracle. Task 4 Step 3's script proves the oracle agrees with the API source. Both must pass before Task 4 is committed.
 2. **Progress mapping.** Task 5 asserts the state of every step for all 15 statuses × both fulfillment types, plus the mismatched pairs.
 3. **Type pin.** Task 6's `expectTypeOf` assertions are checked by `tsc`, not by Vitest at runtime. The mutation check proves they bite.
 
@@ -852,6 +853,111 @@ export type { LaundryOrderVerb } from './laundry/laundry-order-actions';
 Run: `pnpm --filter @clensy/web exec vitest run src/laundry/laundry-order-actions.test.ts`
 Expected: 228 passed.
 
+- [ ] **Step 3: Reconcile the oracle with the API source (required before commit)**
+
+Save this script outside the repository, as `"$TMPDIR/check-laundry-oracle.mjs"`, so the scope check doesn't flag it. Then run it from the repository root. It parses the API files and the oracle, and exits 1 on any difference.
+
+```js
+// One-off reconciliation (#157 Task 4): compares the oracle in
+// packages/web/src/laundry/laundry-order-actions.test.ts with the API
+// sources it transcribes. Run from the repository root. Exit 1 on any
+// difference. Not committed.
+import { readFileSync } from 'node:fs';
+
+const read = (path) => readFileSync(path, 'utf8');
+const api = 'apps/api/src/modules';
+const resolver = read(`${api}/laundry/presentation/graphql/laundry-order.resolver.ts`);
+const invoiceResolver = read(`${api}/billing/presentation/graphql/invoice.resolver.ts`);
+const policy = read(`${api}/laundry/domain/laundry-order-status-transition-policy.ts`);
+const orders = read(`${api}/laundry/application/services/laundry-orders.service.ts`);
+const invoices = read(`${api}/billing/application/services/invoices.service.ts`);
+const oracle = read('packages/web/src/laundry/laundry-order-actions.test.ts');
+
+const failures = [];
+const same = (label, actual, expected) => {
+  const a = JSON.stringify(actual);
+  const e = JSON.stringify(expected);
+  if (a === e) console.log(`ok   ${label}`);
+  else { failures.push(label); console.log(`FAIL ${label}\n     api:    ${a}\n     oracle: ${e}`); }
+};
+const words = (text) => [...text.matchAll(/'?(?:Role\.|S\.|LaundryOrderStatus\.)?\b([A-Z][A-Z_]+)\b'?/g)].map((m) => m[1]);
+const block = (text, re) => {
+  const m = text.match(re);
+  if (!m) throw new Error(`pattern not found: ${re}`);
+  return m[1];
+};
+
+// 1. Transition matrix.
+const rows = (body, keyRe) =>
+  Object.fromEntries([...body.matchAll(keyRe)].map((m) => [m[1], words(m[2]).sort()]).sort(([a], [b]) => a.localeCompare(b)));
+same(
+  'policy MATRIX',
+  rows(block(policy, /> = \{([\s\S]*?)\n\};/), /\[S\.(\w+)\]:\s*\[([\s\S]*?)\]/g),
+  rows(block(oracle, /const SERVER_MATRIX[^=]*= \{([\s\S]*?)\n\};/), /(\w+): \[([\s\S]*?)\]/g),
+);
+
+// 2. Role constants (expanding `...OPERATIONAL`).
+const constants = (text, prefix) => {
+  const out = {};
+  for (const [, name, body] of text.matchAll(new RegExp(`${prefix}(OPERATIONAL|INTAKE|PAYMENT|CANCEL|EXCEPTION|REFUND)(?::[^=]*)? = \\[([\\s\\S]*?)\\];`, 'g'))) {
+    out[name] = [...(body.includes('...OPERATIONAL') ? out.OPERATIONAL : []), ...words(body.replace('...OPERATIONAL', ''))].sort();
+  }
+  return out;
+};
+same('role constants', constants(resolver, 'const '), constants(oracle, 'const '));
+
+// 3. Mutation -> role constant.
+const apiMutations = Object.fromEntries(
+  [...resolver.matchAll(/@Roles\(\.\.\.(\w+)\)\s*\n\s*(?:async\s+)?(\w+)\(/g)]
+    .filter(([, c]) => c !== 'VIEW_ROLES')
+    .map(([, c, m]) => [m, c])
+    .filter(([m]) => m !== 'receiveLaundryOrder')
+    .sort(([a], [b]) => a.localeCompare(b)),
+);
+const oracleMutations = Object.fromEntries(
+  [...oracle.matchAll(/^  (\w+): \{ legal: [^}]*?roles: (\w+), verb/gm)].map(([, m, c]) => [m, c]).sort(([a], [b]) => a.localeCompare(b)),
+);
+same('mutation -> @Roles constant', apiMutations, oracleMutations);
+same('receiveLaundryOrder roles', block(resolver, /@Roles\(\.\.\.(\w+)\)\s*\n\s*async receiveLaundryOrder/), 'INTAKE');
+
+// 4. Invoice generation roles and eligibility.
+same(
+  'generateInvoiceFromOrder roles',
+  words(block(invoiceResolver, /@Roles\(([^)]*)\)\s*\n\s*(?:async\s+)?generateInvoiceFromOrder/)).sort(),
+  words(block(oracle, /generateInvoiceFromOrder: \{[\s\S]*?roles: \[([^\]]*)\]/)).sort(),
+);
+same(
+  'invoice EXCLUDED_STATUSES',
+  words(block(invoices, /EXCLUDED_STATUSES[^=]*= new Set\(\[([\s\S]*?)\]\)/)).sort(),
+  words(block(oracle, /const INVOICE_EXCLUDED[^=]*= \[([^\]]*)\]/)).sort(),
+);
+same('invoice requires priced (totalMinorUnits !== null)', /order\.totalMinorUnits === null\)\s*\{\s*throw/.test(invoices), true);
+
+// 5. Weigh / price preconditions.
+same('price only from WEIGHED', /order\.status !== S\.WEIGHED\)\s*\{\s*throw new BadRequestException\(\s*`Cannot price/.test(orders), true);
+same(
+  'weigh from RECEIVED or WEIGHED, else throw',
+  /order\.status === S\.RECEIVED\)[\s\S]*?else if \(order\.status === S\.WEIGHED\)[\s\S]*?else \{\s*throw new BadRequestException\(\s*`Cannot weigh/.test(orders),
+  true,
+);
+
+// 6. No SUPER_ADMIN bypass in the role check.
+const guard = read('apps/api/src/platform/auth/guards/auth.guard.ts');
+same('AuthGuard: listed roles only, no SUPER_ADMIN bypass', /!requiredRoles\.includes\(principal\.role\)/.test(guard) && !guard.includes('SUPER_ADMIN'), true);
+
+console.log(failures.length === 0 ? 'ORACLE: matches API source' : `ORACLE: ${failures.length} difference(s)`);
+process.exit(failures.length === 0 ? 0 : 1);
+```
+
+Run: `node "$TMPDIR/check-laundry-oracle.mjs"`
+Expected: 10 lines starting `ok`, then `ORACLE: matches API source`, exit 0. On any `FAIL`, fix whichever side disagrees with the API, the oracle or the helper, and don't commit until it passes.
+
+- [ ] **Step 3a: Negative checks (do not commit)**
+
+1. In the test's `SERVER_MATRIX`, change `PAID: ['PROCESSING', 'REFUNDED']` to `PAID: ['PROCESSING', 'REFUNDED', 'CANCELLED']`, then run the script. Expected: `ORACLE: 1 difference(s)`, exit 1. Restore it.
+2. In the helper, add `'SCHEDULER'` to `REFUND`, then run the Step 2 test command. Expected: 18 failed / 210 passed. Restore it.
+3. In the helper's `LEGAL_VERBS`, change `PAID: ['startProcessing', 'refund']` to `PAID: ['startProcessing', 'refund', 'cancel']`, then run the test. Expected: 6 failed / 222 passed. Restore it. 228 pass again.
+
 - [ ] **Step 4: Commit**
 
 ```bash
@@ -865,7 +971,7 @@ git commit -m "feat(web): add the role- and transition-aware laundry action help
 
 - [ ] **Step 1: Write the failing test**
 
-It is table-driven over all 15 statuses × both fulfillment types. For the pure steps, it checks the state of every step. For the markup, it checks the ordered list, exactly one `aria-current` step whose label is the status label, a valid screen-reader state on every step, and no buttons or links. It also covers `AWAITING_PAYMENT` before and after payment, and the mismatched pairs.
+It is table-driven over every status × both fulfillment types. Every consistent pair asserts the **full ordered sequence** against the written-out `PATH` / `AWAITING_PAYMENT_PATH` and the state of every step. `AWAITING_PAYMENT`, `PAID`, both return branches and `COMPLETED` assert their full step lists literally. The markup tests check the ordered list, the label sequence, the screen-reader state of every step, `aria-current` only on the current step (none for `COMPLETED`), and no buttons or links. The two mismatched pairs (`AWAITING_DELIVERY` with `PICKUP`, `AWAITING_PICKUP` with `DELIVERY`) are separate assertions. Terminal statuses render a badge and a sentence, with no `aria-current`.
 
 ```tsx
 import { describe, expect, it } from 'vitest';
@@ -879,6 +985,24 @@ const FULFILLMENTS: readonly LaundryFulfillmentType[] = ['DELIVERY', 'PICKUP'];
 const TERMINAL: readonly LaundryOrderStatus[] = ['CANCELLED', 'DAMAGED', 'LOST', 'REFUNDED', 'REJECTED'];
 const NON_TERMINAL = LAUNDRY_ORDER_STATUSES.filter((s) => !TERMINAL.includes(s));
 const { laundry } = getDefaultMessages();
+
+// The §4.3 happy path, spelled out per fulfillment type: the displayed
+// sequence every non-terminal status must render (Paid slot reads
+// "Awaiting payment" only while that is the status).
+const PATH: Record<LaundryFulfillmentType, LaundryOrderStatus[]> = {
+  DELIVERY: ['RECEIVED', 'WEIGHED', 'PRICED', 'PAID', 'PROCESSING', 'READY', 'AWAITING_DELIVERY', 'COMPLETED'],
+  PICKUP: ['RECEIVED', 'WEIGHED', 'PRICED', 'PAID', 'PROCESSING', 'READY', 'AWAITING_PICKUP', 'COMPLETED'],
+};
+const AWAITING_PAYMENT_PATH: Record<LaundryFulfillmentType, LaundryOrderStatus[]> = {
+  DELIVERY: ['RECEIVED', 'WEIGHED', 'PRICED', 'AWAITING_PAYMENT', 'PROCESSING', 'READY', 'AWAITING_DELIVERY', 'COMPLETED'],
+  PICKUP: ['RECEIVED', 'WEIGHED', 'PRICED', 'AWAITING_PAYMENT', 'PROCESSING', 'READY', 'AWAITING_PICKUP', 'COMPLETED'],
+};
+// Non-terminal statuses the server can write for this fulfillment type.
+// The mismatched return statuses are asserted separately below.
+const consistent = (fulfillment: LaundryFulfillmentType) =>
+  NON_TERMINAL.filter((s) => s !== (fulfillment === 'PICKUP' ? 'AWAITING_DELIVERY' : 'AWAITING_PICKUP'));
+const expectedPath = (status: LaundryOrderStatus, fulfillment: LaundryFulfillmentType) =>
+  status === 'AWAITING_PAYMENT' ? AWAITING_PAYMENT_PATH[fulfillment] : PATH[fulfillment];
 
 // renderToStaticMarkup escapes text (an apostrophe becomes &#x27;).
 function escaped(text: string): string {
@@ -914,16 +1038,17 @@ describe('laundryProgressSteps', () => {
   });
 
   describe.each(FULFILLMENTS)('every status with %s', (fulfillment) => {
-    it.each(NON_TERMINAL)('%s is the single current step, everything before it done, everything after upcoming', (status) => {
+    it.each(consistent(fulfillment))('%s renders the full happy-path sequence with the right state on every step', (status) => {
       const steps = laundryProgressSteps(status, fulfillment) ?? [];
-      expect(steps).toHaveLength(8);
-      const current = steps.findIndex((s) => s.status === status);
-      expect(current).toBeGreaterThanOrEqual(0);
+      const path = expectedPath(status, fulfillment);
+      expect(steps.map((s) => s.status)).toEqual(path);
+      const at = path.indexOf(status);
+      expect(steps.map((s) => s.state)).toEqual(
+        path.map((_, index) =>
+          status === 'COMPLETED' || index < at ? 'complete' : index === at ? 'current' : 'upcoming',
+        ),
+      );
       expect(steps.filter((s) => s.state === 'current')).toHaveLength(status === 'COMPLETED' ? 0 : 1);
-      steps.forEach((step, index) => {
-        const expected = index < current || status === 'COMPLETED' ? 'complete' : index === current ? 'current' : 'upcoming';
-        expect(step.state).toBe(expected);
-      });
     });
 
     it.each(TERMINAL)('%s replaces the steps', (status) => {
@@ -931,11 +1056,53 @@ describe('laundryProgressSteps', () => {
     });
   });
 
-  it.each(FULFILLMENTS)('AWAITING_PAYMENT (%s) takes the Paid slot as current, never as a done Paid step', (fulfillment) => {
-    const steps = laundryProgressSteps('AWAITING_PAYMENT', fulfillment) ?? [];
-    expect(steps.map((s) => s.status)).not.toContain('PAID');
-    expect(steps[2]).toEqual({ state: 'complete', status: 'PRICED' });
-    expect(steps[3]).toEqual({ state: 'current', status: 'AWAITING_PAYMENT' });
+  it('AWAITING_PAYMENT takes the Paid slot as current, never as a done Paid step', () => {
+    expect(laundryProgressSteps('AWAITING_PAYMENT', 'DELIVERY')).toEqual([
+      { state: 'complete', status: 'RECEIVED' },
+      { state: 'complete', status: 'WEIGHED' },
+      { state: 'complete', status: 'PRICED' },
+      { state: 'current', status: 'AWAITING_PAYMENT' },
+      { state: 'upcoming', status: 'PROCESSING' },
+      { state: 'upcoming', status: 'READY' },
+      { state: 'upcoming', status: 'AWAITING_DELIVERY' },
+      { state: 'upcoming', status: 'COMPLETED' },
+    ]);
+    expect(laundryProgressSteps('AWAITING_PAYMENT', 'PICKUP')?.map((s) => s.status)).toEqual(AWAITING_PAYMENT_PATH.PICKUP);
+  });
+
+  it('PAID is the current Paid step', () => {
+    expect(laundryProgressSteps('PAID', 'PICKUP')).toEqual([
+      { state: 'complete', status: 'RECEIVED' },
+      { state: 'complete', status: 'WEIGHED' },
+      { state: 'complete', status: 'PRICED' },
+      { state: 'current', status: 'PAID' },
+      { state: 'upcoming', status: 'PROCESSING' },
+      { state: 'upcoming', status: 'READY' },
+      { state: 'upcoming', status: 'AWAITING_PICKUP' },
+      { state: 'upcoming', status: 'COMPLETED' },
+    ]);
+  });
+
+  it.each([
+    ['AWAITING_PICKUP', 'PICKUP'],
+    ['AWAITING_DELIVERY', 'DELIVERY'],
+  ] as const)('%s is the current return step on its own branch', (status, fulfillment) => {
+    expect(laundryProgressSteps(status, fulfillment)).toEqual([
+      { state: 'complete', status: 'RECEIVED' },
+      { state: 'complete', status: 'WEIGHED' },
+      { state: 'complete', status: 'PRICED' },
+      { state: 'complete', status: 'PAID' },
+      { state: 'complete', status: 'PROCESSING' },
+      { state: 'complete', status: 'READY' },
+      { state: 'current', status },
+      { state: 'upcoming', status: 'COMPLETED' },
+    ]);
+  });
+
+  it('COMPLETED marks every step done and none current', () => {
+    expect(laundryProgressSteps('COMPLETED', 'DELIVERY')).toEqual(
+      PATH.DELIVERY.map((status) => ({ state: 'complete', status })),
+    );
   });
 
   it.each(FULFILLMENTS)('after payment (%s) the Paid slot reads Paid: current at PAID, done from PROCESSING', (fulfillment) => {
@@ -954,26 +1121,33 @@ describe('laundryProgressSteps', () => {
     ['AWAITING_PICKUP', 'DELIVERY'],
   ] as const)('a mismatched %s + %s still shows the recorded status as the current step', (status, fulfillment) => {
     const steps = laundryProgressSteps(status, fulfillment) ?? [];
+    expect(steps.map((s) => s.status)).toEqual(['RECEIVED', 'WEIGHED', 'PRICED', 'PAID', 'PROCESSING', 'READY', status, 'COMPLETED']);
     expect(steps[6]).toEqual({ state: 'current', status });
     expect(steps.filter((s) => s.state === 'current')).toHaveLength(1);
+    const current = stepItems(render(status, fulfillment)).filter((i) => i.current);
+    expect(current).toEqual([{ current: true, label: laundry.status[status], state: laundry.progress.state.current }]);
   });
 });
 
 describe('LaundryOrderProgress', () => {
   describe.each(FULFILLMENTS)('with %s', (fulfillment) => {
-    it.each(NON_TERMINAL)('%s: an ordered list, one aria-current step with its label, accessible states, no controls', (status) => {
+    it.each(consistent(fulfillment))('%s: the labeled sequence in an ordered list, accessible states, no controls', (status) => {
       const html = render(status, fulfillment);
       expect(html).toContain('<ol aria-label="Order progress"');
       expect(html).not.toContain('<button');
       expect(html).not.toContain('<a ');
       const items = stepItems(html);
-      expect(items).toHaveLength(8);
-      const current = items.filter((i) => i.current);
-      expect(current).toHaveLength(1);
-      expect(current[0].label).toBe(laundry.status[status]);
-      expect(current[0].state).toBe(status === 'COMPLETED' ? laundry.progress.state.complete : laundry.progress.state.current);
-      for (const item of items) {
-        expect(Object.values(laundry.progress.state)).toContain(item.state);
+      expect(items.map((i) => i.label)).toEqual(expectedPath(status, fulfillment).map((s) => laundry.status[s]));
+      const steps = laundryProgressSteps(status, fulfillment) ?? [];
+      expect(items.map((i) => i.state)).toEqual(steps.map((s) => laundry.progress.state[s.state]));
+      expect(items.map((i) => i.current)).toEqual(steps.map((s) => s.state === 'current'));
+      if (status === 'COMPLETED') {
+        expect(html).not.toContain('aria-current');
+        expect(items.every((i) => i.state === laundry.progress.state.complete)).toBe(true);
+      } else {
+        const current = items.filter((i) => i.current);
+        expect(current).toHaveLength(1);
+        expect(current[0]).toEqual({ current: true, label: laundry.status[status], state: laundry.progress.state.current });
       }
     });
 
@@ -1022,11 +1196,12 @@ export interface LaundryOrderProgressProps {
 
 type TerminalStatus = 'CANCELLED' | 'DAMAGED' | 'LOST' | 'REFUNDED' | 'REJECTED';
 
-// Every status, mapped once (exhaustive, so a new status fails to compile):
-// a terminal exception replaces the steps; any other status is the current
-// step at that slot of the §4.3 happy path. `AWAITING_PAYMENT` shares the
-// Paid slot with `PAID`, and `AWAITING_PICKUP` / `AWAITING_DELIVERY` share
-// the return slot, so every non-terminal status has exactly one current step.
+// Every status, mapped once (exhaustive, so a new status fails to compile).
+// A terminal exception replaces the steps. `COMPLETED` marks every step done
+// and none current (no `aria-current`). Any other status is the single
+// current step at that slot of the §4.3 happy path: `AWAITING_PAYMENT`
+// shares the Paid slot with `PAID`, and `AWAITING_PICKUP` /
+// `AWAITING_DELIVERY` share the return slot.
 const PROGRESS_SLOT: Readonly<Record<LaundryOrderStatus, number | 'terminal'>> = {
   AWAITING_DELIVERY: 6,
   AWAITING_PAYMENT: 3,
@@ -1069,7 +1244,7 @@ export function LaundryOrderProgress({ fulfillmentType, status }: LaundryOrderPr
       {steps.map((step) => (
         <li
           key={step.status}
-          aria-current={step.status === status ? 'step' : undefined}
+          aria-current={step.state === 'current' ? 'step' : undefined}
           className="flex items-center gap-2"
         >
           <span aria-hidden="true" className={`size-2.5 shrink-0 rounded-full ${MARKER_CLASSES[step.state]}`} />
@@ -1129,12 +1304,15 @@ export type { LaundryOrderProgressProps, LaundryProgressState, LaundryProgressSt
 - [ ] **Step 3: Run**
 
 Run: `pnpm --filter @clensy/web exec vitest run src/laundry/laundry-order-progress.test.tsx`
-Expected: 69 passed.
+Expected: 68 passed.
 
-- [ ] **Step 3a: Mutation check (do not commit)**
+- [ ] **Step 3a: Mutation checks (do not commit; restore after each)**
 
-In `laundryProgressSteps`, replace the `returnStep` expression with `fulfillmentType === 'PICKUP' ? 'AWAITING_PICKUP' : 'AWAITING_DELIVERY'`, which drops the status-follows rule. Run the same command.
-Expected: 6 failed / 63 passed (the mismatched pairs). Restore the file, and 69 pass.
+1. In `laundryProgressSteps`, replace the `returnStep` expression with `fulfillmentType === 'PICKUP' ? 'AWAITING_PICKUP' : 'AWAITING_DELIVERY'`, which drops the status-follows rule. Expected: 2 failed / 66 passed (the mismatched pairs).
+2. Swap `'PROCESSING'` and `'READY'` in `path`. Expected: 44 failed / 24 passed.
+3. In the component, set `aria-current={step.status === status ? 'step' : undefined}`. Expected: 2 failed / 66 passed (`COMPLETED`, both fulfillment types).
+
+After restoring, 68 pass.
 
 - [ ] **Step 4: Commit**
 
@@ -1228,12 +1406,25 @@ Run:
 ```bash
 pnpm --filter @clensy/web test && pnpm --filter @clensy/web build && pnpm --filter @clensy/web lint
 pnpm --filter web test && pnpm --filter web exec tsc --noEmit && pnpm --filter web lint && pnpm --filter web build
-{ git diff --name-only 7c59b82; git ls-files --others --exclude-standard; } | sort -u \
-  | grep -vxE 'docs/superpowers/plans/2026-10-10-laundry-ui-foundation-plan\.md|apps/web/lib/laundry-page-baseline\.test\.tsx|apps/web/lib/laundry-presentation-contract\.test\.ts|packages/web/src/i18n/messages\.ts|packages/web/src/i18n/messages/en/laundry\.ts|packages/web/src/index\.ts|packages/web/src/laundry/(format-weight-grams|laundry-order-actions|laundry-order-progress|laundry-order-status)(\.test)?\.tsx?' \
-  && { echo 'SCOPE: unexpected files above'; exit 1; } || echo 'SCOPE: ok'
 ```
 
-Expected: `@clensy/web` 11 files / 377 tests passed, tsc and lint exit 0. `web` 24 files / 595 tests passed, tsc, lint and build exit 0. The scope check prints `SCOPE: ok`. It covers committed, uncommitted and untracked changes against the base, and any file outside the allowlist (this plan, the two `apps/web/lib` tests, and the `packages/web/src` files in the File Map) is listed and fails the check. The M6 gate record appends to this plan, so the plan file is on the list.
+Then the scope check. It returns non-zero (via `false`, not `exit`, so an interactive shell stays open):
+
+```bash
+unexpected=$({ git diff --name-only 7c59b82; git ls-files --others --exclude-standard; } | sort -u \
+  | grep -vxE 'docs/superpowers/plans/2026-10-10-laundry-ui-foundation-plan\.md|apps/web/lib/laundry-page-baseline\.test\.tsx|apps/web/lib/laundry-presentation-contract\.test\.ts|packages/web/src/i18n/messages\.ts|packages/web/src/i18n/messages/en/laundry\.ts|packages/web/src/index\.ts|packages/web/src/laundry/(format-weight-grams|laundry-order-actions|laundry-order-progress|laundry-order-status)(\.test)?\.tsx?' \
+  || true)
+if [ -n "$unexpected" ]; then
+  printf 'SCOPE: unexpected files:\n%s\n' "$unexpected"
+  false
+else
+  echo 'SCOPE: ok'
+fi
+```
+
+Expected: `@clensy/web` 11 files / 376 tests passed, tsc and lint exit 0. `web` 24 files / 595 tests passed, tsc, lint and build exit 0. The scope check prints `SCOPE: ok` and returns 0. It covers committed, uncommitted and untracked changes against the base. Any file outside the allowlist (this plan, the two `apps/web/lib` tests, and the `packages/web/src` files in the File Map) is printed after `SCOPE: unexpected files:`, the status is 1, and `SCOPE: ok` is not printed. The M6 gate record appends to this plan, so the plan file is on the list.
+
+Negative case (run once, then delete the file): `touch packages/ui/src/stray.ts`, then run the scope check. Expected: `SCOPE: unexpected files:` and `packages/ui/src/stray.ts`, status 1, no `SCOPE: ok`. Then `rm packages/ui/src/stray.ts`.
 
 ## Traceability
 
@@ -1253,7 +1444,7 @@ Expected: `@clensy/web` 11 files / 377 tests passed, tsc and lint exit 0. `web` 
 
 - Every screen: list (#163), intake modal (#160), order page (#156), weighing (#155), services (#158), price review (#162), invoice card (#166), lifecycle buttons (#165), and the drawer removal (#161). Each consumes these helpers.
 - Moving `formatMinorUnits` into `@clensy/web`. Money formatting stays where it is.
-- Reading the API source at test time. The Task 4 oracle is a transcription, re-verified by review and by the one-off comparison recorded under Pre-validation. A committed cross-app source parser would break on formatting changes, and `@clensy/web` cannot import `apps/api`.
+- Committing the API-source reconciliation as a test. Task 4 Step 3's script is a required, repeatable step instead. As a committed test it would break on API formatting changes, and `@clensy/web` cannot import `apps/api`. Later slices that touch laundry RBAC or the matrix re-run it.
 - Positive-weight validation (§8.4.1) is #155. Price preview and line descriptions (§8.4.2, §8.4.5) are #159.
 
 ## Execution risks (operational only)
