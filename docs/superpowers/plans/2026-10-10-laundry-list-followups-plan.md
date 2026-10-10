@@ -4,8 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted |
-| M5 decision | **Accepted** — 2026-10-10, at `640739f`, by the owner, on the first pass. No blocking or major findings. M6 MUST implement Tasks 1–3 as written, then run Final verification in full: the four-path allowlist (with `use-detail-drawer.ts` unchanged), mutations A–E and the Task 1 negative check, full suites, and the manual browser checks. The Forward-after-close behaviour stays as pinned. M7 MUST be a fresh independent review (`CLAUDE.md`: application code). |
+| Status | Draft (revision 2: the three M7 notes, for M5). Revision 1 was Accepted, implemented and M7-approved. See [Revision 2 tasks](#revision-2-tasks-m7-notes). |
+| M5 decision (revision 1) | **Accepted** — 2026-10-10, at `640739f`, by the owner, on the first pass. No blocking or major findings. M6 MUST implement Tasks 1–3 as written, then run Final verification in full: the four-path allowlist (with `use-detail-drawer.ts` unchanged), mutations A–E and the Task 1 negative check, full suites, and the manual browser checks. The Forward-after-close behaviour stays as pinned. M7 MUST be a fresh independent review (`CLAUDE.md`: application code). |
 | Date | 2026-10-10 |
 | Tracking issue | [#171](https://github.com/rexescario-dev/clensy-platform/issues/171). Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Follows [#163](https://github.com/rexescario-dev/clensy-platform/issues/163) (merged in #170 at `15c45cf`). |
 | Scope | Three test files and one module. `apps/web/lib/use-laundry-order-list-url-state.ts` (offset range), its test, `apps/web/lib/use-detail-drawer.test.tsx` (tests only), and `apps/api/test/laundry-order-list-filters.e2e-spec.ts` (one characterization). No API, schema, `@clensy/ui`, `@clensy/web` or page change. `use-detail-drawer.ts` is not modified. |
@@ -28,6 +28,7 @@
 
 1. **What the reset tests pin.** Once a drawer opened on the page has been closed (`router.back()`), a drawer that reappears without a new open, for example by Forward, is treated as reached directly: `close` uses `router.replace`, and `closeWithHref` uses `replaceState`. That is `main`'s behaviour for `close`, mirrored by `closeWithHref`.
    - Consequence: closing after Forward replaces the drawer entry with the list URL, rather than going Back, so the history then has two identical list entries.
+   - This holds only after an in-page close (× calls `router.back()` and resets the flag). If the user leaves the drawer with the browser's Back button instead, `openedHereRef` stays `true`, so Forward then × calls `router.back()` and leaves no duplicate entry (M7 P3-2, added in revision 2).
    - This plan pins the behaviour as it is. Changing it would be a behaviour change for all nine drawer pages, outside #171.
 2. **The boundary is the server's.** Task 1 shows that offset 2147483640 returns an empty page and 2147483648 is rejected, so the constant is grounded in the API's behaviour, not assumed.
 
@@ -247,9 +248,106 @@ diff --git a/apps/web/lib/use-detail-drawer.test.tsx b/apps/web/lib/use-detail-d
 - [ ] **Step 3: Failure evidence (not committed).** In `apps/web/lib/use-detail-drawer.ts`, delete `openedHereRef.current = false;`, first in `close` (mutation A), then in `closeWithHref` (mutation B), one at a time. Each must give `Tests 1 failed | 4 passed (5)`. Revert each.
 - [ ] **Step 4:** Commit: `test(web): pin useDetailDrawer's opened-here reset (#171)`.
 
+## Revision 2 tasks (M7 notes)
+
+Tasks 1–3 are implemented and M7-approved (`9577172`, `4d1a1fa`, `6e1a87f`). Revision 2 resolves M7's three non-blocking notes, on the owner's instruction ("resolve reviewer raised"):
+
+- **P3-1, harden the over-range e2e assertion:** Task 4.
+- **P3-2, complete Review Focus 1:** documentation, already in this revision. Review Focus 1 now covers the browser-Back case.
+- **P3-3, reject lenient offset spellings:** Task 5. Parsing accepts only plain decimal digits. Hex, exponents, signs and surrounding spaces become malformed, so the list shows page 1.
+  - **Product effect:** a hand-typed `?offset=1e3` now shows page 1, not page 51. Every list-produced URL writes plain digits, so no link the app makes is affected.
+  - This applies the #163 URL-state rule (malformed values fall back to the default) more strictly. It adds no new behaviour beyond that rule.
+
+The diffs below are against the M7-approved branch head (`4413351`). M6 applies each one red-first where applicable, one commit per task, then re-runs Final verification.
+
+- [ ] **Task 4: Match the Int coercion error (characterization hardening).**
+  1. Apply:
+
+```diff
+diff --git a/apps/api/test/laundry-order-list-filters.e2e-spec.ts b/apps/api/test/laundry-order-list-filters.e2e-spec.ts
+--- a/apps/api/test/laundry-order-list-filters.e2e-spec.ts
++++ b/apps/api/test/laundry-order-list-filters.e2e-spec.ts
+@@ -241,6 +241,9 @@ describe('laundryOrders list filters (e2e)', () => {
+     expect(inRange.body.errors).toBeUndefined();
+     expect(inRange.body.data.laundryOrders.nodes).toEqual([]);
+     const above = await gql(PAGE, { o: 2147483648 });
+-    expect(above.body.errors).toBeDefined();
++    // The Int coercion error specifically, not any error.
++    expect(above.body.errors?.[0]?.message).toMatch(
++      /Int cannot represent non 32-bit signed integer value/,
++    );
+   });
+ });
+```
+
+  2. Run `pnpm --filter api exec jest --config ./test/jest-e2e.json laundry-order-list-filters laundry.e2e-spec`. Expected: `Tests: 9 passed`.
+  3. Negative check, not committed: change `{ o: 2147483648 }` to `{ o: 'x' }`. That is a different coercion error ("non-integer"). Expected: `1 failed, 6 passed` on the file. Revert.
+  4. `eslint` and `prettier --check` on the file are clean.
+  5. Commit: `test(api): match the Int coercion error for an over-range offset (#171 M7)`.
+
+- [ ] **Task 5: Only plain decimal digits are an offset (red first).**
+  1. Apply the test diff:
+
+```diff
+diff --git a/apps/web/lib/use-laundry-order-list-url-state.test.ts b/apps/web/lib/use-laundry-order-list-url-state.test.ts
+--- a/apps/web/lib/use-laundry-order-list-url-state.test.ts
++++ b/apps/web/lib/use-laundry-order-list-url-state.test.ts
+@@ -52,6 +52,11 @@ describe('parseLaundryOrderListState', () => {
+     expect(parseLaundryOrderListState(new URLSearchParams('offset=60')).offset).toBe(60);
+   });
+ 
++  // #171 (M7 P3-3): only plain decimal digits are an offset; `Number()`'s other spellings are not.
++  it.each(['0x7fffffff', '1e3', '2.147483647e9', ' 60 ', '+20', '60abc'])('treats offset=%j as malformed', (raw) => {
++    expect(parseLaundryOrderListState(new URLSearchParams({ offset: raw })).offset).toBe(0);
++  });
++
+   // #171: `OffsetPaging.offset` is a GraphQL Int; the API rejects anything above 2147483647.
+   it('treats an offset outside the GraphQL Int range as malformed', () => {
+     expect(parseLaundryOrderListState(new URLSearchParams('offset=2147483647')).offset).toBe(2147483640);
+```
+
+  2. Run `pnpm --filter web exec vitest run lib/use-laundry-order-list-url-state.test.ts`. Expected: `Tests 5 failed | 23 passed (28)`. `60abc` already fails `Number()`, so it passes before the change too.
+  3. Apply the module diff:
+
+```diff
+diff --git a/apps/web/lib/use-laundry-order-list-url-state.ts b/apps/web/lib/use-laundry-order-list-url-state.ts
+--- a/apps/web/lib/use-laundry-order-list-url-state.ts
++++ b/apps/web/lib/use-laundry-order-list-url-state.ts
+@@ -80,7 +80,10 @@ export function parseLaundryOrderListState(params: URLSearchParams): LaundryOrde
+   const sortOrderRaw = params.get(PARAM.sortOrder);
+   const statusRaw = params.get(PARAM.status);
+   const fulfillmentRaw = params.get(PARAM.fulfillment);
+-  const offsetRaw = Number(params.get(PARAM.offset));
++  // Plain decimal digits only: `Number()` would also accept hex, exponents,
++  // signs and surrounding spaces (#171).
++  const offsetText = params.get(PARAM.offset) ?? '';
++  const offsetRaw = /^\d+$/.test(offsetText) ? Number(offsetText) : Number.NaN;
+ 
+   return {
+     fulfillment: FULFILLMENT_TYPES.includes(fulfillmentRaw as LaundryFulfillmentType)
+```
+
+  4. Run again. Expected: `Tests 28 passed (28)`. `tsc --noEmit -p .` and eslint are clean.
+  5. Commit: `fix(web): accept only plain decimal digits as a laundry list offset (#171 M7)`.
+
+- [ ] **Re-verify.** Run Final verification below. That includes:
+  - mutation **F**: `const offsetRaw = /^\d+$/.test(offsetText) ? Number(offsetText) : Number.NaN;` → `const offsetRaw = Number(offsetText);` must give `5 failed`;
+  - Task 4's negative check;
+  - A–E again;
+  - `web` (672 tests at pre-validation), lint, `tsc` and the Next build;
+  - the API e2e (9);
+  - the manual browser check, plus `/app/laundry?offset=1e3`, which must show page 1.
+
+  Then record it, and hand off to a fresh M7.
+
+Revision 2 pre-validation: these diffs were applied to `4413351`, then removed before this Draft was committed. Results:
+- Task 4: e2e 9 passed; negative check 1 failed.
+- Task 5: RED 5 failed / 23 passed → GREEN 28 passed; mutation F: 5 failed.
+- Suites: `web` 672 passed; lint 0 errors; `tsc` clean; Next build succeeded.
+
 ## Final verification
 
-- [ ] **Allowlist.** `git diff --name-only 15c45cf...HEAD -- . ':!docs' | sort` equals exactly the four File Map paths.
+- [ ] **Allowlist.** `git diff --name-only 15c45cf...HEAD -- . ':!docs' | sort` equals exactly the four File Map paths. Revision 2 touches no new path.
 - [ ] **Mutations.** Apply each alone, run `lib/use-laundry-order-list-url-state.test.ts`, revert. Expected: each gives `1 failed`.
   - C: `Number.isSafeInteger(offsetRaw) && offsetRaw >= 0 && offsetRaw <= LAUNDRY_ORDER_MAX_OFFSET` → `Number.isSafeInteger(offsetRaw) && offsetRaw >= 0`.
   - D: `return { ...state, offset: offset <= LAUNDRY_ORDER_MAX_OFFSET ? offset : 0 };` → `return { ...state, offset: Number.isSafeInteger(offset) ? offset : 0 };`.
