@@ -80,7 +80,10 @@ export function parseLaundryOrderListState(params: URLSearchParams): LaundryOrde
   const sortOrderRaw = params.get(PARAM.sortOrder);
   const statusRaw = params.get(PARAM.status);
   const fulfillmentRaw = params.get(PARAM.fulfillment);
-  const offsetRaw = Number(params.get(PARAM.offset));
+  // Plain decimal digits only: `Number()` would also accept hex, exponents,
+  // signs and surrounding spaces (#171).
+  const offsetText = params.get(PARAM.offset) ?? '';
+  const offsetRaw = /^\d+$/.test(offsetText) ? Number(offsetText) : Number.NaN;
 
   return {
     fulfillment: FULFILLMENT_TYPES.includes(fulfillmentRaw as LaundryFulfillmentType)

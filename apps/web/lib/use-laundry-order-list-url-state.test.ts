@@ -52,6 +52,11 @@ describe('parseLaundryOrderListState', () => {
     expect(parseLaundryOrderListState(new URLSearchParams('offset=60')).offset).toBe(60);
   });
 
+  // #171 (M7 P3-3): only plain decimal digits are an offset; `Number()`'s other spellings are not.
+  it.each(['0x7fffffff', '1e3', '2.147483647e9', ' 60 ', '+20', '60abc'])('treats offset=%j as malformed', (raw) => {
+    expect(parseLaundryOrderListState(new URLSearchParams({ offset: raw })).offset).toBe(0);
+  });
+
   // #171: `OffsetPaging.offset` is a GraphQL Int; the API rejects anything above 2147483647.
   it('treats an offset outside the GraphQL Int range as malformed', () => {
     expect(parseLaundryOrderListState(new URLSearchParams('offset=2147483647')).offset).toBe(2147483640);
