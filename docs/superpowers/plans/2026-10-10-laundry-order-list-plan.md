@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft (revision 6: M7 return, for M5 review). Revision 5 was Accepted and implemented; M7 returned it with one P1 in the plan's `useDetailDrawer` change. See [M7 return resolutions](#m7-return-resolutions-revision-6) and [Revision 6 tasks](#revision-6-tasks-m7-return). |
+| Status | Accepted (revision 6) |
+| M5 decision (revision 6) | **Accepted** — 2026-10-10, at `ba43374`, by the owner, after a fresh independent M5 review (Opus 5.5, read-only) found no blocking or major issues. M6 MUST apply the Revision 6 tasks as written (R6-1 offset snapping, R6-2 `useDetailDrawer` named entry points, each red first), then run Final verification in full: the 20-path allowlist, all 21 mutations, every suite, `tsc`, lint, the Next build, and every manual browser check, including the bookings direct-link × and `?offset=5`. The owner authorized folding in the review's two minor notes during M6 without reopening M5: the `useDetailDrawer` header comment should mention `openWithHref`, and the no-op-write wording should be softened for equivalent query strings in different encodings. M7 MUST be a fresh independent review. |
 | M5 decision (revision 5) | **Accepted** — 2026-10-10, at `787a915` (revision 5), by the owner, on the sixth pass, with no further revision. Both fifth-pass findings are resolved: the create-success live-URL race is proven with renders held (mutation 7 fails it), and `hrefFor` writes no empty `?` (mutation 19). M6 MUST implement Tasks 1–6 as written, within the Final verification allowlist. That includes all negative and mutation checks, the Task 6 Step 3 baseline run, and the manual browser checks. The acceptance covers the plan review only. It does not waive any M6 step, and no application code is committed by it. M7 MUST be a fresh independent review (`CLAUDE.md`: application code). |
 | M5 history | First pass (2026-10-10, owner, reviewed in five parts): **Returned for Revision** with P1 and P2 findings on Tasks 1–6. All are applied in this revision; see [M5 first-pass resolutions](#m5-first-pass-resolutions). The whole plan was pre-validated again. Second pass (2026-10-10, owner, reviewed in four parts): **Returned for Revision** with four required changes: the drawer URL (with `detail` and the hash) recorded exactly by the tracker; a filter change while the drawer push is queued; defined and tested behavior for an outside navigation while a list update is in flight; drawer hash coverage and an explicit `tsc` step in final verification. All are applied; see [M5 second-pass resolutions](#m5-second-pass-resolutions). Pre-validated again. Third pass (2026-10-10, owner): **Returned for Revision**. A stale commit rendered and fetched; the outside-navigation hash was not captured; a Forward to an identical stale URL was ambiguous; clearing `stale` assumed in-order commits. The owner chose to remove the cause: list URL writes move from the async router to the native History API, so nothing is in flight. See [M5 third-pass resolutions](#m5-third-pass-resolutions). Pre-validated again, including a spike on the real Next.js runtime. Fourth pass (2026-10-10, owner): **Returned for Revision**. Two router calls still ran on the page: create-success `router.push` and direct-link close `router.replace`. Also a stale hook comment and an overstated query-test name. All are applied; see [M5 fourth-pass resolutions](#m5-fourth-pass-resolutions). Pre-validated again. Fifth pass (2026-10-10, owner): **Returned for a small revision**. The create-success test did not prove the live URL is used before React re-renders, and `hrefFor` could leave an empty `?`. Both are applied; see [M5 fifth-pass resolutions](#m5-fifth-pass-resolutions). Pre-validated again. |
 | Date | 2026-10-10 |
@@ -3121,3 +3122,17 @@ Required: revise the plan (M4, then M5), then M6.
 - **Router fallback still reachable.** When `hrefFor` returns `undefined` (the live URL already matches), `open`/`close` fall back to the router path. That is only reachable in a held-render window. The finding-1 fix can remove the fallback for this caller.
 
 Next gate: **M4 — plan revision** for the `useDetailDrawer` change, then M5, then M6. Do not merge.
+
+### M5 — Accepted (2026-10-10, revision 6)
+
+Accepted at `ba43374` by the owner, on a fresh independent review: Opus 5.5, read-only, in a temporary worktree.
+
+The reviewer independently checked:
+- **The plan's code against `main`:** extracted the code blocks; both diffs applied cleanly to `main`'s files.
+- **The red steps:** R6-1 failed 1 of 20; R6-2 failed 2 of 3 against `379adc7`. The drawer test passed 3/3 against `main`'s hook and against the fix.
+- **Suites:** `apps/web` 662 passed and `tsc` was clean.
+- **Mutations:** 8, 10, 12, 15, 16, 17, 19, 20 and 21 each failed with the recorded count, and three extra mutations of its own were caught.
+
+No blocking or major findings. Two minor notes are to be folded into M6.
+
+The reviewer did not re-run the e2e, the client and `@clensy/web` packages, the Next build, the remaining mutations or the manual browser checks. M6 runs all of them.
