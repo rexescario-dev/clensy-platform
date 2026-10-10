@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft (revision 2: the three M7 notes, for M5). Revision 1 was Accepted, implemented and M7-approved. See [Revision 2 tasks](#revision-2-tasks-m7-notes). |
+| Status | Accepted (revision 2) |
+| M5 decision (revision 2) | **Accepted** — 2026-10-10, at `fcb33e5` plus the owner's clarification (both drawer close paths added as explicit browser checks under Re-verify), by the owner. No blocking or major findings. The P2 on Task 5's red count was withdrawn by the reviewer: `60abc` already fails `Number()`, so five of six cases fail first. M6 MUST confirm the red count, the exact error message, and the full Re-verify list, including both close paths, keep the four-path allowlist, and hand off to a fresh M7. Pre-validation counts are author-reported until M6 re-observes them. |
 | M5 decision (revision 1) | **Accepted** — 2026-10-10, at `640739f`, by the owner, on the first pass. No blocking or major findings. M6 MUST implement Tasks 1–3 as written, then run Final verification in full: the four-path allowlist (with `use-detail-drawer.ts` unchanged), mutations A–E and the Task 1 negative check, full suites, and the manual browser checks. The Forward-after-close behaviour stays as pinned. M7 MUST be a fresh independent review (`CLAUDE.md`: application code). |
 | Date | 2026-10-10 |
 | Tracking issue | [#171](https://github.com/rexescario-dev/clensy-platform/issues/171). Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Follows [#163](https://github.com/rexescario-dev/clensy-platform/issues/163) (merged in #170 at `15c45cf`). |
@@ -336,7 +337,10 @@ diff --git a/apps/web/lib/use-laundry-order-list-url-state.ts b/apps/web/lib/use
   - A–E again;
   - `web` (672 tests at pre-validation), lint, `tsc` and the Next build;
   - the API e2e (9);
-  - the manual browser check, plus `/app/laundry?offset=1e3`, which must show page 1.
+  - the manual browser check, plus `/app/laundry?offset=1e3`, which must show page 1;
+  - both drawer close paths on `/app/laundry`, each starting from a fresh entry (`page.goto`), recording `history.length` and the URL at every step. The hook's behaviour does not change; these checks only record it (Review Focus 1).
+    - **× path:** open a row (+1 entry); × (Back to the list entry); Forward (the drawer reappears); ×. Expected: the URL is the list URL without `detail`; `history.length` is unchanged by the last × (replaced, not pushed); Back from there lands on an identical list URL, the duplicate entry.
+    - **Browser-Back path:** open a row (+1 entry); browser Back (the list); Forward (the drawer); ×. Expected: × goes Back, so the URL is the list URL; `history.length` is unchanged; Forward from there reopens the drawer, because the drawer entry still exists and there is no duplicate.
 
   Then record it, and hand off to a fresh M7.
 
@@ -497,3 +501,13 @@ The #163 M10 lessons were applied:
 **Blocking findings:** none.
 
 Gate: **Workflow validated.**
+
+### M5 — Accepted (2026-10-10, revision 2)
+
+Accepted by the owner at `fcb33e5`, with one clarification, applied in the same record commit: explicit browser checks for both drawer close paths (× then Forward then ×; browser Back then Forward then ×), with the expected history behaviour.
+
+Owner notes:
+- The P2 on Task 5's red count was raised and then withdrawn: five failures are consistent.
+- P3: confirm that the `Int` coercion message is stable. The author captured it from the running API at planning time: `Variable "$o" has invalid value: Int cannot represent non 32-bit signed integer value: 2147483648`. M6 re-observes it.
+
+The pre-validation is author-reported until M6 re-runs it.
