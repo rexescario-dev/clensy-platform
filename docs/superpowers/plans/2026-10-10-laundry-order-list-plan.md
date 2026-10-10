@@ -2864,3 +2864,44 @@ Expected: `allowlist OK`.
 ### M5 — Accepted (2026-10-10, sixth pass)
 
 Accepted at `787a915` by the owner. Five earlier passes returned findings, all applied and re-pre-validated (M5 history and the five resolution tables). On the way the design moved from an async-router URL tracker to native History API writes, after the owner chose it in the third pass and a spike confirmed it on Next.js 16.3.1. The owner noted that the reported validation results were reviewed as reported, not re-run by the reviewer. M6 therefore re-observes every recorded count.
+
+### M6 — Implementation complete (2026-10-10)
+
+Implemented on `feat/163-laundry-order-list`, from the Accepted plan at `af64a77` (content of revision 5, `787a915`) and the Accepted lifecycle spec with Amendment #164. Tasks 1–6 were done in plan order, one commit each. Every file was applied byte-for-byte as written in this plan, checked by comparing each new file with the plan's code blocks. No task was split, merged or reordered, and no semantics were added.
+
+| Task | Commit | Evidence |
+| --- | --- | --- |
+| 1 Server filters (**characterization**) | `9e68d14` | 8 passed (6 new + 2 existing). Failure evidence, not committed: the unescaped pattern gave 1 failed / 5 passed; removing the `status: WEIGHED` sibling gave 1 failed / 5 passed. Both reverted, 6 passed. eslint clean. |
+| 2 `$filter` + codegen | `27339d8` | Removed lines: exactly the two old document lines. Added types: exactly the four filter inputs. `LaundryOrdersQueryVariables` has `filter?: LaundryOrderFilter`. Generated file identical to pre-validation. Client build and lint clean. |
+| 3 Sort contract + table | `3fb0ad9` | RED `Cannot find module './laundry-order-sort'` → GREEN 11 passed. RED `Cannot find module './laundry-order-data-table'` → GREEN 14 passed. `@clensy/web` 402 passed, build and lint clean. |
+| 4 URL state | `fadac6f` | RED `Cannot find module './use-laundry-order-list-url-state'` → GREEN 19 passed. |
+| 5 Query variables | `717f0df` | RED `Cannot find module './laundry-order-list-query'` → GREEN 24 passed. `web` tsc and eslint clean. |
+| 6 Page | `379adc7` | Step 3 against the unchanged page: 21 failed (21), as recorded. After Steps 4–6: 21 passed. `web` 658 passed, lint and tsc clean, Next build succeeded. |
+
+Final verification:
+
+- Allowlist: `allowlist OK`.
+- Mutations: all 19 re-observed on the committed code with exactly the recorded counts (3, 1, 10, 1, 2, 1, 7, 5, 4, 5, 1, 6, 2, 1, 1, 2, 2, 2, 1 failed), each reverted. The working tree was clean afterwards. Restored: 64 passed (`apps/web`) and 25 passed (`@clensy/web`).
+- Full suites: Task 1 e2e 8 passed; `@clensy/client` build clean, 10 passed; `@clensy/web` 402 passed, build and lint clean; `web` 658 passed, lint and `tsc --noEmit -p .` clean, Next build succeeded.
+
+Manual browser check, on the real `/app/laundry`. Setup: this branch's web as a production build on port 3999, against this branch's API (unchanged from `main`) on port 3002, with the local Postgres. A throwaway local `TENANT_OWNER` was used and deleted afterwards. Driven with Playwright; screenshots in `.playwright-mcp/` (gitignored).
+
+| Check | Result |
+| --- | --- |
+| 375 px | Cards, no table; toolbar stacks (`flex-direction: column`); `scrollWidth` 360 ≤ 375, no horizontal scroll; long names wrap. Tapping a card opens the drawer (+1 history entry), and Close returns to the list. |
+| ≥ 640 px | Table visible, toolbar in a row, no horizontal scroll. |
+| Search and filters | Search narrows after the pause (no `q` 150 ms in; `q` set after). Choosing a status from page 2 (`offset=20`) returns to page 1 and shows only that status. Clear empties the box and the filters. |
+| Refresh | Loading `?q=ana&status=RECEIVED&fulfillment=PICKUP&sortBy=status&sortOrder=asc` restores the box, both selects and `aria-sort="ascending"` on Status; rows match all three. |
+| Sort | Created asc → desc; Status asc → desc → back to Created desc; `aria-sort` and the URL agree at every step. |
+| History | List updates add no entries. From a fresh entry, opening a row adds exactly one. Back closes the drawer with the list's filter and select intact; Forward reopens it; Close on a drawer opened here goes Back. |
+| Hash | Opening a row from `?status=WEIGHED#x` keeps `#x`; Back and Close keep it. |
+| Waiting search | A search typed and a row opened before the pause: the drawer URL and, after Close, the list carry the search. A keystroke waiting at Back is never applied, and the box shows the entry Back went to. |
+| Create success | From a fresh `?status=RECEIVED&tab=a#x`: +1 entry, drawer URL keeps `status`, `tab` and `#x` with the new `detail`; Close returns to `?status=RECEIVED&tab=a#x`. |
+| Direct-link close | `?status=READY&detail=<id>#x` → Close → `/app/laundry?status=READY#x`, no entry added. `?detail=<id>#x` → Close → `/app/laundry#x` (no empty `?`), no entry added. |
+| Network on Back | After a native push to `?status=READY` and Back to `?status=PAID`: exactly one GraphQL request after Back, `LaundryOrders` with `filter: { status: { eq: PAID } }` and sorting `createdAt DESC, id ASC`. |
+
+An observation, not a defect: when the page already has forward entries (after a Back), a push replaces them, so `history.length` does not grow. That is standard browser behavior. The checks above that count entries start from a fresh entry.
+
+Deviation: none.
+
+Next gate: **M7 — Code Review**. A fresh independent reviewer is required (`CLAUDE.md`: application code).
