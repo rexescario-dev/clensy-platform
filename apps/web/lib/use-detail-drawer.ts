@@ -17,9 +17,11 @@ import { useCallback, useRef } from 'react';
 // there is no guaranteed list-page history entry to go back to; blindly
 // calling `router.back()` could navigate somewhere outside the app entirely
 // (or nowhere, if there's no history at all). `openedHereRef` distinguishes
-// the two cases: it's only set to `true` by this hook's own `open()` call,
-// never by the initial mount reading a pre-existing `?detail=` param, so a
-// direct/shared link always takes the `router.replace()` branch instead.
+// the two cases: it's only set to `true` by this hook's own `open()` or
+// `openWithHref()` call, never by the initial mount reading a pre-existing
+// `?detail=` param, so a direct/shared link always takes the replace branch
+// instead (`router.replace()` in `close`, a native `replaceState` in
+// `closeWithHref`).
 export function useDetailDrawer(paramName = 'detail') {
   const router = useRouter();
   const pathname = usePathname();

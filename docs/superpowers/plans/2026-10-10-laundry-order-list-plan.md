@@ -145,7 +145,7 @@ Derived from the Accepted spec, the amendment and the issue. Every task's requir
 | --- | --- |
 | **P1:** `close(href?)` treated a click event as a URL on the eight pages that pass `close` straight to `onClose` (direct-link drawer, ×, leads to `/app/[object%20Object]`) | `open` and `close` are restored byte-for-byte to `main`. The laundry list uses new, separately named methods: `openWithHref(href)` pushes natively and marks the open as its own. `closeWithHref(href)` goes `router.back()` for a drawer opened here, and otherwise `replaceState(href)`. No existing signature changes, so a stray argument cannot change meaning. New regression test `apps/web/lib/use-detail-drawer.test.tsx` (jsdom) wires a page exactly like bookings (`onClose={close}` into the real `DetailDrawer`). For a direct-link drawer, × gives `router.replace('/app/bookings?status=A')`, and `'/app/bookings'` when `detail` was the only param, with no History API write. `open` uses `router.push`, and a drawer opened here closes with `router.back()`. Against the hook at `379adc7` (the returned code), 2 of 3 fail; against `main`'s hook, 3 pass. Mutation 21 reintroduces the defect and fails 2. Manual check added for bookings. |
 | **P3:** a hand-edited `?offset=5` showed "Page 1.25" | Parse snaps the offset down to a multiple of 20 (`5 → 0`, `45 → 40`). Unit test added; mutation 20. |
-| **P3:** the router fallback in `open`/`close` was reachable when `hrefFor` returned `undefined` | `hrefFor` always returns a URL, and the page calls only `openWithHref`/`closeWithHref`, which have no router fallback. `setState` skips a write when the URL would not change. The page has no path to `router.push`/`router.replace`. |
+| **P3:** the router fallback in `open`/`close` was reachable when `hrefFor` returned `undefined` | `hrefFor` always returns a URL, and the page calls only `openWithHref`/`closeWithHref`, which have no router fallback. `setState` skips the write only when the URL string is identical; an equivalent URL in another encoding is rewritten, harmlessly (`replaceState` adds no entry). The page has no path to `router.push`/`router.replace`. |
 | Process: the M6 manual checks covered only `/app/laundry` | A direct-link × close on `/app/bookings` is added to the manual checks. |
 
 ## Native History spike (Next.js 16.3.1)
@@ -1515,7 +1515,9 @@ export function useLaundryOrderListUrlState() {
   // The exact URL for `update`, plus `set` and minus `remove` params (the
   // drawer's `detail`), built on the live URL: same pathname, every param
   // the list does not own, and the hash. Always a URL, so every caller
-  // writes natively; `setState` skips a write that would change nothing.
+  // writes natively. `setState` skips the write only when the URL string is
+  // identical; an equivalent URL in another encoding (`a%20b` vs `a+b`) is
+  // rewritten, which is harmless because `replaceState` adds no entry.
   const hrefFor = useCallback(
     (update: LaundryOrderListUpdate, { remove = [], set = {} }: LaundryOrderHrefParams = {}): string => {
       const base = new URLSearchParams(window.location.search);
@@ -2495,7 +2497,22 @@ export function useLaundrySearchDraft(committedSearch: string, commit: (text: st
 diff --git a/apps/web/lib/use-detail-drawer.ts b/apps/web/lib/use-detail-drawer.ts
 --- a/apps/web/lib/use-detail-drawer.ts
 +++ b/apps/web/lib/use-detail-drawer.ts
-@@ -47,5 +47,28 @@ export function useDetailDrawer(paramName = 'detail') {
+@@ -17,9 +17,11 @@ import { useCallback, useRef } from 'react';
+ // there is no guaranteed list-page history entry to go back to; blindly
+ // calling `router.back()` could navigate somewhere outside the app entirely
+ // (or nowhere, if there's no history at all). `openedHereRef` distinguishes
+-// the two cases: it's only set to `true` by this hook's own `open()` call,
+-// never by the initial mount reading a pre-existing `?detail=` param, so a
+-// direct/shared link always takes the `router.replace()` branch instead.
++// the two cases: it's only set to `true` by this hook's own `open()` or
++// `openWithHref()` call, never by the initial mount reading a pre-existing
++// `?detail=` param, so a direct/shared link always takes the replace branch
++// instead (`router.replace()` in `close`, a native `replaceState` in
++// `closeWithHref`).
+ export function useDetailDrawer(paramName = 'detail') {
+   const router = useRouter();
+   const pathname = usePathname();
+@@ -47,5 +49,28 @@ export function useDetailDrawer(paramName = 'detail') {
      router.replace(query ? `${pathname}?${query}` : pathname);
    }, [router, pathname, searchParams, paramName]);
  
@@ -2790,7 +2807,7 @@ Tasks 1–6 are implemented and committed (M6 record, `9e68d14`…`379adc7`). Th
   3. Make three files equal this plan's blocks:
      - `apps/web/lib/use-detail-drawer.ts`: `main`'s file plus the Task 6 Step 5 diff;
      - `apps/web/app/app/laundry/page.tsx`: `main`'s file plus the Task 6 Step 6 diff;
-     - `apps/web/lib/use-laundry-order-list-url-state.ts`: the Task 4 module block. After R6-1, the only difference is `hrefFor` always returning a URL and `setState` skipping an unchanged write.
+     - `apps/web/lib/use-laundry-order-list-url-state.ts`: the Task 4 module block. After R6-1, the only difference is `hrefFor` always returning a URL and `setState` skipping a write when the URL string is identical.
   4. Expected: `lib/use-detail-drawer.test.tsx` gives `Tests 3 passed (3)`, and `lib/laundry-list-page.test.tsx lib/laundry-list-page.interaction.test.tsx` gives `Tests 21 passed (21)`. `pnpm --filter web exec tsc --noEmit -p .` and `pnpm --filter web lint` are clean.
 
 ```tsx

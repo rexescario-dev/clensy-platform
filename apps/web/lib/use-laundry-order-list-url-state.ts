@@ -141,7 +141,9 @@ export function useLaundryOrderListUrlState() {
   // The exact URL for `update`, plus `set` and minus `remove` params (the
   // drawer's `detail`), built on the live URL: same pathname, every param
   // the list does not own, and the hash. Always a URL, so every caller
-  // writes natively; `setState` skips a write that would change nothing.
+  // writes natively. `setState` skips the write only when the URL string is
+  // identical; an equivalent URL in another encoding (`a%20b` vs `a+b`) is
+  // rewritten, which is harmless because `replaceState` adds no entry.
   const hrefFor = useCallback(
     (update: LaundryOrderListUpdate, { remove = [], set = {} }: LaundryOrderHrefParams = {}): string => {
       const base = new URLSearchParams(window.location.search);
