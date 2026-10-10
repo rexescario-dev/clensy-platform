@@ -46,6 +46,12 @@ describe('parseLaundryOrderListState', () => {
     expect(parseLaundryOrderListState(new URLSearchParams('sortBy=totalMinorUnits')).sortBy).toBe('createdAt');
   });
 
+  it('snaps the offset down to a page boundary', () => {
+    expect(parseLaundryOrderListState(new URLSearchParams('offset=5')).offset).toBe(0);
+    expect(parseLaundryOrderListState(new URLSearchParams('offset=45')).offset).toBe(40);
+    expect(parseLaundryOrderListState(new URLSearchParams('offset=60')).offset).toBe(60);
+  });
+
   it('trims the search and caps it at 200 characters', () => {
     expect(parseLaundryOrderListState(new URLSearchParams('q=%20%20ana%20')).search).toBe('ana');
     expect(parseLaundryOrderListState(new URLSearchParams(`q=${'a'.repeat(250)}`)).search).toHaveLength(200);

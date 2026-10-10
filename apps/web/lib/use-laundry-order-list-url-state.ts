@@ -83,7 +83,12 @@ export function parseLaundryOrderListState(params: URLSearchParams): LaundryOrde
     fulfillment: FULFILLMENT_TYPES.includes(fulfillmentRaw as LaundryFulfillmentType)
       ? (fulfillmentRaw as LaundryFulfillmentType)
       : null,
-    offset: Number.isSafeInteger(offsetRaw) && offsetRaw >= 0 ? offsetRaw : DEFAULT_LAUNDRY_ORDER_LIST_STATE.offset,
+    // Snapped down to a page boundary, so a hand-edited offset never shows
+    // a fractional page.
+    offset:
+      Number.isSafeInteger(offsetRaw) && offsetRaw >= 0
+        ? offsetRaw - (offsetRaw % LAUNDRY_ORDER_PAGE_SIZE)
+        : DEFAULT_LAUNDRY_ORDER_LIST_STATE.offset,
     search: normalizeLaundrySearch(params.get(PARAM.search) ?? ''),
     sortBy: isLaundryOrderSortKey(sortByRaw) ? sortByRaw : DEFAULT_LAUNDRY_ORDER_LIST_STATE.sortBy,
     sortOrder: sortOrderRaw === 'asc' || sortOrderRaw === 'desc' ? sortOrderRaw : DEFAULT_LAUNDRY_ORDER_LIST_STATE.sortOrder,
