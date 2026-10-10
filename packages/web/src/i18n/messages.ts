@@ -1,5 +1,6 @@
 import { auth } from './messages/en/auth';
 import { bookings } from './messages/en/bookings';
+import { laundry } from './messages/en/laundry';
 import { roles } from './messages/en/roles';
 import { staff } from './messages/en/staff';
 
@@ -9,7 +10,7 @@ import { staff } from './messages/en/staff';
 // than apps/web's page-level ones. Add a line here per namespace as more
 // @clensy/web components need translation.
 export function getDefaultMessages() {
-  return { auth, bookings, roles, staff };
+  return { auth, bookings, laundry, roles, staff };
 }
 
 export type ClensyMessages = ReturnType<typeof getDefaultMessages>;
