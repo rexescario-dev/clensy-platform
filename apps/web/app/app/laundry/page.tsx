@@ -31,7 +31,6 @@ import type {
 import {
   Button,
   ConfirmDialog,
-  DataTable,
   DetailDrawer,
   ErrorState,
   FormDialog,
@@ -39,22 +38,28 @@ import {
   PageHeader,
   StatusBadge,
 } from '@clensy/ui';
-import type { DataTableColumn, StatusTone } from '@clensy/ui';
+import type { StatusTone } from '@clensy/ui';
+import {
+  LaundryOrderDataTable,
+  canReceiveLaundryOrder,
+  useClensyTranslations,
+  type LaundryOrderRow,
+} from '@clensy/web';
 import Link from 'next/link';
 import { Suspense, useState } from 'react';
 import { formatMinorUnits } from '../../../lib/format-price';
+import { laundryOrdersQueryVariables } from '../../../lib/laundry-order-list-query';
 import { useDetailDrawer } from '../../../lib/use-detail-drawer';
-
-type OrderRow = {
-  id: string;
-  status: LaundryOrderStatus;
-  fulfillmentType: LaundryFulfillmentType;
-  weightGrams: number | null;
-  totalMinorUnits: number | null;
-  createdAt: unknown;
-  customer: { id: string; fullName: string };
-  [key: string]: unknown;
-};
+import {
+  LAUNDRY_ORDER_PAGE_SIZE,
+  hasActiveLaundryFilters,
+  laundryListFiltersCleared,
+  useLaundryOrderListUrlState,
+  withLaundryFilterChange,
+  withLaundryPage,
+  withLaundrySort,
+} from '../../../lib/use-laundry-order-list-url-state';
+import { useLaundrySearchDraft } from '../../../lib/use-laundry-search-draft';
 
 const STATUS_TONE: Record<LaundryOrderStatus, StatusTone> = {
   AWAITING_DELIVERY: 'warning',
@@ -135,11 +140,6 @@ const VERB_LABEL: Record<RefVerb, string> = {
   startProcessing: 'Start processing',
 };
 
-function formatDate(value: unknown): string {
-  const d = new Date(value as string);
-  return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleString();
-}
-
 function formatWeight(grams: number | null): string {
   return grams === null ? '—' : `${(grams / 1000).toFixed(2)} kg`;
 }
@@ -174,18 +174,42 @@ export default function LaundryPage() {
 }
 
 function LaundryPageContent() {
-  const [page, setPage] = useState(1);
-  const pageSize = 20;
+  const t = useClensyTranslations('laundry');
+  const { hrefFor, setState: setListState, state: listState } = useLaundryOrderListUrlState();
   const ordersQuery = useLaundryOrdersQuery({
     fetchPolicy: 'network-only',
-    variables: { paging: { limit: pageSize, offset: (page - 1) * pageSize } },
+    notifyOnNetworkStatusChange: true,
+    variables: laundryOrdersQueryVariables(listState),
   });
+  const { data: adminData } = useCurrentAdminQuery();
+  const canCreate = canReceiveLaundryOrder(adminData?.currentAdmin.role);
+
+  const search = useLaundrySearchDraft(listState.search, (text) =>
+    setListState((current) => withLaundryFilterChange(current, { search: text })),
+  );
   const { data: customersData } = useCustomersQuery({
     fetchPolicy: 'network-only',
     variables: { paging: { limit: 100 } },
   });
   const [receive, { loading: creating }] = useReceiveLaundryOrderMutation();
   const { activeId, open: openDetail, close: closeDetail } = useDetailDrawer();
+
+  function handleClearFilters() {
+    search.reset();
+    setListState(laundryListFiltersCleared);
+  }
+
+  // Until the order page cutover (#161), a row opens the drawer, so
+  // weighing, pricing and lifecycle actions stay reachable. A search still
+  // waiting to commit is committed to the list entry first, so it is not
+  // applied later over the drawer and Back returns to the list as typed.
+  function handleRowClick(row: LaundryOrderRow) {
+    const pendingSearch = search.takePending();
+    if (pendingSearch !== undefined) {
+      setListState((current) => withLaundryFilterChange(current, { search: pendingSearch }));
+    }
+    openDetail(row.id, hrefFor((current) => current, { set: { detail: row.id } }));
+  }
 
   const [formOpen, setFormOpen] = useState(false);
   const [customerId, setCustomerId] = useState('');
@@ -209,59 +233,56 @@ function LaundryPageContent() {
       setFormOpen(false);
       await ordersQuery.refetch();
       const newId = result.data?.receiveLaundryOrder.id;
-      if (newId) openDetail(newId);
+      // Only the destination URL is built here (live list state, hash,
+      // `detail`), so this open is a native write like the rest of the
+      // list. The create flow itself belongs to #160.
+      if (newId) openDetail(newId, hrefFor((current) => current, { set: { detail: newId } }));
     } catch {
       setFormError('Unable to create laundry order.');
     }
   }
 
-  const columns: DataTableColumn<OrderRow>[] = [
-    { header: 'Customer', key: 'customer', render: (r) => r.customer.fullName },
-    { header: 'Fulfillment', key: 'fulfillment', render: (r) => r.fulfillmentType },
-    {
-      header: 'Status',
-      key: 'status',
-      render: (r) => (
-        <StatusBadge label={r.status} tone={STATUS_TONE[r.status]} />
-      ),
-    },
-    { header: 'Weight', key: 'weight', render: (r) => formatWeight(r.weightGrams) },
-    {
-      header: 'Total',
-      key: 'total',
-      render: (r) =>
-        r.totalMinorUnits === null ? '—' : formatMinorUnits(r.totalMinorUnits),
-    },
-    { header: 'Created', key: 'created', render: (r) => formatDate(r.createdAt) },
-  ];
-
-  const rows = (ordersQuery.data?.laundryOrders.nodes ?? []) as OrderRow[];
+  // Rows stay on screen while a new page, sort or filter loads, and after
+  // a background error (the bookings list pattern).
+  const effectiveData = ordersQuery.data ?? ordersQuery.previousData;
+  const rows: LaundryOrderRow[] = effectiveData?.laundryOrders.nodes ?? [];
   const customers = customersData?.customers.nodes ?? [];
 
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
-        title="Laundry"
+        title={t('list.title')}
         actions={
-          <Button type="button" onClick={openCreateForm}>
-            + New Laundry Order
-          </Button>
+          canCreate ? (
+            <Button type="button" onClick={openCreateForm}>
+              {t('list.create')}
+            </Button>
+          ) : undefined
         }
       />
 
-      <DataTable
-        columns={columns}
-        rows={rows}
-        rowKey={(r) => r.id}
-        emptyMessage="No laundry orders."
-        loading={ordersQuery.loading}
-        error={ordersQuery.error ? 'Unable to load laundry orders.' : undefined}
-        onRowClick={(r) => openDetail(r.id)}
+      <LaundryOrderDataTable
+        orders={rows}
+        formatPrice={formatMinorUnits}
+        loading={ordersQuery.loading && !effectiveData}
+        refreshing={ordersQuery.loading && Boolean(effectiveData)}
+        hasError={Boolean(ordersQuery.error)}
+        onRowClick={handleRowClick}
+        filters={{ fulfillment: listState.fulfillment, search: search.draft, status: listState.status }}
+        filtersActive={hasActiveLaundryFilters(listState) || search.draft.trim() !== ''}
+        onSearchChange={search.change}
+        onStatusChange={(status) => setListState((current) => withLaundryFilterChange(current, { status }))}
+        onFulfillmentChange={(fulfillment) =>
+          setListState((current) => withLaundryFilterChange(current, { fulfillment }))
+        }
+        onClearFilters={handleClearFilters}
+        sort={{ direction: listState.sortOrder, key: listState.sortBy }}
+        onSortChange={(next) => setListState((current) => withLaundrySort(current, next))}
         pagination={{
-          onPageChange: setPage,
-          page,
-          pageSize,
-          totalCount: ordersQuery.data?.laundryOrders.totalCount ?? 0,
+          onPageChange: (page) => setListState((current) => withLaundryPage(current, page)),
+          page: listState.offset / LAUNDRY_ORDER_PAGE_SIZE + 1,
+          pageSize: LAUNDRY_ORDER_PAGE_SIZE,
+          totalCount: effectiveData?.laundryOrders.totalCount ?? 0,
         }}
       />
 
@@ -314,7 +335,10 @@ function LaundryPageContent() {
       {activeId ? (
         <LaundryDetailDrawer
           id={activeId}
-          onClose={closeDetail}
+          // A drawer opened from this page closes with `router.back()`. One
+          // reached by a direct link or refresh closes with a native write
+          // of the live URL without `detail`.
+          onClose={() => closeDetail(hrefFor((current) => current, { remove: ['detail'] }))}
           onChanged={() => void ordersQuery.refetch()}
         />
       ) : null}

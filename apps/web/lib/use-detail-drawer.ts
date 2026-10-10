@@ -28,17 +28,33 @@ export function useDetailDrawer(paramName = 'detail') {
 
   const activeId = searchParams.get(paramName);
 
-  const open = useCallback((id: string) => {
+  // `href`, when given, is the exact URL to open, and must already carry
+  // `<paramName>=<id>`. It is pushed with the native History API, which
+  // Next.js syncs into `useSearchParams`: the laundry list writes its URL
+  // that way, so nothing is left in flight (see its URL-state hook).
+  const open = useCallback((id: string, href?: string) => {
     openedHereRef.current = true;
+    if (href !== undefined) {
+      window.history.pushState(null, '', href);
+      return;
+    }
     const params = new URLSearchParams(searchParams.toString());
     params.set(paramName, id);
     router.push(`${pathname}?${params.toString()}`);
   }, [router, pathname, searchParams, paramName]);
 
-  const close = useCallback(() => {
+  // `href`, when given, is the exact URL to show after closing a drawer that
+  // was not opened here (a direct link or refresh). It must not carry
+  // `<paramName>`, and it is written with the native History API, like
+  // `open`'s `href`. A drawer opened here still closes with `router.back()`.
+  const close = useCallback((href?: string) => {
     if (openedHereRef.current) {
       openedHereRef.current = false;
       router.back();
+      return;
+    }
+    if (href !== undefined) {
+      window.history.replaceState(null, '', href);
       return;
     }
     const params = new URLSearchParams(searchParams.toString());
