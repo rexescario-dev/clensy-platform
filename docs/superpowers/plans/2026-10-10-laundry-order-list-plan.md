@@ -2905,3 +2905,40 @@ An observation, not a defect: when the page already has forward entries (after a
 Deviation: none.
 
 Next gate: **M7 — Code Review**. A fresh independent reviewer is required (`CLAUDE.md`: application code).
+
+### M7 — Returned for Revision (2026-10-10, fresh independent review)
+
+A fresh agent context on Opus 5.5 reviewed this slice. It did not implement the change (`CLAUDE.md`: application code). It was given the Accepted spec, this Accepted plan and the branch diff at head `e529e01`, and it made no repository edits.
+
+**Decision: Returned for Revision. Blocking findings: 1 (P1).**
+
+The reviewer independently confirmed the following:
+
+- **Gate order:** the M5 record (`af64a77`) precedes the first implementation commit. Tasks 1–6 are one commit each, in order, and no commit carries a `Co-Authored-By` trailer.
+- **Byte identity:** all 12 new files match this plan's code blocks byte for byte. Each of the 5 plan diffs applied with `patch --fuzz=0` gives the branch exactly. The changed files equal the allowlist.
+- **Codegen:** it reproduces the generated client with no drift.
+- **Suites:** `web` 658, `@clensy/web` 402 and API e2e 8 passed; `tsc` and lint are clean.
+- **Mutations:** 7, 11 and 16 were re-observed with the recorded counts.
+- **Boundaries:** `@clensy/web` does not import `@clensy/client`, and nothing under `@clensy/ui`, `apps/api/src` or the schema changed.
+- **Spec fit:** §8.4.4, §4.9 and §4.4 are met for this slice.
+
+**P1 — shared-hook regression** (`apps/web/lib/use-detail-drawer.ts`, `close`).
+
+`close(href?: string)` treats any non-`undefined` argument as a URL. Eight pages pass `closeDetail` straight through as `onClose`: bookings, billing, jobs, cleaners, catalog, catalog/add-ons, cleaners/teams and customers. `DetailDrawer` wires that to `onClick={onClose}`, so the × button calls `close(MouseEvent)`. TypeScript allows this, because `(href?: string) => void` is assignable to `() => void`.
+
+Failure: on any of those pages, open a drawer by a direct link or refresh and click ×. The URL becomes `/app/[object%20Object]` instead of `router.replace` of the list URL. Escape and the backdrop are unaffected, and so is a drawer opened from the list (`router.back()`). The reviewer reproduced it with a temporary jsdom probe, then deleted the probe.
+
+Origin: the plan prescribed this code (revision 4). The plan's tests cover only the laundry page, which wraps the call in a lambda. The M6 manual checks covered only `/app/laundry`.
+
+Required: revise the plan (M4, then M5), then M6.
+
+- Make the hook robust to a non-string argument, or give the laundry list a separately named entry point, so `open`'s and `close`'s existing positional contract is unchanged.
+- Add a regression test: a page-style consumer passes `onClose={closeDetail}` to `DetailDrawer` opened by a direct link, and × still produces `router.replace` of the URL without `detail`.
+- Add a matching mutation row and a manual check on one other drawer page.
+
+**Non-blocking (P3):**
+
+- **Fractional page from a hand-edited offset.** A hand-edited `?offset=5` renders "Page 1.25 of N", because parse accepts any non-negative integer offset. Snapping the offset down to a multiple of 20 would fix it.
+- **Router fallback still reachable.** When `hrefFor` returns `undefined` (the live URL already matches), `open`/`close` fall back to the router path. That is only reachable in a held-render window. The finding-1 fix can remove the fallback for this caller.
+
+Next gate: **M4 — plan revision** for the `useDetailDrawer` change, then M5, then M6. Do not merge.
