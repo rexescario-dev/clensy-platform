@@ -5,6 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Status | **Draft** |
+| M5 history | First pass (2026-10-10, owner): **Returned for Revision** with five P1 and three P2 findings. All eight are applied in this revision. **P1:** (1, 3, 7) progress now maps every status through one exhaustive record. A mismatched status/fulfillment pair still shows the recorded status as the single current step. `AWAITING_PAYMENT` is labeled and announced as the current "Awaiting payment" step, never as a completed Paid step, with before/after-payment coverage for both fulfillment types (Task 5). (2) Every verb is reconciled against the API source (Reconciliation section), and an API-shaped oracle checks all 210 status × fulfillment × role combinations (Task 4). **P2:** (4) the weight formatter's contract is written down, with boundary cases up to `Number.MAX_SAFE_INTEGER` (Task 3). (5) the baseline test is confirmed against the unchanged page (Task 1). (6) a changed-file allowlist replaces the forbidden-path diff (Final verification). (8) table-driven accessibility assertions cover every status and both fulfillment types (Task 5). The whole plan was re-pre-validated (Pre-validation). |
 | Date | 2026-10-10 |
 | Tracking issue | [#157](https://github.com/rexescario-dev/clensy-platform/issues/157). Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). |
 | Scope | `packages/web` (new `laundry` i18n namespace, new `src/laundry/` module, `index.ts` exports) and two `apps/web/lib` tests. No `apps/api`, no `packages/ui`, no `packages/client`, no page or route change. |
@@ -19,22 +20,35 @@
 
 - **Where it lives.** Everything new goes in `@clensy/web`. That is where the issue puts the catalog, it follows the `bookings` precedent (component + catalog + tests in one package), and the package's Vitest already renders with `ClensyI18nProvider`. It is laundry-local: nothing is added to `@clensy/ui`. As with `AdminRole`, identifiers are declared locally so `@clensy/web` does not depend on `@clensy/client`. An apps/web test pins them to the generated client types (Task 6).
 - **Copy (Task 2).** `messages/en/laundry.ts`, registered in `getDefaultMessages()`. Enum-valued maps (`status`, `fulfillment`, `invoicePaymentStatus`, `paymentTerms`, `progress.terminal`) are keyed by the GraphQL enum value, so a screen calls `t(`status.${status}`)` without a mapping table. Verb maps (`actions`, `success`, `failure`, `confirm`) are keyed by `LaundryOrderVerb`. `confirm` uses the plain-language sentences from #165. `useClensyTranslations` has no interpolation, so per-verb strings are spelled out.
-- **Status and weight (Task 3).** `LaundryOrderStatus` / `LaundryFulfillmentType` unions, `LAUNDRY_STATUS_TONE` (the §4.9 map, unchanged), `LAUNDRY_ORDER_STATUSES`, and `formatWeightGrams`, an integer-only grams → kilograms formatter. Money stays `formatMinorUnits` in `apps/web/lib/format-price.ts`.
-- **Actions (Task 4).** `laundryOrderActions(status, fulfillmentType, role)` returns the verbs a screen may show: the §4.3 matrix mirror (plus the §4.4 re-weigh of `WEIGHED`) ∩ the fulfillment branch ∩ the resolver role sets, in one presentation order. It also exports `canReceiveLaundryOrder(role)`, because intake is not order-scoped. `generateInvoice` is legal on the invoice spec's eligible range. Whether an invoice already exists is left to the screen. A missing role (still loading) sees nothing.
-- **Progress (Task 5).** `laundryProgressSteps` (pure) and `<LaundryOrderProgress>`. It renders an ordered list with `aria-current="step"` and a screen-reader state per step. `AWAITING_PAYMENT` takes the Paid slot only while it is the status. Terminal exceptions replace the list with `StatusBadge` and one sentence.
+- **Status and weight (Task 3).** `LaundryOrderStatus` / `LaundryFulfillmentType` unions, `LAUNDRY_STATUS_TONE` (the §4.9 map, unchanged), `LAUNDRY_ORDER_STATUSES`, and `formatWeightGrams`. The formatter's contract: the input is a non-negative safe integer number of grams, and anything else throws `RangeError`. The output is `<whole kg>.<fraction> kg`, where the fraction is the three gram digits with one trailing zero dropped, so it always has two or three digits. Integer arithmetic only, so nothing rounds. Money stays `formatMinorUnits` in `apps/web/lib/format-price.ts`.
+- **Actions (Task 4).** `laundryOrderActions(status, fulfillmentType, role)` returns the verbs a screen may show: the §4.3 matrix mirror (plus the §4.4 re-weigh of `WEIGHED`) ∩ the fulfillment branch ∩ the resolver role sets, in one presentation order. It is reconciled verb by verb against the API source (Reconciliation). The test checks all 210 combinations against an oracle written in the API's own shapes: the target matrix, per-mutation role lists, and service preconditions. It also exports `canReceiveLaundryOrder(role)`, because intake is not order-scoped. `generateInvoice` is legal on the invoice spec's eligible range. Whether an invoice already exists is left to the screen. A missing role (still loading) sees nothing.
+- **Progress (Task 5).** `laundryProgressSteps` (pure) and `<LaundryOrderProgress>`. It renders an ordered list with `aria-current="step"` and a screen-reader state per step. Every status is mapped once, in an exhaustive `Record<LaundryOrderStatus, …>`, so a new status fails to compile:
+
+  | Status | Progress |
+  | --- | --- |
+  | `RECEIVED`, `WEIGHED`, `PRICED` | current at slots 1–3 |
+  | `AWAITING_PAYMENT` | current at slot 4, labeled "Awaiting payment". `PRICED` is done, and Paid is not shown. |
+  | `PAID` | current at slot 4, labeled "Paid" |
+  | `PROCESSING`, `READY` | current at slots 5–6. The slot-4 Paid step is done. |
+  | `AWAITING_PICKUP`, `AWAITING_DELIVERY` | current at slot 7. That slot shows the status itself, so a status that disagrees with `fulfillmentType` (which the server never writes) still has exactly one current step. |
+  | `COMPLETED` | every step done; `aria-current` on Completed |
+  | `CANCELLED`, `REJECTED`, `LOST`, `DAMAGED`, `REFUNDED` | no steps: `StatusBadge` plus one sentence |
+
+  Before `READY`, slot 7 follows `fulfillmentType`.
 - **Feedback (deliverable 4).** No component. The catalog provides `success` (toast) and `failure` (inline `role="alert"`) copy per verb, and `confirm` copy for exactly the destructive verbs. The rules for consuming screens are in Global Constraints.
 
 **Tech Stack:** React 19, `@clensy/ui` (`StatusBadge`, `StatusTone`), `@clensy/web` i18n (`useClensyTranslations`, `ClensyI18nProvider`), Vitest 5 in the `node` environment with `react-dom/server` `renderToStaticMarkup`, and `expectTypeOf` type assertions checked by `tsc --noEmit`. No new dependency and no new test runner.
 
-**Pre-validation (full).** Before M5, on 2026-10-10, the code was applied to a working tree at `7c59b82`. The plan's code blocks are generated from those exact files, and the `index.ts` exports were re-applied in this plan's task order before the final run. Each RED state was reproduced by removing that task's implementation module while keeping its test. Every command named by an `Expected:` line ran with the stated result. The tree was then reverted. Commands run:
+**Pre-validation (full; re-run for the M5 revision).** On 2026-10-10 the code was applied to a working tree at `7c59b82`. The plan's code blocks are generated from those exact files, and the `index.ts` exports follow this plan's task order. Each RED state was reproduced by removing that task's implementation module while keeping its test. Every command named by an `Expected:` line ran with the stated result. The tree was then reverted. Commands run:
 
 - `pnpm --filter web exec vitest run lib/laundry-page-baseline.test.tsx`: 1 passed (characterization, green on first run)
-- `pnpm --filter @clensy/web exec vitest run src/laundry/format-weight-grams.test.ts`: RED (`Cannot find module './format-weight-grams'`), then GREEN 9 passed
-- `pnpm --filter @clensy/web exec vitest run src/laundry/laundry-order-actions.test.ts`: RED (`Cannot find module './laundry-order-actions'`), then GREEN 17 passed
-- `pnpm --filter @clensy/web exec vitest run src/laundry/laundry-order-progress.test.tsx`: RED (`Cannot find module './laundry-order-progress'`), then GREEN 11 passed
+- `pnpm --filter @clensy/web exec vitest run src/laundry/format-weight-grams.test.ts`: RED (`Cannot find module './format-weight-grams'`), then GREEN 17 passed
+- `pnpm --filter @clensy/web exec vitest run src/laundry/laundry-order-actions.test.ts`: RED (`Cannot find module './laundry-order-actions'`), then GREEN 228 passed. The oracle's tables were also compared mechanically with the API source at `7c59b82` by a one-off script, which was not committed. The policy `MATRIX` matched (15 rows). So did all 15 resolver mutation → role-constant pairs, the six constants' members, and `generateInvoiceFromOrder`'s roles. `AuthGuard` has no `SUPER_ADMIN` bypass.
+- `pnpm --filter @clensy/web exec vitest run src/laundry/laundry-order-progress.test.tsx`: RED (`Cannot find module './laundry-order-progress'`), then GREEN 69 passed. Mutation check: deleting the status-follows-return-slot branch from `laundryProgressSteps` gave 6 failed / 63 passed. Restoring it gave 69 passed.
 - `pnpm --filter web exec vitest run lib/laundry-presentation-contract.test.ts`: 2 passed. Mutation check: removing `VOID` from `invoicePaymentStatus` made `pnpm --filter web exec tsc --noEmit` report 1 error, and restoring it cleared the error.
-- `pnpm --filter @clensy/web test` (11 files, 100 tests passed), `pnpm --filter @clensy/web build` (tsc, exit 0), `pnpm --filter @clensy/web lint` (exit 0)
+- `pnpm --filter @clensy/web test` (11 files, 377 tests passed), `pnpm --filter @clensy/web build` (tsc, exit 0), `pnpm --filter @clensy/web lint` (exit 0)
 - `pnpm --filter web test` (24 files, 595 tests passed), `pnpm --filter web exec tsc --noEmit` (exit 0), `pnpm --filter web lint` (exit 0), `pnpm --filter web build` (exit 0)
+- The Final verification scope check printed `SCOPE: ok`. Adding a stray `packages/ui/src/stray.ts` made it list that file and exit 1.
 
 ## Global Constraints
 
@@ -44,16 +58,48 @@ Derived from the Accepted spec and amendment only. Every task's requirements imp
 - The action helper is the intersection of the §4.3 matrix, the fulfillment branch (`AWAITING_PICKUP` only for `PICKUP`, `AWAITING_DELIVERY` only for `DELIVERY`), and the role sets as implemented in `laundry-order.resolver.ts` and `invoice.resolver.ts`. Do not widen any set. `ANALYST` and `SUPER_ADMIN` get no verbs. It is presentation only, and the server stays authoritative (§4.9, §8.4.4).
 - The client matrix is a mirror, not a second state machine. It adds nothing the server policy does not allow. The only non-transition entries are the §4.4 re-weigh (`weigh` on `WEIGHED`) and `price` on `WEIGHED`.
 - Weight is displayed from integer grams with integer arithmetic only. A 1-gram weight must not render as `0.00 kg` (§8.4.4: "kilograms rendered from integer grams").
-- `AWAITING_PAYMENT` is a branch, not a required step. It never marks Paid complete. Terminal exceptions never render the happy path as complete.
+- `AWAITING_PAYMENT` is a branch, not a required step. It is shown and announced as the current "Awaiting payment" step, never as a completed Paid step. Every non-terminal status, including a status/fulfillment pair that disagrees, renders exactly one current step. Terminal exceptions never render the happy path as complete.
 - Progress steps are never interactive: no buttons or links.
 - `@clensy/web` must not import `@clensy/client`.
 - Consuming screens (#155–#166), recorded here so they do not drift: success → `useToast().success(t(`success.${verb}`))`; a failure stays inline (`role="alert"`), with the server message when present and otherwise `t(`failure.${verb}`)`; never toast and inline the same error; destructive verbs (`LAUNDRY_DESTRUCTIVE_VERBS`) go through `ConfirmDialog` with `t(`confirm.${verb}`)` and `t(`actions.${verb}`)` as the confirm label; disable the submitting control while a mutation is in flight. No consumer forks a second status map.
 
 ## Review Focus
 
-1. **Role-set drift.** Compare `VERB_ROLES` in Task 4 against the `@Roles(...)` on every mutation in `apps/api/src/modules/laundry/presentation/graphql/laundry-order.resolver.ts` and on `generateInvoiceFromOrder` in `apps/api/src/modules/billing/presentation/graphql/invoice.resolver.ts`.
-2. **Matrix drift.** Compare `LEGAL_VERBS` against `MATRIX` in `apps/api/src/modules/laundry/domain/laundry-order-status-transition-policy.ts`, translated through the target → verb mapping (`WEIGHED`→`weigh`, `PRICED`→`price`, `AWAITING_PAYMENT`→`markAwaitingPayment`, …).
+1. **Reconciliation.** The table below and Task 4's oracle are independent transcriptions of the API source. Spot-check them against the cited files. The helper's verb-keyed tables are checked against the oracle for all 210 combinations.
+2. **Progress mapping.** Task 5 asserts the state of every step for all 15 statuses × both fulfillment types, plus the mismatched pairs.
 3. **Type pin.** Task 6's `expectTypeOf` assertions are checked by `tsc`, not by Vitest at runtime. The mutation check proves they bite.
+
+## Reconciliation (API source at `7c59b82`)
+
+Role constants, from `apps/api/src/modules/laundry/presentation/graphql/laundry-order.resolver.ts`:
+
+- OPERATIONAL = TENANT_OWNER, OPS_MANAGER, SCHEDULER
+- INTAKE = OPERATIONAL + CUSTOMER_SUPPORT
+- PAYMENT = TENANT_OWNER, OPS_MANAGER, FINANCE, CUSTOMER_SUPPORT
+- CANCEL = TENANT_OWNER, OPS_MANAGER, CUSTOMER_SUPPORT
+- EXCEPTION = TENANT_OWNER, OPS_MANAGER
+- REFUND = TENANT_OWNER, OPS_MANAGER, FINANCE
+
+`AuthGuard` admits a principal only when its role is listed, with no `SUPER_ADMIN` bypass. So `ANALYST` and `SUPER_ADMIN` get no verbs.
+
+| Verb | API mutation | `@Roles` | Legal when (source) |
+| --- | --- | --- | --- |
+| `weigh` | `weighLaundryOrder` | OPERATIONAL | status `RECEIVED` (→ `WEIGHED`) or `WEIGHED` (re-weigh) — `LaundryOrdersService.weigh` |
+| `price` | `priceLaundryOrder` | OPERATIONAL | status `WEIGHED` — `LaundryOrdersService.price` |
+| `markAwaitingPayment` | `markLaundryOrderAwaitingPayment` | PAYMENT | policy allows → `AWAITING_PAYMENT` (`PRICED`) |
+| `markPaid` | `markLaundryOrderPaid` | PAYMENT | → `PAID` (`PRICED`, `AWAITING_PAYMENT`) |
+| `startProcessing` | `startLaundryProcessing` | OPERATIONAL | → `PROCESSING` (`PAID`) |
+| `markReady` | `markLaundryOrderReady` | OPERATIONAL | → `READY` (`PROCESSING`) |
+| `markAwaitingPickup` | `markLaundryOrderAwaitingPickup` | OPERATIONAL | → `AWAITING_PICKUP` (`READY`), and only for `PICKUP` (§4.3) |
+| `markAwaitingDelivery` | `markLaundryOrderAwaitingDelivery` | OPERATIONAL | → `AWAITING_DELIVERY` (`READY`), and only for `DELIVERY` (§4.3) |
+| `complete` | `completeLaundryOrder` | INTAKE | → `COMPLETED` (`AWAITING_PICKUP`, `AWAITING_DELIVERY`) |
+| `generateInvoice` | `generateInvoiceFromOrder` | FINANCE, TENANT_OWNER (`invoice.resolver.ts`) | priced and not `CANCELLED`/`REJECTED`/`LOST`/`DAMAGED`/`REFUNDED`, i.e. `PRICED`..`COMPLETED` — `InvoicesService.assertEligible`. "Already invoiced" is the screen's check. |
+| `cancel` | `cancelLaundryOrder` | CANCEL | → `CANCELLED` (`RECEIVED`, `WEIGHED`, `PRICED`, `AWAITING_PAYMENT`) |
+| `reject` | `rejectLaundryOrder` | EXCEPTION | → `REJECTED` (`RECEIVED`, `WEIGHED`) |
+| `markLost` | `markLaundryOrderLost` | EXCEPTION | → `LOST` (`PROCESSING`, `READY`, `AWAITING_PICKUP`, `AWAITING_DELIVERY`) |
+| `markDamaged` | `markLaundryOrderDamaged` | EXCEPTION | → `DAMAGED` (same as lost) |
+| `refund` | `refundLaundryOrder` | REFUND | → `REFUNDED` (`PAID`, `PROCESSING`, `READY`, `AWAITING_PICKUP`, `AWAITING_DELIVERY`, `COMPLETED`, `LOST`, `DAMAGED`) |
+| *(intake)* `canReceiveLaundryOrder` | `receiveLaundryOrder` | INTAKE | not order-scoped |
 
 ---
 
@@ -78,6 +124,8 @@ Derived from the Accepted spec and amendment only. Every task's requirements imp
 **Files:** Create `apps/web/lib/laundry-page-baseline.test.tsx`
 
 This is a **characterization test**. It pins the current behavior, so it is green on first run. It renders the real `app/app/laundry/page.tsx` with mocked `@clensy/client` hooks and `next/navigation`. Raw enum labels and the 2-decimal weight are today's behavior, not a target. #163 updates this test when it replaces the list.
+
+The mock lists exactly the 22 hooks `page.tsx` imports from `@clensy/client` at `7c59b82`. The page needs no provider for its list path: `useDetailDrawer` only reads `next/navigation`, and the drawer is not rendered without `?detail=`. If the page later imports a hook the mock lacks, Vitest fails with `No "<name>" export is defined on the mock`, which names it. The assertions cover only the list cells.
 
 - [ ] **Step 1: Write the test**
 
@@ -332,15 +380,21 @@ describe('formatWeightGrams', () => {
   it.each([
     [0, '0.00 kg'],
     [1, '0.001 kg'],
+    [10, '0.01 kg'],
     [100, '0.10 kg'],
+    [101, '0.101 kg'],
+    [110, '0.11 kg'],
+    [999, '0.999 kg'],
+    [1000, '1.00 kg'],
     [1005, '1.005 kg'],
     [1250, '1.25 kg'],
     [2500, '2.50 kg'],
+    [Number.MAX_SAFE_INTEGER, '9007199254740.991 kg'],
   ])('renders %i g as %s', (grams, expected) => {
     expect(formatWeightGrams(grams)).toBe(expected);
   });
 
-  it.each([-1, 1.5, Number.NaN])('rejects %s', (grams) => {
+  it.each([-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1])('rejects %s', (grams) => {
     expect(() => formatWeightGrams(grams)).toThrow(RangeError);
   });
 });
@@ -404,15 +458,23 @@ export const LAUNDRY_ORDER_STATUSES = Object.keys(LAUNDRY_STATUS_TONE) as readon
 `packages/web/src/laundry/format-weight-grams.ts`:
 
 ```ts
-// Integer grams → kilograms, without binary floating point: two decimal
-// places, or three when the gram digit is not zero, so 1 g never renders as
-// 0.00 kg. Money stays `formatMinorUnits` in apps/web.
+// Integer grams → kilograms for display. Contract:
+// - input: a non-negative safe integer number of grams; anything else
+//   throws `RangeError` (`null` "not weighed" is the caller's to render);
+// - output: `<kg>.<fraction> kg`, where `<kg>` is the whole kilograms with
+//   no grouping and `<fraction>` is the three gram digits with one trailing
+//   zero dropped, so it is always two or three digits:
+//   1000 → 1.00 kg, 1250 → 1.25 kg, 1005 → 1.005 kg, 1 → 0.001 kg;
+// - integer arithmetic only, so no value rounds: 1 g never renders as
+//   0.00 kg, and the largest safe integer renders exactly.
+// Money stays `formatMinorUnits` in apps/web.
 export function formatWeightGrams(grams: number): string {
   if (!Number.isSafeInteger(grams) || grams < 0) {
     throw new RangeError(`weight must be a non-negative integer number of grams, got ${grams}`);
   }
-  const kilograms = Math.floor(grams / 1000);
-  const fraction = String(grams % 1000).padStart(3, '0');
+  const remainder = grams % 1000;
+  const kilograms = (grams - remainder) / 1000;
+  const fraction = String(remainder).padStart(3, '0');
   const decimals = fraction.endsWith('0') ? fraction.slice(0, 2) : fraction;
   return `${kilograms}.${decimals} kg`;
 }
@@ -430,7 +492,7 @@ export { formatWeightGrams } from './laundry/format-weight-grams';
 - [ ] **Step 3: Run**
 
 Run: `pnpm --filter @clensy/web exec vitest run src/laundry/format-weight-grams.test.ts`
-Expected: 9 passed.
+Expected: 17 passed.
 
 - [ ] **Step 4: Commit**
 
@@ -445,7 +507,7 @@ git commit -m "feat(web): add laundry status tones and an integer-safe weight fo
 
 - [ ] **Step 1: Write the failing test**
 
-It covers the issue's status × role × fulfillment table and the #165 role examples.
+It has three layers: (a) the API-shaped oracle, transcribed from the sources in the Reconciliation table, checked against the helper for all 15 statuses × 2 fulfillment types × 7 roles; (b) the issue's and #165's named examples, as readable pins; (c) the copy-completeness checks for every verb.
 
 ```ts
 import { describe, expect, it } from 'vitest';
@@ -457,9 +519,101 @@ import {
   canReceiveLaundryOrder,
   laundryOrderActions,
 } from './laundry-order-actions';
-import { LAUNDRY_ORDER_STATUSES } from './laundry-order-status';
+import { LAUNDRY_ORDER_STATUSES, type LaundryOrderStatus } from './laundry-order-status';
+import type { LaundryOrderVerb } from './laundry-order-actions';
+import type { AdminRole } from '../roles/admin-roles';
+
+// Reconciliation oracle (#157 M5). An independent transcription of the API,
+// in the API's own shapes, so a slip in the helper's verb-keyed tables shows
+// up as a disagreement. Sources, at 7c59b82:
+// - SERVER_MATRIX: `MATRIX` in
+//   apps/api/src/modules/laundry/domain/laundry-order-status-transition-policy.ts
+// - MUTATIONS: each mutation's `@Roles(...)` in
+//   apps/api/src/modules/laundry/presentation/graphql/laundry-order.resolver.ts
+//   (OPERATIONAL, INTAKE, PAYMENT, CANCEL, EXCEPTION, REFUND constants), and
+//   `generateInvoiceFromOrder`'s in
+//   apps/api/src/modules/billing/presentation/graphql/invoice.resolver.ts
+// - legal: the transition target via SERVER_MATRIX; `weighLaundryOrder` and
+//   `priceLaundryOrder` status checks in LaundryOrdersService.weigh / .price;
+//   `assertEligible` + `EXCLUDED_STATUSES` in InvoicesService.
+const SERVER_MATRIX: Record<LaundryOrderStatus, LaundryOrderStatus[]> = {
+  AWAITING_DELIVERY: ['COMPLETED', 'LOST', 'DAMAGED', 'REFUNDED'],
+  AWAITING_PAYMENT: ['PAID', 'CANCELLED'],
+  AWAITING_PICKUP: ['COMPLETED', 'LOST', 'DAMAGED', 'REFUNDED'],
+  CANCELLED: [],
+  COMPLETED: ['REFUNDED'],
+  DAMAGED: ['REFUNDED'],
+  LOST: ['REFUNDED'],
+  PAID: ['PROCESSING', 'REFUNDED'],
+  PRICED: ['AWAITING_PAYMENT', 'PAID', 'CANCELLED'],
+  PROCESSING: ['READY', 'LOST', 'DAMAGED', 'REFUNDED'],
+  READY: ['AWAITING_PICKUP', 'AWAITING_DELIVERY', 'LOST', 'DAMAGED', 'REFUNDED'],
+  RECEIVED: ['WEIGHED', 'REJECTED', 'CANCELLED'],
+  REFUNDED: [],
+  REJECTED: [],
+  WEIGHED: ['PRICED', 'REJECTED', 'CANCELLED'],
+};
+const OPERATIONAL: AdminRole[] = ['TENANT_OWNER', 'OPS_MANAGER', 'SCHEDULER'];
+const INTAKE: AdminRole[] = [...OPERATIONAL, 'CUSTOMER_SUPPORT'];
+const PAYMENT: AdminRole[] = ['TENANT_OWNER', 'OPS_MANAGER', 'FINANCE', 'CUSTOMER_SUPPORT'];
+const CANCEL: AdminRole[] = ['TENANT_OWNER', 'OPS_MANAGER', 'CUSTOMER_SUPPORT'];
+const EXCEPTION: AdminRole[] = ['TENANT_OWNER', 'OPS_MANAGER'];
+const REFUND: AdminRole[] = ['TENANT_OWNER', 'OPS_MANAGER', 'FINANCE'];
+const PRICED_ONWARD: LaundryOrderStatus[] = [
+  'PRICED', 'AWAITING_PAYMENT', 'PAID', 'PROCESSING', 'READY', 'AWAITING_PICKUP', 'AWAITING_DELIVERY', 'COMPLETED',
+  'CANCELLED', 'LOST', 'DAMAGED', 'REFUNDED',
+];
+const INVOICE_EXCLUDED: LaundryOrderStatus[] = ['CANCELLED', 'REJECTED', 'LOST', 'DAMAGED', 'REFUNDED'];
+const byTarget = (target: LaundryOrderStatus) => (s: LaundryOrderStatus) => SERVER_MATRIX[s].includes(target);
+const MUTATIONS: Record<string, { legal: (s: LaundryOrderStatus) => boolean; roles: AdminRole[]; verb: LaundryOrderVerb }> = {
+  cancelLaundryOrder: { legal: byTarget('CANCELLED'), roles: CANCEL, verb: 'cancel' },
+  completeLaundryOrder: { legal: byTarget('COMPLETED'), roles: INTAKE, verb: 'complete' },
+  generateInvoiceFromOrder: {
+    legal: (s) => PRICED_ONWARD.includes(s) && !INVOICE_EXCLUDED.includes(s),
+    roles: ['FINANCE', 'TENANT_OWNER'],
+    verb: 'generateInvoice',
+  },
+  markLaundryOrderAwaitingDelivery: { legal: byTarget('AWAITING_DELIVERY'), roles: OPERATIONAL, verb: 'markAwaitingDelivery' },
+  markLaundryOrderAwaitingPayment: { legal: byTarget('AWAITING_PAYMENT'), roles: PAYMENT, verb: 'markAwaitingPayment' },
+  markLaundryOrderAwaitingPickup: { legal: byTarget('AWAITING_PICKUP'), roles: OPERATIONAL, verb: 'markAwaitingPickup' },
+  markLaundryOrderDamaged: { legal: byTarget('DAMAGED'), roles: EXCEPTION, verb: 'markDamaged' },
+  markLaundryOrderLost: { legal: byTarget('LOST'), roles: EXCEPTION, verb: 'markLost' },
+  markLaundryOrderPaid: { legal: byTarget('PAID'), roles: PAYMENT, verb: 'markPaid' },
+  markLaundryOrderReady: { legal: byTarget('READY'), roles: OPERATIONAL, verb: 'markReady' },
+  priceLaundryOrder: { legal: (s) => s === 'WEIGHED', roles: OPERATIONAL, verb: 'price' },
+  refundLaundryOrder: { legal: byTarget('REFUNDED'), roles: REFUND, verb: 'refund' },
+  rejectLaundryOrder: { legal: byTarget('REJECTED'), roles: EXCEPTION, verb: 'reject' },
+  startLaundryProcessing: { legal: byTarget('PROCESSING'), roles: OPERATIONAL, verb: 'startProcessing' },
+  weighLaundryOrder: { legal: (s) => s === 'RECEIVED' || s === 'WEIGHED', roles: OPERATIONAL, verb: 'weigh' },
+};
+// The fulfillment branch: the server picks the READY target from
+// `fulfillmentType` (lifecycle spec §4.3); the UI offers only that one.
+const BRANCH_ONLY: Partial<Record<LaundryOrderVerb, 'DELIVERY' | 'PICKUP'>> = {
+  markAwaitingDelivery: 'DELIVERY',
+  markAwaitingPickup: 'PICKUP',
+};
 
 describe('laundryOrderActions', () => {
+  it('covers every order-scoped mutation the API has, and no other verb', () => {
+    expect(Object.values(MUTATIONS).map((m) => m.verb).sort()).toEqual([...LAUNDRY_ORDER_VERBS].sort());
+  });
+
+  const combos = LAUNDRY_ORDER_STATUSES.flatMap((status) =>
+    (['DELIVERY', 'PICKUP'] as const).flatMap((fulfillment) =>
+      [...ADMIN_ROLES].map((role) => [status, fulfillment, role] as const),
+    ),
+  );
+
+  it.each(combos)('%s + %s + %s matches the API oracle, in presentation order', (status, fulfillment, role) => {
+    const expected = LAUNDRY_ORDER_VERBS.filter((verb) => {
+      const mutation = Object.values(MUTATIONS).find((m) => m.verb === verb);
+      if (!mutation || !mutation.legal(status) || !mutation.roles.includes(role)) return false;
+      const branch = BRANCH_ONLY[verb];
+      return branch === undefined || branch === fulfillment;
+    });
+    expect(laundryOrderActions(status, fulfillment, role)).toEqual(expected);
+  });
+
   it.each([
     // #157 issue table and #165 role examples.
     ['RECEIVED', 'PICKUP', 'OPS_MANAGER', ['weigh', 'cancel', 'reject']],
@@ -696,7 +850,7 @@ export type { LaundryOrderVerb } from './laundry/laundry-order-actions';
 - [ ] **Step 3: Run**
 
 Run: `pnpm --filter @clensy/web exec vitest run src/laundry/laundry-order-actions.test.ts`
-Expected: 17 passed.
+Expected: 228 passed.
 
 - [ ] **Step 4: Commit**
 
@@ -711,13 +865,39 @@ git commit -m "feat(web): add the role- and transition-aware laundry action help
 
 - [ ] **Step 1: Write the failing test**
 
+It is table-driven over all 15 statuses × both fulfillment types. For the pure steps, it checks the state of every step. For the markup, it checks the ordered list, exactly one `aria-current` step whose label is the status label, a valid screen-reader state on every step, and no buttons or links. It also covers `AWAITING_PAYMENT` before and after payment, and the mismatched pairs.
+
 ```tsx
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ClensyI18nProvider } from '../i18n/i18n-context';
 import { getDefaultMessages } from '../i18n/messages';
 import { LaundryOrderProgress, laundryProgressSteps } from './laundry-order-progress';
-import { LAUNDRY_ORDER_STATUSES } from './laundry-order-status';
+import { LAUNDRY_ORDER_STATUSES, type LaundryFulfillmentType, type LaundryOrderStatus } from './laundry-order-status';
+
+const FULFILLMENTS: readonly LaundryFulfillmentType[] = ['DELIVERY', 'PICKUP'];
+const TERMINAL: readonly LaundryOrderStatus[] = ['CANCELLED', 'DAMAGED', 'LOST', 'REFUNDED', 'REJECTED'];
+const NON_TERMINAL = LAUNDRY_ORDER_STATUSES.filter((s) => !TERMINAL.includes(s));
+const { laundry } = getDefaultMessages();
+
+// renderToStaticMarkup escapes text (an apostrophe becomes &#x27;).
+function escaped(text: string): string {
+  return text.replaceAll("'", '&#x27;');
+}
+
+function render(status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType) {
+  return renderToStaticMarkup(
+    <ClensyI18nProvider>
+      <LaundryOrderProgress fulfillmentType={fulfillmentType} status={status} />
+    </ClensyI18nProvider>,
+  );
+}
+
+function stepItems(html: string): { current: boolean; label: string; state: string }[] {
+  return [...html.matchAll(/<li( aria-current="step")?[^>]*>.*?<span[^>]*>([^<]*)<\/span><span class="sr-only">([^<]*)<\/span><\/li>/g)].map(
+    (m) => ({ current: m[1] !== undefined, label: m[2], state: m[3] }),
+  );
+}
 
 describe('laundryProgressSteps', () => {
   it('walks the pickup happy path with the current step marked', () => {
@@ -733,59 +913,83 @@ describe('laundryProgressSteps', () => {
     ]);
   });
 
-  it('puts AWAITING_PAYMENT in the Paid slot without marking the order paid', () => {
-    const steps = laundryProgressSteps('AWAITING_PAYMENT', 'DELIVERY') ?? [];
+  describe.each(FULFILLMENTS)('every status with %s', (fulfillment) => {
+    it.each(NON_TERMINAL)('%s is the single current step, everything before it done, everything after upcoming', (status) => {
+      const steps = laundryProgressSteps(status, fulfillment) ?? [];
+      expect(steps).toHaveLength(8);
+      const current = steps.findIndex((s) => s.status === status);
+      expect(current).toBeGreaterThanOrEqual(0);
+      expect(steps.filter((s) => s.state === 'current')).toHaveLength(status === 'COMPLETED' ? 0 : 1);
+      steps.forEach((step, index) => {
+        const expected = index < current || status === 'COMPLETED' ? 'complete' : index === current ? 'current' : 'upcoming';
+        expect(step.state).toBe(expected);
+      });
+    });
+
+    it.each(TERMINAL)('%s replaces the steps', (status) => {
+      expect(laundryProgressSteps(status, fulfillment)).toBeNull();
+    });
+  });
+
+  it.each(FULFILLMENTS)('AWAITING_PAYMENT (%s) takes the Paid slot as current, never as a done Paid step', (fulfillment) => {
+    const steps = laundryProgressSteps('AWAITING_PAYMENT', fulfillment) ?? [];
     expect(steps.map((s) => s.status)).not.toContain('PAID');
+    expect(steps[2]).toEqual({ state: 'complete', status: 'PRICED' });
     expect(steps[3]).toEqual({ state: 'current', status: 'AWAITING_PAYMENT' });
-    expect(steps.find((s) => s.status === 'AWAITING_DELIVERY')?.state).toBe('upcoming');
   });
 
-  it('shows the delivery step for DELIVERY and marks every step done once COMPLETED', () => {
-    const steps = laundryProgressSteps('COMPLETED', 'DELIVERY') ?? [];
-    expect(steps.map((s) => s.status)).toContain('AWAITING_DELIVERY');
-    expect(steps.map((s) => s.status)).not.toContain('AWAITING_PICKUP');
-    expect(steps.every((s) => s.state === 'complete')).toBe(true);
+  it.each(FULFILLMENTS)('after payment (%s) the Paid slot reads Paid: current at PAID, done from PROCESSING', (fulfillment) => {
+    expect((laundryProgressSteps('PRICED', fulfillment) ?? [])[3]).toEqual({ state: 'upcoming', status: 'PAID' });
+    expect((laundryProgressSteps('PAID', fulfillment) ?? [])[3]).toEqual({ state: 'current', status: 'PAID' });
+    expect((laundryProgressSteps('PROCESSING', fulfillment) ?? [])[3]).toEqual({ state: 'complete', status: 'PAID' });
   });
 
-  it.each(['CANCELLED', 'DAMAGED', 'LOST', 'REFUNDED', 'REJECTED'] as const)('returns no steps for %s', (status) => {
-    expect(laundryProgressSteps(status, 'PICKUP')).toBeNull();
+  it('shows only the order\'s own return step', () => {
+    expect((laundryProgressSteps('READY', 'PICKUP') ?? [])[6].status).toBe('AWAITING_PICKUP');
+    expect((laundryProgressSteps('READY', 'DELIVERY') ?? [])[6].status).toBe('AWAITING_DELIVERY');
+  });
+
+  it.each([
+    ['AWAITING_DELIVERY', 'PICKUP'],
+    ['AWAITING_PICKUP', 'DELIVERY'],
+  ] as const)('a mismatched %s + %s still shows the recorded status as the current step', (status, fulfillment) => {
+    const steps = laundryProgressSteps(status, fulfillment) ?? [];
+    expect(steps[6]).toEqual({ state: 'current', status });
+    expect(steps.filter((s) => s.state === 'current')).toHaveLength(1);
   });
 });
 
 describe('LaundryOrderProgress', () => {
-  function render(status: Parameters<typeof LaundryOrderProgress>[0]['status']) {
-    return renderToStaticMarkup(
-      <ClensyI18nProvider>
-        <LaundryOrderProgress fulfillmentType="PICKUP" status={status} />
-      </ClensyI18nProvider>,
-    );
-  }
-
-  it('renders an ordered list with aria-current on the current step only', () => {
-    const html = render('WEIGHED');
-    expect(html).toContain('<ol aria-label="Order progress"');
-    expect(html.match(/aria-current="step"/g)).toHaveLength(1);
-    expect(html).toMatch(/<li aria-current="step"[^>]*>.*?Weighed.*?Current step/);
-    expect(html).not.toContain('<button');
-    expect(html).not.toContain('<a ');
-  });
-
-  it('replaces the steps with a badge and a sentence for CANCELLED', () => {
-    const html = render('CANCELLED');
-    expect(html).not.toContain('<ol');
-    expect(html).toContain('Cancelled');
-    expect(html).toContain('This order was cancelled before payment.');
-    expect(html).not.toContain('Done');
-  });
-
-  it('has a label for every status and a sentence for every terminal status', () => {
-    const { laundry } = getDefaultMessages();
-    for (const status of LAUNDRY_ORDER_STATUSES) {
-      expect(laundry.status[status]).toEqual(expect.any(String));
-      if (laundryProgressSteps(status, 'PICKUP') === null) {
-        expect(laundry.progress.terminal[status as keyof typeof laundry.progress.terminal]).toEqual(expect.any(String));
+  describe.each(FULFILLMENTS)('with %s', (fulfillment) => {
+    it.each(NON_TERMINAL)('%s: an ordered list, one aria-current step with its label, accessible states, no controls', (status) => {
+      const html = render(status, fulfillment);
+      expect(html).toContain('<ol aria-label="Order progress"');
+      expect(html).not.toContain('<button');
+      expect(html).not.toContain('<a ');
+      const items = stepItems(html);
+      expect(items).toHaveLength(8);
+      const current = items.filter((i) => i.current);
+      expect(current).toHaveLength(1);
+      expect(current[0].label).toBe(laundry.status[status]);
+      expect(current[0].state).toBe(status === 'COMPLETED' ? laundry.progress.state.complete : laundry.progress.state.current);
+      for (const item of items) {
+        expect(Object.values(laundry.progress.state)).toContain(item.state);
       }
-    }
+    });
+
+    it.each(TERMINAL)('%s: a badge and its sentence, no steps', (status) => {
+      const html = render(status, fulfillment);
+      expect(html).not.toContain('<ol');
+      expect(html).not.toContain('aria-current');
+      expect(html).toContain(laundry.status[status]);
+      expect(html).toContain(escaped(laundry.progress.terminal[status as keyof typeof laundry.progress.terminal]));
+    });
+  });
+
+  it('labels AWAITING_PAYMENT as awaiting payment, not paid', () => {
+    const items = stepItems(render('AWAITING_PAYMENT', 'PICKUP'));
+    expect(items[3]).toEqual({ current: true, label: 'Awaiting payment', state: 'Current step' });
+    expect(items.map((i) => i.label)).not.toContain('Paid');
   });
 });
 ```
@@ -818,13 +1022,28 @@ export interface LaundryOrderProgressProps {
 
 type TerminalStatus = 'CANCELLED' | 'DAMAGED' | 'LOST' | 'REFUNDED' | 'REJECTED';
 
-const TERMINAL: ReadonlySet<LaundryOrderStatus> = new Set<LaundryOrderStatus>([
-  'CANCELLED',
-  'DAMAGED',
-  'LOST',
-  'REFUNDED',
-  'REJECTED',
-]);
+// Every status, mapped once (exhaustive, so a new status fails to compile):
+// a terminal exception replaces the steps; any other status is the current
+// step at that slot of the §4.3 happy path. `AWAITING_PAYMENT` shares the
+// Paid slot with `PAID`, and `AWAITING_PICKUP` / `AWAITING_DELIVERY` share
+// the return slot, so every non-terminal status has exactly one current step.
+const PROGRESS_SLOT: Readonly<Record<LaundryOrderStatus, number | 'terminal'>> = {
+  AWAITING_DELIVERY: 6,
+  AWAITING_PAYMENT: 3,
+  AWAITING_PICKUP: 6,
+  CANCELLED: 'terminal',
+  COMPLETED: 7,
+  DAMAGED: 'terminal',
+  LOST: 'terminal',
+  PAID: 3,
+  PRICED: 2,
+  PROCESSING: 4,
+  READY: 5,
+  RECEIVED: 0,
+  REFUNDED: 'terminal',
+  REJECTED: 'terminal',
+  WEIGHED: 1,
+};
 
 const MARKER_CLASSES: Record<LaundryProgressState, string> = {
   complete: 'bg-slate-900',
@@ -864,14 +1083,25 @@ export function LaundryOrderProgress({ fulfillmentType, status }: LaundryOrderPr
   );
 }
 
-// The §4.3 happy path for this order. `AWAITING_PAYMENT` takes the Paid
-// slot only while it is the status: it is a branch, not a required step.
-// Returns `null` for a terminal exception, which replaces the steps.
+// The §4.3 happy path for this order, or `null` for a terminal exception.
+// The Paid slot reads "Awaiting payment" only while that is the status: it
+// is a branch, never shown as a completed step. The return slot follows the
+// status when the status is one of its two values, so a status and a
+// `fulfillmentType` that disagree (the server never writes that) still
+// render the recorded status as current; otherwise it follows
+// `fulfillmentType`.
 export function laundryProgressSteps(
   status: LaundryOrderStatus,
   fulfillmentType: LaundryFulfillmentType,
 ): LaundryProgressStep[] | null {
-  if (TERMINAL.has(status)) return null;
+  const slot = PROGRESS_SLOT[status];
+  if (slot === 'terminal') return null;
+  const returnStep: LaundryOrderStatus =
+    status === 'AWAITING_DELIVERY' || status === 'AWAITING_PICKUP'
+      ? status
+      : fulfillmentType === 'PICKUP'
+        ? 'AWAITING_PICKUP'
+        : 'AWAITING_DELIVERY';
   const path: LaundryOrderStatus[] = [
     'RECEIVED',
     'WEIGHED',
@@ -879,12 +1109,11 @@ export function laundryProgressSteps(
     status === 'AWAITING_PAYMENT' ? 'AWAITING_PAYMENT' : 'PAID',
     'PROCESSING',
     'READY',
-    fulfillmentType === 'PICKUP' ? 'AWAITING_PICKUP' : 'AWAITING_DELIVERY',
+    returnStep,
     'COMPLETED',
   ];
-  const currentIndex = path.indexOf(status);
   return path.map((step, index) => ({
-    state: index < currentIndex || status === 'COMPLETED' ? 'complete' : index === currentIndex ? 'current' : 'upcoming',
+    state: index < slot || status === 'COMPLETED' ? 'complete' : index === slot ? 'current' : 'upcoming',
     status: step,
   }));
 }
@@ -900,7 +1129,12 @@ export type { LaundryOrderProgressProps, LaundryProgressState, LaundryProgressSt
 - [ ] **Step 3: Run**
 
 Run: `pnpm --filter @clensy/web exec vitest run src/laundry/laundry-order-progress.test.tsx`
-Expected: 11 passed.
+Expected: 69 passed.
+
+- [ ] **Step 3a: Mutation check (do not commit)**
+
+In `laundryProgressSteps`, replace the `returnStep` expression with `fulfillmentType === 'PICKUP' ? 'AWAITING_PICKUP' : 'AWAITING_DELIVERY'`, which drops the status-follows rule. Run the same command.
+Expected: 6 failed / 63 passed (the mismatched pairs). Restore the file, and 69 pass.
 
 - [ ] **Step 4: Commit**
 
@@ -994,10 +1228,12 @@ Run:
 ```bash
 pnpm --filter @clensy/web test && pnpm --filter @clensy/web build && pnpm --filter @clensy/web lint
 pnpm --filter web test && pnpm --filter web exec tsc --noEmit && pnpm --filter web lint && pnpm --filter web build
-git diff --stat 7c59b82 -- apps/web/app apps/api packages/ui packages/client
+{ git diff --name-only 7c59b82; git ls-files --others --exclude-standard; } | sort -u \
+  | grep -vxE 'docs/superpowers/plans/2026-10-10-laundry-ui-foundation-plan\.md|apps/web/lib/laundry-page-baseline\.test\.tsx|apps/web/lib/laundry-presentation-contract\.test\.ts|packages/web/src/i18n/messages\.ts|packages/web/src/i18n/messages/en/laundry\.ts|packages/web/src/index\.ts|packages/web/src/laundry/(format-weight-grams|laundry-order-actions|laundry-order-progress|laundry-order-status)(\.test)?\.tsx?' \
+  && { echo 'SCOPE: unexpected files above'; exit 1; } || echo 'SCOPE: ok'
 ```
 
-Expected: `@clensy/web` 11 files / 100 tests passed, tsc and lint exit 0. `web` 24 files / 595 tests passed, tsc, lint and build exit 0. The last diff is empty: no page, API, UI-kit or client change.
+Expected: `@clensy/web` 11 files / 377 tests passed, tsc and lint exit 0. `web` 24 files / 595 tests passed, tsc, lint and build exit 0. The scope check prints `SCOPE: ok`. It covers committed, uncommitted and untracked changes against the base, and any file outside the allowlist (this plan, the two `apps/web/lib` tests, and the `packages/web/src` files in the File Map) is listed and fails the check. The M6 gate record appends to this plan, so the plan file is on the list.
 
 ## Traceability
 
@@ -1017,7 +1253,7 @@ Expected: `@clensy/web` 11 files / 100 tests passed, tsc and lint exit 0. `web` 
 
 - Every screen: list (#163), intake modal (#160), order page (#156), weighing (#155), services (#158), price review (#162), invoice card (#166), lifecycle buttons (#165), and the drawer removal (#161). Each consumes these helpers.
 - Moving `formatMinorUnits` into `@clensy/web`. Money formatting stays where it is.
-- An automated cross-check between the client mirror and the API's policy and role constants. The two are compared by review (Review Focus 1–2). A source-parsing test across apps would be brittle.
+- Reading the API source at test time. The Task 4 oracle is a transcription, re-verified by review and by the one-off comparison recorded under Pre-validation. A committed cross-app source parser would break on formatting changes, and `@clensy/web` cannot import `apps/api`.
 - Positive-weight validation (§8.4.1) is #155. Price preview and line descriptions (§8.4.2, §8.4.5) are #159.
 
 ## Execution risks (operational only)
