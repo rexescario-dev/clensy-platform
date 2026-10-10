@@ -232,4 +232,18 @@ describe('laundryOrders list filters (e2e)', () => {
     });
     expect(res.body.errors).toBeDefined();
   });
+
+  // #171: `OffsetPaging.offset` is a GraphQL `Int` (32-bit signed). The web
+  // list therefore treats a URL offset above 2147483647 as malformed.
+  it('accepts an offset at the top of the GraphQL Int range and rejects one above it', async () => {
+    const PAGE = `query($o: Int!) { laundryOrders(paging: { limit: 20, offset: $o }) { totalCount nodes { id } } }`;
+    const inRange = await gql(PAGE, { o: 2147483640 });
+    expect(inRange.body.errors).toBeUndefined();
+    expect(inRange.body.data.laundryOrders.nodes).toEqual([]);
+    const above = await gql(PAGE, { o: 2147483648 });
+    // The Int coercion error specifically, not any error.
+    expect(above.body.errors?.[0]?.message).toMatch(
+      /Int cannot represent non 32-bit signed integer value/,
+    );
+  });
 });

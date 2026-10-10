@@ -3050,8 +3050,8 @@ Expected: `allowlist OK`.
 - Partial order-id search. It would need a schema-level change, which the issue rules out.
 - Sorting by weight or total (not in `LaundryOrderSortFields`). Sorting customers by name (the server has no such sort field).
 - A fixed locale or timezone for Created (a product decision beyond #163).
-- M7 (revision 6) P3-1: a test for `closeWithHref` resetting `openedHereRef`. No behaviour depends on it today. `main`'s `close` has the same untested pattern.
-- M7 (revision 6) P3-2: clamping a hand-edited offset above GraphQL's 32-bit `Int` (for example `?offset=3000000000`), which today shows the list's error state. It is only reachable by editing the URL. It is a behaviour change, so it needs its own slice.
+- *(Resolved by #171, PR #172.)* M7 (revision 6) P3-1: a test for `closeWithHref` resetting `openedHereRef`. No behaviour depends on it today. `main`'s `close` has the same untested pattern.
+- *(Resolved by #171, PR #172.)* M7 (revision 6) P3-2: clamping a hand-edited offset above GraphQL's 32-bit `Int` (for example `?offset=3000000000`), which today shows the list's error state. It is only reachable by editing the URL. It is a behaviour change, so it needs its own slice.
 
 ## Execution risks (operational only)
 

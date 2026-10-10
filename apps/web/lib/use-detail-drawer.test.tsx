@@ -54,6 +54,23 @@ function BookingsLikePage() {
   );
 }
 
+// Wired like the laundry list: the named entry points, with exact URLs.
+function LaundryLikePage() {
+  const { activeId, closeWithHref, openWithHref } = useDetailDrawer();
+  return (
+    <>
+      <button type="button" onClick={() => openWithHref('/app/bookings?status=A&detail=o1')}>
+        Open o1
+      </button>
+      {activeId ? (
+        <DetailDrawer open onClose={() => closeWithHref('/app/bookings?status=A')} title="Order">
+          <p>{activeId}</p>
+        </DetailDrawer>
+      ) : null}
+    </>
+  );
+}
+
 let container: HTMLDivElement;
 let root: Root;
 
@@ -119,5 +136,37 @@ describe('useDetailDrawer on pages that pass close straight to onClose', () => {
     expect(nav.replace).not.toHaveBeenCalled();
     expect(window.history.pushState).not.toHaveBeenCalled();
     expect(window.history.replaceState).not.toHaveBeenCalled();
+  });
+
+  // #171: once a drawer opened here has been closed, one that reappears without a new open (for
+  // example by Forward) counts as reached directly, so it closes with a replace, not Back.
+  it('close resets opened-here: a drawer that reappears afterwards closes with router.replace', () => {
+    nav.query = 'status=A';
+    act(() => root.render(<BookingsLikePage />));
+    act(() => button('Open o1').click());
+    show('status=A&detail=o1');
+    act(() => button('Close').click());
+    expect(nav.back).toHaveBeenCalledTimes(1);
+    show('status=A'); // Back landed on the list
+    show('status=A&detail=o1'); // Forward: the drawer reappears with no new open
+    act(() => button('Close').click());
+    expect(nav.back).toHaveBeenCalledTimes(1);
+    expect(nav.replace).toHaveBeenCalledWith('/app/bookings?status=A');
+  });
+
+  it('closeWithHref resets opened-here: a drawer that reappears afterwards closes with replaceState', () => {
+    nav.query = 'status=A';
+    act(() => root.render(<LaundryLikePage />));
+    act(() => button('Open o1').click());
+    expect(window.history.pushState).toHaveBeenCalledWith(null, '', '/app/bookings?status=A&detail=o1');
+    show('status=A&detail=o1');
+    act(() => button('Close').click());
+    expect(nav.back).toHaveBeenCalledTimes(1);
+    show('status=A');
+    show('status=A&detail=o1');
+    act(() => button('Close').click());
+    expect(nav.back).toHaveBeenCalledTimes(1);
+    expect(window.history.replaceState).toHaveBeenCalledWith(null, '', '/app/bookings?status=A');
+    expect(nav.replace).not.toHaveBeenCalled();
   });
 });

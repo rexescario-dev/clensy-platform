@@ -52,6 +52,18 @@ describe('parseLaundryOrderListState', () => {
     expect(parseLaundryOrderListState(new URLSearchParams('offset=60')).offset).toBe(60);
   });
 
+  // #171 (M7 P3-3): only plain decimal digits are an offset; `Number()`'s other spellings are not.
+  it.each(['0x7fffffff', '1e3', '2.147483647e9', ' 60 ', '+20', '60abc'])('treats offset=%j as malformed', (raw) => {
+    expect(parseLaundryOrderListState(new URLSearchParams({ offset: raw })).offset).toBe(0);
+  });
+
+  // #171: `OffsetPaging.offset` is a GraphQL Int; the API rejects anything above 2147483647.
+  it('treats an offset outside the GraphQL Int range as malformed', () => {
+    expect(parseLaundryOrderListState(new URLSearchParams('offset=2147483647')).offset).toBe(2147483640);
+    expect(parseLaundryOrderListState(new URLSearchParams('offset=2147483648')).offset).toBe(0);
+    expect(parseLaundryOrderListState(new URLSearchParams('offset=3000000000')).offset).toBe(0);
+  });
+
   it('trims the search and caps it at 200 characters', () => {
     expect(parseLaundryOrderListState(new URLSearchParams('q=%20%20ana%20')).search).toBe('ana');
     expect(parseLaundryOrderListState(new URLSearchParams(`q=${'a'.repeat(250)}`)).search).toHaveLength(200);
@@ -107,6 +119,11 @@ describe('withLaundryFilterChange', () => {
 });
 
 describe('withLaundryPage', () => {
+  it('keeps a page whose offset is the last in the GraphQL Int range, and treats the next as page 1', () => {
+    expect(withLaundryPage(DEFAULT_LAUNDRY_ORDER_LIST_STATE, 107374183).offset).toBe(2147483640);
+    expect(withLaundryPage(DEFAULT_LAUNDRY_ORDER_LIST_STATE, 107374184).offset).toBe(0);
+  });
+
   it('maps the 1-based page to an offset of 20 per page', () => {
     expect(withLaundryPage(DEFAULT_LAUNDRY_ORDER_LIST_STATE, 1).offset).toBe(0);
     expect(withLaundryPage(DEFAULT_LAUNDRY_ORDER_LIST_STATE, 3).offset).toBe(40);

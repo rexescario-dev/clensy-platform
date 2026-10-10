@@ -37,6 +37,9 @@ export interface LaundryOrderHrefParams {
 }
 
 export const LAUNDRY_ORDER_PAGE_SIZE = 20;
+// `OffsetPaging.offset` is a GraphQL `Int` (32-bit signed); the API rejects
+// anything larger, so a larger offset is treated as malformed (#171).
+export const LAUNDRY_ORDER_MAX_OFFSET = 2_147_483_647;
 export const LAUNDRY_SEARCH_DEBOUNCE_MS = 300;
 export const LAUNDRY_SEARCH_MAX_LENGTH = 200;
 
@@ -77,16 +80,19 @@ export function parseLaundryOrderListState(params: URLSearchParams): LaundryOrde
   const sortOrderRaw = params.get(PARAM.sortOrder);
   const statusRaw = params.get(PARAM.status);
   const fulfillmentRaw = params.get(PARAM.fulfillment);
-  const offsetRaw = Number(params.get(PARAM.offset));
+  // Plain decimal digits only: `Number()` would also accept hex, exponents,
+  // signs and surrounding spaces (#171).
+  const offsetText = params.get(PARAM.offset) ?? '';
+  const offsetRaw = /^\d+$/.test(offsetText) ? Number(offsetText) : Number.NaN;
 
   return {
     fulfillment: FULFILLMENT_TYPES.includes(fulfillmentRaw as LaundryFulfillmentType)
       ? (fulfillmentRaw as LaundryFulfillmentType)
       : null,
     // Snapped down to a page boundary, so a hand-edited offset never shows
-    // a fractional page.
+    // a fractional page. Outside the GraphQL `Int` range it is malformed.
     offset:
-      Number.isSafeInteger(offsetRaw) && offsetRaw >= 0
+      Number.isSafeInteger(offsetRaw) && offsetRaw >= 0 && offsetRaw <= LAUNDRY_ORDER_MAX_OFFSET
         ? offsetRaw - (offsetRaw % LAUNDRY_ORDER_PAGE_SIZE)
         : DEFAULT_LAUNDRY_ORDER_LIST_STATE.offset,
     search: normalizeLaundrySearch(params.get(PARAM.search) ?? ''),
@@ -192,11 +198,11 @@ export function withLaundryFilterChange(
 }
 
 // Pagination is 1-based in `DataTable`, offset-based in the URL. Anything
-// but a positive safe integer page, or a page whose offset is not a safe
-// integer, means page 1.
+// but a positive safe integer page, or a page whose offset is beyond
+// `LAUNDRY_ORDER_MAX_OFFSET`, means page 1.
 export function withLaundryPage(state: LaundryOrderListState, page: number): LaundryOrderListState {
   const offset = Number.isSafeInteger(page) && page >= 1 ? (page - 1) * LAUNDRY_ORDER_PAGE_SIZE : 0;
-  return { ...state, offset: Number.isSafeInteger(offset) ? offset : 0 };
+  return { ...state, offset: offset <= LAUNDRY_ORDER_MAX_OFFSET ? offset : 0 };
 }
 
 // A sort transition from the table. `null` always restores the default
