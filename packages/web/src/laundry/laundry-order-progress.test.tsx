@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ClensyI18nProvider } from '../i18n/i18n-context';
 import { getDefaultMessages } from '../i18n/messages';
-import { LaundryOrderProgress, laundryProgressSteps } from './laundry-order-progress';
+import { LaundryOrderProgress } from './laundry-order-progress';
+import { LAUNDRY_TERMINAL_STATUSES, laundryProgressSteps, type LaundryTerminalStatus } from './laundry-progress-steps';
 import { LAUNDRY_ORDER_STATUSES, type LaundryFulfillmentType, type LaundryOrderStatus } from './laundry-order-status';
 
 const FULFILLMENTS: readonly LaundryFulfillmentType[] = ['DELIVERY', 'PICKUP'];
@@ -150,6 +151,13 @@ describe('laundryProgressSteps', () => {
     expect(steps.filter((s) => s.state === 'current')).toHaveLength(1);
     const current = stepItems(render(status, fulfillment)).filter((i) => i.current);
     expect(current).toEqual([{ current: true, label: laundry.status[status], state: laundry.progress.state.current }]);
+  });
+});
+
+describe('terminal statuses', () => {
+  it('match this test\'s own list, and every one has exactly one catalog sentence', () => {
+    expect([...LAUNDRY_TERMINAL_STATUSES].sort()).toEqual([...TERMINAL].sort());
+    expectTypeOf<keyof typeof laundry.progress.terminal>().toEqualTypeOf<LaundryTerminalStatus>();
   });
 });
 

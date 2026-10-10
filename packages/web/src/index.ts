@@ -32,5 +32,7 @@ export {
   laundryOrderActions,
 } from './laundry/laundry-order-actions';
 export type { LaundryOrderVerb } from './laundry/laundry-order-actions';
-export { LaundryOrderProgress, laundryProgressSteps } from './laundry/laundry-order-progress';
-export type { LaundryOrderProgressProps, LaundryProgressState, LaundryProgressStep } from './laundry/laundry-order-progress';
+export { LaundryOrderProgress } from './laundry/laundry-order-progress';
+export type { LaundryOrderProgressProps } from './laundry/laundry-order-progress';
+export { laundryProgressSteps } from './laundry/laundry-progress-steps';
+export type { LaundryProgressState, LaundryProgressStep } from './laundry/laundry-progress-steps';
