@@ -1510,3 +1510,135 @@ Non-blocking observations. These do not affect the decision, and their dispositi
 4. The API reconciliation script is uncommitted by design (Deferred). Re-run it in later slices that touch laundry RBAC or the matrix.
 
 Next gate: **M8 — Refactoring** (owner to decide: refactor observation 1, or N/A).
+
+### M8 — Complete (2026-10-10)
+
+```text
+Decision: Complete
+Subject: PR #168, branch feat/157-laundry-ui-foundation, commit 18efc3a
+Scope:
+- packages/web/src/laundry/laundry-order-progress.tsx, its test, and a new laundry-progress-steps.ts
+- packages/web/src/index.ts (export sources only; the exported names are unchanged)
+Accepted specification: docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md (§4.3, §8.4.4)
+Accepted implementation plan: this plan
+M7 / authorization: Approved for merge (ccde444); M8 requested by the owner ("m8-m10")
+
+Maintainability goals (M7 non-blocking observations 1 and 2):
+- Tie the terminal-status type to the data, instead of a hand-written union plus a cast.
+- Keep the pure progress logic out of the 'use client' module, so a Server Component can call it.
+
+Changes:
+- LAUNDRY_TERMINAL_STATUSES is an `as const` tuple, and LaundryTerminalStatus is derived from it. PROGRESS_SLOT is now
+  Record<Exclude<LaundryOrderStatus, LaundryTerminalStatus>, number>, so every status must be in exactly one of the two
+  to compile. The component narrows with isLaundryTerminalStatus instead of `status as TerminalStatus`.
+- laundryProgressSteps and the step types move to laundry-progress-steps.ts (no 'use client'). The component imports
+  them from there. index.ts re-exports the same public names from the new module. The new module's helper names are
+  deliberately not added to the index (no public-API expansion).
+- One new test: the test's own TERMINAL list equals the tuple (runtime), and the catalog's progress.terminal keys equal
+  LaundryTerminalStatus (expectTypeOf, enforced by `pnpm --filter @clensy/web build`).
+
+Verification:
+Before (ccde444): @clensy/web 11 files / 376 passed, tsc exit 0; web 595 passed.
+After (18efc3a): @clensy/web 11 files / 377 passed (one new test), tsc and lint exit 0; web 24 files / 595 passed,
+  tsc, lint and build exit 0.
+Behaviour lock, re-run against the moved code, each restored:
+  mismatch rule dropped → 2 failed; PROCESSING/READY swapped → 44 failed; aria-current from status → 2 failed.
+Evidence for the new guard (not committed):
+  READY removed from PROGRESS_SLOT → 1 tsc error;
+  PROCESSING moved into the terminal tuple without a catalog sentence → TS2344 in the progress test;
+  LOST sentence removed from the catalog → 2 Vitest failures (the terminal markup tests), so a missing sentence also
+  fails in CI's `pnpm run test`; an extra sentence is caught only by the @clensy/web tsc build.
+
+Externally observable behavior changes: None
+Independent review: a fresh Opus 5.5 context, not the author, Approved with no blocking findings. Its dump of the
+  runtime exports, laundryProgressSteps for all 15 statuses × 2 fulfillment types (plus off-union inputs), and the
+  rendered markup for every combination was byte-identical at ccde444 and 18efc3a. A compiler-API listing of all 45
+  index exports and their types was identical. Mutations confirmed claims (a)–(c). Non-blocking notes: (b) depends on
+  tsc running; Server Component use is shown at module level only (for #156); the test's TERMINAL list is still
+  hand-written but runtime-checked.
+
+Gate: Complete — proceed to M9.
+```
+
+### M9 — Complete (2026-10-10)
+
+```text
+Decision: Complete
+Subject: #157 Laundry UI foundation, PR #168
+Accepted specification: docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md (with Amendment #164)
+Accepted implementation plan: this plan
+M7: Approved for merge (ccde444)
+M8: Complete (18efc3a), independently reviewed
+
+Documentation scope:
+- packages/web/README.md
+- docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md (one link only)
+- this plan's Gate outcomes
+
+Updated artifacts:
+- packages/web/README.md ← M6 (new laundry module and namespace) and M8 (pure progress module)
+- the lifecycle spec's "Governing process" link ← found by M9's link check (pre-existing)
+- this plan ← the M8–M10 gate outcomes
+
+Editorial changes:
+- The lifecycle spec's "Governing process" link was `../workflows/specs/agent-workflow-design.md`, one level too
+  shallow and broken since the spec was written. It is now `../../workflows/...`. No wording changed.
+
+Content updates:
+- packages/web/README.md: a new "Laundry presentation (`laundry/`)" section describing what shipped (local unions
+  pinned to the client, tones, formatWeightGrams contract, laundryOrderActions / canReceiveLaundryOrder,
+  laundryProgressSteps / <LaundryOrderProgress>, catalog key conventions, and when to re-run the reconciliation
+  script). The i18n paragraph's namespace list now includes `laundry`.
+
+Unchanged, with reason:
+- docs/README.md records API and tenant-isolation slices. This slice changes no API, schema or tenant behaviour.
+- apps/web/README.md: no apps/web page or shell change.
+- The lifecycle spec's Amendment #164 row: #164 is the spec-first gate. Implementation slices are tracked by epic
+  #154, not on the spec.
+- No changelog or roadmap file exists in the repository.
+
+Verification:
+- Links: every relative link in packages/web/README.md, this plan and the lifecycle spec resolves (scripted scan; the
+  one failure was the editorial fix above).
+- Heading hierarchy: the README's new `##` section sits between Roles and i18n, matching its siblings.
+- Status consistency: the plan is Accepted, M6 is complete, M7 Approved, M8 Complete, and PR #168 is open.
+- Cross-references: the README cites the spec sections and this plan. The plan cites the spec and Amendment #164.
+- Terminology follows the spec: verb, matrix, fulfillment branch, terminal exception, happy path; `fulfillmentType`
+  as *return* fulfillment.
+- Duplicates / outdated refs: the README's earlier namespace list was the only outdated reference; it is updated.
+
+Gate: Documentation complete. Code, behavior and contracts are unchanged by this stage.
+```
+
+### M10 — Accepted, workflow validated (2026-10-10)
+
+```text
+Decision: Accepted
+Subject: workflow prompt library
+Governing specification: docs/workflows/specs/agent-workflow-design.md
+```
+
+**Subject:** the installed workflow prompt library (`docs/workflows/`, generic 1.4.1 / claude 0.2.0), run on #157 from M4 to M9, downstream of the #164 slice-local amendment (M2/M3, merged in #167).
+
+**Asset inventory:** unchanged. Nine prompts map to M2–M10, with `conventions/prompt-library.md` as M1. There are no orphan assets.
+
+**Checks:**
+- §2.5 was honoured: M5 Accept `92d6fca` (recorded `98285a2`) is an ancestor of the first M6 commit `1fdfd0f`.
+- The Accepted spec governed everything. The plan cites Amendment #164, which was Accepted at M3 before M4 began (`7c59b82` is the plan's base). Owner direction during #164 kept the repeated-add-on behaviour unchanged before merge, and that was done as an M2 revision, not in M4.
+- M5 recorded two explicit Returns before Accept: eight findings on the first pass, four on the second. Each pass was re-pre-validated.
+- M6 followed the TDD contract. Each task's RED state was observed before its implementation was copied in. The Task 1 characterization test has mutation evidence outside the commit.
+- CLAUDE.md's M7 rule was honoured: a fresh, independent reviewer on the most capable model. It was applied again to the M8 refactor, because that touches application code.
+- Providers were honoured: GitHub for issues #157/#154, the branch, and PR #168.
+- Slice Completion Reports were emitted at M6 and at M7–M10.
+- §2.8 was honoured: one PR (#168) carries the plan, implementation, refactor and docs.
+- The scope allowlist governed M6. M8 and M9 each declared their own scope: the new `laundry-progress-steps.ts`, the README, and the one spec link.
+
+**Blocking findings:** none.
+
+**Non-blocking observations:**
+1. **CI does not type-check `packages/*`.** CI runs lint, `api`/`web` `tsc --noEmit`, and the tests. `expectTypeOf` assertions inside `packages/web/src` tests are therefore enforced only by `pnpm --filter @clensy/web build`, which CI doesn't run. Here, the apps/web contract test (Task 6) is CI-enforced. The catalog's terminal sentences are CI-enforced at runtime for a *missing* sentence (2 Vitest failures), but an *extra* sentence is caught only locally. This gap predates the slice and affects every `packages/*` test file. It is a CI-configuration follow-up, outside this slice.
+2. **Generating plan code from verified files kept the plan and the code identical through three revisions.** M7 confirmed this with a byte comparison of all 10 files. One gap in the method: M4 first described the pre-validation as "applied in task order" when the RED states were in fact reproduced by removal. The wording was corrected before review. Plans should describe how RED was obtained.
+3. **Review findings about a check's own logic need a run, not a reading.** The second M5 pass read the old scope check as fail-open. A run showed it failed closed, and the owner corrected the finding. The switch to `if`/`else` still stood, for interactive safety.
+4. **The commit-trailer rule needed enforcement at commit time.** One M6 commit was created with a `Co-Authored-By` trailer, against the owner's global rule. It was amended before push, and a scan confirmed no pushed commit carries one.
+
+Gate: **Workflow validated.**
