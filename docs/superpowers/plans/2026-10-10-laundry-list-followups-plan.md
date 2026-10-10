@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Accepted |
+| M5 decision | **Accepted** — 2026-10-10, at `640739f`, by the owner, on the first pass. No blocking or major findings. M6 MUST implement Tasks 1–3 as written, then run Final verification in full: the four-path allowlist (with `use-detail-drawer.ts` unchanged), mutations A–E and the Task 1 negative check, full suites, and the manual browser checks. The Forward-after-close behaviour stays as pinned. M7 MUST be a fresh independent review (`CLAUDE.md`: application code). |
 | Date | 2026-10-10 |
 | Tracking issue | [#171](https://github.com/rexescario-dev/clensy-platform/issues/171). Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Follows [#163](https://github.com/rexescario-dev/clensy-platform/issues/163) (merged in #170 at `15c45cf`). |
 | Scope | Three test files and one module. `apps/web/lib/use-laundry-order-list-url-state.ts` (offset range), its test, `apps/web/lib/use-detail-drawer.test.tsx` (tests only), and `apps/api/test/laundry-order-list-filters.e2e-spec.ts` (one characterization). No API, schema, `@clensy/ui`, `@clensy/web` or page change. `use-detail-drawer.ts` is not modified. |
@@ -274,4 +275,11 @@ diff --git a/apps/web/lib/use-detail-drawer.test.tsx b/apps/web/lib/use-detail-d
 
 ## Gate outcomes
 
-*(Appended after M5.)*
+### M5 — Accepted (2026-10-10, first pass)
+
+Accepted at `640739f` by the owner. No blocking or major findings. The owner's minor notes:
+1. The Forward-after-close behaviour is unusual but deliberately preserved and deferred.
+2. The manual boundary checks must confirm the rendered UI: `?offset=3000000000` shows page 1 with rows, and `?offset=2147483647` shows page 107374183 without an error.
+3. The allowlist must be confirmed after implementation.
+
+The reported pre-validation results were not re-run by the owner. M6 re-observes them.
