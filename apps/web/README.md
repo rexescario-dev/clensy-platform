@@ -30,7 +30,7 @@ The laundry order list ([#163](https://github.com/rexescario-dev/clensy-platform
 - **Sort:** an allowed field, then `id ASC`.
 - **Paging:** 20 per page.
 
-**URL state.** The list keeps its state in the URL, in `q`, `status`, `fulfillment`, `sortBy`, `sortOrder` and `offset` (`lib/use-laundry-order-list-url-state.ts`). Parsing validates every value, treats an offset beyond GraphQL's `Int` range as malformed ([#171](https://github.com/rexescario-dev/clensy-platform/issues/171)), and snaps the offset to a page boundary. Variables are built in `lib/laundry-order-list-query.ts`. The search box debounces for 300 ms (`lib/use-laundry-search-draft.ts`).
+**URL state.** The list keeps its state in the URL, in `q`, `status`, `fulfillment`, `sortBy`, `sortOrder` and `offset` (`lib/use-laundry-order-list-url-state.ts`). Parsing validates every value. The offset must be plain decimal digits within GraphQL's `Int` range, or it is malformed ([#171](https://github.com/rexescario-dev/clensy-platform/issues/171)); it is snapped to a page boundary. Variables are built in `lib/laundry-order-list-query.ts`. The search box debounces for 300 ms (`lib/use-laundry-search-draft.ts`).
 
 **Native history writes.** Unlike the bookings list's `router.replace`, this list writes its URL with the native History API, which Next.js syncs into `useSearchParams`. Each write builds on the live `window.location`, keeping the hash and every param the list does not own.
 - **List updates** use `replaceState`, so they add no history entry.

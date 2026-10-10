@@ -545,8 +545,66 @@ Re-verify:
   | Browser-Back path, from a fresh `?status=RECEIVED` | open row → browser Back (the list) → Forward (the drawer) → × goes Back (the list URL) → Forward reopens the drawer, so the drawer entry survives and there is no duplicate. |
   | Bookings direct-link × | closes to `/app/bookings?sortBy=status&sortOrder=asc&limit=20&offset=0`, +0 entries |
 
-  In the browser-Back run, `history.length` read 9 both before and after opening the row (the tab already had about ten navigations). The path's behaviour is evidenced by the URLs and by Forward reopening the drawer after ×.
+  In the browser-Back run, `history.length` read 9 both before and after opening the row. *Corrected after M7 (P3-2):* the original explanation ("the tab already had about ten navigations") does not hold, because `pushState` always adds an entry after truncating forward entries. The cause is unexplained, so the `history.length` part of this check is **unconfirmed**. The path's behaviour is still evidenced by the URL sequence and by Forward reopening the drawer after ×. The hook is unchanged and unit-pinned (mutations A and B).
 
 Deviation: none.
 
 Next gate: **M7**, a fresh independent review (`CLAUDE.md`: application code).
+
+### M7 — Approved for merge (2026-10-10, fresh independent review of revision 2)
+
+A fresh agent context on Opus 5.5 reviewed revision 2 at head `9f9447f`. It did not implement the change. It was read-only, worked in a temporary worktree it removed, and left the tree clean.
+
+**Decision: Approved for merge. Blocking findings: none.**
+
+The reviewer independently confirmed:
+
+- **Gate order:** the M5 record (`116a838`) precedes `4c3de3c` and `a944012`, one commit per task. No trailers in commits or the PR body.
+- **Exact application:** the plan's three revision-2 diffs applied to `4413351` with no fuzz reproduce both commits exactly.
+- **Scope:** the code changes are the four File Map paths. The `apps/web/README.md` difference is the docs-only M9 sentence. `use-detail-drawer.ts` is identical to `main`.
+- **Task 5 red/green:** RED 5 failed / 23 passed, on exactly the five stated spellings (`60abc` already passed); GREEN 28 passed.
+- **Task 5 probes:** empty, zeros, boundary values, hex, binary, octal, exponents, signs, encoded `+`, whitespace, newline, decimals, Arabic-Indic and full-width digits, underscores, `Infinity`, `NaN`, unsafe integers, and 400-digit strings. Every offset the app writes round-trips. The other params are unaffected.
+- **Task 4:** the live message is graphql-js's own `GraphQLInt` text. The `{ o: 'x' }` negative check fails as expected.
+- **Mutations:** A–F at the recorded counts. Four extra regex mutants were killed. The only survivor, `\d*`, is an equivalent mutant.
+- **Suites:** `web` 672; `tsc` and lint clean; API e2e 9.
+- **CI** green at `9f9447f`.
+
+Reported only by M6, not re-run: the Next build, `@clensy/web` 402, and the browser checks.
+
+**Non-blocking (P3), resolved in M9 below:**
+1. The PR body described revision 1 only.
+2. M6's `history.length` explanation for the browser-Back run was wrong; the record above is corrected.
+3. `apps/web/README.md` did not say only plain digits are accepted.
+
+The reviewer also judged Review Focus 1 and both close-path checks accurate against `use-detail-drawer.ts`. They rest on an implicit assumption: the list page stays mounted across same-pathname Back and Forward.
+
+### M8 — N/A (2026-10-10, revision 2)
+
+```text
+Decision: N/A
+Rationale: revision 2 is one guard expression and tests. There is nothing to restructure without changing behaviour.
+```
+
+### M9 — Complete (2026-10-10, revision 2)
+
+```text
+Decision: Complete
+Documentation scope: apps/web/README.md (one clause); PR #172 body; this plan (the M6 record correction above and these records)
+Content updates:
+- apps/web/README.md: the URL-state sentence now says the offset must be plain decimal digits (← Task 5; M7 P3-3).
+- PR #172 body: now describes revisions 1 and 2, including the user-visible `?offset=1e3` → page 1 effect (← M7 P3-1).
+- This plan: the M6 revision-2 browser-Back note is corrected to "unconfirmed" (← M7 P3-2).
+Verification: relative links and anchors resolve (scripted scan). Status consistency: plan Accepted (revision 2), M6
+complete, M7 Approved, M8 N/A.
+Gate: Documentation complete. Code unchanged.
+```
+
+### M10 — Accepted, workflow validated (2026-10-10, revision 2)
+
+The asset inventory is unchanged. A post-approval revision followed the gates in order: M4 revision → owner M5 (with a clarification applied before M6) → M6 red first → fresh M7 → M8/M9. That honours §2.4 and §2.5 for changed application code.
+
+**Blocking findings:** none.
+
+**Non-blocking observation:** an M6 record gave an explanation the evidence did not support (the `history.length` note). M7 caught it, and it is now corrected. Records should state an anomaly as unexplained rather than guess a cause.
+
+Gate: **Workflow validated.**
