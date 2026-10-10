@@ -4,7 +4,9 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft (revision 2) |
+| Status | Accepted (revision 2) |
+| M5 decision (revision 2) | **Accepted** — 2026-10-11, at `d8f0ac2`, by the owner. No blocking findings. M6 MUST run Final verification in full; the production-build browser matrix is required before merge, because the test harness models history and cannot prove the installed Next.js keeps the marker. M7 MUST be a fresh independent review (`CLAUDE.md`: application code). Pre-validation counts are author-reported until M6 re-observes them. |
+| M5 decision (revision 1) | Request changes — 2026-10-11, at `b0eec89`. See Gate outcomes. |
 | Date | 2026-10-11 |
 | Tracking issue | [#173](https://github.com/rexescario-dev/clensy-platform/issues/173). Follows #171 (merged in #172 at `8553a04`), whose plan deferred this behaviour (Review Focus 1). |
 | Scope | `apps/web/lib/use-detail-drawer.ts`, `apps/web/lib/use-laundry-order-list-url-state.ts`, and two test files. No page, `@clensy/ui`, `@clensy/web`, API or schema change. |
@@ -710,6 +712,5 @@ diff --git a/apps/web/lib/use-laundry-order-list-url-state.ts b/apps/web/lib/use
 
 ## Gate outcomes
 
-*(Appended after M5.)*
-
 - **M5, review 1 (2026-10-11):** request changes. It raised four points: the Back invariant, hook-test isolation, coverage of all nine pages, and Next version sensitivity. Revision 2 answers each one; see the Revision log.
+- **M5, review 2 (2026-10-11): Accepted** at `d8f0ac2`, by the owner. No blocking findings. The reviewer found that revision 2 addresses all four points. The one non-blocking note: the hook tests model the history stack and Next's URL sync separately, so they cannot prove the installed Next.js keeps the marker. The production-build browser matrix is therefore required before merge, not optional. The pre-validation results were not re-run by the reviewer; M6 re-observes them.
