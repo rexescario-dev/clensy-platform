@@ -35,8 +35,12 @@ fragment LaundryOrderDetail on LaundryOrder {
   }
 }
 
-query LaundryOrders($paging: OffsetPaging, $sorting: [LaundryOrderSort!]) {
-  laundryOrders(paging: $paging, sorting: $sorting) {
+query LaundryOrders(
+  $paging: OffsetPaging
+  $filter: LaundryOrderFilter
+  $sorting: [LaundryOrderSort!]
+) {
+  laundryOrders(paging: $paging, filter: $filter, sorting: $sorting) {
     totalCount
     pageInfo {
       hasNextPage

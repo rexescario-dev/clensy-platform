@@ -18,9 +18,31 @@ Full application shell (sidebar/header/user menu/logout) mounted once for every 
 
 `apps/web` does still keep `cn` and `lucide-react` as ordinary dependencies for its own non-primitive needs (its own `className` composition, its own icons) — that isn't an exception to the rule above, since neither is a shadcn-specific dependency.
 
-`apps/web` also consumes reusable Clensy domain components (e.g. `LoginForm`, `BookingDataTable`, `StaffDataTable`, `CreateStaffForm`) through [`@clensy/web`](../../packages/web/README.md)'s public API. Unlike `@clensy/ui`, these are self-translating — they own their own UI copy via `@clensy/web`'s own i18n context, not via translated-strings-as-props from `apps/web`.
+`apps/web` also consumes reusable Clensy domain components (e.g. `LoginForm`, `BookingDataTable`, `LaundryOrderDataTable`, `StaffDataTable`, `CreateStaffForm`) through [`@clensy/web`](../../packages/web/README.md)'s public API. Unlike `@clensy/ui`, these are self-translating — they own their own UI copy via `@clensy/web`'s own i18n context, not via translated-strings-as-props from `apps/web`.
 
 `apps/web` also still depends on the `shadcn` package itself, and `app/globals.css` still has `@import "shadcn/tailwind.css"`. This is not an exception to the rule above either: it's a CSS token dependency, not a component dependency. `apps/web/app/globals.css` owns the base theme-token layer that `@clensy/ui`'s primitives consume by class name (see the design spec §4.7), and that CSS import is the only reason the `shadcn` package stays in `apps/web/package.json`. Do not remove it — doing so breaks the Tailwind build.
+
+## Laundry list (`/app/laundry`)
+
+The laundry order list ([#163](https://github.com/rexescario-dev/clensy-platform/issues/163); [plan](../../docs/superpowers/plans/2026-10-10-laundry-order-list-plan.md); [lifecycle spec](../../docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md) Amendment #164 §8.4.4) filters, sorts and pages on the server:
+- **Search:** customer name (escaped `iLike`), plus an exact match on a full order UUID.
+- **Filters:** status and fulfillment, each with `eq`.
+- **Sort:** an allowed field, then `id ASC`.
+- **Paging:** 20 per page.
+
+**URL state.** The list keeps its state in the URL, in `q`, `status`, `fulfillment`, `sortBy`, `sortOrder` and `offset` (`lib/use-laundry-order-list-url-state.ts`). Parsing validates every value and snaps the offset to a page boundary. Variables are built in `lib/laundry-order-list-query.ts`. The search box debounces for 300 ms (`lib/use-laundry-search-draft.ts`).
+
+**Native history writes.** Unlike the bookings list's `router.replace`, this list writes its URL with the native History API, which Next.js syncs into `useSearchParams`. Each write builds on the live `window.location`, keeping the hash and every param the list does not own.
+- **List updates** use `replaceState`, so they add no history entry.
+- **Opening the drawer** uses `pushState`, from a row or after creating an order.
+- **Closing a drawer reached by a direct link** uses `replaceState` with `detail` removed. A drawer opened on the page closes with `router.back()`.
+- **Back/Forward** cancels a search still waiting to commit.
+
+The page makes no `router.push` or `router.replace` of its own.
+
+**Drawer hook.** For this, `lib/use-detail-drawer.ts` has two laundry-only methods, `openWithHref(href)` and `closeWithHref(href)`. Its `open` and `close` are unchanged for every other page. Those pages pass `close` straight to `onClose`, which `DetailDrawer`'s × button calls with a click event. So `close` must never take an argument; `lib/use-detail-drawer.test.tsx` pins that.
+
+Until [#161](https://github.com/rexescario-dev/clensy-platform/issues/161), a row opens the drawer (`?detail=<id>`), not `/app/laundry/[id]`.
 
 ## i18n
 

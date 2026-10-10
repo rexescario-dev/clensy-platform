@@ -37,13 +37,23 @@ Column headers and generic strings (`Unassigned`, `No bookings.`) come from `use
 
 ## Laundry presentation (`laundry/`)
 
-Shared presentation helpers for the laundry screens of [#154](https://github.com/rexescario-dev/clensy-platform/issues/154) ([laundry lifecycle spec](../../docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md) §4.3, §4.4, §4.9 and Amendment #164 §8.4.4; [#157 plan](../../docs/superpowers/plans/2026-10-10-laundry-ui-foundation-plan.md)). No page uses them yet. The screens adopt them in later #154 slices.
+Shared presentation helpers for the laundry screens of [#154](https://github.com/rexescario-dev/clensy-platform/issues/154) ([laundry lifecycle spec](../../docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md) §4.3, §4.4, §4.9 and Amendment #164 §8.4.4; [#157 plan](../../docs/superpowers/plans/2026-10-10-laundry-ui-foundation-plan.md)). The `/app/laundry` list uses them ([#163](https://github.com/rexescario-dev/clensy-platform/issues/163), [#163 plan](../../docs/superpowers/plans/2026-10-10-laundry-order-list-plan.md)); the order page and the remaining #154 screens adopt them in later slices.
 
 - `LaundryOrderStatus` and `LaundryFulfillmentType` are declared locally, not imported from `@clensy/client`. `apps/web/lib/laundry-presentation-contract.test.ts` pins them to the generated client types under `tsc`. `LAUNDRY_STATUS_TONE` is the spec §4.9 badge-tone map, and `LAUNDRY_ORDER_STATUSES` lists every status.
 - `formatWeightGrams(grams)` renders integer grams as kilograms using integer arithmetic only: two decimals, or three when the gram digit is non-zero (`1` → `0.001 kg`, `2500` → `2.50 kg`). Negative, fractional or unsafe input throws `RangeError`. Money stays `formatMinorUnits` in apps/web.
 - `laundryOrderActions(status, fulfillmentType, role)` returns the verbs a screen may show, in presentation order. It is the intersection of the spec §4.3 matrix (plus re-weighing a `WEIGHED` order), the fulfillment branch, and the API's role sets. `canReceiveLaundryOrder(role)` covers intake. `ANALYST`, `SUPER_ADMIN` and a still-loading role get nothing. `LAUNDRY_DESTRUCTIVE_VERBS` marks the verbs that need a confirmation. The helper is presentation only, and the API decides. If the API's matrix or role sets change, re-run the plan's Task 4 reconciliation script.
 - `laundryProgressSteps(status, fulfillmentType)` is pure, in a module without `'use client'`. It returns the happy-path steps, or `null` for a terminal exception. `<LaundryOrderProgress>` renders those steps as an ordered list with `aria-current="step"` on the current step only, or a terminal exception as a badge plus one sentence. `AWAITING_PAYMENT` takes the Paid slot only while it is the status. `COMPLETED` marks every step done.
-- Copy comes from the `laundry` namespace. Enum-valued maps are keyed by the GraphQL value (`status`, `fulfillment`, `invoicePaymentStatus`, `paymentTerms`, `progress.terminal`). Verb maps are keyed by `LaundryOrderVerb`: `actions` (labels), `success` (toast text), `failure` (inline errors) and `confirm` (exactly the destructive verbs).
+- `<LaundryOrderDataTable>` (#163) is the list's presentation:
+  - **Columns:** customer, short order id (the full id in `title` and screen-reader text), fulfillment, status badge, weight, total and created.
+  - **Toolbar:** a labelled search field and native status and fulfillment selects, plus a "Clear search and filters" button while any is active.
+  - **Mobile:** a card per order below `sm`.
+  - **States:** the plain or filtered empty copy.
+
+  Like `BookingDataTable`, it delegates to `@clensy/ui`'s `DataTable`, takes a host-injected `formatPrice`, and is props-driven. The host owns the URL state and the query.
+- `laundry-order-sort.ts` is the list's sort contract:
+  - **Keys:** `LAUNDRY_ORDER_SORT_KEYS` lists the `LaundryOrderSortFields`. The table offers Order, Fulfillment, Status and Created. Customer is not sortable, because the server's only customer sort is `customerId`, which is not alphabetical.
+  - **Clicks:** `clickedLaundrySortKey` takes only the clicked column from `DataTable` and rejects unknown keys and directions. `nextLaundryOrderSort` applies the list's own transitions: a new column sorts ascending; ascending goes to descending; descending goes to `null`, which means "restore `DEFAULT_LAUNDRY_ORDER_SORT`" (Created, descending). Created itself toggles ascending ↔ descending.
+- Copy comes from the `laundry` namespace. Enum-valued maps are keyed by the GraphQL value (`status`, `fulfillment`, `invoicePaymentStatus`, `paymentTerms`, `progress.terminal`). Verb maps are keyed by `LaundryOrderVerb`: `actions` (labels), `success` (toast text), `failure` (inline errors) and `confirm` (exactly the destructive verbs). The list's copy is under `list` (columns, filters, search label, title, create button, filtered-empty text).
 
 ## i18n (`src/i18n/`)
 

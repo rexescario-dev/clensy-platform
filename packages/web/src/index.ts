@@ -36,3 +36,17 @@ export { LaundryOrderProgress } from './laundry/laundry-order-progress';
 export type { LaundryOrderProgressProps } from './laundry/laundry-order-progress';
 export { laundryProgressSteps } from './laundry/laundry-progress-steps';
 export type { LaundryProgressState, LaundryProgressStep } from './laundry/laundry-progress-steps';
+export { LaundryOrderDataTable } from './laundry/laundry-order-data-table';
+export type {
+  LaundryOrderDataTableProps,
+  LaundryOrderListFilters,
+  LaundryOrderRow,
+} from './laundry/laundry-order-data-table';
+export {
+  DEFAULT_LAUNDRY_ORDER_SORT,
+  LAUNDRY_ORDER_SORT_KEYS,
+  clickedLaundrySortKey,
+  isLaundryOrderSortKey,
+  nextLaundryOrderSort,
+} from './laundry/laundry-order-sort';
+export type { LaundryOrderSortKey, LaundryOrderSortState } from './laundry/laundry-order-sort';

@@ -17,9 +17,11 @@ import { useCallback, useRef } from 'react';
 // there is no guaranteed list-page history entry to go back to; blindly
 // calling `router.back()` could navigate somewhere outside the app entirely
 // (or nowhere, if there's no history at all). `openedHereRef` distinguishes
-// the two cases: it's only set to `true` by this hook's own `open()` call,
-// never by the initial mount reading a pre-existing `?detail=` param, so a
-// direct/shared link always takes the `router.replace()` branch instead.
+// the two cases: it's only set to `true` by this hook's own `open()` or
+// `openWithHref()` call, never by the initial mount reading a pre-existing
+// `?detail=` param, so a direct/shared link always takes the replace branch
+// instead (`router.replace()` in `close`, a native `replaceState` in
+// `closeWithHref`).
 export function useDetailDrawer(paramName = 'detail') {
   const router = useRouter();
   const pathname = usePathname();
@@ -47,5 +49,28 @@ export function useDetailDrawer(paramName = 'detail') {
     router.replace(query ? `${pathname}?${query}` : pathname);
   }, [router, pathname, searchParams, paramName]);
 
-  return { activeId, close, open };
+  // Laundry list only (#163): open and close with an exact URL the caller
+  // built from the live `window.location`, written with the native History
+  // API, which Next.js syncs into `useSearchParams`. Separate names, not an
+  // optional argument on `open`/`close`: other pages pass `close` straight
+  // to `onClose`, so `DetailDrawer`'s × button calls it with a click event,
+  // and that must keep meaning "close", never "go to this URL".
+  const openWithHref = useCallback((href: string) => {
+    openedHereRef.current = true;
+    window.history.pushState(null, '', href);
+  }, []);
+
+  // A drawer opened here closes with `router.back()`, as `close` does. One
+  // reached by a direct link or refresh replaces the entry with `href`, which
+  // must not carry `<paramName>`.
+  const closeWithHref = useCallback((href: string) => {
+    if (openedHereRef.current) {
+      openedHereRef.current = false;
+      router.back();
+      return;
+    }
+    window.history.replaceState(null, '', href);
+  }, [router]);
+
+  return { activeId, close, closeWithHref, open, openWithHref };
 }
