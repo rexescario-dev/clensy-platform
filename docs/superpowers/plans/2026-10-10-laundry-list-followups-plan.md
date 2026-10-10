@@ -283,3 +283,37 @@ Accepted at `640739f` by the owner. No blocking or major findings. The owner's m
 3. The allowlist must be confirmed after implementation.
 
 The reported pre-validation results were not re-run by the owner. M6 re-observes them.
+
+### M6 — Implementation complete (2026-10-10)
+
+Implemented on `feat/171-laundry-list-followups` from the Accepted plan (`640739f`, recorded `74ad167`). Each task applied its diff exactly as embedded in this plan (extracted and `git apply`-ed), one commit each, in order.
+
+| Task | Commit | Evidence |
+| --- | --- | --- |
+| 1 Offset limit (**characterization**) | `9577172` | 9 passed (with `laundry.e2e-spec`). Failure evidence, not committed: `2147483648` → `2147483647` gave 1 failed / 6 passed. Reverted. eslint clean. |
+| 2 Out-of-range offset | `4d1a1fa` | RED 2 failed / 20 passed (22) → GREEN 22 passed. `tsc` clean. |
+| 3 Opened-here reset (**characterization**) | `6e1a87f` | 5 passed. Failure evidence, not committed: mutation A (no reset in `close`) and mutation B (no reset in `closeWithHref`) each gave 1 failed / 4 passed. Reverted. |
+
+Final verification:
+
+- Allowlist OK: exactly the four File Map paths. `use-detail-drawer.ts` is unchanged from `15c45cf`.
+- Mutations C, D and E each gave 1 failed / 21 passed. All were reverted, and the tree was clean afterwards.
+- Full suites:
+
+  | Check | Result |
+  | --- | --- |
+  | `web` | 666 passed; lint 0 errors; `tsc --noEmit -p .` clean; Next build succeeded |
+  | `@clensy/web` | 402 passed |
+  | API e2e | 9 passed |
+
+- Manual browser check: this branch's web (production build, port 3999) against this branch's API (port 3002) and the local Postgres. A throwaway `TENANT_OWNER` was used and then deleted.
+
+  | URL | Result |
+  | --- | --- |
+  | `/app/laundry?offset=3000000000` | "Page 1 of 6", 20 rows, no error text, no alert |
+  | `/app/laundry?offset=2147483647` | "Page 107374183 of 6", no rows, "No laundry orders.", no error |
+  | `/app/bookings?…&detail=<id>`, then × | `/app/bookings?sortBy=status&sortOrder=asc&limit=20&offset=0`, the drawer closed, +0 history entries, Bookings shown |
+
+Deviation: none.
+
+Next gate: **M7 — Code Review**, by a fresh independent reviewer (`CLAUDE.md`: application code).
