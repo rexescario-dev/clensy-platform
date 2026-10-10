@@ -60,6 +60,27 @@ export const laundry = {
     UNPAID: 'Unpaid',
     VOID: 'Void',
   },
+  list: {
+    columns: {
+      created: 'Created',
+      customer: 'Customer',
+      fulfillment: 'Fulfillment',
+      order: 'Order',
+      status: 'Status',
+      total: 'Total',
+      weight: 'Weight',
+    },
+    create: '+ New Laundry Order',
+    emptyFiltered: 'No laundry orders match these filters.',
+    filters: {
+      all: 'All',
+      clear: 'Clear search and filters',
+      fulfillment: 'Fulfillment',
+      status: 'Status',
+    },
+    search: 'Search by customer or order id',
+    title: 'Laundry',
+  },
   noActions: 'No further actions for this order.',
   paymentTerms: {
     PAY_NOW: 'Pay now',
