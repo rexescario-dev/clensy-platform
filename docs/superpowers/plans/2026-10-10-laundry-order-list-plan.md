@@ -4,12 +4,12 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted |
-| M5 decision | **Accepted** — 2026-10-10, at `787a915` (revision 5), by the owner, on the sixth pass, with no further revision. Both fifth-pass findings are resolved: the create-success live-URL race is proven with renders held (mutation 7 fails it), and `hrefFor` writes no empty `?` (mutation 19). M6 MUST implement Tasks 1–6 as written, within the Final verification allowlist. That includes all negative and mutation checks, the Task 6 Step 3 baseline run, and the manual browser checks. The acceptance covers the plan review only. It does not waive any M6 step, and no application code is committed by it. M7 MUST be a fresh independent review (`CLAUDE.md`: application code). |
+| Status | Draft (revision 6: M7 return, for M5 review). Revision 5 was Accepted and implemented; M7 returned it with one P1 in the plan's `useDetailDrawer` change. See [M7 return resolutions](#m7-return-resolutions-revision-6) and [Revision 6 tasks](#revision-6-tasks-m7-return). |
+| M5 decision (revision 5) | **Accepted** — 2026-10-10, at `787a915` (revision 5), by the owner, on the sixth pass, with no further revision. Both fifth-pass findings are resolved: the create-success live-URL race is proven with renders held (mutation 7 fails it), and `hrefFor` writes no empty `?` (mutation 19). M6 MUST implement Tasks 1–6 as written, within the Final verification allowlist. That includes all negative and mutation checks, the Task 6 Step 3 baseline run, and the manual browser checks. The acceptance covers the plan review only. It does not waive any M6 step, and no application code is committed by it. M7 MUST be a fresh independent review (`CLAUDE.md`: application code). |
 | M5 history | First pass (2026-10-10, owner, reviewed in five parts): **Returned for Revision** with P1 and P2 findings on Tasks 1–6. All are applied in this revision; see [M5 first-pass resolutions](#m5-first-pass-resolutions). The whole plan was pre-validated again. Second pass (2026-10-10, owner, reviewed in four parts): **Returned for Revision** with four required changes: the drawer URL (with `detail` and the hash) recorded exactly by the tracker; a filter change while the drawer push is queued; defined and tested behavior for an outside navigation while a list update is in flight; drawer hash coverage and an explicit `tsc` step in final verification. All are applied; see [M5 second-pass resolutions](#m5-second-pass-resolutions). Pre-validated again. Third pass (2026-10-10, owner): **Returned for Revision**. A stale commit rendered and fetched; the outside-navigation hash was not captured; a Forward to an identical stale URL was ambiguous; clearing `stale` assumed in-order commits. The owner chose to remove the cause: list URL writes move from the async router to the native History API, so nothing is in flight. See [M5 third-pass resolutions](#m5-third-pass-resolutions). Pre-validated again, including a spike on the real Next.js runtime. Fourth pass (2026-10-10, owner): **Returned for Revision**. Two router calls still ran on the page: create-success `router.push` and direct-link close `router.replace`. Also a stale hook comment and an overstated query-test name. All are applied; see [M5 fourth-pass resolutions](#m5-fourth-pass-resolutions). Pre-validated again. Fifth pass (2026-10-10, owner): **Returned for a small revision**. The create-success test did not prove the live URL is used before React re-renders, and `hrefFor` could leave an empty `?`. Both are applied; see [M5 fifth-pass resolutions](#m5-fifth-pass-resolutions). Pre-validated again. |
 | Date | 2026-10-10 |
 | Tracking issue | [#163](https://github.com/rexescario-dev/clensy-platform/issues/163). Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#157](https://github.com/rexescario-dev/clensy-platform/issues/157) (closed, merged in #168 at `8cdd6b1`). Row cutover is [#161](https://github.com/rexescario-dev/clensy-platform/issues/161). |
-| Scope | `apps/web` (laundry list page, three new `lib` modules, an optional `href` argument on `useDetailDrawer.open` and `close` (written with `window.history.pushState` / `replaceState`), tests), `packages/web` (new `LaundryOrderDataTable`, a pure sort module, `list` copy, exports), `packages/client` (`$filter` on the `LaundryOrders` operation, regenerated client), and one new `apps/api/test` e2e characterization file. No API source, schema, migration, or `@clensy/ui` change. |
+| Scope | `apps/web` (laundry list page, three new `lib` modules, two separately named laundry-only methods on `useDetailDrawer`, `openWithHref` and `closeWithHref` (written with `window.history.pushState` / `replaceState`; `open` and `close` are unchanged from `main`), tests), `packages/web` (new `LaundryOrderDataTable`, a pure sort module, `list` copy, exports), `packages/client` (`$filter` on the `LaundryOrders` operation, regenerated client), and one new `apps/api/test` e2e characterization file. No API source, schema, migration, or `@clensy/ui` change. |
 | Implements (Accepted) | [Laundry Orders & Lifecycle](../specs/2026-09-06-laundry-orders-lifecycle-design.md), Status **Accepted** (2026-09-06), with **Amendment #164**, Accepted 2026-10-10 (merged in #167 at `7c59b82`). The governing text is §8.4.4, first bullet: "`/app/laundry` is the list: server-side filter on customer name, status, and fulfillment type; sort on the existing `LaundryOrderSortFields`; human-readable status and fulfillment labels; `formatMinorUnits` for money; kilograms rendered from integer grams; offset page size 20; a row opens `/app/laundry/[id]`." Also §4.9 (status-badge tones, still Accepted) and §4.4 (intake roles). |
 | Relies on (Accepted) | [Laundry UI Foundation plan](2026-10-10-laundry-ui-foundation-plan.md) (#157, Accepted and merged): `LAUNDRY_STATUS_TONE`, `LAUNDRY_ORDER_STATUSES`, `formatWeightGrams`, `canReceiveLaundryOrder` (its role policy is tested there, in `laundry-order-actions.test.ts`), and the `laundry` message catalog. [Paginated nestjs-query GraphQL collections](../specs/2026-08-28-paginated-graphql-collections-design.md): root connection with `totalCount`, max 100. |
 | Authority | Where this plan and an Accepted spec disagree, the **spec wins** and this plan must be revised. File names, helper names, copy keys, URL parameter names, and task order are planning decisions, not product semantics. |
@@ -33,8 +33,8 @@
 - **URL state (Task 4).** Keys: `q`, `status`, `fulfillment`, `sortBy`, `sortOrder`, `offset`. Every value is validated on parse, and anything unknown falls back to the default. Serializing keeps params the list does not own, and the URL hash. Any search, filter or sort change resets `offset` to 0. A page that is not a positive safe integer means page 1. Page size is fixed at 20, with no page-size selector.
 - **URL writes: native History API (Task 4, Task 6).** The list writes its URL with `window.history.replaceState` and `pushState`. Next.js documents that both integrate with its router and sync `usePathname` and `useSearchParams` (`next/dist/docs/01-app/01-getting-started/04-linking-and-navigating.md`, "Native History API"). The [Native History spike](#native-history-spike-nextjs-1631) confirmed it on this app's Next.js 16.3.1. `window.location` changes at once, and the re-render with the new `useSearchParams` follows. Nothing is ever in flight, so there is no queue to reconcile with Back/Forward. Each update builds on the live `window.location`, so two updates made before React re-renders compose. React's render is still scheduled; the plan claims only that URL, controls and query converge on the URL the user is on, which Task 6 checks.
   - *List updates* (search, filters, sort, page) use `replaceState`. They add no history entry, like the bookings list's `router.replace`.
-  - *Opening the drawer*, from a row or after creating an order, uses `pushState` with the same URL plus `detail`. It goes through `useDetailDrawer.open(id, href)`, so the drawer hook still marks the open as its own, and closing it still goes `router.back()` to the list entry.
-  - *Closing a drawer reached by a direct link or refresh* uses `replaceState` with the live URL minus `detail`, through `useDetailDrawer.close(href)`.
+  - *Opening the drawer*, from a row or after creating an order, uses `pushState` with the same URL plus `detail`. It goes through `useDetailDrawer().openWithHref(href)`, so the drawer hook still marks the open as its own, and closing it still goes `router.back()` to the list entry.
+  - *Closing a drawer reached by a direct link or refresh* uses `replaceState` with the live URL minus `detail`, through `useDetailDrawer().closeWithHref(href)`. A drawer opened here still closes with `router.back()`.
   - The page therefore makes no `router.push` or `router.replace` of its own. `router.back()` is the browser's Back. No async router navigation can land over a native write. `hrefFor(update, { set, remove })` builds every one of these URLs.
   - *Back and Forward* are the browser's. The URL, and so the list state and the drawer, is whatever entry the user went to. Only the entry the user lands on is rendered and queried.
   - Every URL the list writes keeps the pathname, every param it does not own (repeated ones included), and the hash.
@@ -69,7 +69,7 @@ Derived from the Accepted spec, the amendment and the issue. Every task's requir
 - The create button shows only when `canReceiveLaundryOrder(role)` (INTAKE: TENANT_OWNER, OPS_MANAGER, SCHEDULER, CUSTOMER_SUPPORT). ANALYST, FINANCE, SUPER_ADMIN and a still-loading role do not see it. The server stays authoritative.
 - `DataTable` provides row activation (click, Enter, Space) on both rows and mobile cards. The mobile card adds no link, button, or second click handler.
 - Do not modify `@clensy/ui`, `apps/api/src`, `apps/api/src/schema.gql`, or any migration. Add no dependency. `@clensy/web` does not import `@clensy/client`.
-- The drawer, the intake form, and their helpers in `page.tsx` are unchanged. Only the list block, its imports, and the now-unused `OrderRow` type and `formatDate` helper change. `useDetailDrawer.open` and `close` each gain only an optional `href` argument, written with the native History API. Every existing caller passes no `href` and keeps today's `router.push` / `router.replace`. The create flow itself belongs to #160; this plan changes only the URL its success navigation uses.
+- The drawer, the intake form, and their helpers in `page.tsx` are unchanged. Only the list block, its imports, and the now-unused `OrderRow` type and `formatDate` helper change. `useDetailDrawer` gains two new, separately named methods, `openWithHref` and `closeWithHref`, which only the laundry list calls. `open` and `close` are byte-identical to `main`. Eight pages pass `close` straight to `onClose`, which `DetailDrawer`'s × button calls with a click event, so `close` must never take an argument (M7 P1). The create flow itself belongs to #160; this plan changes only the URL its success navigation uses.
 
 ## M5 first-pass resolutions
 
@@ -138,6 +138,15 @@ Derived from the Accepted spec, the amendment and the issue. Every task's requir
 | The create-success test let React render the filter change before `hrefFor` ran | The harness now models router state separately from `window.location`. `useSearchParams` serves `nav.rendered`, which follows the URL only when `notify()` runs. With `nav.holdRenders`, a native write moves `window.location` but not the rendered params, as when Next.js renders a native write in a later transition. The test holds renders, changes the filter, and settles the create request, asserting twice that the list query still renders the old filter (PAID). Only then does it let React render. The drawer URL has the new filter, the unrelated param, the hash and the new id; exactly one entry is added and no router call is made. Building from rendered params (mutation 7) now fails this test. |
 | Empty `?` when the last param is removed | `hrefFor` omits `?` when the query is empty. Test: closing a drawer opened at `/app/laundry?detail=<id>#x` leaves `/app/laundry#x` (mutation 19). |
 
+## M7 return resolutions (revision 6)
+
+| M7 finding | Resolution |
+| --- | --- |
+| **P1:** `close(href?)` treated a click event as a URL on the eight pages that pass `close` straight to `onClose` (direct-link drawer, ×, leads to `/app/[object%20Object]`) | `open` and `close` are restored byte-for-byte to `main`. The laundry list uses new, separately named methods: `openWithHref(href)` pushes natively and marks the open as its own. `closeWithHref(href)` goes `router.back()` for a drawer opened here, and otherwise `replaceState(href)`. No existing signature changes, so a stray argument cannot change meaning. New regression test `apps/web/lib/use-detail-drawer.test.tsx` (jsdom) wires a page exactly like bookings (`onClose={close}` into the real `DetailDrawer`). For a direct-link drawer, × gives `router.replace('/app/bookings?status=A')`, and `'/app/bookings'` when `detail` was the only param, with no History API write. `open` uses `router.push`, and a drawer opened here closes with `router.back()`. Against the hook at `379adc7` (the returned code), 2 of 3 fail; against `main`'s hook, 3 pass. Mutation 21 reintroduces the defect and fails 2. Manual check added for bookings. |
+| **P3:** a hand-edited `?offset=5` showed "Page 1.25" | Parse snaps the offset down to a multiple of 20 (`5 → 0`, `45 → 40`). Unit test added; mutation 20. |
+| **P3:** the router fallback in `open`/`close` was reachable when `hrefFor` returned `undefined` | `hrefFor` always returns a URL, and the page calls only `openWithHref`/`closeWithHref`, which have no router fallback. `setState` skips a write when the URL would not change. The page has no path to `router.push`/`router.replace`. |
+| Process: the M6 manual checks covered only `/app/laundry` | A direct-link × close on `/app/bookings` is added to the manual checks. |
+
 ## Native History spike (Next.js 16.3.1)
 
 Run at planning time on this app's own Next.js (16.3.1, production build, `next start`), with a throwaway page outside `/app` that rendered `useSearchParams().toString()` and counted `popstate`. It was driven with Playwright, then deleted. Starting URL `?tab=a#h`, history length 2:
@@ -157,14 +166,14 @@ Limitations: the spike ran on a throwaway page, not `/app/laundry`, which needs 
 ## Review Focus (for the sixth M5 pass)
 
 1. **Sort transitions.** Confirm the click table in Architecture, especially Created toggling asc ↔ desc instead of having a third "default" state that would look identical to desc.
-2. **Shared hook change.** `useDetailDrawer` is used by nine pages. `open(id, href?)` and `close(href?)` gain optional arguments that only the laundry list passes; both are written natively. Every other caller passes none and keeps `router.push` / `router.replace`. A drawer opened here still closes with `router.back()`.
+2. **Shared hook change.** `useDetailDrawer` is used by nine pages. `open` and `close` are unchanged from `main`. The laundry list uses only the new `openWithHref(href)` and `closeWithHref(href)`, which write natively; `closeWithHref` still goes `router.back()` for a drawer opened here. A regression test drives a page wired like the other eight (`onClose={close}` into the real `DetailDrawer`, ×, direct link) and requires `router.replace` of the URL without `detail` (revision 6).
 3. **Native History API.** The list no longer uses `router.replace`. The bookings list still does; aligning it is out of scope. The integration is documented by Next.js and spiked on 16.3.1. A future Next.js upgrade should re-run the manual browser checks.
 4. **Exact id.** The full id is in `title` and screen-reader text, not the visible label. The visible label is the first 8 characters, monospace. Matching is case-insensitive.
 5. **No mobile sort control.** Not required by the issue. Below `sm`, headers are hidden. The URL sort still applies, and the default is newest first. Deferred.
 6. **Status option order and server status sort.** The filter lists `LAUNDRY_ORDER_STATUSES` (enum-alphabetical, the #157 export). The server sorts statuses in Postgres enum declaration order, which is lifecycle order. Task 1 pins it.
 7. **Issue wording note.** The issue says "There is no current `mobileRow` usage in `apps/web`". `BookingDataTable` (in `@clensy/web`, rendered by `apps/web`) already passes `mobileRow`. This plan follows its card shape and the issue's classes.
 
-## Pre-validation (full, revision 5)
+## Pre-validation (full, revision 6)
 
 Every task below was applied to the branch at `8cdd6b1`, then removed before this Draft was committed. All commands named in an `Expected:` line were run, with these results:
 
@@ -176,9 +185,10 @@ Every task below was applied to the branch at `8cdd6b1`, then removed before thi
 | `pnpm --filter api exec eslint test/laundry-order-list-filters.e2e-spec.ts` | clean |
 | `pnpm --filter @clensy/client codegen`, the Task 2 semantic diff checks, then `build` / `test` / `lint` | only the two old document lines removed; build clean; 10 passed; lint clean |
 | `pnpm --filter @clensy/web test` / `build` / `lint` | 402 passed; clean; clean |
-| `pnpm --filter web test` / `lint`, `pnpm --filter web exec tsc --noEmit -p .`, `pnpm --filter web build` | 658 passed; clean; clean; Next build succeeded |
+| `pnpm --filter web test` / `lint`, `pnpm --filter web exec tsc --noEmit -p .`, `pnpm --filter web build` | 662 passed; clean; clean; Next build succeeded |
 | Task 6 Step 3 (both page test files against `8cdd6b1`'s page) | 21 failed of 21 |
-| Mutation checks (Final verification) | each of 19 mutations failed its test with the recorded count; restored → 64 + 25 passed |
+| Mutation checks (Final verification) | each of 21 mutations failed its test with the recorded count; restored → 68 + 25 passed |
+| Revision 6 red steps against the committed code (`379adc7`) | R6-1: `1 failed \| 19 passed (20)`; R6-2: `2 failed \| 1 passed (3)`. `use-detail-drawer.test.tsx` against `main`'s hook: 3 passed. |
 
 Environment note: on this machine `pnpm --filter @clensy/client build` and `test` first failed on unchanged `main` too, because `vitest` was not linked in `packages/client` (`TS2307: Cannot find module 'vitest'` in `session-signal.test.ts`). `pnpm install --frozen-lockfile --offline` linked it ("Lockfile is up to date"), and both then passed. If M6 sees the same error, run that install first. It changes no tracked file.
 
@@ -200,7 +210,8 @@ Environment note: on this machine `pnpm --filter @clensy/client build` and `test
 | `apps/web/lib/laundry-page-baseline.test.tsx` → `apps/web/lib/laundry-list-page.test.tsx` | Rename and rewrite (`git mv`) | 6 |
 | `apps/web/lib/laundry-list-page.interaction.test.tsx` | Create (jsdom) | 6 |
 | `apps/web/lib/use-laundry-search-draft.ts` | Create | 6 |
-| `apps/web/lib/use-detail-drawer.ts` | Modify: optional `href` on `open` and `close`, written natively | 6 |
+| `apps/web/lib/use-detail-drawer.ts` | Modify: add `openWithHref` and `closeWithHref`; `open`/`close` unchanged | 6 (revised in revision 6) |
+| `apps/web/lib/use-detail-drawer.test.tsx` | Create (jsdom; regression test for the other eight pages) | Revision 6 |
 | `apps/web/app/app/laundry/page.tsx` | Modify: list block only | 6 |
 
 ---
@@ -1231,6 +1242,12 @@ describe('parseLaundryOrderListState', () => {
     expect(parseLaundryOrderListState(new URLSearchParams('sortBy=totalMinorUnits')).sortBy).toBe('createdAt');
   });
 
+  it('snaps the offset down to a page boundary', () => {
+    expect(parseLaundryOrderListState(new URLSearchParams('offset=5')).offset).toBe(0);
+    expect(parseLaundryOrderListState(new URLSearchParams('offset=45')).offset).toBe(40);
+    expect(parseLaundryOrderListState(new URLSearchParams('offset=60')).offset).toBe(60);
+  });
+
   it('trims the search and caps it at 200 characters', () => {
     expect(parseLaundryOrderListState(new URLSearchParams('q=%20%20ana%20')).search).toBe('ana');
     expect(parseLaundryOrderListState(new URLSearchParams(`q=${'a'.repeat(250)}`)).search).toHaveLength(200);
@@ -1439,7 +1456,12 @@ export function parseLaundryOrderListState(params: URLSearchParams): LaundryOrde
     fulfillment: FULFILLMENT_TYPES.includes(fulfillmentRaw as LaundryFulfillmentType)
       ? (fulfillmentRaw as LaundryFulfillmentType)
       : null,
-    offset: Number.isSafeInteger(offsetRaw) && offsetRaw >= 0 ? offsetRaw : DEFAULT_LAUNDRY_ORDER_LIST_STATE.offset,
+    // Snapped down to a page boundary, so a hand-edited offset never shows
+    // a fractional page.
+    offset:
+      Number.isSafeInteger(offsetRaw) && offsetRaw >= 0
+        ? offsetRaw - (offsetRaw % LAUNDRY_ORDER_PAGE_SIZE)
+        : DEFAULT_LAUNDRY_ORDER_LIST_STATE.offset,
     search: normalizeLaundrySearch(params.get(PARAM.search) ?? ''),
     sortBy: isLaundryOrderSortKey(sortByRaw) ? sortByRaw : DEFAULT_LAUNDRY_ORDER_LIST_STATE.sortBy,
     sortOrder: sortOrderRaw === 'asc' || sortOrderRaw === 'desc' ? sortOrderRaw : DEFAULT_LAUNDRY_ORDER_LIST_STATE.sortOrder,
@@ -1477,10 +1499,10 @@ export function serializeLaundryOrderListState(
 //   history entry, as with the bookings list's `router.replace`.
 // - Opening the drawer, from a row or after creating an order,
 //   `pushState`s the same kind of URL plus `detail`
-//   (`useDetailDrawer.open(id, href)`), so Back, and the drawer's own
-//   `router.back()`, return to the list.
+//   (`useDetailDrawer().openWithHref(href)`), so Back, and the drawer's
+//   own `router.back()`, return to the list.
 // - Closing a drawer reached by a direct link or refresh `replaceState`s
-//   the URL without `detail` (`useDetailDrawer.close(href)`). The page
+//   the URL without `detail` (`useDetailDrawer().closeWithHref(href)`). The page
 //   therefore makes no `router.push` or `router.replace` of its own, so no
 //   async router navigation can land over a native write.
 // - Back and Forward are the browser's: the URL, and therefore the list
@@ -1491,10 +1513,10 @@ export function useLaundryOrderListUrlState() {
 
   // The exact URL for `update`, plus `set` and minus `remove` params (the
   // drawer's `detail`), built on the live URL: same pathname, every param
-  // the list does not own, and the hash. Returns undefined when nothing
-  // would change.
+  // the list does not own, and the hash. Always a URL, so every caller
+  // writes natively; `setState` skips a write that would change nothing.
   const hrefFor = useCallback(
-    (update: LaundryOrderListUpdate, { remove = [], set = {} }: LaundryOrderHrefParams = {}): string | undefined => {
+    (update: LaundryOrderListUpdate, { remove = [], set = {} }: LaundryOrderHrefParams = {}): string => {
       const base = new URLSearchParams(window.location.search);
       const current = parseLaundryOrderListState(base);
       const next = update(current);
@@ -1502,7 +1524,6 @@ export function useLaundryOrderListUrlState() {
       for (const [key, value] of Object.entries(set)) params.set(key, value);
       for (const key of remove) params.delete(key);
       const query = params.toString();
-      if (query === base.toString()) return undefined;
       return `${window.location.pathname}${query === '' ? '' : `?${query}`}${window.location.hash}`;
     },
     [],
@@ -1511,7 +1532,8 @@ export function useLaundryOrderListUrlState() {
   const setState = useCallback(
     (update: LaundryOrderListUpdate) => {
       const href = hrefFor(update);
-      if (href !== undefined) window.history.replaceState(null, '', href);
+      const live = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      if (href !== live) window.history.replaceState(null, '', href);
     },
     [hrefFor],
   );
@@ -1565,7 +1587,7 @@ function normalizeLaundrySearch(text: string): string {
 
 - [ ] **Step 4: Run it to see it pass, then commit**
 
-Run: `pnpm --filter web exec vitest run lib/use-laundry-order-list-url-state.test.ts` — Expected: `Tests 19 passed (19)`.
+Run: `pnpm --filter web exec vitest run lib/use-laundry-order-list-url-state.test.ts` — Expected: `Tests 20 passed (20)`.
 
 ```bash
 git add apps/web/lib/use-laundry-order-list-url-state.ts apps/web/lib/use-laundry-order-list-url-state.test.ts
@@ -2472,44 +2494,36 @@ export function useLaundrySearchDraft(committedSearch: string, commit: (text: st
 diff --git a/apps/web/lib/use-detail-drawer.ts b/apps/web/lib/use-detail-drawer.ts
 --- a/apps/web/lib/use-detail-drawer.ts
 +++ b/apps/web/lib/use-detail-drawer.ts
-@@ -28,19 +28,35 @@ export function useDetailDrawer(paramName = 'detail') {
- 
-   const activeId = searchParams.get(paramName);
- 
--  const open = useCallback((id: string) => {
-+  // `href`, when given, is the exact URL to open, and must already carry
-+  // `<paramName>=<id>`. It is pushed with the native History API, which
-+  // Next.js syncs into `useSearchParams`: the laundry list writes its URL
-+  // that way, so nothing is left in flight (see its URL-state hook).
-+  const open = useCallback((id: string, href?: string) => {
-     openedHereRef.current = true;
-+    if (href !== undefined) {
-+      window.history.pushState(null, '', href);
-+      return;
-+    }
-     const params = new URLSearchParams(searchParams.toString());
-     params.set(paramName, id);
-     router.push(`${pathname}?${params.toString()}`);
+@@ -47,5 +47,28 @@ export function useDetailDrawer(paramName = 'detail') {
+     router.replace(query ? `${pathname}?${query}` : pathname);
    }, [router, pathname, searchParams, paramName]);
  
--  const close = useCallback(() => {
-+  // `href`, when given, is the exact URL to show after closing a drawer that
-+  // was not opened here (a direct link or refresh). It must not carry
-+  // `<paramName>`, and it is written with the native History API, like
-+  // `open`'s `href`. A drawer opened here still closes with `router.back()`.
-+  const close = useCallback((href?: string) => {
-     if (openedHereRef.current) {
-       openedHereRef.current = false;
-       router.back();
-       return;
-     }
-+    if (href !== undefined) {
-+      window.history.replaceState(null, '', href);
+-  return { activeId, close, open };
++  // Laundry list only (#163): open and close with an exact URL the caller
++  // built from the live `window.location`, written with the native History
++  // API, which Next.js syncs into `useSearchParams`. Separate names, not an
++  // optional argument on `open`/`close`: other pages pass `close` straight
++  // to `onClose`, so `DetailDrawer`'s × button calls it with a click event,
++  // and that must keep meaning "close", never "go to this URL".
++  const openWithHref = useCallback((href: string) => {
++    openedHereRef.current = true;
++    window.history.pushState(null, '', href);
++  }, []);
++
++  // A drawer opened here closes with `router.back()`, as `close` does. One
++  // reached by a direct link or refresh replaces the entry with `href`, which
++  // must not carry `<paramName>`.
++  const closeWithHref = useCallback((href: string) => {
++    if (openedHereRef.current) {
++      openedHereRef.current = false;
++      router.back();
 +      return;
 +    }
-     const params = new URLSearchParams(searchParams.toString());
-     params.delete(paramName);
-     const query = params.toString();
++    window.history.replaceState(null, '', href);
++  }, [router]);
++
++  return { activeId, close, closeWithHref, open, openWithHref };
+ }
 ```
 
 - [ ] **Step 6: Edit the page**
@@ -2581,7 +2595,7 @@ diff --git a/apps/web/app/app/laundry/page.tsx b/apps/web/app/app/laundry/page.t
  function formatWeight(grams: number | null): string {
    return grams === null ? '—' : `${(grams / 1000).toFixed(2)} kg`;
  }
-@@ -174,12 +174,19 @@ export default function LaundryPage() {
+@@ -174,18 +174,45 @@ export default function LaundryPage() {
  }
  
  function LaundryPageContent() {
@@ -2604,10 +2618,14 @@ diff --git a/apps/web/app/app/laundry/page.tsx b/apps/web/app/app/laundry/page.t
    const { data: customersData } = useCustomersQuery({
      fetchPolicy: 'network-only',
      variables: { paging: { limit: 100 } },
-@@ -187,6 +194,23 @@ function LaundryPageContent() {
+   });
    const [receive, { loading: creating }] = useReceiveLaundryOrderMutation();
-   const { activeId, open: openDetail, close: closeDetail } = useDetailDrawer();
- 
+-  const { activeId, open: openDetail, close: closeDetail } = useDetailDrawer();
++  // Only the History-API entry points: `open`/`close` would route through
++  // `router.push`/`router.replace`, which the list never mixes with its
++  // native URL writes.
++  const { activeId, closeWithHref, openWithHref } = useDetailDrawer();
++
 +  function handleClearFilters() {
 +    search.reset();
 +    setListState(laundryListFiltersCleared);
@@ -2622,13 +2640,12 @@ diff --git a/apps/web/app/app/laundry/page.tsx b/apps/web/app/app/laundry/page.t
 +    if (pendingSearch !== undefined) {
 +      setListState((current) => withLaundryFilterChange(current, { search: pendingSearch }));
 +    }
-+    openDetail(row.id, hrefFor((current) => current, { set: { detail: row.id } }));
++    openWithHref(hrefFor((current) => current, { set: { detail: row.id } }));
 +  }
-+
+ 
    const [formOpen, setFormOpen] = useState(false);
    const [customerId, setCustomerId] = useState('');
-   const [fulfillmentType, setFulfillmentType] =
-@@ -209,59 +233,56 @@ function LaundryPageContent() {
+@@ -209,59 +236,56 @@ function LaundryPageContent() {
        setFormOpen(false);
        await ordersQuery.refetch();
        const newId = result.data?.receiveLaundryOrder.id;
@@ -2636,7 +2653,7 @@ diff --git a/apps/web/app/app/laundry/page.tsx b/apps/web/app/app/laundry/page.t
 +      // Only the destination URL is built here (live list state, hash,
 +      // `detail`), so this open is a native write like the rest of the
 +      // list. The create flow itself belongs to #160.
-+      if (newId) openDetail(newId, hrefFor((current) => current, { set: { detail: newId } }));
++      if (newId) openWithHref(hrefFor((current) => current, { set: { detail: newId } }));
      } catch {
        setFormError('Unable to create laundry order.');
      }
@@ -2723,7 +2740,7 @@ diff --git a/apps/web/app/app/laundry/page.tsx b/apps/web/app/app/laundry/page.t
          }}
        />
  
-@@ -314,7 +335,10 @@ function LaundryPageContent() {
+@@ -314,7 +338,10 @@ function LaundryPageContent() {
        {activeId ? (
          <LaundryDetailDrawer
            id={activeId}
@@ -2731,7 +2748,7 @@ diff --git a/apps/web/app/app/laundry/page.tsx b/apps/web/app/app/laundry/page.t
 +          // A drawer opened from this page closes with `router.back()`. One
 +          // reached by a direct link or refresh closes with a native write
 +          // of the live URL without `detail`.
-+          onClose={() => closeDetail(hrefFor((current) => current, { remove: ['detail'] }))}
++          onClose={() => closeWithHref(hrefFor((current) => current, { remove: ['detail'] }))}
            onChanged={() => void ordersQuery.refetch()}
          />
        ) : null}
@@ -2751,6 +2768,163 @@ git commit -m "feat(web): redesign the laundry order list with server search, fi
 
 ---
 
+## Revision 6 tasks (M7 return)
+
+Tasks 1–6 are implemented and committed (M6 record, `9e68d14`…`379adc7`). Their blocks above now show the revision 6 code for `use-laundry-order-list-url-state.ts`, its test, `use-detail-drawer.ts` and `page.tsx`. M6 applies only the delta, test first, as two commits on the same branch and PR (R6-1, R6-2), then verifies and records it (R6-3). Every resulting file must equal this plan's blocks byte for byte.
+
+- [ ] **R6-1: Offset snapping (red first).**
+  1. Add the `'snaps the offset down to a page boundary'` test from the Task 4 test block to `apps/web/lib/use-laundry-order-list-url-state.test.ts`.
+  2. Run `pnpm --filter web exec vitest run lib/use-laundry-order-list-url-state.test.ts`. Expected: `Tests 1 failed | 19 passed (20)`.
+  3. In `apps/web/lib/use-laundry-order-list-url-state.ts`, replace only the line `offset: Number.isSafeInteger(offsetRaw) && offsetRaw >= 0 ? offsetRaw : DEFAULT_LAUNDRY_ORDER_LIST_STATE.offset,` with the commented, snapped `offset:` entry from the Task 4 module block.
+  4. Run again. Expected: `Tests 20 passed (20)`.
+
+  ```bash
+  git add apps/web/lib/use-laundry-order-list-url-state.ts apps/web/lib/use-laundry-order-list-url-state.test.ts
+  git commit -m "fix(web): snap a hand-edited laundry list offset to a page boundary (#163 M7)"
+  ```
+
+- [ ] **R6-2: Keep `useDetailDrawer`'s `open`/`close` unchanged for other pages (red first).**
+  1. Create `apps/web/lib/use-detail-drawer.test.tsx` with the content below.
+  2. Run `pnpm --filter web exec vitest run lib/use-detail-drawer.test.tsx` against the committed hook (`379adc7`). Expected: `Tests 2 failed | 1 passed (3)`. The failures are `router.replace` not called with `'/app/bookings?status=A'` and with `'/app/bookings'`.
+  3. Make three files equal this plan's blocks:
+     - `apps/web/lib/use-detail-drawer.ts`: `main`'s file plus the Task 6 Step 5 diff;
+     - `apps/web/app/app/laundry/page.tsx`: `main`'s file plus the Task 6 Step 6 diff;
+     - `apps/web/lib/use-laundry-order-list-url-state.ts`: the Task 4 module block. After R6-1, the only difference is `hrefFor` always returning a URL and `setState` skipping an unchanged write.
+  4. Expected: `lib/use-detail-drawer.test.tsx` gives `Tests 3 passed (3)`, and `lib/laundry-list-page.test.tsx lib/laundry-list-page.interaction.test.tsx` gives `Tests 21 passed (21)`. `pnpm --filter web exec tsc --noEmit -p .` and `pnpm --filter web lint` are clean.
+
+```tsx
+// @vitest-environment jsdom
+import { DetailDrawer } from '@clensy/ui';
+import { act, useSyncExternalStore } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Regression (#163 M7): eight pages (bookings, billing, jobs, cleaners,
+// catalog, catalog/add-ons, cleaners/teams, customers) pass `close`
+// straight to a drawer's `onClose`, and `DetailDrawer` wires that to its ×
+// button's `onClick`, so × calls `close(clickEvent)`. Whatever the laundry
+// list needs from this hook, `open` and `close` keep their contract for
+// those pages: router navigation, never a URL taken from an argument.
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+const nav = vi.hoisted(() => ({
+  back: vi.fn(),
+  listeners: new Set<() => void>(),
+  push: vi.fn(),
+  query: '',
+  replace: vi.fn(),
+}));
+
+vi.mock('next/navigation', () => ({
+  usePathname: () => '/app/bookings',
+  useRouter: () => ({ back: nav.back, push: nav.push, replace: nav.replace }),
+  useSearchParams: () => {
+    const query = useSyncExternalStore(
+      (listener) => {
+        nav.listeners.add(listener);
+        return () => nav.listeners.delete(listener);
+      },
+      () => nav.query,
+    );
+    return new URLSearchParams(query);
+  },
+}));
+
+const { useDetailDrawer } = await import('./use-detail-drawer');
+
+// Wired exactly like the eight pages: `onClose={close}`.
+function BookingsLikePage() {
+  const { activeId, close, open } = useDetailDrawer();
+  return (
+    <>
+      <button type="button" onClick={() => open('o1')}>
+        Open o1
+      </button>
+      {activeId ? (
+        <DetailDrawer open onClose={close} title="Booking">
+          <p>{activeId}</p>
+        </DetailDrawer>
+      ) : null}
+    </>
+  );
+}
+
+let container: HTMLDivElement;
+let root: Root;
+
+function show(query: string) {
+  act(() => {
+    nav.query = query;
+    for (const listener of nav.listeners) listener();
+  });
+}
+
+function button(label: string): HTMLButtonElement {
+  return [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+    (candidate) => candidate.textContent === label || candidate.getAttribute('aria-label') === label,
+  )!;
+}
+
+beforeEach(() => {
+  nav.back.mockReset();
+  nav.push.mockReset();
+  nav.replace.mockReset();
+  nav.query = '';
+  window.history.replaceState(null, '', '/app/bookings');
+  vi.spyOn(window.history, 'pushState');
+  vi.spyOn(window.history, 'replaceState');
+  container = document.createElement('div');
+  document.body.append(container);
+  root = createRoot(container);
+});
+
+afterEach(() => {
+  act(() => root.unmount());
+  container.remove();
+  vi.restoreAllMocks();
+});
+
+describe('useDetailDrawer on pages that pass close straight to onClose', () => {
+  it('closes a drawer reached by a direct link with router.replace of the URL without detail', () => {
+    nav.query = 'status=A&detail=abc';
+    act(() => root.render(<BookingsLikePage />));
+    act(() => button('Close').click());
+    expect(nav.replace).toHaveBeenCalledWith('/app/bookings?status=A');
+    expect(nav.replace).toHaveBeenCalledTimes(1);
+    expect(window.history.replaceState).not.toHaveBeenCalled();
+    expect(window.history.pushState).not.toHaveBeenCalled();
+    expect(window.location.pathname).toBe('/app/bookings');
+  });
+
+  it('closes a direct-link drawer whose only param is detail to the bare path', () => {
+    nav.query = 'detail=abc';
+    act(() => root.render(<BookingsLikePage />));
+    act(() => button('Close').click());
+    expect(nav.replace).toHaveBeenCalledWith('/app/bookings');
+  });
+
+  it('opens with router.push and closes a drawer opened here with router.back', () => {
+    nav.query = 'status=A';
+    act(() => root.render(<BookingsLikePage />));
+    act(() => button('Open o1').click());
+    expect(nav.push).toHaveBeenCalledWith('/app/bookings?status=A&detail=o1');
+    show('status=A&detail=o1');
+    act(() => button('Close').click());
+    expect(nav.back).toHaveBeenCalledTimes(1);
+    expect(nav.replace).not.toHaveBeenCalled();
+    expect(window.history.pushState).not.toHaveBeenCalled();
+    expect(window.history.replaceState).not.toHaveBeenCalled();
+  });
+});
+```
+
+  ```bash
+  git add apps/web/lib/use-detail-drawer.test.tsx apps/web/lib/use-detail-drawer.ts apps/web/app/app/laundry/page.tsx apps/web/lib/use-laundry-order-list-url-state.ts
+  git commit -m "fix(web): keep useDetailDrawer open/close unchanged for other pages; add named laundry entry points (#163 M7)"
+  ```
+
+- [ ] **R6-3: Verify.** Run Final verification below in full: the allowlist (now 20 paths), all 21 mutations, the full suites, and the manual checks, including the new bookings and offset checks. Record it in Gate outcomes as the revision 6 M6 record, then hand back to M7, which reviews again with a fresh reviewer.
+
 ## Final verification (before the M6 handoff report)
 
 - [ ] **Changed-file allowlist.** Any path outside the File Map fails verification:
@@ -2763,6 +2937,7 @@ apps/web/lib/laundry-list-page.test.tsx
 apps/web/lib/laundry-order-list-query.test.ts
 apps/web/lib/laundry-order-list-query.ts
 apps/web/lib/laundry-page-baseline.test.tsx
+apps/web/lib/use-detail-drawer.test.tsx
 apps/web/lib/use-detail-drawer.ts
 apps/web/lib/use-laundry-order-list-url-state.test.ts
 apps/web/lib/use-laundry-order-list-url-state.ts
@@ -2792,20 +2967,22 @@ Expected: `allowlist OK`.
   | 5 | `laundry-order-sort.ts`: delete the line `if (clicked === DEFAULT_LAUNDRY_ORDER_SORT.key) return { direction: 'asc', key: clicked };` | `src/laundry/laundry-order-sort.test.ts` (in `packages/web`) | 2 failed |
   | 6 | `laundry-order-sort.ts`: `return isLaundryOrderSortKey(reported.key) ? reported.key : undefined;` → `return reported.key as LaundryOrderSortKey;` | `src/laundry/laundry-order-sort.test.ts` | 1 failed |
   | 7 | `use-laundry-order-list-url-state.ts`: `const base = new URLSearchParams(window.location.search);` → `const base = new URLSearchParams(searchParams.toString());` (build on the last render, not the live URL) | `lib/laundry-list-page.interaction.test.tsx` | 7 failed |
-  | 8 | `page.tsx`: `openDetail(row.id, hrefFor((current) => current, { set: { detail: row.id } }));` → `openDetail(row.id);` | `lib/laundry-list-page.interaction.test.tsx` | 5 failed |
+  | 8 | `page.tsx`: `openWithHref(hrefFor((current) => current, { set: { detail: row.id } }));` → `openWithHref(hrefFor((current) => current));` (row opens without `detail`) | `lib/laundry-list-page.interaction.test.tsx` | 5 failed |
   | 9 | `use-laundry-order-list-url-state.ts`: drop `${window.location.hash}` from the returned href | `lib/laundry-list-page.interaction.test.tsx` | 4 failed |
-  | 10 | `use-laundry-order-list-url-state.ts`: `window.history.replaceState(null, '', href)` → `window.history.pushState(null, '', href)` | `lib/laundry-list-page.interaction.test.tsx` | 5 failed |
+  | 10 | `use-laundry-order-list-url-state.ts`: `if (href !== live) window.history.replaceState(null, '', href);` → `if (href !== live) window.history.pushState(null, '', href);` | `lib/laundry-list-page.interaction.test.tsx` | 5 failed |
   | 11 | `use-laundry-search-draft.ts`: replace the three statements in `handlePopState` with `return;` | `lib/laundry-list-page.interaction.test.tsx` | 1 failed |
-  | 12 | `use-detail-drawer.ts`: `window.history.pushState(null, '', href);` → `router.push(href);` | `lib/laundry-list-page.interaction.test.tsx` | 6 failed |
+  | 12 | `use-detail-drawer.ts` (`openWithHref`): `window.history.pushState(null, '', href);` → `router.push(href);` | `lib/laundry-list-page.interaction.test.tsx` | 6 failed |
   | 13 | `page.tsx`: `if (pendingSearch !== undefined) {` → `if (false) {` | `lib/laundry-list-page.interaction.test.tsx` | 2 failed |
   | 14 | `laundry-order-data-table.tsx`: `onSortChange(nextLaundryOrderSort(sort, clicked))` → `onSortChange(reported as never)` | `lib/laundry-list-page.interaction.test.tsx` | 1 failed |
-  | 15 | `page.tsx`: `if (newId) openDetail(newId, hrefFor((current) => current, { set: { detail: newId } }));` → `if (newId) openDetail(newId);` | `lib/laundry-list-page.interaction.test.tsx` | 1 failed |
-  | 16 | `use-detail-drawer.ts`: `window.history.replaceState(null, '', href);` → `router.replace(href);` | `lib/laundry-list-page.interaction.test.tsx` | 2 failed |
-  | 17 | `page.tsx`: `onClose={() => closeDetail(hrefFor((current) => current, { remove: ['detail'] }))}` → `onClose={() => closeDetail()}` | `lib/laundry-list-page.interaction.test.tsx` | 2 failed |
+  | 15 | `page.tsx`: `if (newId) openWithHref(hrefFor((current) => current, { set: { detail: newId } }));` → ``if (newId) openWithHref(`/app/laundry?detail=${newId}`);`` (drops the live list URL) | `lib/laundry-list-page.interaction.test.tsx` | 1 failed |
+  | 16 | `use-detail-drawer.ts` (`closeWithHref`): `window.history.replaceState(null, '', href);` → `router.replace(href);` | `lib/laundry-list-page.interaction.test.tsx` | 2 failed |
+  | 17 | `page.tsx`: `onClose={() => closeWithHref(hrefFor((current) => current, { remove: ['detail'] }))}` → `onClose={() => closeWithHref(hrefFor((current) => current))}` (`detail` kept) | `lib/laundry-list-page.interaction.test.tsx` | 2 failed |
   | 18 | `use-laundry-order-list-url-state.ts`: delete `for (const key of remove) params.delete(key);` | `lib/laundry-list-page.interaction.test.tsx` | 2 failed |
   | 19 | `use-laundry-order-list-url-state.ts`: always write `?`: `${window.location.pathname}${query === '' ? '' : `?${query}`}…` → `${window.location.pathname}?${query}…` | `lib/laundry-list-page.interaction.test.tsx` | 1 failed |
+  | 20 | `use-laundry-order-list-url-state.ts`: `? offsetRaw - (offsetRaw % LAUNDRY_ORDER_PAGE_SIZE)` → `? offsetRaw` | `lib/use-laundry-order-list-url-state.test.ts` | 1 failed |
+  | 21 | `use-detail-drawer.ts`: reintroduce the M7 defect. Replace `const close = useCallback(() => {` with `const close = useCallback((href?: unknown) => {` followed by `if (href !== undefined && !openedHereRef.current) { window.history.replaceState(null, '', String(href)); return; }` | `lib/use-detail-drawer.test.tsx` | 2 failed |
 
-  After reverting, run `pnpm --filter web exec vitest run lib/use-laundry-order-list-url-state.test.ts lib/laundry-order-list-query.test.ts lib/laundry-list-page.test.tsx lib/laundry-list-page.interaction.test.tsx` — Expected: `Tests 64 passed (64)`. Then run `pnpm --filter @clensy/web exec vitest run src/laundry/laundry-order-sort.test.ts src/laundry/laundry-order-data-table.test.tsx` — Expected: `Tests 25 passed (25)`.
+  After reverting, run `pnpm --filter web exec vitest run lib/use-laundry-order-list-url-state.test.ts lib/laundry-order-list-query.test.ts lib/laundry-list-page.test.tsx lib/laundry-list-page.interaction.test.tsx lib/use-detail-drawer.test.tsx` — Expected: `Tests 68 passed (68)`. Then run `pnpm --filter @clensy/web exec vitest run src/laundry/laundry-order-sort.test.ts src/laundry/laundry-order-data-table.test.tsx` — Expected: `Tests 25 passed (25)`.
 - [ ] **Full suites.** All of these pass:
   - the Task 1 e2e command
   - `pnpm --filter @clensy/client build`
@@ -2824,6 +3001,8 @@ Expected: `allowlist OK`.
   - Type a search and open a row before the pause ends. Closing the drawer shows the list filtered by that search.
   - With a filter set and a hash in the URL, create an order. The new order's drawer opens, and closing it shows the list with the same filter and hash.
   - Open `/app/laundry?status=READY&detail=<id>#x` directly (or refresh with the drawer open), then close the drawer. The URL keeps `status=READY` and `#x`, loses `detail`, and no history entry is added. Opening `/app/laundry?detail=<id>#x` and closing leaves `/app/laundry#x`, with no empty `?`.
+  - Other drawer pages are unchanged (revision 6). Open `/app/bookings?detail=<id>` directly (any existing booking), with another param if the page has one, then click ×. The URL becomes the bookings list URL without `detail` (never `/app/[object%20Object]`). A refresh then still shows the bookings list.
+  - A hand-edited `/app/laundry?offset=5` shows "Page 1 of N", not a fractional page.
   - In the browser's network panel, Back issues a `laundryOrders` request only for the entry it lands on.
 
 ## Traceability
