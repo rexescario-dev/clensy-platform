@@ -421,12 +421,12 @@ Unchanged, and still Accepted whether or not this amendment is accepted:
 - The §4.3 matrix, including no self-edges. Re-weigh of a `WEIGHED` order remains a state-preserving update of `weightGrams`.
 - §4.4 RBAC and every verb precondition other than the `weightGrams` precondition on `weighLaundryOrder`. `priceLaundryOrder` keeps its Accepted inputs and preconditions, including how it handles a repeated `addOnId` (§8.4.3).
 - §4.5 amount calculation, quantity resolution, and post-`PRICED` immutability of weight, lines, and `totalMinorUnits`.
-- `computeLaundryLineAmount` still defines the 0-gram `PER_KG` case (Accepted §6). If §8.4.1 is accepted, that case is no longer reachable through `weighLaundryOrder`. The pure function’s definition does not change.
+- `computeLaundryLineAmount` still defines the 0-gram `PER_KG` case (Accepted §6). Under §8.4.1, that case is no longer reachable through `weighLaundryOrder`. The pure function’s definition does not change.
 - Invoice generation, `paymentStatus: UNPAID` at generation, and the absence of a payment-recording mutation. Recording money against an invoice stays [#39](https://github.com/rexescario-dev/clensy-platform/issues/39).
 - No bag, basket, or batch table. Several weight-entry rows are client input only. They are summed to one integer `weightGrams` and are not persisted.
 - No audit-event read API. The order page may show `createdAt`, `updatedAt`, and current status. It must not present that as an event history.
 - No inline customer creation in the intake modal.
-- No second pricing implementation. A preview, if accepted, calls the same `resolveEffectivePricing` and `computeLaundryLineAmount` path and writes nothing.
+- No second pricing implementation. The preview (§8.4.5) calls the same `resolveEffectivePricing` and `computeLaundryLineAmount` path and writes nothing.
 
 ### 8.3 Schema finding for line names
 
