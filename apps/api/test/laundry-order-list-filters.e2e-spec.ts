@@ -241,6 +241,9 @@ describe('laundryOrders list filters (e2e)', () => {
     expect(inRange.body.errors).toBeUndefined();
     expect(inRange.body.data.laundryOrders.nodes).toEqual([]);
     const above = await gql(PAGE, { o: 2147483648 });
-    expect(above.body.errors).toBeDefined();
+    // The Int coercion error specifically, not any error.
+    expect(above.body.errors?.[0]?.message).toMatch(
+      /Int cannot represent non 32-bit signed integer value/,
+    );
   });
 });
