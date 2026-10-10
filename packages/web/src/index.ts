@@ -25,3 +25,10 @@ export type { StaffErrorKey } from './staff/staff-errors';
 export { LAUNDRY_ORDER_STATUSES, LAUNDRY_STATUS_TONE } from './laundry/laundry-order-status';
 export type { LaundryFulfillmentType, LaundryOrderStatus } from './laundry/laundry-order-status';
 export { formatWeightGrams } from './laundry/format-weight-grams';
+export {
+  LAUNDRY_DESTRUCTIVE_VERBS,
+  LAUNDRY_ORDER_VERBS,
+  canReceiveLaundryOrder,
+  laundryOrderActions,
+} from './laundry/laundry-order-actions';
+export type { LaundryOrderVerb } from './laundry/laundry-order-actions';
