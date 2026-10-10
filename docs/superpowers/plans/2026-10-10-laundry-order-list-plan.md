@@ -3200,3 +3200,35 @@ Manual browser check, real app. Setup: this branch's web as a production build o
 Deviation: none from the Accepted plan. The minor-note comments were authorized by the owner at M5.
 
 Next gate: **M7 — Code Review**, by a fresh independent reviewer (`CLAUDE.md`: application code).
+
+### M7 — Approved for merge (2026-10-10, fresh independent review of revision 6)
+
+A fresh agent context on Opus 5.5 reviewed the slice at head `ec57722`. It had no part in the implementation (`CLAUDE.md`: application code). It was given the Accepted spec, this Accepted plan (revision 6) and the branch diff. It made no repository edits, and its experiments ran in a temporary worktree it removed.
+
+**Decision: Approved for merge. Blocking findings: none.**
+
+The reviewer independently confirmed:
+
+- **Gate order and hygiene:** M5 (`b5775d5`) → R6-1 (`ea527ed`) → R6-2 (`de6ab42`) → notes (`ba43902`) → M6 record (`ec57722`), each fix one commit. None of the 21 branch commits has a `Co-Authored-By` trailer.
+- **Byte identity:** all 13 full-file blocks equal HEAD byte for byte. All 5 plan diffs applied to `8cdd6b1` with `patch --fuzz=0` give HEAD exactly. The changed paths equal the 20-path allowlist plus `docs/`. `ba43902` changed only comments in code.
+- **P1 fixed:** `open` and `close` bodies are identical to `main`. The eight other pages are untouched and keep `onClose={closeDetail}`. The laundry page uses only `openWithHref`/`closeWithHref` behind a lambda, with no `router.push`/`replace`. No path remains where a non-string is read as a URL.
+- **Regression test:** `use-detail-drawer.test.tsx` gives 2 failed / 1 passed against `379adc7`, and 3 passed against `main`'s hook and against HEAD.
+- **Offset and URL handling:** snapping, `hrefFor` and `setState` behave as documented.
+- **Spec and constraints:** §8.4.4 and the Global Constraints are met.
+- **Re-ran:**
+  - `web` 662 and `@clensy/web` 402 passed;
+  - `web` `tsc` and lint clean; `packages/web` tsc and eslint clean; `packages/client` tsc clean;
+  - API e2e 8 passed;
+  - Next build succeeded (main tree).
+- **Mutations re-observed** with the recorded counts: 1, 7, 8, 10, 12, 15, 16, 17, 18, 19, 20, 21. Four of its own five extra mutations were caught.
+
+Reported only by M6, not re-run: mutations 2–6, 9, 11, 13 and 14; the `@clensy/client` test; the manual browser checks.
+
+**Non-blocking (P3):**
+
+1. Deleting `openedHereRef.current = false;` from `closeWithHref` (`use-detail-drawer.ts:68`) leaves every test passing. It has no practical effect today, and `close` on `main` has the same untested pattern.
+2. Since revision 5, an offset above GraphQL's 32-bit `Int` (e.g. `?offset=3000000000`) gets a server validation error and the list's error state, not page 1. It is only reachable by hand-editing; it could be clamped in a later slice.
+
+**PR body:** the reviewer could not check it. After the review, the author confirmed that it carries the plan's required statements: the drawer stays until #161, and search is customer name plus exact id only. The author also updated it from revision 5's `open`/`close` wording to revision 6's named methods.
+
+Next gate: **M8 — Refactoring** (or N/A), **M9 — Documentation**, **M10** if in scope; then closeout. Merge is the owner's decision.
