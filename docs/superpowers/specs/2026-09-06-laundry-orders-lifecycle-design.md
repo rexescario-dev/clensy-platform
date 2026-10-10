@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| **Status** | Accepted |
+| **Status** | Accepted — 2026-09-06. The Accepted contract is §§1–7 as accepted that day. [Amendment #164](#8-amendment-164--focused-order-workspace-draft) is **Draft** and is not part of the Accepted contract until M3 accepts it. |
 | **Kind** | Architecture RFC (product behavior/contracts for this slice, not a process specification) |
 | **Date** | 2026-09-06 |
 | **Tracking** | [#37](https://github.com/rexescario-dev/clensy-platform/issues/37) — milestone M11 (Laundry Orders & Lifecycle); first ticket of the Laundry epic after the #36 prerequisite |
@@ -11,6 +11,7 @@
 | **Source-material note** | Issue #37 (and #38–#45) cite a "Laundry Module Discovery report, §7/§8/§15/§19" as an architecture reference. That document does not exist as a retrievable artifact — it is absent from the repository (all branches, full history, deleted files, stashes), the ContextForge runtime tree, the GitHub wiki (never created), gists, and issue comments. Per the developer's instruction, this specification is reconstructed from the #37 ticket body, the Accepted #36 specification, and existing repository patterns; every lifecycle edge not literally present in the ticket text was resolved interactively with the project owner during M2 brainstorming (recorded as ratified decisions in §4.3 and §5). #36 followed the same interactive-resolution pattern for the same reason. |
 | **Revision note** | M3 round 1 (reviewer: project owner) returned the draft for four required corrections plus six precision items, not a redesign. Required: (1) `PAID → CANCELLED` removed — since `CANCELLED` is terminal it created a paid order with no path to `REFUNDED`, contradicting `REFUNDED`'s reason for existing; cancellation is now reachable only before payment is recorded, and every `PAID` order retains a path to `REFUNDED` (§4.3, §4.4, §5). (2) `minimumChargeMinorUnits` is now frozen into the per-line pricing snapshot, so a historical line is fully self-contained and re-derivable without reading `PricingRule` (§4.2, §4.5, §4.7, §4.10); `pricingRuleId` is demoted to a soft traceability pointer with no foreign key. (3) The snapshot's `quantity` is stated explicitly to store the canonical input in the unit's integer representation — grams for `PER_KG` — with the `÷1000` kilogram conversion confined to the amount calculation so no fractional value is ever persisted (§3, §4.2, §4.5). (4) The web action set is defined as `matrix-legal ∩ order-local branch predicate (fulfillmentType) ∩ actor RBAC`, with the server authoritative (§4.9). Precision items folded in: `WEIGHED → REJECTED`'s business meaning stated (§4.3 n.6); `REFUNDED` explicitly does not imply `LOST`/`DAMAGED` (§4.3 n.8a); the pre-transaction `getCustomer` read reframed as an error-shape choice with the FK as the correctness mechanism (§4.1); the `unit` Postgres enum is module-local (`laundry_order_line_unit_enum`), not a reuse of catalog's TypeORM-generated `pricing_rule_entity_unit_enum` (§4.10, §5); the concurrency acceptance test now requires a competing-valid-target race as the load-bearing case (§4.6, §6); `fulfillmentType` clarified as *return* fulfillment, not intake logistics (§3, §4.2). |
 | **M3 decision** | **Accepted** — 2026-09-06. M3 round 1's four required corrections and six precision items all verified present and consistent across the matrix (§4.3), the verb table (§4.4), pricing (§4.5), validation (§4.8), the migration (§4.10), and rationale (§5) — not merely asserted. Round 2 raised one final verification item — the `baseQuantity` × `unit` interaction — resolved by adding §4.5 step 3a: one quantity-resolution rule applied identically to the base-service line and every add-on line, keyed on the *resolved* `PricingRule.unit`, where `PER_KG` always prices on `order.weightGrams` and a supplied quantity there is silently ignored (not rejected, because the client cannot know the resolved unit in advance), `PER_ITEM` uses the caller's quantity, `FLAT`/`PER_SERVICE` use `1`, and the stored snapshot `quantity` is always the canonical value the amount was computed from. No remaining design blocker; no further design fork. Ready for M4 Implementation Planning. |
+| **Amendment #164** | **Draft** — 2026-10-10. Tracking [#164](https://github.com/rexescario-dev/clensy-platform/issues/164), parent [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Slice-local. Does not replace this specification. M3 has not accepted it. Two bullets inside it still need an explicit owner confirmation because they change validation or persistence: positive `weightGrams`, and a frozen line description column. |
 
 ---
 
@@ -95,7 +96,7 @@ Audit goes through the `AUDIT_LOGGER` port and `runAuditInTransaction`; `modules
 | `customerId` | `string` | required; references `Customer.id`; FK `ON DELETE RESTRICT`; immutable after creation |
 | `fulfillmentType` | `LaundryFulfillmentType` (`PICKUP \| DELIVERY`) | required; set at intake; immutable; describes how the **finished** laundry is returned to the customer (not intake logistics — §3); selects the `READY` branch (§4.3) |
 | `status` | `LaundryOrderStatus` | starts at `RECEIVED`; only ever changed through a §4.3 transition |
-| `weightGrams` | `number \| null` | `null` until the order is weighed; thereafter a non-negative integer (0 permitted). Locked once the order is `PRICED` |
+| `weightGrams` | `number \| null` | `null` until the order is weighed; thereafter a non-negative integer (0 permitted). Locked once the order is `PRICED`. Amendment #164 §8.4.1 (Draft, not Accepted) proposes requiring an integer ≥ 1 |
 | `totalMinorUnits` | `number \| null` | `null` until `PRICED`; then the frozen sum of every line's `amountMinorUnits` (§4.5). Never recomputed |
 | `createdAt` | `Date` | `@CreateDateColumn` |
 | `updatedAt` | `Date` | `@UpdateDateColumn` |
@@ -312,6 +313,8 @@ Audit failures inside the transaction propagate and roll back the whole operatio
 
 ### 4.9 Web — `/app/laundry`
 
+> **Amendment #164 (Draft), §8.4.4.** A dedicated order route and a searchable intake modal are proposed and are **not** Accepted. Until M3 accepts §8, this section remains the contract.
+
 One route, built entirely from `packages/ui` primitives and the `/app/*` shell (the `/app/:path*` middleware matcher already covers it):
 
 - **List** — `DataTable` of orders: customer, `fulfillmentType`, status (`StatusBadge`, tones: `RECEIVED`/`WEIGHED`/`PRICED`/`AWAITING_PAYMENT` → neutral; `PAID`/`PROCESSING`/`READY`/`AWAITING_PICKUP`/`AWAITING_DELIVERY` → warning; `COMPLETED` → success; `CANCELLED`/`REJECTED`/`LOST`/`DAMAGED`/`REFUNDED` → danger), weight, total (`formatMinorUnits`), created. Offset pagination, `pageSize` 20, the `bookings/page.tsx` shape.
@@ -390,3 +393,132 @@ No backfill — both tables are new.
 - Multi-currency; tiered/banded pricing; a scheduled-pricing promotion mechanism; a laundry-vs-cleaning catalog flag.
 - Work-before-payment (`AWAITING_PAYMENT → PROCESSING`); cancellation once an order is `PAID` (replaced by the `REFUNDED` path); cancellation after processing begins; a direct `READY → COMPLETED` edge — all considered and declined in M2/M3 (§5, §4.3).
 - Implementation sequencing, task breakdown, and the TDD plan — M4.
+
+---
+
+## 8. Amendment #164 — Focused order workspace (Draft)
+
+| Field | Value |
+| --- | --- |
+| **Status** | **Draft.** Not Accepted. Until M3 accepts this amendment, §§1–7 remain the contract, including “`weightGrams` … 0 permitted” (§4.2, §4.8) and §4.9’s drawer. |
+| **Date** | 2026-10-10 |
+| **Tracking** | [#164](https://github.com/rexescario-dev/clensy-platform/issues/164), under [#154](https://github.com/rexescario-dev/clensy-platform/issues/154) |
+| **Kind** | Slice-local amendment of this architecture RFC. Not a second specification. |
+| **Depends on** | This specification (Accepted 2026-09-06). [Laundry invoices](2026-09-06-laundry-invoices-design.md) (Accepted) for the frozen `InvoiceLine.description` precedent and for the rule that generation does not settle the invoice. |
+
+### 8.1 Question and thesis
+
+**Question:** The Accepted web contract (§4.9) puts intake, weighing, pricing, invoicing, and lifecycle actions in one list page and a `?detail=` drawer. The agreed workspace is a list, a creation modal, and a dedicated order page, including several temporary weight entries that still persist as one `weightGrams`. Which of those changes are presentation only, and which ones alter validation or stored data?
+
+**Thesis:** The lifecycle matrix, verb RBAC, pricing formula, prepaid-processing rule, and post-`PRICED` immutability stay as Accepted. The web end state replaces the drawer. Two owner recommendations change the contract if, and only if, M3 confirms them: `weighLaundryOrder` rejects a zero weight, and each priced line freezes the catalog name in a new snapshot field. Neither is implemented, and no migration is written, before that confirmation.
+
+### 8.2 What this amendment changes, and what it does not
+
+On acceptance, the sentences in §8.4 replace the cited Accepted sentences. They do not replace anything else.
+
+Unchanged, and still Accepted whether or not this amendment is accepted:
+
+- The §4.3 matrix, including no self-edges. Re-weigh of a `WEIGHED` order remains a state-preserving update of `weightGrams`.
+- §4.4 RBAC and every verb other than the `weightGrams` precondition on `weighLaundryOrder`, and the new duplicate-add-on precondition on `priceLaundryOrder` / preview.
+- §4.5 amount calculation, quantity resolution, and post-`PRICED` immutability of weight, lines, and `totalMinorUnits`.
+- `computeLaundryLineAmount` still defines the 0-gram `PER_KG` case (Accepted §6). If §8.4.1 is accepted, that case is no longer reachable through `weighLaundryOrder`. The pure function’s definition does not change.
+- Invoice generation, `paymentStatus: UNPAID` at generation, and the absence of a payment-recording mutation. Recording money against an invoice stays [#39](https://github.com/rexescario-dev/clensy-platform/issues/39).
+- No bag, basket, or batch table. Several weight-entry rows are client input only. They are summed to one integer `weightGrams` and are not persisted.
+- No audit-event read API. The order page may show `createdAt`, `updatedAt`, and current status. It must not present that as an event history.
+- No inline customer creation in the intake modal.
+- No second pricing implementation. A preview, if accepted, calls the same `resolveEffectivePricing` and `computeLaundryLineAmount` path and writes nothing.
+
+### 8.3 Schema finding for line names
+
+Investigated against the current model. No name is stored on a laundry line.
+
+`LaundryOrderLinePricingSnapshot` and `LaundryOrderLinePricingSnapshotEmbeddable` persist only `rateMinorUnits`, `unit`, `quantity`, `amountMinorUnits`, `minimumChargeMinorUnits`, `minimumChargeApplied`, and `pricingRuleId`. `LaundryOrderLine` also stores `serviceId` or `addOnId`, foreign keys to the live catalog row (`ON DELETE RESTRICT`). Those ids keep the row from being deleted. They do not keep the name. A later rename of `Service.name` or `AddOn.name` changes any label read from the catalog.
+
+`InvoiceLine.description` is the existing frozen-name pattern: a string copied at invoice generation (`Service.name`, or `AddOn.name + " (add-on)"`), with no foreign key back to the catalog. That string is not on the laundry line, so an invoice cannot be used as the order page’s source before an invoice exists, and it is not created until generation.
+
+A frozen name on the order line therefore needs a new column. This amendment does not add that column. M3 acceptance of §8.4.2 is the approval to plan an additive migration. Existing rows cannot be repaired to the name that was current at pricing time, because that name was never stored. A backfill can only copy the catalog name at migration time, and must say so.
+
+The fallback, if M3 rejects the column, is a live catalog label resolved from `serviceId` / `addOnId`. That label is allowed to change after a rename. Invoice descriptions stay frozen either way.
+
+### 8.4 Proposed replacements
+
+These are the only normative changes. Each one is in force only after M3 accepts this amendment. §8.4.1 and §8.4.2 additionally need the explicit confirmation named on each bullet. The other bullets are the working direction for the draft and are accepted or returned with the amendment as a whole.
+
+#### 8.4.1 Positive weight — confirmation required
+
+Replace §4.2 `weightGrams` note “thereafter a non-negative integer (0 permitted)” and the §4.4 / §4.8 precondition “non-negative integer”.
+
+Proposed contract: `weightGrams` is `null` until the order is weighed, and thereafter an integer **≥ 1**. `weighLaundryOrder` rejects `0` and any negative or non-integer with `BadRequestException`. `WeighLaundryOrderInput.weightGrams` uses that same minimum. The UI rejects blank, non-numeric, zero, and negative entries and must not be the only check.
+
+M3 confirms this bullet only if every order that leaves `RECEIVED` must have a positive measured weight. If M3 declines it, the Accepted “0 permitted” rule stands and the rest of this amendment can still be accepted.
+
+#### 8.4.2 Frozen line description — confirmation required before any migration
+
+Add one field to `LaundryOrderLinePricingSnapshot`:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `description` | `string` | The catalog name copied once at `priceLaundryOrder`. Base service: `Service.name`. Add-on: `AddOn.name + " (add-on)"`, the same string [#38](https://github.com/rexescario-dev/clensy-platform/issues/38) freezes onto `InvoiceLine.description`. Not a foreign key. A later catalog rename does not change it. |
+
+`priceLaundryOrder` copies it inside the same transaction that inserts the line. If the catalog row cannot be read, the command fails and rolls back, matching invoice generation’s missing-name guard. The order page and the price preview show this frozen string after pricing. They do not re-read `Service.name` / `AddOn.name` for a priced line.
+
+Persistence is an additive column on `laundry_order_line_entity` (proposed name `pricingSnapshotDescription`, `text not null` for lines written after the migration). Rows already priced before the migration do not have a historical name to recover (§8.3). No migration is authored in this Draft. Planning it is allowed only after M3 accepts this bullet.
+
+If M3 rejects the column, priced lines display the live catalog name and the order page must tolerate a later rename. Preview of a not-yet-priced order always uses the current catalog name, because nothing has been frozen yet.
+
+#### 8.4.3 One line per add-on
+
+`priceLaundryOrder` and the preview in §8.4.5 reject a repeated `addOnId` in one request with `BadRequestException`. The UI does not offer a second row for an add-on already selected. Two separately priced instances of the same add-on are out of scope unless a later decision says otherwise. Different add-ons on one order stay allowed.
+
+#### 8.4.4 Web end state
+
+Replace §4.9’s “one route” and “Detail — `DetailDrawer` (`?detail=<id>`)” as the primary detail experience. Also replace the intake control that is a customer `<select>` limited to 100 rows.
+
+End state:
+
+- `/app/laundry` is the list: server-side filter on customer name, status, and fulfillment type; sort on the existing `LaundryOrderSortFields`; human-readable status and fulfillment labels; `formatMinorUnits` for money; kilograms rendered from integer grams; offset page size 20; a row opens `/app/laundry/[id]`.
+- Intake stays a `FormDialog` on the list. Customer selection can reach any customer the customers query returns, not only the first 100. Fulfillment is `PICKUP` (customer pickup) or `DELIVERY`, chosen at intake and immutable. The form says that the choice is fixed and that delivery does not schedule a route. Creating a customer inline is out of scope. Success opens `/app/laundry/[id]` for the new order.
+- `/app/laundry/[id]` is the order workspace: back link to the list, customer, order id, fulfillment, status, progress through the §4.3 happy path (the `AWAITING_PAYMENT` branch is shown when that is the status, not as a required step), summary, weighing, services, price, invoice, and lifecycle actions. `AWAITING_PICKUP` and `AWAITING_DELIVERY` stay mutually exclusive by `fulfillmentType`.
+- `/app/laundry?detail=<id>` redirects to `/app/laundry/[id]`, so existing links keep working. The `DetailDrawer` is not the primary detail experience; it is removed once the order page is verified.
+- Weighing UI may show multiple temporary rows. The client sums them, in whole grams, at most three decimal places of kilograms, and submits one `weightGrams`. The server remains authoritative. Re-weigh stays legal only in `RECEIVED` and `WEIGHED`.
+- Services follow §4.5 step 3a. A `PER_KG` line shows weight and no item quantity. A `PER_ITEM` line shows an item count. `FLAT` / `PER_SERVICE` show no quantity. The client does not compute the amount.
+- Before `priceLaundryOrder`, displayed amounts are an estimate from §8.4.5. Confirming price is `priceLaundryOrder`, once. After `PRICED`, the page shows the frozen snapshot, not a new estimate.
+- Invoice generation stays the Accepted `generateInvoiceFromOrder` rules. Marking the order `PAID` or `AWAITING_PAYMENT` is a laundry lifecycle verb. Neither action records an invoice payment. `PROCESSING` remains reachable only from `PAID`.
+- Action buttons are the §4.3 matrix intersected with the fulfillment branch and the actor’s §4.4 role. `cancel`, `reject`, `lost`, `damaged`, and `refund` require an explicit confirmation. The client mirror is presentation only.
+
+§4.9’s status-badge tones stay as Accepted.
+
+#### 8.4.5 Price preview
+
+Add a read, not a mutation:
+
+`previewLaundryOrderPrice(input: PriceLaundryOrderInput!): LaundryPricePreview!`
+
+- Same input and same quantity-resolution and amount rules as `priceLaundryOrder` (§4.5), including ignoring a quantity unless the resolved unit is `PER_ITEM`.
+- Allowed only when status is `WEIGHED` and `weightGrams` is set. Otherwise `BadRequestException`.
+- Does not insert lines, change status, set `totalMinorUnits`, emit `laundry_order.priced`, generate an invoice, or mark an order paid.
+- Authorization matches `priceLaundryOrder` (TENANT_OWNER, OPS_MANAGER, SCHEDULER).
+- Each returned line includes the current catalog name (§8.4.2’s string rule), `unit`, canonical `quantity`, `rateMinorUnits`, `amountMinorUnits`, `minimumChargeMinorUnits`, and `minimumChargeApplied`, plus the estimated total (sum of line amounts). The result is an estimate. The committed total remains `LaundryOrder.totalMinorUnits` after pricing.
+- A repeated `addOnId` is rejected (§8.4.3).
+
+This read does not expose `PricingRule.unit` on the catalog `PricingRule` type. The preview payload carries the unit for that quote only.
+
+### 8.5 Acceptance criteria for this amendment
+
+M3 may accept the amendment only when all of the following are true:
+
+- A reviewer can see, from §8.2 and §8.4 alone, which Accepted sentences change and which do not.
+- §8.4.1 is either explicitly confirmed or explicitly declined. Silence is not acceptance of a zero-weight change.
+- §8.4.2 is either explicitly confirmed, including approval to plan the additive column, or explicitly declined in favor of live catalog labels. Silence is not approval to migrate.
+- The preview (§8.4.5) is specified as a non-write, and it uses the existing amount function rather than a second formula.
+- Temporary weight rows are specified as not persisted.
+- No task breakdown or implementation sequence is required to understand the contract.
+
+### 8.6 Deferrals
+
+- Inline customer creation.
+- An audit-event query, and any timeline that would require one.
+- Recording invoice payments ([#39](https://github.com/rexescario-dev/clensy-platform/issues/39)).
+- Persisted per-bag weights.
+- Editing a price after `PRICED`.
+- Implementation planning (M4) and any code or migration (M6). This Draft does not authorize either.
