@@ -511,3 +511,42 @@ Owner notes:
 - P3: confirm that the `Int` coercion message is stable. The author captured it from the running API at planning time: `Variable "$o" has invalid value: Int cannot represent non 32-bit signed integer value: 2147483648`. M6 re-observes it.
 
 The pre-validation is author-reported until M6 re-runs it.
+
+### M6 — Revision 2 implemented (2026-10-10)
+
+Implemented from the Accepted revision 2 (`fcb33e5`, recorded `116a838`). Each task applied its diff exactly as embedded in "Revision 2 tasks". The resulting code is byte-identical to the pre-validation.
+
+| Task | Commit | Evidence |
+| --- | --- | --- |
+| 4 Match the `Int` coercion error | `4c3de3c` | e2e 9 passed. Negative check, not committed: `{ o: 'x' }` gave 1 failed / 6 passed. Reverted. eslint and prettier clean. The message re-observed at planning time is `Variable "$o" has invalid value: Int cannot represent non 32-bit signed integer value: 2147483648`. |
+| 5 Plain decimal digits only | `a944012` | RED 5 failed / 23 passed (28). The failing cases were exactly `0x7fffffff`, `1e3`, `2.147483647e9`, `" 60 "` and `+20`; `60abc` passed, as stated. GREEN 28 passed. `tsc` and eslint clean. |
+
+Re-verify:
+
+- **Code allowlist:** OK, the four File Map paths. `use-detail-drawer.ts` is unchanged. `apps/web/README.md` also differs from `main`; that is the M9 documentation edit (`4413351`), outside the code allowlist.
+- **Mutations:** A and B gave 1 failed / 4 passed. C, D and E gave 1 failed / 27 passed. F gave 5 failed / 23 passed. All were reverted, and the tree was clean afterwards.
+- **Suites:**
+
+  | Check | Result |
+  | --- | --- |
+  | `web` | 672 passed; lint 0 errors; `tsc` clean; Next build succeeded |
+  | `@clensy/web` | 402 passed |
+  | API e2e | 9 passed |
+
+- **Manual browser check:** branch web (production build, port 3999) against the branch API (port 3002), with a throwaway owner that was then deleted.
+
+  | Check | Result |
+  | --- | --- |
+  | `?offset=1e3` | "Page 1 of 7", 20 rows, no error |
+  | `?offset=3000000000` | "Page 1 of 7", 20 rows, no error |
+  | `?offset=2147483647` | "Page 107374183 of 7", 0 rows, no error |
+  | `?offset=40` | "Page 3 of 7", 20 rows (plain digits unaffected) |
+  | × path, from `?status=RECEIVED` | `history.length` 8 → open row 9 → × goes Back to the list (9) → Forward shows the drawer (9) → × gives the list URL, length unchanged (replaced) → browser Back lands on an identical list URL. That is the duplicate entry, as documented. |
+  | Browser-Back path, from a fresh `?status=RECEIVED` | open row → browser Back (the list) → Forward (the drawer) → × goes Back (the list URL) → Forward reopens the drawer, so the drawer entry survives and there is no duplicate. |
+  | Bookings direct-link × | closes to `/app/bookings?sortBy=status&sortOrder=asc&limit=20&offset=0`, +0 entries |
+
+  In the browser-Back run, `history.length` read 9 both before and after opening the row (the tab already had about ten navigations). The path's behaviour is evidenced by the URLs and by Forward reopening the drawer after ×.
+
+Deviation: none.
+
+Next gate: **M7**, a fresh independent review (`CLAUDE.md`: application code).
