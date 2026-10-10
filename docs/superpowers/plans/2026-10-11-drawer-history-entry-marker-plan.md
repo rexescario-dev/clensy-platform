@@ -714,3 +714,39 @@ diff --git a/apps/web/lib/use-laundry-order-list-url-state.ts b/apps/web/lib/use
 
 - **M5, review 1 (2026-10-11):** request changes. It raised four points: the Back invariant, hook-test isolation, coverage of all nine pages, and Next version sensitivity. Revision 2 answers each one; see the Revision log.
 - **M5, review 2 (2026-10-11): Accepted** at `d8f0ac2`, by the owner. No blocking findings. The reviewer found that revision 2 addresses all four points. The one non-blocking note: the hook tests model the history stack and Next's URL sync separately, so they cannot prove the installed Next.js keeps the marker. The production-build browser matrix is therefore required before merge, not optional. The pre-validation results were not re-run by the reviewer; M6 re-observes them.
+
+### M6 — Implementation complete (2026-10-11)
+
+Implemented on `fix/173-drawer-history-entry-marker` from the Accepted plan (`d8f0ac2`, recorded `cc938e9`). The code was first reset to `8553a04`. Then each task's diffs were extracted from this plan and `git apply`-ed exactly as embedded.
+
+| Task | Commit | Evidence |
+| --- | --- | --- |
+| 1 Tests first | `93c747b` (one commit with Task 2, as planned) | RED: the hook tests gave 6 failed / 4 passed (10), and the laundry interaction tests 2 failed / 15 passed (17). The failures were exactly the two #173 tests. |
+| 2 The marker | `93c747b` | GREEN: 27 passed (27). `tsc` and eslint clean. The applied code is byte-identical to the pre-validated code. |
+
+Final verification:
+
+- **Next version:** `16.3.1`.
+- **Allowlist:** OK, exactly the four File Map paths.
+- **Mutations** (27 tests each), all reverted; the tree was clean afterwards:
+
+  | Mutation | Result |
+  | --- | --- |
+  | M1 | 5 failed / 22 passed |
+  | M2 | 9 failed / 18 passed |
+  | M3 | 1 failed / 26 passed |
+  | M4 | 4 failed / 23 passed |
+  | M5 | 1 failed / 26 passed |
+  | M6 | 3 failed / 24 passed |
+
+- **Full suites:** `web` 679 passed; lint exit 0; `tsc --noEmit -p .` clean; Next build succeeded. `@clensy/web` 402 passed.
+- **Browser** (required by M5): this commit's web (production build, port 3999) against this branch's API (port 3002) and the local Postgres, in Chromium, with fresh tabs.
+  - **Regression matrix:** all nine pages, columns a–f: 54 of 54 pass.
+  - **Navigate away and return:** laundry and bookings, by typed address and by in-app link, 4 of 4 pass. Back restores the marked drawer entry, × lands on the list with no extra entry, and Forward reopens the drawer.
+  - **Refresh on a pushed drawer:** laundry and bookings. The marker survives the reload, × returns to the list URL, and `history.length` is unchanged.
+  - **Console:** only a `favicon.ico` 404, which is unrelated.
+  - **Cleanup:** a throwaway `TENANT_OWNER`, and one job, cleaner and add-on created for the matrix, were all deleted afterwards. The booking used for the job is unchanged (`CONFIRMED`).
+
+Deviation: none.
+
+Next gate: **M7 — Code Review**, by a fresh independent reviewer (`CLAUDE.md`: application code).
