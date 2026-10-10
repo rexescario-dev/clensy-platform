@@ -271,7 +271,7 @@ diff --git a/apps/web/lib/use-detail-drawer.test.tsx b/apps/web/lib/use-detail-d
 
 ## Deferred
 
-- Changing what "close after Forward" does (Review Focus 1). That would be a behaviour change for all drawer pages.
+- Changing what "close after Forward" does (Review Focus 1; refined by M7 P3-2: the duplicate list entry arises only after an in-page × close, not after leaving the drawer with the browser Back button). That would be a behaviour change for all drawer pages.
 
 ## Gate outcomes
 
@@ -317,3 +317,85 @@ Final verification:
 Deviation: none.
 
 Next gate: **M7 — Code Review**, by a fresh independent reviewer (`CLAUDE.md`: application code).
+
+### M7 — Approved for merge (2026-10-10, fresh independent review)
+
+A fresh agent context on Opus 5.5 reviewed PR #172 (`15c45cf...7b82083`). It did not implement the change (`CLAUDE.md`: application code). It was read-only, ran its experiments in a temporary worktree it removed, and left the tree clean.
+
+**Decision: Approved for merge. Blocking findings: none.**
+
+The reviewer independently confirmed:
+
+- **Gate order:** M5 record → one commit per task, in plan order. No `Co-Authored-By` or "Generated with" line in any commit or in the PR body.
+- **Zero fuzz:** the plan's 4 diffs applied to `15c45cf` with `-F0` reproduce each task commit and the branch tree.
+- **Scope:** the allowlist is exact, and `use-detail-drawer.ts` is unchanged.
+- **Test-first:** Task 2 RED was 2 failed / 20 passed; GREEN 22 passed.
+- **Mutations:** C, D, E (1 failed each) and A, B (1 failed each, the matching test). Control: with both resets removed, `main`'s test file still passes 3/3, confirming the gap.
+- **Suites:** `web` 666 passed; `tsc` and lint clean; API e2e 9 passed.
+- **API limit:** the negative check fails as expected, and a probe confirms the server limit is exactly the `Int` maximum.
+- **Clamp boundaries:** parse and `withLaundryPage` were probed across the boundaries (±, fractional, huge, `MAX_SAFE_INTEGER`, `Infinity`, `NaN`). Every parsed value is a fixed point of serialize → parse.
+- **CI** is green on PR #172.
+
+Reported only by M6, not re-run: the Next build, `@clensy/web` 402, and the manual browser checks.
+
+**Non-blocking (P3):**
+
+1. The over-range e2e case asserts only that `errors` is defined. Matching the `Int` coercion message would harden it. The in-range assertion and the negative check already discriminate.
+2. Review Focus 1 is accurate but incomplete. Leaving the drawer with the browser Back button, not ×, keeps `openedHereRef` true, so Forward then × calls `router.back()` and leaves no duplicate entry. That behaviour is pre-existing, and the Deferred item now mentions it.
+3. Offset parsing accepts lenient numeric spellings via `Number()` (`0x7fffffff`, `1e3`, surrounding spaces). Every result is in range and snapped, so this is harmless and pre-existing.
+
+Next gate: **M8**, then M9 and M10, then closeout. Merge is the owner's decision.
+
+### M8 — N/A (2026-10-10)
+
+```text
+Decision: N/A
+Subject: PR #172, branch feat/171-laundry-list-followups
+M7 / authorization: Approved for merge; M8–M10 per the owner's "fix followups" (the same stage run as #163)
+Rationale: the slice is one guard in one module plus tests. There is nothing to restructure without changing behaviour.
+The M7 P3s are a test-assertion hardening and pre-existing parsing leniency. Neither is a behaviour-preserving
+refactor. P3-1 is noted for a future test pass, and P3-3 needs no action.
+No code changed in M8.
+```
+
+### M9 — Complete (2026-10-10)
+
+```text
+Decision: Complete
+Subject: #171, PR #172
+Documentation scope:
+- apps/web/README.md (one sentence)
+- docs/superpowers/plans/2026-10-10-laundry-order-list-plan.md (Deferred list: mark the two items resolved by #171)
+- this plan (Deferred wording, Gate outcomes)
+
+Content updates (each traces to M6 or M7 of #171):
+- apps/web/README.md: "Parsing validates every value and snaps the offset to a page boundary" now also says that an
+  offset beyond GraphQL's `Int` range is treated as malformed (← Task 2).
+- #163 plan Deferred: both M7 (revision 6) items now point to #171 as resolved (← M6, M7 of #171).
+- This plan's Deferred item now carries the M7 P3-2 refinement.
+
+Editorial changes: none.
+Unchanged, with reason: packages/web/README.md (no package change); docs/README.md (no API, schema or tenant change);
+no changelog or roadmap exists.
+Verification: relative links and anchors in the touched files resolve (scripted scan). Status consistency: plan Accepted,
+M6 complete, M7 Approved, M8 N/A, PR #172 open.
+Gate: Documentation complete. Code unchanged.
+```
+
+### M10 — Accepted, workflow validated (2026-10-10)
+
+The asset inventory is unchanged: nine prompts for M2–M10, plus `prompt-library.md` for M1, with no orphans.
+
+- **§2.5:** the M5 record `74ad167` precedes `9577172`.
+- **One PR:** #172 carries the plan, code and docs (§2.8).
+- **Providers:** GitHub via `gh` for #171, the branch and PR #172.
+- **M7:** a fresh, independent, read-only review on the most capable model.
+- **Slice Completion Reports** were emitted at M6 and M7–M10.
+
+The #163 M10 lessons were applied:
+- Reviewers used their own scratch directories, and no helper was overwritten.
+- The plan named the shared hook's other consumers and tested `close` on a page wired like them.
+
+**Blocking findings:** none.
+
+Gate: **Workflow validated.**
