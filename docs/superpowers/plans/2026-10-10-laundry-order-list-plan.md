@@ -3153,3 +3153,50 @@ The reviewer independently checked:
 No blocking or major findings. Two minor notes are to be folded into M6.
 
 The reviewer did not re-run the e2e, the client and `@clensy/web` packages, the Next build, the remaining mutations or the manual browser checks. M6 runs all of them.
+
+### M6 — Revision 6 implemented (2026-10-10)
+
+Implemented on `feat/163-laundry-order-list` from the Accepted revision 6 (`ba43374`, recorded at `b5775d5`). R6-1 and R6-2 were applied in plan order, each red first. Every touched file was taken from this plan's blocks (Task 4 module and test, Task 6 Step 5 and Step 6 diffs applied to `main` with `patch --fuzz=0`, the R6-2 test block). Each was checked byte-identical before commit.
+
+The owner numbered the two fixes the other way round when accepting. The plan's order (R6-1 offset, R6-2 drawer) was followed; both were test-first, as instructed.
+
+| Task | Commit | Evidence |
+| --- | --- | --- |
+| R6-1 Offset snapping | `ea527ed` | RED `snaps the offset down to a page boundary`: 1 failed / 19 passed (20). GREEN 20 passed. `web` tsc and eslint clean. |
+| R6-2 Named entry points | `de6ab42` | RED against the committed hook (`379adc7`): 2 failed / 1 passed (3). `router.replace` was not called with `'/app/bookings?status=A'` nor with `'/app/bookings'`. GREEN 3 passed. Page tests 21 passed. `tsc` and `web` lint clean. |
+| Owner-authorized minor notes | `ba43902` | Comments only, with the plan's blocks synced. The `useDetailDrawer` header now says `openedHereRef` is set by `open()` or `openWithHref()`. The `hrefFor` comment says `setState` skips only an identical URL string; an equivalent URL in another encoding is rewritten, harmlessly. The resolution-table wording matches. `open`/`close` function bodies are unchanged from `main`. |
+
+Final verification:
+
+- Allowlist: `allowlist OK` (20 paths).
+- Mutations: all 21 re-observed on the committed code with exactly the recorded counts (3, 1, 10, 1, 2, 1, 7, 5, 4, 5, 1, 6, 2, 1, 1, 2, 2, 2, 1, 1, 2 failed), each reverted. The tree was clean afterwards. Restored: 68 passed (`apps/web`, five files) and 25 passed (`@clensy/web`).
+  - The first mutation run did not execute: the shared scratch helper had been overwritten by another session's helper with a different argument layout, and every invocation stopped before editing a file. The run was repeated with a new helper; the results above are from that run.
+- Full suites:
+
+  | Check | Result |
+  | --- | --- |
+  | Task 1 e2e | 8 passed |
+  | `@clensy/client` | 10 passed; build clean; lint 0 errors |
+  | `@clensy/web` | 402 passed; build clean; lint 0 errors |
+  | `web` | 28 files / 662 passed; lint 0 errors; `tsc --noEmit -p .` clean; Next build succeeded |
+
+Manual browser check, real app. Setup: this branch's web as a production build on port 3999, the branch API (unchanged) on 3002 with `WEB_ORIGIN=http://localhost:3999`, and the local Postgres. A throwaway `TENANT_OWNER` was used and deleted afterwards. Driven with Playwright.
+
+| Check | Result |
+| --- | --- |
+| Bookings direct-link × (M7 P1) | `/app/bookings?sortBy=status&sortOrder=asc&limit=20&offset=0&detail=<booking>`, then × gives `/app/bookings?sortBy=status&sortOrder=asc&limit=20&offset=0`. The drawer closed, no history entry was added, and the Bookings list is shown. Never `/app/[object%20Object]`. Reloading that URL shows the Bookings list. |
+| `?offset=5` | "Page 1 of 4" (not a fractional page). |
+| 375 px | 20 cards, no table; toolbar stacks; `scrollWidth` 360 ≤ 375. A card opens the drawer (+1 entry) and Close returns to the list. |
+| 640 px | Table visible, toolbar in a row, no horizontal overflow. |
+| Search and filters | From page 2, choosing WEIGHED returns to offset 0 with only Weighed rows. Search applies after the pause (no `q` at 150 ms). Customer search alone narrows to Laundry Jane. The filtered-empty copy shows. Clear empties the box and the filters. |
+| Sort | Created asc → desc; Status asc → desc → Created desc; `aria-sort` matches at every step. List updates added no history entries. |
+| History and hash | From `?status=WEIGHED#x`, opening a row adds +1 entry and keeps `#x`. Back closes the drawer with the select still WEIGHED; Forward reopens it; Close on a drawer opened here goes Back. |
+| Waiting search | A search typed and a row opened before the pause: the drawer and, after Close, the list carry `q=Ana` and the box shows `Ana`. Back while a keystroke waits: the keystroke is not applied, and the box shows the entry Back went to. |
+| Create success | From a fresh `?status=RECEIVED&tab=a#x`: +1 entry, and the drawer URL keeps `status`, `tab` and `#x` with the new `detail`. Close returns to `?status=RECEIVED&tab=a#x`. |
+| Laundry direct-link close | `?status=READY&detail=<id>#x` then × gives `/app/laundry?status=READY#x`, +0 entries. `?detail=<id>#x` then × gives `/app/laundry#x`, +0 entries. |
+| Refresh | `?q=ana&status=RECEIVED&fulfillment=PICKUP&sortBy=status&sortOrder=asc` restores the box, both selects and `aria-sort="ascending"`. |
+| Network on Back | After native pushes to `?status=PAID` and `?status=READY`, Back gives exactly one GraphQL request: `LaundryOrders` with `filter: { status: { eq: PAID } }` and `createdAt DESC, id ASC`. |
+
+Deviation: none from the Accepted plan. The minor-note comments were authorized by the owner at M5.
+
+Next gate: **M7 — Code Review**, by a fresh independent reviewer (`CLAUDE.md`: application code).
