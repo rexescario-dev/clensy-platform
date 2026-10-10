@@ -1458,3 +1458,22 @@ Negative case (run once, then delete the file): `touch packages/ui/src/stray.ts`
 ### M5 — Accepted (2026-10-10, third pass)
 
 Accepted at `92d6fca` by the owner. The first pass returned eight findings and the second pass four. All were applied and re-pre-validated (M5 history). The owner also corrected the second-pass reasoning on the scope check: the original `&& { …; exit 1; } || echo` form did fail closed when run as a script. The interactive-terminal hazard was the separate, valid reason to adopt the `if`/`else` form. The acceptance is limited to the plan's allowlist. It does not authorize API, UI-kit, client or page changes in this slice.
+
+### M6 — Implementation complete (2026-10-10)
+
+Implemented on `feat/157-laundry-ui-foundation`, from the Accepted plan at `98285a2` and the Accepted lifecycle spec with Amendment #164. Tasks 1–6 were done in plan order, one commit each. Every code block was applied as written in this plan. No task was split, merged or reordered, and no semantics were added.
+
+| Task | Commit | Evidence |
+| --- | --- | --- |
+| 1 Baseline (**characterization**) | `1fdfd0f` | 1 passed against the unchanged page. Failure evidence, not committed: mutating `page.tsx`'s weight to `toFixed(3)` failed it (`Expected: "2.50 kg"`). Reverted. |
+| 2 Catalog | `534c3e3` | `@clensy/web` tsc exit 0. The existing 8 files / 63 tests passed. |
+| 3 Status + weight | `b795c69` | RED `Cannot find module './format-weight-grams'` → GREEN 17 passed |
+| 4 Actions | `5af94cd` | RED `Cannot find module './laundry-order-actions'` → GREEN 228 passed. Step 3 oracle script: 10/10 `ok`, `ORACLE: matches API source`, exit 0. Step 3a: oracle `PAID` slip gave `1 difference(s)`, exit 1. `REFUND` + `SCHEDULER` gave 18 failed / 210 passed. `PAID` + `cancel` gave 6 failed / 222 passed. All restored, 228 passed. |
+| 5 Progress | `e1a68be` | RED `Cannot find module './laundry-order-progress'` → GREEN 68 passed. Step 3a: mismatch rule dropped gave 2 failed / 66 passed. `PROCESSING`/`READY` swapped gave 44 failed / 24 passed. `aria-current` from `step.status === status` gave 2 failed / 66 passed. All restored, 68 passed. |
+| 6 Client contract | `84cee8d` | 2 passed, `web` tsc exit 0. Mutation: dropping `VOID` gave 1 type error. Restored, tsc exit 0. |
+
+Final verification: `@clensy/web` 11 files / 376 tests passed, tsc and lint exit 0. `web` 24 files / 595 tests passed, tsc, lint and build exit 0. Scope check `SCOPE: ok` (status 0). Negative case: a stray `packages/ui/src/stray.ts` was listed, status 1, no `SCOPE: ok`; then removed.
+
+Deviation: none. One process correction: the Task 1 commit was first created with a `Co-Authored-By` trailer, against the owner's global commit rule. It was amended before any push. No pushed commit carries one.
+
+Next gate: **M7 — Code Review**. A fresh independent reviewer is required (`CLAUDE.md`: application code).
