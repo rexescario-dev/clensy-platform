@@ -11,7 +11,7 @@
 | **Source-material note** | Issue #37 (and #38–#45) cite a "Laundry Module Discovery report, §7/§8/§15/§19" as an architecture reference. That document does not exist as a retrievable artifact — it is absent from the repository (all branches, full history, deleted files, stashes), the ContextForge runtime tree, the GitHub wiki (never created), gists, and issue comments. Per the developer's instruction, this specification is reconstructed from the #37 ticket body, the Accepted #36 specification, and existing repository patterns; every lifecycle edge not literally present in the ticket text was resolved interactively with the project owner during M2 brainstorming (recorded as ratified decisions in §4.3 and §5). #36 followed the same interactive-resolution pattern for the same reason. |
 | **Revision note** | M3 round 1 (reviewer: project owner) returned the draft for four required corrections plus six precision items, not a redesign. Required: (1) `PAID → CANCELLED` removed — since `CANCELLED` is terminal it created a paid order with no path to `REFUNDED`, contradicting `REFUNDED`'s reason for existing; cancellation is now reachable only before payment is recorded, and every `PAID` order retains a path to `REFUNDED` (§4.3, §4.4, §5). (2) `minimumChargeMinorUnits` is now frozen into the per-line pricing snapshot, so a historical line is fully self-contained and re-derivable without reading `PricingRule` (§4.2, §4.5, §4.7, §4.10); `pricingRuleId` is demoted to a soft traceability pointer with no foreign key. (3) The snapshot's `quantity` is stated explicitly to store the canonical input in the unit's integer representation — grams for `PER_KG` — with the `÷1000` kilogram conversion confined to the amount calculation so no fractional value is ever persisted (§3, §4.2, §4.5). (4) The web action set is defined as `matrix-legal ∩ order-local branch predicate (fulfillmentType) ∩ actor RBAC`, with the server authoritative (§4.9). Precision items folded in: `WEIGHED → REJECTED`'s business meaning stated (§4.3 n.6); `REFUNDED` explicitly does not imply `LOST`/`DAMAGED` (§4.3 n.8a); the pre-transaction `getCustomer` read reframed as an error-shape choice with the FK as the correctness mechanism (§4.1); the `unit` Postgres enum is module-local (`laundry_order_line_unit_enum`), not a reuse of catalog's TypeORM-generated `pricing_rule_entity_unit_enum` (§4.10, §5); the concurrency acceptance test now requires a competing-valid-target race as the load-bearing case (§4.6, §6); `fulfillmentType` clarified as *return* fulfillment, not intake logistics (§3, §4.2). |
 | **M3 decision** | **Accepted** — 2026-09-06. M3 round 1's four required corrections and six precision items all verified present and consistent across the matrix (§4.3), the verb table (§4.4), pricing (§4.5), validation (§4.8), the migration (§4.10), and rationale (§5) — not merely asserted. Round 2 raised one final verification item — the `baseQuantity` × `unit` interaction — resolved by adding §4.5 step 3a: one quantity-resolution rule applied identically to the base-service line and every add-on line, keyed on the *resolved* `PricingRule.unit`, where `PER_KG` always prices on `order.weightGrams` and a supplied quantity there is silently ignored (not rejected, because the client cannot know the resolved unit in advance), `PER_ITEM` uses the caller's quantity, `FLAT`/`PER_SERVICE` use `1`, and the stored snapshot `quantity` is always the canonical value the amount was computed from. No remaining design blocker; no further design fork. Ready for M4 Implementation Planning. |
-| **Amendment #164** | **Accepted** — 2026-10-10 (M3). Tracking [#164](https://github.com/rexescario-dev/clensy-platform/issues/164), parent [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Slice-local; does not replace this specification. The owner explicitly **confirmed** §8.4.1 (`weightGrams` ≥ 1) and §8.4.2 (frozen line `description`, with approval to plan an additive migration that backfills existing rows). M3 precision items folded in: §8.4.2 now states the backfill rule and `not null` for every row; the §2, §4.2, §4.4, §4.8 and §4.9 cross-references point at §8.4. No remaining design blocker. Ready for M4. |
+| **Amendment #164** | **Accepted** — 2026-10-10 (M3). Tracking [#164](https://github.com/rexescario-dev/clensy-platform/issues/164), parent [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Slice-local; does not replace this specification. The owner explicitly **confirmed** §8.4.1 (`weightGrams` ≥ 1) and §8.4.2 (frozen line `description`, with approval to plan an additive migration that backfills existing rows). §8.4.3 was revised before merge to keep the Accepted repeated-add-on behavior. M3 precision items folded in: §8.4.2 now states the backfill rule and `not null` for every row; the §2, §4.2, §4.4, §4.8 and §4.9 cross-references point at §8.4. No remaining design blocker. Ready for M4. |
 
 ---
 
@@ -419,7 +419,7 @@ On acceptance, the sentences in §8.4 replace the cited Accepted sentences. They
 Unchanged, and still Accepted whether or not this amendment is accepted:
 
 - The §4.3 matrix, including no self-edges. Re-weigh of a `WEIGHED` order remains a state-preserving update of `weightGrams`.
-- §4.4 RBAC and every verb other than the `weightGrams` precondition on `weighLaundryOrder`, and the new duplicate-add-on precondition on `priceLaundryOrder` / preview.
+- §4.4 RBAC and every verb precondition other than the `weightGrams` precondition on `weighLaundryOrder`. `priceLaundryOrder` keeps its Accepted inputs and preconditions, including how it handles a repeated `addOnId` (§8.4.3).
 - §4.5 amount calculation, quantity resolution, and post-`PRICED` immutability of weight, lines, and `totalMinorUnits`.
 - `computeLaundryLineAmount` still defines the 0-gram `PER_KG` case (Accepted §6). If §8.4.1 is accepted, that case is no longer reachable through `weighLaundryOrder`. The pure function’s definition does not change.
 - Invoice generation, `paymentStatus: UNPAID` at generation, and the absence of a payment-recording mutation. Recording money against an invoice stays [#39](https://github.com/rexescario-dev/clensy-platform/issues/39).
@@ -468,9 +468,9 @@ The migration is planned in M4 and authored in M6. Applying it to staging or pro
 
 Preview of a not-yet-priced order always uses the current catalog name, because nothing has been frozen yet.
 
-#### 8.4.3 One line per add-on
+#### 8.4.3 Repeated add-ons — no change
 
-`priceLaundryOrder` and the preview in §8.4.5 reject a repeated `addOnId` in one request with `BadRequestException`. The UI does not offer a second row for an add-on already selected. Two separately priced instances of the same add-on are out of scope unless a later decision says otherwise. Different add-ons on one order stay allowed.
+This amendment does not change how `priceLaundryOrder` treats a repeated `addOnId`. The Accepted §4.4 and §4.8 preconditions stand: the server prices each `addOns` entry as its own line, as it does today. The preview in §8.4.5 does the same, so an estimate never disagrees with the committed price. The order page may offer each add-on once in its picker. That is presentation only. It is not a server rule and must not be described as one. A server-side rejection of repeated add-ons is deferred (§8.6) until a product decision explicitly authorizes changing pricing behavior.
 
 #### 8.4.4 Web end state
 
@@ -501,7 +501,7 @@ Add a read, not a mutation:
 - Does not insert lines, change status, set `totalMinorUnits`, emit `laundry_order.priced`, generate an invoice, or mark an order paid.
 - Authorization matches `priceLaundryOrder` (TENANT_OWNER, OPS_MANAGER, SCHEDULER).
 - Each returned line includes the current catalog name (§8.4.2’s string rule), `unit`, canonical `quantity`, `rateMinorUnits`, `amountMinorUnits`, `minimumChargeMinorUnits`, and `minimumChargeApplied`, plus the estimated total (sum of line amounts). The result is an estimate. The committed total remains `LaundryOrder.totalMinorUnits` after pricing.
-- A repeated `addOnId` is rejected (§8.4.3).
+- A repeated `addOnId` is handled exactly as `priceLaundryOrder` handles it (§8.4.3). The preview adds no precondition of its own.
 
 This read does not expose `PricingRule.unit` on the catalog `PricingRule` type. The preview payload carries the unit for that quote only.
 
@@ -523,4 +523,5 @@ M3 may accept the amendment only when all of the following are true:
 - Recording invoice payments ([#39](https://github.com/rexescario-dev/clensy-platform/issues/39)).
 - Persisted per-bag weights.
 - Editing a price after `PRICED`.
+- Rejecting a repeated `addOnId` on `priceLaundryOrder` (§8.4.3). This needs its own product decision, because it changes Accepted pricing behavior.
 - Implementation planning (M4) and any code or migration (M6) follow this acceptance through the workflow. M3 acceptance is not itself a code or schema change.
