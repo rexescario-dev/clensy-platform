@@ -28,33 +28,17 @@ export function useDetailDrawer(paramName = 'detail') {
 
   const activeId = searchParams.get(paramName);
 
-  // `href`, when given, is the exact URL to open, and must already carry
-  // `<paramName>=<id>`. It is pushed with the native History API, which
-  // Next.js syncs into `useSearchParams`: the laundry list writes its URL
-  // that way, so nothing is left in flight (see its URL-state hook).
-  const open = useCallback((id: string, href?: string) => {
+  const open = useCallback((id: string) => {
     openedHereRef.current = true;
-    if (href !== undefined) {
-      window.history.pushState(null, '', href);
-      return;
-    }
     const params = new URLSearchParams(searchParams.toString());
     params.set(paramName, id);
     router.push(`${pathname}?${params.toString()}`);
   }, [router, pathname, searchParams, paramName]);
 
-  // `href`, when given, is the exact URL to show after closing a drawer that
-  // was not opened here (a direct link or refresh). It must not carry
-  // `<paramName>`, and it is written with the native History API, like
-  // `open`'s `href`. A drawer opened here still closes with `router.back()`.
-  const close = useCallback((href?: string) => {
+  const close = useCallback(() => {
     if (openedHereRef.current) {
       openedHereRef.current = false;
       router.back();
-      return;
-    }
-    if (href !== undefined) {
-      window.history.replaceState(null, '', href);
       return;
     }
     const params = new URLSearchParams(searchParams.toString());
@@ -63,5 +47,28 @@ export function useDetailDrawer(paramName = 'detail') {
     router.replace(query ? `${pathname}?${query}` : pathname);
   }, [router, pathname, searchParams, paramName]);
 
-  return { activeId, close, open };
+  // Laundry list only (#163): open and close with an exact URL the caller
+  // built from the live `window.location`, written with the native History
+  // API, which Next.js syncs into `useSearchParams`. Separate names, not an
+  // optional argument on `open`/`close`: other pages pass `close` straight
+  // to `onClose`, so `DetailDrawer`'s × button calls it with a click event,
+  // and that must keep meaning "close", never "go to this URL".
+  const openWithHref = useCallback((href: string) => {
+    openedHereRef.current = true;
+    window.history.pushState(null, '', href);
+  }, []);
+
+  // A drawer opened here closes with `router.back()`, as `close` does. One
+  // reached by a direct link or refresh replaces the entry with `href`, which
+  // must not carry `<paramName>`.
+  const closeWithHref = useCallback((href: string) => {
+    if (openedHereRef.current) {
+      openedHereRef.current = false;
+      router.back();
+      return;
+    }
+    window.history.replaceState(null, '', href);
+  }, [router]);
+
+  return { activeId, close, closeWithHref, open, openWithHref };
 }

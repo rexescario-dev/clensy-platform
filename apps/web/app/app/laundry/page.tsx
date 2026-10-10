@@ -192,7 +192,10 @@ function LaundryPageContent() {
     variables: { paging: { limit: 100 } },
   });
   const [receive, { loading: creating }] = useReceiveLaundryOrderMutation();
-  const { activeId, open: openDetail, close: closeDetail } = useDetailDrawer();
+  // Only the History-API entry points: `open`/`close` would route through
+  // `router.push`/`router.replace`, which the list never mixes with its
+  // native URL writes.
+  const { activeId, closeWithHref, openWithHref } = useDetailDrawer();
 
   function handleClearFilters() {
     search.reset();
@@ -208,7 +211,7 @@ function LaundryPageContent() {
     if (pendingSearch !== undefined) {
       setListState((current) => withLaundryFilterChange(current, { search: pendingSearch }));
     }
-    openDetail(row.id, hrefFor((current) => current, { set: { detail: row.id } }));
+    openWithHref(hrefFor((current) => current, { set: { detail: row.id } }));
   }
 
   const [formOpen, setFormOpen] = useState(false);
@@ -236,7 +239,7 @@ function LaundryPageContent() {
       // Only the destination URL is built here (live list state, hash,
       // `detail`), so this open is a native write like the rest of the
       // list. The create flow itself belongs to #160.
-      if (newId) openDetail(newId, hrefFor((current) => current, { set: { detail: newId } }));
+      if (newId) openWithHref(hrefFor((current) => current, { set: { detail: newId } }));
     } catch {
       setFormError('Unable to create laundry order.');
     }
@@ -338,7 +341,7 @@ function LaundryPageContent() {
           // A drawer opened from this page closes with `router.back()`. One
           // reached by a direct link or refresh closes with a native write
           // of the live URL without `detail`.
-          onClose={() => closeDetail(hrefFor((current) => current, { remove: ['detail'] }))}
+          onClose={() => closeWithHref(hrefFor((current) => current, { remove: ['detail'] }))}
           onChanged={() => void ordersQuery.refetch()}
         />
       ) : null}

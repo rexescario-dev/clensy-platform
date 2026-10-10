@@ -126,10 +126,10 @@ export function serializeLaundryOrderListState(
 //   history entry, as with the bookings list's `router.replace`.
 // - Opening the drawer, from a row or after creating an order,
 //   `pushState`s the same kind of URL plus `detail`
-//   (`useDetailDrawer.open(id, href)`), so Back, and the drawer's own
-//   `router.back()`, return to the list.
+//   (`useDetailDrawer().openWithHref(href)`), so Back, and the drawer's
+//   own `router.back()`, return to the list.
 // - Closing a drawer reached by a direct link or refresh `replaceState`s
-//   the URL without `detail` (`useDetailDrawer.close(href)`). The page
+//   the URL without `detail` (`useDetailDrawer().closeWithHref(href)`). The page
 //   therefore makes no `router.push` or `router.replace` of its own, so no
 //   async router navigation can land over a native write.
 // - Back and Forward are the browser's: the URL, and therefore the list
@@ -140,10 +140,10 @@ export function useLaundryOrderListUrlState() {
 
   // The exact URL for `update`, plus `set` and minus `remove` params (the
   // drawer's `detail`), built on the live URL: same pathname, every param
-  // the list does not own, and the hash. Returns undefined when nothing
-  // would change.
+  // the list does not own, and the hash. Always a URL, so every caller
+  // writes natively; `setState` skips a write that would change nothing.
   const hrefFor = useCallback(
-    (update: LaundryOrderListUpdate, { remove = [], set = {} }: LaundryOrderHrefParams = {}): string | undefined => {
+    (update: LaundryOrderListUpdate, { remove = [], set = {} }: LaundryOrderHrefParams = {}): string => {
       const base = new URLSearchParams(window.location.search);
       const current = parseLaundryOrderListState(base);
       const next = update(current);
@@ -151,7 +151,6 @@ export function useLaundryOrderListUrlState() {
       for (const [key, value] of Object.entries(set)) params.set(key, value);
       for (const key of remove) params.delete(key);
       const query = params.toString();
-      if (query === base.toString()) return undefined;
       return `${window.location.pathname}${query === '' ? '' : `?${query}`}${window.location.hash}`;
     },
     [],
@@ -160,7 +159,8 @@ export function useLaundryOrderListUrlState() {
   const setState = useCallback(
     (update: LaundryOrderListUpdate) => {
       const href = hrefFor(update);
-      if (href !== undefined) window.history.replaceState(null, '', href);
+      const live = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      if (href !== live) window.history.replaceState(null, '', href);
     },
     [hrefFor],
   );
