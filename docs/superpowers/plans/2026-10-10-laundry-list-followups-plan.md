@@ -545,7 +545,7 @@ Re-verify:
   | Browser-Back path, from a fresh `?status=RECEIVED` | open row → browser Back (the list) → Forward (the drawer) → × goes Back (the list URL) → Forward reopens the drawer, so the drawer entry survives and there is no duplicate. |
   | Bookings direct-link × | closes to `/app/bookings?sortBy=status&sortOrder=asc&limit=20&offset=0`, +0 entries |
 
-  In the browser-Back run, `history.length` read 9 both before and after opening the row. *Corrected after M7 (P3-2):* the original explanation ("the tab already had about ten navigations") does not hold, because `pushState` always adds an entry after truncating forward entries. The cause is unexplained, so the `history.length` part of this check is **unconfirmed**. The path's behaviour is still evidenced by the URL sequence and by Forward reopening the drawer after ×. The hook is unchanged and unit-pinned (mutations A and B).
+  In the browser-Back run, `history.length` read 9 both before and after opening the row. *Corrected after M7 (P3-2):* the original explanation ("the tab already had about ten navigations") does not hold, because `pushState` always adds an entry after truncating forward entries. The cause is unexplained, so the `history.length` part of this check is **unconfirmed** here. **Confirmed on re-run** (below). The path's behaviour is still evidenced by the URL sequence and by Forward reopening the drawer after ×. The hook is unchanged and unit-pinned (mutations A and B).
 
 Deviation: none.
 
@@ -608,3 +608,14 @@ The asset inventory is unchanged. A post-approval revision followed the gates in
 **Non-blocking observation:** an M6 record gave an explanation the evidence did not support (the `history.length` note). M7 caught it, and it is now corrected. Records should state an anomaly as unexplained rather than guess a cause.
 
 Gate: **Workflow validated.**
+
+### Pre-merge re-check — both close paths in fresh tabs (2026-10-10)
+
+The owner asked for this before merge. Each run used a new browser tab opened directly on `/app/laundry?status=RECEIVED` against the branch at `5281928`: production build on port 3999, API on 3002, and a throwaway owner that was then deleted. `history.length` is recorded at every step.
+
+| Path | Steps and `history.length` | Result |
+| --- | --- | --- |
+| Browser-Back | fresh 2 → open row 3 → browser Back (the list) 3 → Forward (the drawer) 3 → × to the list URL, 3 → Forward reopens the drawer, 3 | Opening adds exactly +1. × goes Back. The drawer entry survives, so there is no duplicate. |
+| × | fresh 2 → open row 3 → × (Back to the list) 3 → Forward (the drawer) 3 → × to the list URL, 3 (replaced, not pushed) → browser Back lands on an identical list URL, 3 | Matches Review Focus 1: the duplicate list entry. |
+
+The earlier anomaly, `history.length` unchanged on open, does not reproduce in a fresh tab. It belonged to the earlier tab's history, not to the code. M6's browser-Back check is now confirmed in full.
