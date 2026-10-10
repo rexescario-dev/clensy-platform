@@ -363,9 +363,45 @@ export type LaundryFulfillmentType =
   | 'DELIVERY'
   | 'PICKUP';
 
+export type LaundryFulfillmentTypeFilterComparison = {
+  eq?: LaundryFulfillmentType | null | undefined;
+  gt?: LaundryFulfillmentType | null | undefined;
+  gte?: LaundryFulfillmentType | null | undefined;
+  iLike?: LaundryFulfillmentType | null | undefined;
+  in?: Array<LaundryFulfillmentType> | null | undefined;
+  is?: boolean | null | undefined;
+  isNot?: boolean | null | undefined;
+  like?: LaundryFulfillmentType | null | undefined;
+  lt?: LaundryFulfillmentType | null | undefined;
+  lte?: LaundryFulfillmentType | null | undefined;
+  neq?: LaundryFulfillmentType | null | undefined;
+  notILike?: LaundryFulfillmentType | null | undefined;
+  notIn?: Array<LaundryFulfillmentType> | null | undefined;
+  notLike?: LaundryFulfillmentType | null | undefined;
+};
+
 export type LaundryOrderAddOnInput = {
   addOnId: string | number;
   quantity?: number | null | undefined;
+};
+
+export type LaundryOrderFilter = {
+  and?: Array<LaundryOrderFilter> | null | undefined;
+  createdAt?: DateFieldComparison | null | undefined;
+  customer?: LaundryOrderFilterCustomerFilter | null | undefined;
+  customerId?: IdFilterComparison | null | undefined;
+  fulfillmentType?: LaundryFulfillmentTypeFilterComparison | null | undefined;
+  id?: IdFilterComparison | null | undefined;
+  or?: Array<LaundryOrderFilter> | null | undefined;
+  status?: LaundryOrderStatusFilterComparison | null | undefined;
+};
+
+export type LaundryOrderFilterCustomerFilter = {
+  and?: Array<LaundryOrderFilterCustomerFilter> | null | undefined;
+  createdAt?: DateFieldComparison | null | undefined;
+  fullName?: StringFieldComparison | null | undefined;
+  id?: IdFilterComparison | null | undefined;
+  or?: Array<LaundryOrderFilterCustomerFilter> | null | undefined;
 };
 
 export type LaundryOrderRefInput = {
@@ -401,6 +437,23 @@ export type LaundryOrderStatus =
   | 'REFUNDED'
   | 'REJECTED'
   | 'WEIGHED';
+
+export type LaundryOrderStatusFilterComparison = {
+  eq?: LaundryOrderStatus | null | undefined;
+  gt?: LaundryOrderStatus | null | undefined;
+  gte?: LaundryOrderStatus | null | undefined;
+  iLike?: LaundryOrderStatus | null | undefined;
+  in?: Array<LaundryOrderStatus> | null | undefined;
+  is?: boolean | null | undefined;
+  isNot?: boolean | null | undefined;
+  like?: LaundryOrderStatus | null | undefined;
+  lt?: LaundryOrderStatus | null | undefined;
+  lte?: LaundryOrderStatus | null | undefined;
+  neq?: LaundryOrderStatus | null | undefined;
+  notILike?: LaundryOrderStatus | null | undefined;
+  notIn?: Array<LaundryOrderStatus> | null | undefined;
+  notLike?: LaundryOrderStatus | null | undefined;
+};
 
 export type LoginInput = {
   email: string;
@@ -814,6 +867,7 @@ export type LaundryOrderDetailFragment = { id: string, status: LaundryOrderStatu
 
 export type LaundryOrdersQueryVariables = Exact<{
   paging?: OffsetPaging | null | undefined;
+  filter?: LaundryOrderFilter | null | undefined;
   sorting?: Array<LaundryOrderSort> | LaundryOrderSort | null | undefined;
 }>;
 
@@ -2544,8 +2598,8 @@ export type CompleteJobMutationHookResult = ReturnType<typeof useCompleteJobMuta
 export type CompleteJobMutationResult = Apollo.MutationResult<CompleteJobMutation>;
 export type CompleteJobMutationOptions = Apollo.BaseMutationOptions<CompleteJobMutation, CompleteJobMutationVariables>;
 export const LaundryOrdersDocument = gql`
-    query LaundryOrders($paging: OffsetPaging, $sorting: [LaundryOrderSort!]) {
-  laundryOrders(paging: $paging, sorting: $sorting) {
+    query LaundryOrders($paging: OffsetPaging, $filter: LaundryOrderFilter, $sorting: [LaundryOrderSort!]) {
+  laundryOrders(paging: $paging, filter: $filter, sorting: $sorting) {
     totalCount
     pageInfo {
       hasNextPage
@@ -2571,6 +2625,7 @@ export const LaundryOrdersDocument = gql`
  * const { data, loading, error } = useLaundryOrdersQuery({
  *   variables: {
  *      paging: // value for 'paging'
+ *      filter: // value for 'filter'
  *      sorting: // value for 'sorting'
  *   },
  * });
