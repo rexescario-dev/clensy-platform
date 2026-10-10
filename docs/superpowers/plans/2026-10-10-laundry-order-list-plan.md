@@ -3050,6 +3050,8 @@ Expected: `allowlist OK`.
 - Partial order-id search. It would need a schema-level change, which the issue rules out.
 - Sorting by weight or total (not in `LaundryOrderSortFields`). Sorting customers by name (the server has no such sort field).
 - A fixed locale or timezone for Created (a product decision beyond #163).
+- M7 (revision 6) P3-1: a test for `closeWithHref` resetting `openedHereRef`. No behaviour depends on it today. `main`'s `close` has the same untested pattern.
+- M7 (revision 6) P3-2: clamping a hand-edited offset above GraphQL's 32-bit `Int` (for example `?offset=3000000000`), which today shows the list's error state. It is only reachable by editing the URL. It is a behaviour change, so it needs its own slice.
 
 ## Execution risks (operational only)
 
@@ -3232,3 +3234,116 @@ Reported only by M6, not re-run: mutations 2–6, 9, 11, 13 and 14; the `@clensy
 **PR body:** the reviewer could not check it. After the review, the author confirmed that it carries the plan's required statements: the drawer stays until #161, and search is customer name plus exact id only. The author also updated it from revision 5's `open`/`close` wording to revision 6's named methods.
 
 Next gate: **M8 — Refactoring** (or N/A), **M9 — Documentation**, **M10** if in scope; then closeout. Merge is the owner's decision.
+
+### M8 — N/A (2026-10-10)
+
+```text
+Decision: N/A
+Subject: PR #170, branch feat/163-laundry-order-list, head 6459d0c
+Accepted specification: docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md (Amendment #164 §8.4.4)
+Accepted implementation plan: this plan (revision 6)
+M7 / authorization: Approved for merge (6459d0c); M8–M10 requested by the owner ("m8-m10")
+
+Candidates considered, and why none is an M8 refactor:
+- The fulfillment-type list is declared twice: `apps/web/lib/use-laundry-order-list-url-state.ts` and
+  `packages/web/src/laundry/laundry-order-data-table.tsx`. Sharing it means a new `@clensy/web` export, which is a
+  public-contract change, not allowed in M8. Two two-element constants typed against the same union are not worth it.
+- The drawer's local STATUS_TONE / formatWeight duplicate the #157 helpers. The drawer is owned by #156/#161 and is
+  outside this slice.
+- M7 P3-1 (the untested openedHereRef reset in closeWithHref) is a test addition, not a refactor.
+- M7 P3-2 (clamping a huge offset) is a behaviour change, not a refactor.
+Both P3s are listed under "Deferred".
+No code changed in M8.
+```
+
+### M9 — Complete (2026-10-10)
+
+```text
+Decision: Complete
+Subject: #163 Laundry order list, PR #170
+Accepted specification: docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md (with Amendment #164)
+Accepted implementation plan: this plan (revision 6)
+M7: Approved for merge (6459d0c). M8: N/A.
+
+Documentation scope:
+- packages/web/README.md
+- apps/web/README.md
+- this plan's Deferred list and Gate outcomes
+
+Updated artifacts:
+- packages/web/README.md ← M6 (LaundryOrderDataTable, laundry-order-sort, `list` copy). The section's
+  "No page uses them yet" is no longer true.
+- apps/web/README.md ← M6 revisions 5–6 (the /app/laundry list: server filtering, URL state, native History API
+  writes, useDetailDrawer's openWithHref/closeWithHref and why close takes no argument).
+- this plan ← the M7 P3 follow-ups (Deferred) and the M8–M10 records.
+
+Editorial changes: none needed. The links were already correct.
+
+Content updates:
+- packages/web/README.md:
+  - The laundry section's intro now says /app/laundry uses the helpers (#163) and the remaining screens follow.
+  - New bullets for <LaundryOrderDataTable> and the sort contract (keys, transitions, why Customer is not sortable).
+  - The copy bullet names the `list` keys.
+- apps/web/README.md:
+  - A new "Laundry list (`/app/laundry`)" section.
+  - LaundryOrderDataTable added to the list of @clensy/web components the app consumes.
+
+Unchanged, with reason:
+- docs/README.md records API and tenant-isolation slices. This slice adds only a test under apps/api (no API,
+  schema or tenant behaviour change).
+- The lifecycle spec: #163 implements §8.4.4 without amending it. Implementation slices are tracked by epic
+  #154, not on the spec (#157 precedent).
+- No changelog or roadmap file exists in the repository.
+
+Verification:
+- Links: every relative link and in-page anchor in both READMEs and this plan resolves (scripted scan, 0 broken).
+- Heading hierarchy: the new `##` section in apps/web/README.md sits between UI and i18n. In packages/web/README.md
+  the new content is bullets inside the existing `##` laundry section.
+- Status consistency: the plan is Accepted (revision 6), M6 complete, M7 Approved, M8 N/A, PR #170 open.
+- Terminology follows the spec and the plan: fulfillment, status, `LaundryOrderSortFields`, drawer / `?detail=`,
+  cutover (#161).
+- Duplicates / outdated refs: the packages/web "No page uses them yet" sentence was the only outdated statement.
+  It is updated.
+
+Gate: Documentation complete. Code, behaviour and contracts are unchanged by this stage.
+```
+
+### M10 — Accepted, workflow validated (2026-10-10)
+
+```text
+Decision: Accepted
+Subject: workflow prompt library
+Governing specification: docs/workflows/specs/agent-workflow-design.md
+```
+
+**Subject:** the installed workflow prompt library (`docs/workflows/`, generic 1.4.1 / claude 0.2.0), run on #163 from M4 to M9. There was no M2/M3 for this slice: #163 implements the already-Accepted Amendment #164 §8.4.4, as #157 did.
+
+**Asset inventory:** unchanged. Nine prompts map to M2–M10, with `conventions/prompt-library.md` as M1. There are no orphan assets.
+
+**Checks:**
+- §2.5 was honoured twice:
+  - M5 Accept of revision 5 (`787a915`, recorded `af64a77`) precedes the first M6 commit `9e68d14`.
+  - M5 Accept of revision 6 (`ba43374`, recorded `b5775d5`) precedes the revision 6 commits `ea527ed` and `de6ab42`.
+- M7's Return path worked as specified. The first fresh M7 returned a P1 that the Accepted plan itself prescribed. The slice went back to M4 (revision 6), then M5 (a fresh independent review, owner Accept), then M6 (red first), then a second fresh M7 (Approved). No Accepted artifact was rewritten silently. Each revision is recorded in the plan's status and decision rows.
+- The authority model held:
+  - The spec governed semantics. The Customer sort and the order-id search scope were decided against §8.4.4, plus the spike the issue required.
+  - The plan governed sequencing: R6-1 then R6-2 followed the plan, even though the owner's acceptance message numbered them the other way round.
+- CLAUDE.md's M7 rule was honoured both times: a fresh, independent reviewer on the most capable model, read-only. The owner also chose a fresh independent reviewer for the revision 6 M5.
+- Providers were honoured: GitHub for issues #163/#154/#161, the branch and PR #170, all through `gh`.
+- Slice Completion Reports were emitted at M6 (both revisions), M7 and M8–M10.
+- §2.8 was honoured: one PR (#170) carries the plan, implementation, fixes and docs.
+- No commit on the branch carries a `Co-Authored-By` trailer or "Generated with" line. M7 checked all 21; the PR body has none either.
+
+**Blocking findings:** none.
+
+**Non-blocking observations:**
+1. **A plan that changes a shared module needs a test on an existing consumer.**
+   - Revision 4 added an optional parameter to `useDetailDrawer.close`. Every gate passed: the plan's tests, the allowlist, mutations, and the manual browser checks. But all of them covered only `/app/laundry`, which called the hook through a lambda. Eight other pages passed `close` straight to an `onClick`, and the first M7 found the break.
+   - TypeScript allows a `(x?: T) => void` where a `() => void` is expected, so `tsc` cannot catch this class of bug.
+   - Lesson: when a plan modifies a shared module, M4 should name its other consumers. M4 should add a regression test wired the way they are, and include at least one of them in the manual checks.
+2. **An early spike would have saved M5 passes.** Passes 1–3 refined an async-router URL tracker. The race questions ended only when the owner chose native History API writes, after a 15-minute spike confirmed them on Next.js 16.3.1. When a review keeps finding race edge cases in coordination logic, it is worth spiking a model that has no in-flight state before refining the logic further.
+3. **Shared scratch space between agents.** The revision 6 M5 reviewer overwrote the author's mutation helper in the session scratchpad. The author's first mutation run then failed before editing any file, and it was re-run with a new helper. Reviewers were afterwards given their own subdirectory. Each agent should use its own scratch directory.
+4. **Generating plan code from verified files kept plan and code identical** through six revisions. Both M7s confirmed this with byte comparison, and with `patch --fuzz=0` for the plan diffs.
+5. **The #157 CI gap still applies.** CI type-checks only `api`/`web`. `packages/*` is enforced by the local builds the plan requires.
+
+Gate: **Workflow validated.**
