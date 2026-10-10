@@ -4,11 +4,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft (revision 2, for the third M5 pass) |
-| M5 history | First pass (2026-10-10, owner, reviewed in five parts): **Returned for Revision** with P1 and P2 findings on Tasks 1–6. All are applied in this revision; see [M5 first-pass resolutions](#m5-first-pass-resolutions). The whole plan was pre-validated again. Second pass (2026-10-10, owner, reviewed in four parts): **Returned for Revision** with four required changes: the drawer URL (with `detail` and the hash) recorded exactly by the tracker; a filter change while the drawer push is queued; defined and tested behavior for an outside navigation while a list update is in flight; drawer hash coverage and an explicit `tsc` step in final verification. All are applied; see [M5 second-pass resolutions](#m5-second-pass-resolutions). Pre-validated again. |
+| Status | Draft (revision 3, for the fourth M5 pass) |
+| M5 history | First pass (2026-10-10, owner, reviewed in five parts): **Returned for Revision** with P1 and P2 findings on Tasks 1–6. All are applied in this revision; see [M5 first-pass resolutions](#m5-first-pass-resolutions). The whole plan was pre-validated again. Second pass (2026-10-10, owner, reviewed in four parts): **Returned for Revision** with four required changes: the drawer URL (with `detail` and the hash) recorded exactly by the tracker; a filter change while the drawer push is queued; defined and tested behavior for an outside navigation while a list update is in flight; drawer hash coverage and an explicit `tsc` step in final verification. All are applied; see [M5 second-pass resolutions](#m5-second-pass-resolutions). Pre-validated again. Third pass (2026-10-10, owner): **Returned for Revision**. A stale commit rendered and fetched; the outside-navigation hash was not captured; a Forward to an identical stale URL was ambiguous; clearing `stale` assumed in-order commits. The owner chose to remove the cause: list URL writes move from the async router to the native History API, so nothing is in flight. See [M5 third-pass resolutions](#m5-third-pass-resolutions). Pre-validated again, including a spike on the real Next.js runtime. |
 | Date | 2026-10-10 |
 | Tracking issue | [#163](https://github.com/rexescario-dev/clensy-platform/issues/163). Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#157](https://github.com/rexescario-dev/clensy-platform/issues/157) (closed, merged in #168 at `8cdd6b1`). Row cutover is [#161](https://github.com/rexescario-dev/clensy-platform/issues/161). |
-| Scope | `apps/web` (laundry list page, three new `lib` modules, an optional `href` argument on `useDetailDrawer.open`, tests), `packages/web` (new `LaundryOrderDataTable`, a pure sort module, `list` copy, exports), `packages/client` (`$filter` on the `LaundryOrders` operation, regenerated client), and one new `apps/api/test` e2e characterization file. No API source, schema, migration, or `@clensy/ui` change. |
+| Scope | `apps/web` (laundry list page, three new `lib` modules, an optional `href` argument on `useDetailDrawer.open` (pushed with `window.history.pushState`), tests), `packages/web` (new `LaundryOrderDataTable`, a pure sort module, `list` copy, exports), `packages/client` (`$filter` on the `LaundryOrders` operation, regenerated client), and one new `apps/api/test` e2e characterization file. No API source, schema, migration, or `@clensy/ui` change. |
 | Implements (Accepted) | [Laundry Orders & Lifecycle](../specs/2026-09-06-laundry-orders-lifecycle-design.md), Status **Accepted** (2026-09-06), with **Amendment #164**, Accepted 2026-10-10 (merged in #167 at `7c59b82`). The governing text is §8.4.4, first bullet: "`/app/laundry` is the list: server-side filter on customer name, status, and fulfillment type; sort on the existing `LaundryOrderSortFields`; human-readable status and fulfillment labels; `formatMinorUnits` for money; kilograms rendered from integer grams; offset page size 20; a row opens `/app/laundry/[id]`." Also §4.9 (status-badge tones, still Accepted) and §4.4 (intake roles). |
 | Relies on (Accepted) | [Laundry UI Foundation plan](2026-10-10-laundry-ui-foundation-plan.md) (#157, Accepted and merged): `LAUNDRY_STATUS_TONE`, `LAUNDRY_ORDER_STATUSES`, `formatWeightGrams`, `canReceiveLaundryOrder` (its role policy is tested there, in `laundry-order-actions.test.ts`), and the `laundry` message catalog. [Paginated nestjs-query GraphQL collections](../specs/2026-08-28-paginated-graphql-collections-design.md): root connection with `totalCount`, max 100. |
 | Authority | Where this plan and an Accepted spec disagree, the **spec wins** and this plan must be revised. File names, helper names, copy keys, URL parameter names, and task order are planning decisions, not product semantics. |
@@ -30,13 +30,13 @@
 
   `null` means exactly one thing everywhere: restore `createdAt desc`. Created toggles asc ↔ desc, because "back to the default" from the default would be a click that does nothing. The header indicator (`aria-sort`) is rendered from the same state, so the indicator, the URL and the server sort cannot disagree. Task 6 pins that click by click.
 - **URL state (Task 4).** Keys: `q`, `status`, `fulfillment`, `sortBy`, `sortOrder`, `offset`. Every value is validated on parse, and anything unknown falls back to the default. Serializing keeps params the list does not own, and the URL hash. Any search, filter or sort change resets `offset` to 0. A page that is not a positive safe integer means page 1. Page size is fixed at 20, with no page-size selector.
-- **Navigation tracking (Task 4).** `router.replace` and `router.push` commit asynchronously, so `window.location` can lag. The hook tracks keys of the form `<pathname>?<query>`, and every navigation the list makes goes through one call, `requestHref`, which builds the exact URL, records it, and returns it with the current hash for the caller to send. Policy:
-  - *Own requests compose.* Each request builds on the latest URL the list has requested and not yet seen committed, so a debounced search that lands just after a filter change keeps both. The same holds for a filter change sent while the drawer push is still queued, because the drawer URL is recorded with `detail`.
-  - *An outside navigation wins.* A commit the list never requested (Back, Forward, closing the drawer) becomes `outside`. The requests still pending become `stale`. `outsideNavigations` increments, and the search box cancels any keystroke still waiting.
-  - *A late stale commit is undone.* A sent `router.replace` cannot be cancelled. If a `stale` URL commits after the outside navigation, the list immediately `replace`s it with the outside URL. **Residual limitation:** the stale URL can be visible for one commit before the restore. Because both are `replace`s, no history entry is added. `stale` is cleared once any later own request commits, since nothing sent before it can still land.
-  - *Lifecycle.* The hook lives only in the `/app/laundry` page, so a route change unmounts it and discards the tracker. The pathname in each key also keeps a same-query URL on another path from matching.
-- **Search draft (Task 6).** `useLaundrySearchDraft` owns the 300 ms debounce. The input shows every keystroke; the URL follows after a pause. An outside navigation cancels a waiting keystroke, and the draft becomes the committed search. The list's own updates never overwrite the draft: a committed search is always the draft's own text, and clearing empties both.
-- **Drawer open (Task 6).** A row click takes any waiting search out of the debounce, and `requestHref` builds the exact drawer URL: list state, the search, `detail`, and the hash. `useDetailDrawer.open(id, href)` pushes that exact `href`. The drawer hook still marks the open as its own, so closing still goes `router.back()`.
+- **URL writes: native History API (Task 4, Task 6).** The list writes its URL with `window.history.replaceState` and `pushState`. Next.js documents that both integrate with its router and sync `usePathname` and `useSearchParams` (`next/dist/docs/01-app/01-getting-started/04-linking-and-navigating.md`, "Native History API"). The [Native History spike](#native-history-spike-nextjs-1631) confirmed it on this app's Next.js 16.3.1. `window.location` changes at once, and the re-render with the new `useSearchParams` follows. Nothing is ever in flight, so there is no queue to reconcile with Back/Forward. Each update builds on the live `window.location`, so two updates made before React re-renders compose. React's render is still scheduled; the plan claims only that URL, controls and query converge on the URL the user is on, which Task 6 checks.
+  - *List updates* (search, filters, sort, page) use `replaceState`. They add no history entry, like the bookings list's `router.replace`.
+  - *Opening the drawer* uses `pushState` with the same URL plus `detail`. It goes through `useDetailDrawer.open(id, href)`, so the drawer hook still marks the open as its own, and closing still goes `router.back()` to the list entry.
+  - *Back and Forward* are the browser's. The URL, and so the list state and the drawer, is whatever entry the user went to. Only the entry the user lands on is rendered and queried.
+  - Every URL the list writes keeps the pathname, every param it does not own (repeated ones included), and the hash.
+- **Search draft (Task 6).** `useLaundrySearchDraft` owns the 300 ms debounce. The input shows every keystroke; the URL follows after a pause. Back/Forward (`popstate`) cancels a waiting keystroke, and the draft becomes the search of the entry the user went to, read from `window.location`, which is already updated when `popstate` fires. The list's own updates never overwrite the draft.
+- **Drawer open (Task 6).** A row click first commits any waiting search to the list entry (`replaceState`), then pushes the drawer entry. The search is not applied later over the drawer, and Back returns to the list as typed.
 - **Server filter (Task 5).** Search is `customer.fullName.iLike '%text%'`, with `%`, `_` and `\` escaped. Any canonical 8-4-4-4-12 hex UUID, of any version or variant and either case, adds `id.eq` under `or`. Status and fulfillment are `eq`. Sort is the primary field, then `id ASC`, except when the primary field is `id`. The API adds no tie-breaker; this builder does.
 - **Page (Task 6).** Rows stay on screen while a new page loads, using the bookings `data ?? previousData` pattern. `DataTable` keeps rows on a background error. The drawer, the create form, and their code are unchanged.
 
@@ -66,7 +66,7 @@ Derived from the Accepted spec, the amendment and the issue. Every task's requir
 - The create button shows only when `canReceiveLaundryOrder(role)` (INTAKE: TENANT_OWNER, OPS_MANAGER, SCHEDULER, CUSTOMER_SUPPORT). ANALYST, FINANCE, SUPER_ADMIN and a still-loading role do not see it. The server stays authoritative.
 - `DataTable` provides row activation (click, Enter, Space) on both rows and mobile cards. The mobile card adds no link, button, or second click handler.
 - Do not modify `@clensy/ui`, `apps/api/src`, `apps/api/src/schema.gql`, or any migration. Add no dependency. `@clensy/web` does not import `@clensy/client`.
-- The drawer, the intake form, and their helpers in `page.tsx` are unchanged. Only the list block, its imports, and the now-unused `OrderRow` type and `formatDate` helper change. `useDetailDrawer.open` gains only an optional `href` argument; every existing caller passes only the id and is unaffected.
+- The drawer, the intake form, and their helpers in `page.tsx` are unchanged. Only the list block, its imports, and the now-unused `OrderRow` type and `formatDate` helper change. `useDetailDrawer.open` gains only an optional `href` argument, pushed with `window.history.pushState`; every existing caller passes only the id and keeps today's `router.push`.
 
 ## M5 first-pass resolutions
 
@@ -94,6 +94,8 @@ Derived from the Accepted spec, the amendment and the issue. Every task's requir
 
 ## M5 second-pass resolutions
 
+*Revision 3 note:* the tracker described in the rows below (`requestHref`, `pending`/`stale`/`outside`) was removed in revision 3, when list URL writes moved to the native History API. Each behavior these rows protected is still tested. The [third-pass table](#m5-third-pass-resolutions) maps old tests to their replacements.
+
 | Part | Finding | Resolution |
 | --- | --- | --- |
 | 3, 4 | [P2] The drawer URL was recorded without `detail`; a list update sent while the drawer push was queued could drop it | `requestParams` is replaced by `requestHref(update, extra)`, which records the exact URL it returns. The page passes `{ detail: row.id }`, and `useDetailDrawer.open(id, href)` pushes that exact `href`. New test: a filter change sent while the drawer push is still queued keeps `detail` (mutation 10). |
@@ -103,22 +105,51 @@ Derived from the Accepted spec, the amendment and the issue. Every task's requir
 | 3 | Draft sync | Simplified to the outside-navigation rule. The earlier "follow the committed search after a list update" effect turned out to be redundant: its mutations survived, because own updates never commit text other than the draft's. It was removed. |
 | 4 | Keep `tsc` in final verification; counts are results to verify | `pnpm --filter web exec tsc --noEmit -p .` is listed explicitly. Expected failure counts are labelled as recorded results that M6 must re-observe. |
 
-## Review Focus (for the third M5 pass)
+## M5 third-pass resolutions
+
+| Finding | Resolution |
+| --- | --- |
+| Stale state reaches controls and query variables during render | Removed at the source. With `replaceState`/`pushState` nothing is in flight, so no earlier list update can commit after Back/Forward. Test: after Back, the only query variables issued are the landed entry's, and the status select shows it ("never queries a state the user did not land on"). |
+| Outside-navigation hash not captured | No restore exists any more. Every URL the list writes is built from the live `window.location`, hash included, and Back/Forward are the browser's own. Tests: the hash and repeated unrelated params survive list updates and the drawer push (mutation 9). |
+| Forward to an identical stale URL is ambiguous | No stale set exists, so a Forward is always a Forward. Test: Back closes the drawer and restores the list entry's filter, controls and query; Forward reopens the drawer. |
+| Clearing `stale` assumes in-order commits | No commit-ordering assumption remains. The only ordering relied on is that `replaceState`/`pushState` update `window.location` immediately, which the spike confirmed. |
+| Guardrail: `replaceState` for list updates, `pushState` for the drawer, `router.back()` still closes it | Tests: list updates add no entry (mutation 10); opening adds exactly one (mutation 12); the drawer hook's `router.back()` is the fake history's Back. |
+| Guardrail: keep debounced-search cancellation on Back/Forward | `popstate` listener in `useLaundrySearchDraft`. Test: a keystroke waiting at Back never applies, and the box shows the landed entry's search (mutation 11). |
+| Guardrail: test the real Next integration | Real runtime: the [spike](#native-history-spike-nextjs-1631) on Next.js 16.3.1. jsdom: the harness models the integration the spike observed. M6's manual browser checks repeat it on the real page. |
+| Guardrail: remove the tracker only after replacements cover its behaviors | Old → new tests: filter then search → "composes … before React re-renders"; drawer with waiting search → "commits a waiting search to the list entry, then pushes the drawer"; filter while drawer push queued → "keeps detail for a list update made right after opening, before React re-renders"; drawer hash and unrelated params → "keeps the hash and every unrelated param …"; outside navigation wins → "lets Back and Forward restore …" and "never queries a state the user did not land on"; stale cleanup → no stale state exists (the Forward case is in "lets Back and Forward restore …"); keystroke cancelled on outside navigation → "cancels a keystroke still waiting when the user goes Back". Kept: own update vs. waiting keystroke, clear, sort sequence. |
+| Found while revising | Opening a row used to carry a waiting search only into the drawer entry, so Back lost it. The search is now committed to the list entry first. Test: "returns to the list as typed when the drawer is closed with Back" (mutation 13). |
+
+## Native History spike (Next.js 16.3.1)
+
+Run at planning time on this app's own Next.js (16.3.1, production build, `next start`), with a throwaway page outside `/app` that rendered `useSearchParams().toString()` and counted `popstate`. It was driven with Playwright, then deleted. Starting URL `?tab=a#h`, history length 2:
+
+| Step | `window.location` | Rendered `useSearchParams` | `history.length` |
+| --- | --- | --- | --- |
+| Two `replaceState` calls in one click (`status=READY`, then `+q=ana`), read in the same tick | `?status=READY&q=ana#h` | `tab=a` (not yet re-rendered) | 2 |
+| 300 ms later | `?status=READY&q=ana#h` | `status=READY&q=ana` | 2 |
+| `pushState` (`+detail=x`) | `?status=READY&q=ana&detail=x#h` | `status=READY&q=ana&detail=x` | 3 |
+| `history.back()` | `?status=READY&q=ana#h` | `status=READY&q=ana`, `popstate` 1 | 3 |
+| `history.forward()` | `?status=READY&q=ana&detail=x#h` | `status=READY&q=ana&detail=x`, `popstate` 2 | 3 |
+
+Conclusions used by the plan: the URL changes synchronously, and the render follows; a second write in the same tick builds on the first; `replaceState` adds no entry and `pushState` adds one; Back/Forward restore `useSearchParams` and fire `popstate`; the hash survives.
+
+## Review Focus (for the fourth M5 pass)
 
 1. **Sort transitions.** Confirm the click table in Architecture, especially Created toggling asc ↔ desc instead of having a third "default" state that would look identical to desc.
-2. **Shared hook change.** `useDetailDrawer.open(id, href?)` is used by nine pages. The argument is optional, and every existing caller passes only the id (checked with `grep`). Only the laundry list passes `href`.
-3. **Outside-navigation policy.** "The outside navigation wins", with a possible one-commit flash of the stale URL before the restore. If the flash is unacceptable, the alternative is to stop issuing `replace` while a request is pending and send one combined request later. That trades the flash for slower URL updates.
+2. **Shared hook change.** `useDetailDrawer.open(id, href?)` is used by nine pages. Only the laundry list passes `href`, which is pushed natively. Every other caller passes only the id and keeps `router.push`. Closing is unchanged (`router.back()` when opened here).
+3. **Native History API.** The list no longer uses `router.replace`. The bookings list still does; aligning it is out of scope. The integration is documented by Next.js and spiked on 16.3.1. A future Next.js upgrade should re-run the manual browser checks.
 4. **Exact id.** The full id is in `title` and screen-reader text, not the visible label. The visible label is the first 8 characters, monospace. Matching is case-insensitive.
 5. **No mobile sort control.** Not required by the issue. Below `sm`, headers are hidden. The URL sort still applies, and the default is newest first. Deferred.
 6. **Status option order and server status sort.** The filter lists `LAUNDRY_ORDER_STATUSES` (enum-alphabetical, the #157 export). The server sorts statuses in Postgres enum declaration order, which is lifecycle order. Task 1 pins it.
 7. **Issue wording note.** The issue says "There is no current `mobileRow` usage in `apps/web`". `BookingDataTable` (in `@clensy/web`, rendered by `apps/web`) already passes `mobileRow`. This plan follows its card shape and the issue's classes.
 
-## Pre-validation (full, revision 2)
+## Pre-validation (full, revision 3)
 
 Every task below was applied to the branch at `8cdd6b1`, then removed before this Draft was committed. All commands named in an `Expected:` line were run, with these results:
 
 | Command | Result |
 | --- | --- |
+| Native History spike (above) | integration confirmed on Next.js 16.3.1 |
 | `pnpm --filter api exec jest --config ./test/jest-e2e.json laundry-order-list-filters laundry.e2e-spec` | 8 passed (6 new + 2 existing) |
 | Task 1 negative checks (unescaped pattern; sibling removed) | each failed 1 test; restored → 6 passed |
 | `pnpm --filter api exec eslint test/laundry-order-list-filters.e2e-spec.ts` | clean |
@@ -148,7 +179,7 @@ Environment note: on this machine `pnpm --filter @clensy/client build` and `test
 | `apps/web/lib/laundry-page-baseline.test.tsx` → `apps/web/lib/laundry-list-page.test.tsx` | Rename and rewrite (`git mv`) | 6 |
 | `apps/web/lib/laundry-list-page.interaction.test.tsx` | Create (jsdom) | 6 |
 | `apps/web/lib/use-laundry-search-draft.ts` | Create | 6 |
-| `apps/web/lib/use-detail-drawer.ts` | Modify: optional `href` on `open` | 6 |
+| `apps/web/lib/use-detail-drawer.ts` | Modify: optional `href` on `open`, pushed natively | 6 |
 | `apps/web/app/app/laundry/page.tsx` | Modify: list block only | 6 |
 
 ---
@@ -1126,7 +1157,7 @@ git commit -m "feat(web): add the laundry order list table with filters, mobile 
 - Create: `apps/web/lib/use-laundry-order-list-url-state.test.ts`
 - Create: `apps/web/lib/use-laundry-order-list-url-state.ts`
 
-The pure helpers are unit-tested here. The hook's navigation tracking (own requests composing, the drawer URL, the hash, outside navigations and stale commits) is exercised through the real page in Task 6's jsdom test, which leaves navigations queued and commits them in chosen orders.
+The pure helpers are unit-tested here. The hook's History API writes (composing before a re-render, the drawer URL, the hash, Back/Forward) are exercised through the real page in Task 6's jsdom test.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1312,8 +1343,8 @@ import {
   type LaundryOrderSortState,
   type LaundryOrderStatus,
 } from '@clensy/web';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useCallback } from 'react';
 
 // `/app/laundry` list state, kept in the URL so a refresh, or back from an
 // order, restores it (lifecycle spec §8.4.4). Params the list does not own,
@@ -1406,96 +1437,50 @@ export function serializeLaundryOrderListState(
   return params;
 }
 
-// Navigation tracking. `router.replace` and `router.push` commit
-// asynchronously, so `window.location` can still show the previous URL when
-// the next update runs. The tracker works on keys of the form
-// `<pathname>?<query>`:
+// The list writes its URL with the native History API, which Next.js
+// integrates with `useSearchParams` (Next 16 "Native History API"; verified
+// at planning time on 16.3.1). `window.history.replaceState` and
+// `pushState` change `window.location` at once; the re-render with the new
+// `useSearchParams` follows. Nothing is ever in flight, so there is no
+// queue to reconcile with Back/Forward, and each update can build on the
+// live `window.location`, even before React has rendered the previous one.
 //
-// - `pending`: URLs this list asked for and has not yet seen committed.
-//   Each new request builds on the latest of them, so a debounced search
-//   that lands just after a filter change keeps both. A commit of a pending
-//   key drops it and every earlier one, and clears `stale`: the router has
-//   moved past everything sent before it.
-// - An outside navigation (a commit this list never asked for, such as
-//   Back, Forward, or closing the drawer) wins. Its key becomes `outside`,
-//   the requests still pending become `stale`, and `outsideNavigations`
-//   increments so the search box can cancel a keystroke still waiting.
-// - A sent `router.replace` cannot be cancelled. If a `stale` key commits
-//   after the outside navigation, the list immediately replaces it with
-//   `outside` again. The user can briefly see the stale URL; they do not
-//   stay on it.
-//
-// The hook lives only in the `/app/laundry` page, so a route change unmounts
-// it and discards the tracker. The pathname in each key keeps a same-query
-// URL on another path from matching anyway.
+// - List updates (search, filters, sort, page) `replaceState`: they add no
+//   history entry, as with the bookings list's `router.replace`.
+// - Opening the drawer `pushState`s the same kind of URL plus `detail`
+//   (`useDetailDrawer.open(id, href)`), so Back, and the drawer's own
+//   `router.back()`, return to the list.
+// - Back and Forward are the browser's: the URL, and therefore the list
+//   state, is whatever entry the user went to.
 export function useLaundryOrderListUrlState() {
-  const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
-  const committed = `${pathname}?${searchParams.toString()}`;
-  const tracker = useRef({
-    outside: null as string | null,
-    pending: [] as string[],
-    previous: committed,
-    stale: new Set<string>(),
-  });
-  const [outsideNavigations, setOutsideNavigations] = useState(0);
-
-  useEffect(() => {
-    const t = tracker.current;
-    if (committed === t.previous) return;
-    t.previous = committed;
-    const index = t.pending.indexOf(committed);
-    if (index !== -1) {
-      t.pending = t.pending.slice(index + 1);
-      t.stale.clear();
-      return;
-    }
-    if (t.stale.has(committed) && t.outside !== null) {
-      t.stale.delete(committed);
-      t.pending.push(t.outside);
-      router.replace(`${t.outside}${window.location.hash}`);
-      return;
-    }
-    t.stale = new Set(t.pending);
-    t.pending = [];
-    t.outside = committed;
-    setOutsideNavigations((count) => count + 1);
-  }, [committed, router]);
-
   const state = parseLaundryOrderListState(searchParams);
 
-  // Builds the exact URL for `update` (plus `extra` params, such as the
-  // drawer's `detail`) on the latest requested URL, records it as pending,
-  // and returns it with the current hash. The caller must navigate to it.
-  // Returns undefined when it would not change the URL.
-  const requestHref = useCallback(
+  // The exact URL for `update` (plus `extra` params, such as the drawer's
+  // `detail`), built on the live URL: same pathname, every param the list
+  // does not own, and the hash. Returns undefined when nothing would change.
+  const hrefFor = useCallback(
     (update: LaundryOrderListUpdate, extra: Readonly<Record<string, string>> = {}): string | undefined => {
-      const t = tracker.current;
-      const last = t.pending.at(-1);
-      const baseKey = last ?? `${pathname}?${new URLSearchParams(window.location.search).toString()}`;
-      const base = new URLSearchParams(baseKey.slice(baseKey.indexOf('?') + 1));
+      const base = new URLSearchParams(window.location.search);
       const current = parseLaundryOrderListState(base);
       const next = update(current);
       const params = next === current ? new URLSearchParams(base) : serializeLaundryOrderListState(next, base);
       for (const [key, value] of Object.entries(extra)) params.set(key, value);
-      const key = `${pathname}?${params.toString()}`;
-      if (key === baseKey) return undefined;
-      t.pending.push(key);
-      return `${key}${window.location.hash}`;
+      if (params.toString() === base.toString()) return undefined;
+      return `${window.location.pathname}?${params.toString()}${window.location.hash}`;
     },
-    [pathname],
+    [],
   );
 
   const setState = useCallback(
     (update: LaundryOrderListUpdate) => {
-      const href = requestHref(update);
-      if (href !== undefined) router.replace(href);
+      const href = hrefFor(update);
+      if (href !== undefined) window.history.replaceState(null, '', href);
     },
-    [router, requestHref],
+    [hrefFor],
   );
 
-  return { outsideNavigations, requestHref, setState, state };
+  return { hrefFor, setState, state };
 }
 
 // Applies a search, filter or sort change. Any real change returns to page
@@ -1770,7 +1755,7 @@ git commit -m "feat(web): build the laundry list server filter and sort variable
 
 The #157 baseline was a characterization of the old list ("It is not a target"). This task replaces its assertions with the redesigned behavior. The old ones (`AWAITING_PAYMENT`, a `toFixed(2)` weight) intentionally stop holding.
 
-The static test covers rendering and query wiring. The jsdom test drives the real page, URL-state hook and search-draft hook through clicks, typing and timers. Its router queues every navigation and commits only on `commit()`. `outside()` commits a navigation the list did not make, ahead of anything queued, so in-flight races run in a fixed order.
+The static test covers rendering and query wiring. The jsdom test drives the real page, URL-state hook and search-draft hook through clicks, typing and timers. Its harness models the Next.js integration the spike observed: `pushState`/`replaceState` keep a fake entry stack, update `window.location` at once and notify `useSearchParams`; React renders at the end of the surrounding `act`, so two updates in one `act` happen before any re-render; Back/Forward move through the stack and fire `popstate`. The router mock records any `router.push`/`replace` call, and the tests expect none.
 
 - [ ] **Step 1: Rename and write the static page test**
 
@@ -1953,38 +1938,32 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Drives the real `/app/laundry` page, URL-state hook and search-draft
-// hook. The fake router queues every navigation and commits only when the
-// test calls `commit()`, so the races the M5 review raised (a debounced
-// search landing after a filter change, or after a row opened the drawer)
-// happen deterministically.
+// hook. The list writes its URL with the native History API, which Next.js
+// syncs into `useSearchParams` (verified on Next 16.3.1 at planning time:
+// `location` changes at once, the re-render follows, Back/Forward fire
+// `popstate`). This harness models exactly that: `pushState` and
+// `replaceState` keep a fake entry stack and notify `useSearchParams`
+// subscribers, and React renders at the end of the surrounding `act`, so
+// two updates inside one `act` happen before any re-render.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const ORDER_ID = '3f2a9c1e-0b7d-4e55-9a10-6c2b8d4e7f01';
 
-const nav = vi.hoisted(() => {
-  const listeners = new Set<() => void>();
-  const store = {
-    calls: [] as { method: 'push' | 'replace'; url: string }[],
-    committed: '',
-    listeners,
-    orderQueryIds: [] as string[],
-    queued: [] as string[],
-    sortingCalls: [] as unknown[],
-  };
-  return store;
-});
-
-function navigate(method: 'push' | 'replace', url: string) {
-  nav.calls.push({ method, url });
-  nav.queued.push(url);
-}
+const nav = vi.hoisted(() => ({
+  entries: [] as string[],
+  index: 0,
+  listeners: new Set<() => void>(),
+  orderQueryIds: [] as string[],
+  queryVariables: [] as { filter?: unknown; paging: unknown; sorting: unknown }[],
+  routerCalls: [] as string[],
+}));
 
 vi.mock('next/navigation', () => ({
   usePathname: () => '/app/laundry',
   useRouter: () => ({
-    back: vi.fn(),
-    push: (url: string) => navigate('push', url),
-    replace: (url: string) => navigate('replace', url),
+    back: () => goBack(),
+    push: (url: string) => nav.routerCalls.push(`push ${url}`),
+    replace: (url: string) => nav.routerCalls.push(`replace ${url}`),
   }),
   useSearchParams: () => {
     const query = useSyncExternalStore(
@@ -1992,7 +1971,7 @@ vi.mock('next/navigation', () => ({
         nav.listeners.add(listener);
         return () => nav.listeners.delete(listener);
       },
-      () => nav.committed,
+      () => window.location.search,
     );
     return new URLSearchParams(query);
   },
@@ -2021,8 +2000,8 @@ vi.mock('@clensy/client', () => {
       nav.orderQueryIds.push(options.variables.id);
       return query();
     },
-    useLaundryOrdersQuery: (options: { variables: { sorting: unknown } }) => {
-      nav.sortingCalls.push(options.variables.sorting);
+    useLaundryOrdersQuery: (options: { variables: (typeof nav.queryVariables)[number] }) => {
+      nav.queryVariables.push(options.variables);
       return { data: { laundryOrders: { nodes: [row], totalCount: 1 } }, error: undefined, loading: false };
     },
     useMarkLaundryOrderAwaitingDeliveryMutation: idle,
@@ -2044,73 +2023,98 @@ vi.mock('@clensy/client', () => {
 
 const { default: LaundryPage } = await import('../app/app/laundry/page');
 
+const nativeReplaceState = window.history.replaceState.bind(window.history);
+
 let container: HTMLDivElement;
 let root: Root;
 
-// Commits every queued navigation in order, as the router would.
-function commit() {
+function notify() {
+  for (const listener of nav.listeners) listener();
+}
+
+// The entry the fake history is on, applied to `window.location`.
+function showEntry() {
+  nativeReplaceState(null, '', nav.entries[nav.index]);
+}
+
+function goBack() {
   act(() => {
-    for (const url of nav.queued.splice(0)) {
-      const [path, hash = ''] = url.split('#');
-      nav.committed = path.split('?')[1] ?? '';
-      window.history.replaceState(null, '', `${path}${hash ? `#${hash}` : ''}`);
-      for (const listener of nav.listeners) listener();
-    }
+    nav.index -= 1;
+    showEntry();
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    notify();
   });
 }
 
-// An outside navigation (Back, Forward) that commits at once, ahead of
-// anything still queued.
-function outside(query: string) {
+function goForward() {
   act(() => {
-    nav.committed = query;
-    window.history.replaceState(null, '', `/app/laundry?${query}`);
-    for (const listener of nav.listeners) listener();
+    nav.index += 1;
+    showEntry();
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    notify();
   });
 }
 
 function url(): URLSearchParams {
-  return new URLSearchParams(nav.committed);
+  return new URLSearchParams(window.location.search);
 }
 
-function start(query = '', hash = '') {
-  nav.committed = query;
-  window.history.replaceState(null, '', `/app/laundry${query ? `?${query}` : ''}${hash}`);
+// `history` holds the entries before the current one, oldest first.
+function start(query = '', hash = '', history: string[] = []) {
+  nav.entries = [...history.map((entry) => `/app/laundry?${entry}`), `/app/laundry${query ? `?${query}` : ''}${hash}`];
+  nav.index = nav.entries.length - 1;
+  showEntry();
   act(() => root.render(<LaundryPage />));
 }
 
 function typeSearch(text: string) {
   const input = container.querySelector<HTMLInputElement>('#laundry-order-search')!;
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, text);
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-  });
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, text);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 function selectStatus(value: string) {
   const select = container.querySelector<HTMLSelectElement>('#laundry-order-status-filter')!;
-  act(() => {
-    select.value = value;
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  select.value = value;
+  select.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
-function clickHeader(label: string) {
-  const button = [...container.querySelectorAll<HTMLButtonElement>('th button')].find((b) => b.textContent === label)!;
-  act(() => button.click());
+function clickRow() {
+  container.querySelector<HTMLTableRowElement>('tr[role="button"]')!.click();
+}
+
+function headerButton(label: string): HTMLButtonElement {
+  return [...container.querySelectorAll<HTMLButtonElement>('th button')].find((b) => b.textContent === label)!;
 }
 
 function ariaSort(label: string): string | null {
-  const button = [...container.querySelectorAll<HTMLButtonElement>('th button')].find((b) => b.textContent === label)!;
-  return button.closest('th')!.getAttribute('aria-sort');
+  return headerButton(label).closest('th')!.getAttribute('aria-sort');
+}
+
+function searchBox(): string {
+  return container.querySelector<HTMLInputElement>('#laundry-order-search')!.value;
+}
+
+function statusSelect(): string {
+  return container.querySelector<HTMLSelectElement>('#laundry-order-status-filter')!.value;
 }
 
 beforeEach(() => {
   vi.useFakeTimers();
-  nav.calls = [];
-  nav.queued = [];
   nav.orderQueryIds = [];
-  nav.sortingCalls = [];
+  nav.queryVariables = [];
+  nav.routerCalls = [];
+  vi.spyOn(window.history, 'pushState').mockImplementation((_data, _unused, href) => {
+    nav.entries = [...nav.entries.slice(0, nav.index + 1), String(href)];
+    nav.index += 1;
+    showEntry();
+    notify();
+  });
+  vi.spyOn(window.history, 'replaceState').mockImplementation((_data, _unused, href) => {
+    nav.entries[nav.index] = String(href);
+    showEntry();
+    notify();
+  });
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -2119,139 +2123,127 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
 describe('/app/laundry list interactions', () => {
-  it('keeps both a filter change and a debounced search that lands before the filter commits', () => {
+  it('composes a filter change and a debounced search made before React re-renders', () => {
     start();
-    typeSearch('ana');
-    act(() => vi.advanceTimersByTime(290));
-    selectStatus('READY'); // queued, not committed
-    act(() => vi.advanceTimersByTime(10)); // the search commit fires now
-    commit();
+    act(() => typeSearch('ana'));
+    act(() => {
+      vi.advanceTimersByTime(290);
+      selectStatus('READY');
+      vi.advanceTimersByTime(10); // the search commit fires before any re-render
+    });
     expect(url().get('q')).toBe('ana');
     expect(url().get('status')).toBe('READY');
     expect(url().get('offset')).toBe('0');
+    expect(nav.entries).toHaveLength(1); // list updates replace; they add no entry
+    expect(nav.routerCalls).toEqual([]);
   });
 
-  it('opens the drawer with a pending search in the same navigation, and nothing later drops detail', () => {
+  it('commits a waiting search to the list entry, then pushes the drawer; nothing applies later', () => {
     start('status=READY&offset=20');
-    typeSearch('ana');
+    act(() => typeSearch('ana'));
     act(() => vi.advanceTimersByTime(100));
-    act(() => container.querySelector<HTMLTableRowElement>('tr[role="button"]')!.click());
+    act(() => clickRow());
     act(() => vi.advanceTimersByTime(1000)); // the debounce would have fired by now
-    commit();
+    expect(nav.entries).toHaveLength(2);
+    const listEntry = new URLSearchParams(nav.entries[0].split('?')[1]);
+    expect({ detail: listEntry.get('detail'), q: listEntry.get('q') }).toEqual({ detail: null, q: 'ana' });
     expect(url().get('detail')).toBe(ORDER_ID);
     expect(url().get('q')).toBe('ana');
     expect(url().get('status')).toBe('READY');
-    expect(nav.calls.map((call) => call.method)).toEqual(['push']);
+    expect(url().get('offset')).toBe('0');
     expect(nav.orderQueryIds.at(-1)).toBe(ORDER_ID);
-
-    // A filter change while the drawer is open keeps `detail`.
-    selectStatus('PAID');
-    commit();
-    expect(url().get('detail')).toBe(ORDER_ID);
-    expect(url().get('status')).toBe('PAID');
+    expect(nav.routerCalls).toEqual([]);
   });
 
-  it('keeps detail when a list update is sent while the drawer push is still queued', () => {
+  it('returns to the list as typed when the drawer is closed with Back', () => {
     start();
-    act(() => container.querySelector<HTMLTableRowElement>('tr[role="button"]')!.click());
-    selectStatus('READY'); // built on the queued drawer URL
-    expect(nav.calls.map((call) => call.method)).toEqual(['push', 'replace']);
-    commit();
+    act(() => typeSearch('ana'));
+    act(() => clickRow());
+    goBack();
+    expect(url().get('q')).toBe('ana');
+    expect(url().has('detail')).toBe(false);
+    expect(searchBox()).toBe('ana');
+  });
+
+  it('keeps detail for a list update made right after opening, before React re-renders', () => {
+    start();
+    act(() => {
+      clickRow();
+      selectStatus('READY');
+    });
     expect(url().get('detail')).toBe(ORDER_ID);
     expect(url().get('status')).toBe('READY');
   });
 
-  it('keeps the hash when opening the drawer', () => {
-    start('tab=a', '#orders');
-    act(() => container.querySelector<HTMLTableRowElement>('tr[role="button"]')!.click());
-    expect(nav.calls.at(-1)).toEqual({
-      method: 'push',
-      url: `/app/laundry?tab=a&detail=${ORDER_ID}#orders`,
-    });
-  });
-
-  it('lets an outside navigation win over a list update still queued behind it', () => {
-    start('status=PAID');
-    selectStatus('READY'); // sent, not committed
-    outside('status=PAID&q=back'); // Back commits first
-    commit(); // the stale READY replace lands, and the list restores the outside URL
-    expect(nav.calls.at(-1)).toEqual({ method: 'replace', url: '/app/laundry?status=PAID&q=back' });
-    commit();
-    expect(nav.committed).toBe('status=PAID&q=back');
-    expect(container.querySelector<HTMLInputElement>('#laundry-order-search')!.value).toBe('back');
-
-    // The restore is the list's own request, so the next update builds on it.
-    selectStatus('PROCESSING');
-    commit();
-    expect(url().get('q')).toBe('back');
-    expect(url().get('status')).toBe('PROCESSING');
-  });
-
-  it('forgets a stale request once a later request of its own commits', () => {
-    start('status=PAID');
-    selectStatus('READY');
-    const staleUrl = nav.calls.at(-1)!.url;
-    outside('status=PAID&q=back');
-    nav.queued.splice(0); // the router drops the stale replace; it never lands
-    selectStatus('PROCESSING');
-    commit(); // the list's own request commits: nothing before it can land now
-    const sent = nav.calls.length;
-    outside(staleUrl.split('?')[1]); // the user later goes Forward to that same URL
-    expect(nav.calls).toHaveLength(sent); // treated as a navigation, not a stale commit to undo
-    expect(url().get('status')).toBe('READY');
-  });
-
-  it('cancels a keystroke still waiting when an outside navigation commits', () => {
-    start('q=ana');
-    typeSearch('anab');
-    outside('q=ben');
-    act(() => vi.advanceTimersByTime(1000));
-    expect(nav.calls).toEqual([]); // the waiting search never commits
-    expect(container.querySelector<HTMLInputElement>('#laundry-order-search')!.value).toBe('ben');
-  });
-
-  it('keeps unrelated params and the hash across list updates', () => {
+  it('keeps the hash and every unrelated param when opening the drawer and on list updates', () => {
     start('utm_source=mail&tab=a&tab=b', '#orders');
-    selectStatus('READY');
-    commit();
-    expect(url().get('utm_source')).toBe('mail');
+    act(() => selectStatus('READY'));
+    expect(window.location.hash).toBe('#orders');
     expect(url().getAll('tab')).toEqual(['a', 'b']);
-    expect(nav.calls.at(-1)!.url.endsWith('#orders')).toBe(true);
+    act(() => clickRow());
+    expect(nav.entries.at(-1)).toMatch(new RegExp(`^/app/laundry\\?utm_source=mail&tab=a&tab=b&.*detail=${ORDER_ID}#orders$`));
   });
 
-  it('follows the committed search after a list update, but not over a keystroke still waiting', () => {
+  it('lets Back and Forward restore the URL, controls, query and drawer of the entry the user goes to', () => {
+    start('status=PAID');
+    act(() => selectStatus('READY'));
+    act(() => clickRow());
+    expect(nav.entries).toHaveLength(2);
+
+    goBack(); // closes the drawer: the list entry, with its filter
+    expect(url().get('status')).toBe('READY');
+    expect(url().has('detail')).toBe(false);
+    expect(statusSelect()).toBe('READY');
+    expect(nav.queryVariables.at(-1)).toMatchObject({ filter: { status: { eq: 'READY' } } });
+
+    goForward(); // the drawer entry again
+    expect(url().get('detail')).toBe(ORDER_ID);
+    expect(nav.orderQueryIds.at(-1)).toBe(ORDER_ID);
+    expect(nav.routerCalls).toEqual([]);
+  });
+
+  it('never queries a state the user did not land on when going Back', () => {
+    start('status=READY', '', ['status=PAID']);
+    nav.queryVariables = [];
+    goBack();
+    expect(nav.queryVariables.map((variables) => variables.filter)).toEqual([{ status: { eq: 'PAID' } }]);
+    expect(statusSelect()).toBe('PAID');
+  });
+
+  it('cancels a keystroke still waiting when the user goes Back', () => {
+    start('q=ana', '', ['q=ben']);
+    act(() => typeSearch('anab'));
+    goBack();
+    act(() => vi.advanceTimersByTime(1000));
+    expect(url().get('q')).toBe('ben'); // the waiting search never applies
+    expect(nav.entries).toEqual(['/app/laundry?q=ben', '/app/laundry?q=ana']);
+    expect(searchBox()).toBe('ben');
+  });
+
+  it('does not overwrite a keystroke still waiting with the list’s own update', () => {
     start('q=ana');
-    const input = () => container.querySelector<HTMLInputElement>('#laundry-order-search')!.value;
-    expect(input()).toBe('ana');
-
-    outside('q=ben');
-    expect(input()).toBe('ben');
-
-    // A list update (the filter) commits while "benj" is still waiting.
-    typeSearch('benj');
-    selectStatus('READY');
-    commit();
-    expect(input()).toBe('benj');
+    act(() => typeSearch('anab'));
+    act(() => selectStatus('READY'));
+    expect(searchBox()).toBe('anab');
     act(() => vi.advanceTimersByTime(300));
-    commit();
-    expect(url().get('q')).toBe('benj');
+    expect(url().get('q')).toBe('anab');
     expect(url().get('status')).toBe('READY');
   });
 
   it('clears the search and filters, including a keystroke still waiting', () => {
     start('q=ana&status=READY');
-    typeSearch('anab');
+    act(() => typeSearch('anab'));
     const clear = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Clear search and filters')!;
     act(() => clear.click());
     act(() => vi.advanceTimersByTime(1000));
-    commit();
     expect(url().has('q')).toBe(false);
     expect(url().has('status')).toBe(false);
-    expect(container.querySelector<HTMLInputElement>('#laundry-order-search')!.value).toBe('');
+    expect(searchBox()).toBe('');
   });
 
   it('keeps the header indicator, URL and server sort in step through each click', () => {
@@ -2266,11 +2258,10 @@ describe('/app/laundry list interactions', () => {
     ];
     expect(ariaSort('Created')).toBe('descending');
     for (const [click, sortBy, sortOrder, header, sorting] of steps) {
-      clickHeader(click);
-      commit();
+      act(() => headerButton(click).click());
       expect({ sortBy: url().get('sortBy'), sortOrder: url().get('sortOrder') }).toEqual({ sortBy, sortOrder });
       expect(ariaSort(header)).toBe(sortOrder === 'asc' ? 'ascending' : 'descending');
-      expect(nav.sortingCalls.at(-1)).toEqual(sorting);
+      expect(nav.queryVariables.at(-1)!.sorting).toEqual(sorting);
     }
     expect(ariaSort('Status')).toBe('none');
   });
@@ -2287,37 +2278,37 @@ Expected: `Tests 17 failed (17)`. This was recorded at planning time against `8c
 ```ts
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { LAUNDRY_SEARCH_DEBOUNCE_MS } from './use-laundry-order-list-url-state';
+import { LAUNDRY_SEARCH_DEBOUNCE_MS, parseLaundryOrderListState } from './use-laundry-order-list-url-state';
 
 // The list's search box. The input shows every keystroke (`draft`); the
 // committed search (the URL) follows once typing pauses for
 // `LAUNDRY_SEARCH_DEBOUNCE_MS`.
 //
-// Sync rule: an outside navigation (`outsideNavigations` increments: Back,
-// Forward, closing the drawer) cancels a keystroke still waiting, and the
-// draft becomes the committed search. The outside navigation wins. The
-// list's own updates never overwrite the draft: a committed search is
+// Back and Forward (`popstate`) cancel a keystroke still waiting, and the
+// draft becomes the search of the entry the user went to; the browser's
+// navigation wins. `window.location` already shows that entry when
+// `popstate` fires, so the draft is read from it rather than from a
+// `useSearchParams` render that may not have happened yet.
+//
+// The list's own updates never overwrite the draft: a committed search is
 // always the draft's own text (debounced, or carried into the drawer
 // push), and clearing empties both.
-export function useLaundrySearchDraft(
-  committedSearch: string,
-  outsideNavigations: number,
-  commit: (text: string) => void,
-) {
+export function useLaundrySearchDraft(committedSearch: string, commit: (text: string) => void) {
   const [draft, setDraft] = useState(committedSearch);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pendingText = useRef<string | undefined>(undefined);
-  const lastOutside = useRef(outsideNavigations);
 
   useEffect(() => () => clearTimeout(timer.current), []);
 
   useEffect(() => {
-    if (lastOutside.current === outsideNavigations) return;
-    lastOutside.current = outsideNavigations;
-    clearTimeout(timer.current);
-    pendingText.current = undefined;
-    setDraft(committedSearch);
-  }, [committedSearch, outsideNavigations]);
+    function handlePopState() {
+      clearTimeout(timer.current);
+      pendingText.current = undefined;
+      setDraft(parseLaundryOrderListState(new URLSearchParams(window.location.search)).search);
+    }
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const change = useCallback(
     (text: string) => {
@@ -2351,24 +2342,25 @@ export function useLaundrySearchDraft(
 }
 ```
 
-- [ ] **Step 5: Let the drawer open push an exact caller-built URL**
+- [ ] **Step 5: Let the drawer open push an exact caller-built URL natively**
 
 ```diff
 diff --git a/apps/web/lib/use-detail-drawer.ts b/apps/web/lib/use-detail-drawer.ts
 --- a/apps/web/lib/use-detail-drawer.ts
 +++ b/apps/web/lib/use-detail-drawer.ts
-@@ -28,8 +28,15 @@ export function useDetailDrawer(paramName = 'detail') {
+@@ -28,8 +28,16 @@ export function useDetailDrawer(paramName = 'detail') {
  
    const activeId = searchParams.get(paramName);
  
 -  const open = useCallback((id: string) => {
-+  // `href`, when given, is the exact URL to push, and must already carry
-+  // `<paramName>=<id>`. The laundry list builds it itself, so its URL
-+  // tracking records exactly what is pushed, hash included.
++  // `href`, when given, is the exact URL to open, and must already carry
++  // `<paramName>=<id>`. It is pushed with the native History API, which
++  // Next.js syncs into `useSearchParams`: the laundry list writes its URL
++  // that way, so nothing is left in flight (see its URL-state hook).
 +  const open = useCallback((id: string, href?: string) => {
      openedHereRef.current = true;
 +    if (href !== undefined) {
-+      router.push(href);
++      window.history.pushState(null, '', href);
 +      return;
 +    }
      const params = new URLSearchParams(searchParams.toString());
@@ -2445,19 +2437,14 @@ diff --git a/apps/web/app/app/laundry/page.tsx b/apps/web/app/app/laundry/page.t
  function formatWeight(grams: number | null): string {
    return grams === null ? '—' : `${(grams / 1000).toFixed(2)} kg`;
  }
-@@ -174,12 +174,24 @@ export default function LaundryPage() {
+@@ -174,12 +174,19 @@ export default function LaundryPage() {
  }
  
  function LaundryPageContent() {
 -  const [page, setPage] = useState(1);
 -  const pageSize = 20;
 +  const t = useClensyTranslations('laundry');
-+  const {
-+    outsideNavigations,
-+    requestHref,
-+    setState: setListState,
-+    state: listState,
-+  } = useLaundryOrderListUrlState();
++  const { hrefFor, setState: setListState, state: listState } = useLaundryOrderListUrlState();
    const ordersQuery = useLaundryOrdersQuery({
      fetchPolicy: 'network-only',
 -    variables: { paging: { limit: pageSize, offset: (page - 1) * pageSize } },
@@ -2467,13 +2454,13 @@ diff --git a/apps/web/app/app/laundry/page.tsx b/apps/web/app/app/laundry/page.t
 +  const { data: adminData } = useCurrentAdminQuery();
 +  const canCreate = canReceiveLaundryOrder(adminData?.currentAdmin.role);
 +
-+  const search = useLaundrySearchDraft(listState.search, outsideNavigations, (text) =>
++  const search = useLaundrySearchDraft(listState.search, (text) =>
 +    setListState((current) => withLaundryFilterChange(current, { search: text })),
 +  );
    const { data: customersData } = useCustomersQuery({
      fetchPolicy: 'network-only',
      variables: { paging: { limit: 100 } },
-@@ -187,6 +199,26 @@ function LaundryPageContent() {
+@@ -187,6 +194,23 @@ function LaundryPageContent() {
    const [receive, { loading: creating }] = useReceiveLaundryOrderMutation();
    const { activeId, open: openDetail, close: closeDetail } = useDetailDrawer();
  
@@ -2483,24 +2470,21 @@ diff --git a/apps/web/app/app/laundry/page.tsx b/apps/web/app/app/laundry/page.t
 +  }
 +
 +  // Until the order page cutover (#161), a row opens the drawer, so
-+  // weighing, pricing and lifecycle actions stay reachable. The list hook
-+  // builds and records the exact drawer URL (`detail`, any search still
-+  // waiting to commit, and the hash), so a later list update builds on it
-+  // and cannot drop `detail`.
++  // weighing, pricing and lifecycle actions stay reachable. A search still
++  // waiting to commit is committed to the list entry first, so it is not
++  // applied later over the drawer and Back returns to the list as typed.
 +  function handleRowClick(row: LaundryOrderRow) {
 +    const pendingSearch = search.takePending();
-+    const href = requestHref(
-+      (current) =>
-+        pendingSearch === undefined ? current : withLaundryFilterChange(current, { search: pendingSearch }),
-+      { detail: row.id },
-+    );
-+    openDetail(row.id, href);
++    if (pendingSearch !== undefined) {
++      setListState((current) => withLaundryFilterChange(current, { search: pendingSearch }));
++    }
++    openDetail(row.id, hrefFor((current) => current, { detail: row.id }));
 +  }
 +
    const [formOpen, setFormOpen] = useState(false);
    const [customerId, setCustomerId] = useState('');
    const [fulfillmentType, setFulfillmentType] =
-@@ -215,53 +247,47 @@ function LaundryPageContent() {
+@@ -215,53 +239,47 @@ function LaundryPageContent() {
      }
    }
  
@@ -2641,13 +2625,13 @@ Expected: `allowlist OK`.
   | 4 | `page.tsx`: `canCreate ? (` → `true ? (` | `lib/laundry-list-page.test.tsx` | 1 failed |
   | 5 | `laundry-order-sort.ts`: delete the line `if (clicked === DEFAULT_LAUNDRY_ORDER_SORT.key) return { direction: 'asc', key: clicked };` | `src/laundry/laundry-order-sort.test.ts` (in `packages/web`) | 2 failed |
   | 6 | `laundry-order-sort.ts`: `return isLaundryOrderSortKey(reported.key) ? reported.key : undefined;` → `return reported.key as LaundryOrderSortKey;` | `src/laundry/laundry-order-sort.test.ts` | 1 failed |
-  | 7 | `use-laundry-order-list-url-state.ts`: `const last = t.pending.at(-1);` → `const last = undefined as string \| undefined;` (build on `window.location`) | `lib/laundry-list-page.interaction.test.tsx` | 2 failed |
-  | 8 | `page.tsx`: `openDetail(row.id, href);` → `void href; openDetail(row.id);` | `lib/laundry-list-page.interaction.test.tsx` | 2 failed |
-  | 9 | `use-laundry-order-list-url-state.ts`: `` return `${key}${window.location.hash}`; `` → `return key;` | `lib/laundry-list-page.interaction.test.tsx` | 2 failed |
-  | 10 | `use-laundry-order-list-url-state.ts`: `t.pending.push(key);` → `if (Object.keys(extra).length === 0) t.pending.push(key);` (drawer URL not recorded) | `lib/laundry-list-page.interaction.test.tsx` | 1 failed |
-  | 11 | `use-laundry-order-list-url-state.ts`: `if (t.stale.has(committed) && t.outside !== null) {` → `if (false) {` (no stale restore) | `lib/laundry-list-page.interaction.test.tsx` | 1 failed |
-  | 12 | `use-laundry-order-list-url-state.ts`: delete `t.stale.clear();` | `lib/laundry-list-page.interaction.test.tsx` | 1 failed |
-  | 13 | `use-laundry-search-draft.ts`: `if (lastOutside.current === outsideNavigations) return;` → `if (true) return;` | `lib/laundry-list-page.interaction.test.tsx` | 3 failed |
+  | 7 | `use-laundry-order-list-url-state.ts`: `const base = new URLSearchParams(window.location.search);` → `const base = new URLSearchParams(searchParams.toString());` (build on the last render, not the live URL) | `lib/laundry-list-page.interaction.test.tsx` | 5 failed |
+  | 8 | `page.tsx`: `openDetail(row.id, hrefFor((current) => current, { detail: row.id }));` → `openDetail(row.id);` | `lib/laundry-list-page.interaction.test.tsx` | 4 failed |
+  | 9 | `use-laundry-order-list-url-state.ts`: drop `${window.location.hash}` from the returned href | `lib/laundry-list-page.interaction.test.tsx` | 1 failed |
+  | 10 | `use-laundry-order-list-url-state.ts`: `window.history.replaceState(null, '', href)` → `window.history.pushState(null, '', href)` | `lib/laundry-list-page.interaction.test.tsx` | 3 failed |
+  | 11 | `use-laundry-search-draft.ts`: replace the three statements in `handlePopState` with `return;` | `lib/laundry-list-page.interaction.test.tsx` | 1 failed |
+  | 12 | `use-detail-drawer.ts`: `window.history.pushState(null, '', href);` → `router.push(href);` | `lib/laundry-list-page.interaction.test.tsx` | 4 failed |
+  | 13 | `page.tsx`: `if (pendingSearch !== undefined) {` → `if (false) {` | `lib/laundry-list-page.interaction.test.tsx` | 2 failed |
   | 14 | `laundry-order-data-table.tsx`: `onSortChange(nextLaundryOrderSort(sort, clicked))` → `onSortChange(reported as never)` | `lib/laundry-list-page.interaction.test.tsx` | 1 failed |
 
   After reverting, run `pnpm --filter web exec vitest run lib/use-laundry-order-list-url-state.test.ts lib/laundry-order-list-query.test.ts lib/laundry-list-page.test.tsx lib/laundry-list-page.interaction.test.tsx` — Expected: `Tests 60 passed (60)`. Then run `pnpm --filter @clensy/web exec vitest run src/laundry/laundry-order-sort.test.ts src/laundry/laundry-order-data-table.test.tsx` — Expected: `Tests 25 passed (25)`.
@@ -2664,8 +2648,10 @@ Expected: `allowlist OK`.
   - Created toggles asc/desc. Status goes asc → desc → back to newest first.
   - A row opens the drawer, and closing it returns to the filtered list.
   - With a hash in the URL (`/app/laundry?status=READY#x`), opening a row keeps `#x`.
-  - Change a filter and press Back at once. The page ends on the URL Back went to, not the filter change.
-  - Type a search and press Back before the pause ends. The search is not applied afterwards.
+  - Filter changes add no history entries. Opening a row adds one; Back closes the drawer and shows the list as it was; Forward reopens it.
+  - Type a search and press Back before the pause ends. The search is not applied afterwards, and the box shows the entry Back went to.
+  - Type a search and open a row before the pause ends. Closing the drawer shows the list filtered by that search.
+  - In the browser's network panel, Back issues a `laundryOrders` request only for the entry it lands on.
 
 ## Traceability
 
