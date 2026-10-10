@@ -1477,3 +1477,36 @@ Final verification: `@clensy/web` 11 files / 376 tests passed, tsc and lint exit
 Deviation: none. One process correction: the Task 1 commit was first created with a `Co-Authored-By` trailer, against the owner's global commit rule. It was amended before any push. No pushed commit carries one.
 
 Next gate: **M7 — Code Review**. A fresh independent reviewer is required (`CLAUDE.md`: application code).
+
+### M7 — Approved for merge (2026-10-10, fresh independent review)
+
+A fresh agent context on Opus 5.5 reviewed this slice. It did not implement the change (`CLAUDE.md`: application code). It was given the Accepted spec, this Accepted plan and the branch diff at head `7cbbce6`, and it made no repository edits.
+
+**Decision: Approved for merge. Blocking findings: none.**
+
+The reviewer independently confirmed the following:
+- The M5 record comes before the first M6 commit. The tasks are one commit each, in order. No commit carries a `Co-Authored-By` trailer.
+- All 10 new files are byte-identical to this plan's code blocks.
+- `LEGAL_VERBS`, every verb's role set, invoice eligibility, the fulfillment branches and the `AuthGuard` behaviour all match the API source, checked by hand.
+- Progress semantics and accessibility hold for every status and both fulfillment types.
+- `formatWeightGrams` is integer-only.
+- The scope is 13/13 files on the allowlist, and the Task 4 oracle script gave 10/10 `ok`.
+
+The reviewer's own runs:
+- `@clensy/web` 376/376 tests passed, with tsc and lint exit 0.
+- `web` 595/595 tests passed, with tsc, lint and build exit 0.
+
+The reviewer also ran its own mutation checks, each restored afterwards:
+- Widening the invoice roles gave 18 failed tests.
+- Dropping the pickup branch gave 5 failed.
+- Setting `aria-current` from `status` gave 2 failed.
+- Changing the formatter's trailing-zero rule gave 3 failed.
+- Removing `VOID`, or adding `COURIER` to the local fulfillment union, gave TS2344 under tsc. Vitest still passed, which confirms that tsc enforces the pin.
+
+Non-blocking observations. These do not affect the decision, and their disposition is M8's call:
+1. `laundry-order-progress.tsx`: the `status as TerminalStatus` cast is not tied to the slot map's `'terminal'` entries. The test's `TERMINAL` list is hand-written. Deriving the type from the slot map or the catalog keys would close that gap.
+2. `laundryProgressSteps` is a pure function exported from a `'use client'` module. A Server Component would receive a client reference instead of the function. Today's planned consumers are all client pages. Note this for #156.
+3. Test and implementation share a commit per task. The RED evidence is in the M6 record, not in git history, which the plan permits.
+4. The API reconciliation script is uncommitted by design (Deferred). Re-run it in later slices that touch laundry RBAC or the matrix.
+
+Next gate: **M8 — Refactoring** (owner to decide: refactor observation 1, or N/A).
