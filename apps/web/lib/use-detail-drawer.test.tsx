@@ -326,6 +326,29 @@ describe('useDetailDrawer: a second close before the Back lands is ignored', () 
     expect(nav.replace).not.toHaveBeenCalled();
   });
 
+  // #173 revision 4 (M7 P2-1): a Back that crosses documents may leave this
+  // document in the back/forward cache with the guard set. Restoring it fires
+  // `pageshow` with `persisted`, not `popstate`; × must work again after it.
+  it('releases the guard when the page is restored from the back/forward cache', () => {
+    start('/app/bookings?status=A', ['/app/jobs']);
+    act(() => root.render(<BookingsLikePage />));
+    act(() => button('Open o1').click());
+    deferBack();
+    act(() => button('Close').click()); // the Back crosses documents: no popstate here
+    expect(nav.back).toHaveBeenCalledTimes(1);
+    act(() => {
+      window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: false })); // a fresh load: not a release
+    });
+    act(() => button('Close').click());
+    expect(nav.back).toHaveBeenCalledTimes(1);
+    act(() => {
+      window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true })); // Forward restores it
+    });
+    act(() => button('Close').click());
+    expect(nav.back).toHaveBeenCalledTimes(2);
+    expect(nav.replace).not.toHaveBeenCalled();
+  });
+
   it('closeWithHref goes Back once for × then × again, and never replaces the entry', () => {
     start('/app/bookings?status=A', ['/app/jobs']);
     act(() => root.render(<LaundryLikePage />));

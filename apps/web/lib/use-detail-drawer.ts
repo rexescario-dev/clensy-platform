@@ -25,10 +25,11 @@ import { useCallback, useEffect, useRef } from 'react';
 // custom `history.state` across Back/Forward (traverse navigations preserve
 // it) and copies its own keys into the state object passed to a native
 // `pushState`. So each drawer entry is pushed natively, with the marker.
-// (A `router.refresh()` or server-action navigation does not preserve custom
-// history state, so it would drop the marker and × would fall back to
-// replacing the entry: safe, but the duplicate returns. No drawer page uses
-// either today; keep it that way or re-mark the entry after one.)
+// (A `router.refresh()` rewrites the current entry's state without custom
+// keys, so it would drop the marker and × would fall back to replacing the
+// entry: safe, but the duplicate returns. A server-action redirect pushes a
+// new, unmarked entry instead. No drawer page uses either today; keep it
+// that way or re-mark the entry after one.)
 const DRAWER_ENTRY_KEY = '__clensyDetailDrawer';
 
 // The current entry's drawer marker, as a fresh state object for a native
@@ -61,13 +62,25 @@ export function useDetailDrawer(paramName = 'detail') {
   // `popstate` arrives the drawer entry is still current, marker and all, so
   // a second close in that window (a double Escape, × then the backdrop)
   // would go Back twice, past the list entry. It is ignored instead.
+  //
+  // `popstate` reports a same-document Back. If the Back crosses documents,
+  // this one may be frozen in the back/forward cache with the guard still
+  // set, and a later Forward restores it with `pageshow` (`persisted`), not
+  // `popstate`; that clears the guard too, or × would do nothing.
   const backPendingRef = useRef(false);
   useEffect(() => {
     const settled = () => {
       backPendingRef.current = false;
     };
+    const restored = (event: PageTransitionEvent) => {
+      if (event.persisted) settled();
+    };
     window.addEventListener('popstate', settled);
-    return () => window.removeEventListener('popstate', settled);
+    window.addEventListener('pageshow', restored);
+    return () => {
+      window.removeEventListener('popstate', settled);
+      window.removeEventListener('pageshow', restored);
+    };
   }, []);
 
   const back = useCallback(() => {
