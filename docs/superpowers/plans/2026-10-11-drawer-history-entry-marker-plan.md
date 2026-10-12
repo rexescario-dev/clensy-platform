@@ -710,6 +710,11 @@ diff --git a/apps/web/lib/use-laundry-order-list-url-state.ts b/apps/web/lib/use
 | Laundry native writes, `openWithHref`/`closeWithHref` | #163 plan | 1, 2 |
 | The duplicate entry (#171 Review Focus 1) | #173 | 1, 2 |
 
+## Deferred
+
+- **Double close within one traversal** (M7 P3-1): ignore a second `close`/`closeWithHref` until the next `popstate`.
+- **Marker loss on `router.refresh()` or a server-action retry** (M7 P3-2). It fails safe, to replace. Revisit if either is adopted on a drawer page.
+
 ## Gate outcomes
 
 - **M5, review 1 (2026-10-11):** request changes. It raised four points: the Back invariant, hook-test isolation, coverage of all nine pages, and Next version sensitivity. Revision 2 answers each one; see the Revision log.
@@ -750,3 +755,88 @@ Final verification:
 Deviation: none.
 
 Next gate: **M7 — Code Review**, by a fresh independent reviewer (`CLAUDE.md`: application code).
+
+### M7 — Approved for merge (2026-10-12, fresh independent review)
+
+A fresh agent context on Opus 5.5 reviewed PR #174 (`8553a04...07d69a6`, code commit `93c747b`). It did not implement the change (`CLAUDE.md`: application code). It was read-only, worked in a temporary worktree that it removed, and left the main tree clean.
+
+**Decision: Approved for merge. Blocking findings: none.**
+
+The reviewer independently confirmed:
+
+- **Gate order:** M4 → revision 2 → M5 record → code → M6 record. No `Co-Authored-By` or "Generated with" line in any commit or the PR body.
+- **Exact application:** the plan's four diffs, applied to `8553a04`, reproduce `93c747b` exactly. They are byte-identical at `d8f0ac2` (the accepted revision) and at HEAD, and the allowlist is exact.
+- **Test-first:** RED was 6 failed / 4 passed for the hook tests and 2 failed / 15 passed for the laundry tests; GREEN was 27 passed. A behavioural RED, the reviewer's own: with its `entryStates` assertion removed, the laundry Forward test still fails on `8553a04` (`nav.index` 1 ≠ 0). So it reproduces the duplicate entry itself.
+- **Mutations:** M1–M6 at the recorded counts. One extra mutant, `closeWithHref` always going Back, gave 3 failed.
+- **Suites:** `web` 679; lint and `tsc` exit 0, and both caught a planted type error.
+- **Next 16.3.1 source:**
+  - The marker survives a native push, Back/Forward and a reload: `copyNextJsInternalHistoryState`, `ACTION_RESTORE` → `completeTraverseNavigation` (`preserveCustomHistoryState: true`), and `create-initial-router-state.js`.
+  - `drawerEntryState()`'s fresh object avoids the `__NA` short-circuit.
+  - Every `router.push`/`replace` drops the marker, so no path marks an entry this hook did not push.
+  - `window` is only read inside callbacks.
+- **Equivalence for the eight pages:**
+  - `useSearchParams` syncs.
+  - Scroll is kept, because a restore reuses the scroll ref.
+  - Jobs `openDetail(newId)` and bookings' `onClose()` after a delete behave as before.
+  - The modal drawer blocks list controls while a drawer entry is current.
+- **Spec §4.4 and the Global Constraints** are met.
+
+Reported only by M6, not re-run: the Next build, `@clensy/web` 402, the browser matrix (54/54, navigate-away 4/4, refresh), and the owner's hands-on check.
+
+**Non-blocking (P3):**
+1. **A double close can go Back twice** (`use-detail-drawer.ts:68`, `:90`). The marker stays on the entry until the asynchronous `popstate`. If `close` runs twice inside that window (for example × and then the backdrop within milliseconds), `history.back()` runs twice and can pass the list entry. That is hard to trigger. Deferred: ignore a second close until the next `popstate`.
+2. **`router.refresh()` and server-action retries would drop the marker** (`preserveCustomHistoryState: false`). × would then fail safe to replace, bringing back the old duplicate. No app code uses either today. Deferred.
+3. **The hook-level Forward test fails on `8553a04` for a setup reason:** the mocked `router.push` adds no entry. The laundry interaction test shows the regression itself (the behavioural RED above). No action needed; the plan already says the harness cannot model Next's state copying.
+4. **The author's scratch files in `.git/claude-tmp/`** are untracked and outside the work tree. They are removed at closeout.
+
+Next gate: **M8**, then M9 and M10. Merge is the owner's decision.
+
+### M8 — Complete, comment-only (2026-10-12)
+
+```text
+Decision: Complete
+Subject: PR #174, branch fix/173-drawer-history-entry-marker
+Scope: apps/web/lib/use-laundry-order-list-url-state.ts (the native-writes comment block);
+       apps/web/app/app/laundry/page.tsx (the LaundryDetailDrawer onClose comment)
+M7 / authorization: Approved for merge; M8–M10 per the owner's "continue"
+Goal: comments that explain the implementation. Both still said a drawer "reached by a direct link or refresh"
+closes by replacement. After #173 a refresh keeps the marker and goes Back; only an unmarked entry (a direct link)
+is replaced. Found by the author after M7; M7 did not raise it.
+Behaviour: unchanged. The diff touches comment lines only (scripted check: no added or removed non-comment line).
+Characterization: none needed; no executable line changed.
+Verification after: `web` 679 passed; lint exit 0; `tsc --noEmit -p .` clean.
+Commit: 997e120
+Out of scope, deferred: M7 P3-1 and P3-2 are behaviour changes (see Deferred). P3-3 and P3-4 need no code.
+Review: page.tsx is outside the plan's four-path code allowlist, and both files are application code, so a fresh
+independent reviewer checks this delta (CLAUDE.md); see "M8 review" below.
+```
+
+
+### M9 — Complete (2026-10-12)
+
+```text
+Decision: Complete
+Subject: #173, PR #174
+Documentation scope:
+- apps/web/README.md (the laundry "Native history writes" bullets and the "Drawer hook" paragraph)
+- docs/superpowers/plans/2026-10-10-laundry-list-followups-plan.md (Deferred: mark the close-after-Forward item resolved)
+- PR #174 body (the M8 comment fix and these docs)
+- this plan (Deferred, Gate outcomes)
+
+Content updates (each traces to M6, M7 or M8 of #173):
+- apps/web/README.md: opening pushes a marked entry; closing goes Back when the entry is marked, also after Forward or
+  a refresh, and replaces it otherwise; list updates keep the marker (← Task 2). The "Drawer hook" paragraph no longer
+  says `open`/`close` are unchanged for the other pages: the hook now serves every page with the marker. It keeps the
+  `close`-takes-no-argument rule (← Task 2; Global Constraints).
+- #171 plan Deferred: the "close after Forward" item points to #173 / PR #174 as resolved (← M6, M7).
+- This plan: Deferred items for M7 P3-1 and P3-2 (← M7).
+
+Editorial changes: none.
+Unchanged, with reason: packages/web/README.md (no package change); docs/README.md (no API, schema or tenant
+change); the Dashboard UX Foundation spec (§4.4 leaves the mechanism to M4, so no spec text changes); the #163 plan
+(historical record of its own revision; its "unchanged for other pages" wording described that slice); no changelog
+or roadmap exists.
+Verification: 19 relative links and anchors in the touched files resolve (scripted scan). Status consistency: plan
+Accepted (revision 2), M6 complete, M7 Approved, M8 complete (comment-only, independent review below), PR #174 open.
+Gate: Documentation complete. Code unchanged in M9.
+```
