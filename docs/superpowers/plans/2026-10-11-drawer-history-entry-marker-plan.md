@@ -1088,3 +1088,26 @@ Accepted at `d04212e` by the owner. No blocking findings.
 A second Back from the *same* drawer entry needs a `popstate` that leaves the current entry unchanged, which does not occur. No code change is needed. M6 adds a browser check that interleaves an unrelated traversal: ×, browser Forward and × again, in one task, with a forward entry present. It must never end before the list entry.
 
 The pre-validation was not re-run by the reviewer; M6 re-observes it against the committed implementation.
+
+### M6 — Revision 3 implemented (2026-10-13)
+
+Implemented from the Accepted revision 3 (`d04212e`, recorded `348ed2f`). Task 3's two diffs were extracted from this plan and `git apply`-ed exactly as embedded, the test first.
+
+| Task | Commit | Evidence |
+| --- | --- | --- |
+| 3 Double-close guard | `3253a5f` | RED 2 failed / 10 passed (12), exactly the two new tests. GREEN 29 passed (29). eslint and `tsc` clean. The applied code is byte-identical to the pre-validated code. |
+
+Revision 3 final verification:
+
+- **Allowlist:** OK, exactly `use-detail-drawer.ts` and `use-detail-drawer.test.tsx`.
+- **Mutations:** G1 2 failed / 27 passed; G2 5 failed / 24 passed; G3 2 failed / 27 passed; G4 1 failed / 28 passed. All were reverted, and the tree was clean afterwards.
+- **Full suites:** `web` 681 passed; lint exit 0; `tsc --noEmit -p .` clean; Next build succeeded.
+- **Browser** (required by M5): a production build of `3253a5f` with a clean tree, against the branch API and local Postgres, in Chromium, with fresh tabs and a throwaway `TENANT_OWNER` that was deleted afterwards.
+  - **Double close:** 18 of 18 pass, on 6 pages (bookings, billing, catalog, customers, cleaners/teams, laundry) × 3 ways (× then the backdrop in one task; two Escape keydowns in one task; two Escape presses). Each case lands on the list, Forward reopens the drawer, and × closes it again.
+  - **Unrelated traversal interleaved** (the M5 clarification). On laundry and bookings, from the drawer entry with a forward entry (`/app/billing`) present, one task ran ×, `history.forward()` and × again. Both ended on the list URL, never before the list entry.
+  - **Regression matrix** a–f on the same 6 pages, and refresh then × on laundry and bookings: all pass.
+  - **Not run:** jobs, cleaners and add-ons have no local rows. They use the hook wired the same way.
+
+Deviation: none.
+
+Next gate: **M7**, a fresh independent review (`CLAUDE.md`: application code).
