@@ -1304,3 +1304,36 @@ The reviewer's clarification is recorded as a verification limitation, not a gap
 - An end-to-end check is to be added if a browser environment with the cache enabled becomes available.
 
 The pre-validation was not re-run by the reviewer; M6 re-observes it.
+
+### M6 — Revision 4 implemented (2026-10-13)
+
+Implemented from the Accepted revision 4 (`b014706`, recorded `dfcf3a2`). Task 4's two diffs were extracted from this plan and `git apply`-ed exactly as embedded, the test first.
+
+| Task | Commit | Evidence |
+| --- | --- | --- |
+| 4 Release on a back/forward-cache restore | `6785ac2` | RED 1 failed / 12 passed (13), exactly the new test. GREEN 30 passed (30). eslint and `tsc` clean. The applied code is byte-identical to the pre-validated code. |
+
+Revision 4 final verification:
+
+- **Allowlist:** OK, exactly the two hook files.
+- **Mutations** (30 tests each), all reverted; the tree was clean afterwards:
+
+  | Mutation | Result | Note |
+  | --- | --- | --- |
+  | G5 | 1 failed / 29 passed | as planned |
+  | G6 | 1 failed / 29 passed | as planned |
+  | G1 | 3 failed / 27 passed | one more than in revision 3: the new test also depends on the guard |
+  | G2 | 6 failed / 24 passed | one more than in revision 3, for the same reason |
+  | G3 | 3 failed / 27 passed | one more than in revision 3, for the same reason |
+  | G4 | 1 failed / 29 passed | |
+
+- **Full suites:** `web` 682 passed; lint exit 0; `tsc --noEmit -p .` clean; Next build succeeded.
+- **Browser:** a production build of `6785ac2` with a clean tree, in Chromium, with fresh tabs and a throwaway `TENANT_OWNER` that was deleted afterwards. These results describe the PR's final code.
+  - **Double close:** 18 of 18, on 6 pages × 3 ways.
+  - **Refresh, and a full page load away and Back,** each then ×, Forward and × again: 4 of 4, on laundry and bookings.
+  - **Regression matrix** a–f on the 6 pages: all pass.
+- **Limitation, per M5:** a real back/forward-cache restore is **not** browser-verified. Playwright's Chromium disables the cache. The synthetic `pageshow` test and G5/G6 prove the handler's logic only.
+
+Deviation: none.
+
+Next gate: **M7**, a fresh independent review (`CLAUDE.md`: application code).
