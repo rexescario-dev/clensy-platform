@@ -1,6 +1,6 @@
 'use client';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 // Resolves the "close behavior" question spec §4.4 deliberately leaves as a
 // plan-level implementation decision (design doc §4.4: "A same-page-origin
@@ -25,6 +25,10 @@ import { useCallback } from 'react';
 // custom `history.state` across Back/Forward (traverse navigations preserve
 // it) and copies its own keys into the state object passed to a native
 // `pushState`. So each drawer entry is pushed natively, with the marker.
+// (A `router.refresh()` or server-action navigation does not preserve custom
+// history state, so it would drop the marker and × would fall back to
+// replacing the entry: safe, but the duplicate returns. No drawer page uses
+// either today; keep it that way or re-mark the entry after one.)
 const DRAWER_ENTRY_KEY = '__clensyDetailDrawer';
 
 // The current entry's drawer marker, as a fresh state object for a native
@@ -53,6 +57,25 @@ export function useDetailDrawer(paramName = 'detail') {
 
   const activeId = searchParams.get(paramName);
 
+  // A Back this hook started that the browser has not reported yet. Until
+  // `popstate` arrives the drawer entry is still current, marker and all, so
+  // a second close in that window (a double Escape, × then the backdrop)
+  // would go Back twice, past the list entry. It is ignored instead.
+  const backPendingRef = useRef(false);
+  useEffect(() => {
+    const settled = () => {
+      backPendingRef.current = false;
+    };
+    window.addEventListener('popstate', settled);
+    return () => window.removeEventListener('popstate', settled);
+  }, []);
+
+  const back = useCallback(() => {
+    if (backPendingRef.current) return;
+    backPendingRef.current = true;
+    router.back();
+  }, [router]);
+
   const push = useCallback(
     (href: string) => window.history.pushState({ [DRAWER_ENTRY_KEY]: paramName }, '', href),
     [paramName],
@@ -66,14 +89,14 @@ export function useDetailDrawer(paramName = 'detail') {
 
   const close = useCallback(() => {
     if (isDrawerEntryPushedHere(paramName)) {
-      router.back();
+      back();
       return;
     }
     const params = new URLSearchParams(searchParams.toString());
     params.delete(paramName);
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname);
-  }, [router, pathname, searchParams, paramName]);
+  }, [back, router, pathname, searchParams, paramName]);
 
   // Laundry list only (#163): open and close with an exact URL the caller
   // built from the live `window.location`, written with the native History
@@ -88,11 +111,11 @@ export function useDetailDrawer(paramName = 'detail') {
   // carry `<paramName>`.
   const closeWithHref = useCallback((href: string) => {
     if (isDrawerEntryPushedHere(paramName)) {
-      router.back();
+      back();
       return;
     }
     window.history.replaceState(null, '', href);
-  }, [router, paramName]);
+  }, [back, paramName]);
 
   return { activeId, close, closeWithHref, open, openWithHref };
 }

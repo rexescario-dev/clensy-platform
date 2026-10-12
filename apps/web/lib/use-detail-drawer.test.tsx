@@ -293,3 +293,50 @@ describe('useDetailDrawer: entries this page pushed go Back to the list entry be
     expect(nav.entries).toEqual(['/app/bookings?status=A', '/app/bookings?status=A&detail=o1']);
   });
 });
+
+// #173 M7 P3-1: `router.back()` lands asynchronously, and until `popstate`
+// the drawer entry, marker and all, is still current. A second close in that
+// window must not go Back again, past the list entry.
+describe('useDetailDrawer: a second close before the Back lands is ignored', () => {
+  // `router.back()` that lands only when the test says so.
+  function deferBack() {
+    nav.back.mockImplementation(() => undefined);
+  }
+
+  function pressEscape() {
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Escape' }));
+    });
+  }
+
+  it('goes Back once for a double Escape, then closes normally after Forward', () => {
+    start('/app/bookings?status=A', ['/app/jobs']);
+    act(() => root.render(<BookingsLikePage />));
+    act(() => button('Open o1').click());
+    deferBack();
+    pressEscape();
+    pressEscape();
+    expect(nav.back).toHaveBeenCalledTimes(1);
+    traverse(-1); // the one Back lands: the list entry
+    expect(nav.index).toBe(1);
+    expect(window.location.pathname + window.location.search).toBe('/app/bookings?status=A');
+    traverse(1); // Forward: the drawer entry again
+    act(() => button('Close').click());
+    expect(nav.back).toHaveBeenCalledTimes(2); // released by the popstate
+    expect(nav.replace).not.toHaveBeenCalled();
+  });
+
+  it('closeWithHref goes Back once for × then × again, and never replaces the entry', () => {
+    start('/app/bookings?status=A', ['/app/jobs']);
+    act(() => root.render(<LaundryLikePage />));
+    act(() => button('Open o1').click());
+    deferBack();
+    act(() => button('Close').click());
+    act(() => button('Close').click());
+    expect(nav.back).toHaveBeenCalledTimes(1);
+    expect(window.history.replaceState).not.toHaveBeenCalled();
+    traverse(-1);
+    expect(nav.entries).toEqual(['/app/jobs', '/app/bookings?status=A', '/app/bookings?status=A&detail=o1']);
+    expect(nav.index).toBe(1);
+  });
+});
