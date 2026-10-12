@@ -338,9 +338,10 @@ function LaundryPageContent() {
       {activeId ? (
         <LaundryDetailDrawer
           id={activeId}
-          // A drawer opened from this page closes with `router.back()`. One
-          // reached by a direct link or refresh closes with a native write
-          // of the live URL without `detail`.
+          // A drawer entry this page pushed (marked in `history.state`,
+          // #173) closes with `router.back()`, also after Forward or a
+          // refresh. One reached by a direct link closes with a native
+          // write of the live URL without `detail`.
           onClose={() => closeWithHref(hrefFor((current) => current, { remove: ['detail'] }))}
           onChanged={() => void ordersQuery.refetch()}
         />

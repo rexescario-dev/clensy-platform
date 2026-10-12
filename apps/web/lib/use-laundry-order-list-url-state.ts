@@ -134,11 +134,14 @@ export function serializeLaundryOrderListState(
 // - Opening the drawer, from a row or after creating an order,
 //   `pushState`s the same kind of URL plus `detail`
 //   (`useDetailDrawer().openWithHref(href)`), so Back, and the drawer's
-//   own `router.back()`, return to the list.
-// - Closing a drawer reached by a direct link or refresh `replaceState`s
-//   the URL without `detail` (`useDetailDrawer().closeWithHref(href)`). The page
-//   therefore makes no `router.push` or `router.replace` of its own, so no
-//   async router navigation can land over a native write.
+//   own `router.back()`, return to the list. That entry carries the drawer
+//   marker in `history.state` (#173); list updates keep it.
+// - Closing a drawer whose entry has no marker, one reached by a direct
+//   link, `replaceState`s the URL without `detail`
+//   (`useDetailDrawer().closeWithHref(href)`); a marked entry, including
+//   after Forward or a refresh, goes Back. The page therefore makes no
+//   `router.push` or `router.replace` of its own, so no async router
+//   navigation can land over a native write.
 // - Back and Forward are the browser's: the URL, and therefore the list
 //   state, is whatever entry the user went to.
 export function useLaundryOrderListUrlState() {
