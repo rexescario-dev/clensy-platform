@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft (revision 4); revisions 2 and 3 Accepted and implemented |
+| Status | Accepted (revision 4); revisions 2 and 3 implemented |
+| M5 decision (revision 4) | **Accepted** — 2026-10-13, at `b014706`, by the owner. No blocking findings. Keep the synthetic `pageshow` test and G5/G6. Record that a real back/forward-cache restore is **not** browser-verified (Playwright's Chromium disables it): the synthetic event proves the handler's logic, not a real restore. Add an end-to-end check if an environment with the cache enabled becomes available. |
 | M5 decision (revision 3) | **Accepted** — 2026-10-13, at `d04212e`, by the owner. No blocking findings. One clarification is an M6 requirement: show that an unrelated traversal cannot clear the guard early and allow a second Back (see Gate outcomes). The browser checks are mandatory against the committed implementation, especially × then the backdrop in one task, and two Escape keydowns. Scope: the hook and its test only. M7 MUST be a fresh independent review. |
 | M5 decision (revision 2) | **Accepted** — 2026-10-11, at `d8f0ac2`, by the owner. No blocking findings. M6 MUST run Final verification in full; the production-build browser matrix is required before merge, because the test harness models history and cannot prove the installed Next.js keeps the marker. M7 MUST be a fresh independent review (`CLAUDE.md`: application code). Pre-validation counts are author-reported until M6 re-observes them. |
 | M5 decision (revision 1) | Request changes — 2026-10-11, at `b0eec89`. See Gate outcomes. |
@@ -1291,3 +1292,15 @@ Reported only by M6, not re-run: the Next build and all the browser results.
 **P3-2:** the header comment is accurate for `router.refresh()`. "Server-action navigation" is loose: a server-action redirect pushes a new, unmarked entry rather than stripping the current one. The stated outcome (× replaces, which is safe) holds.
 
 **Owner decision pending** on P2-1: fix it in this PR (revision 4) or track it.
+
+### M5 — Accepted (2026-10-13, revision 4)
+
+Accepted at `b014706` by the owner. No blocking findings.
+
+The reviewer's clarification is recorded as a verification limitation, not a gap to close now:
+- The new test dispatches a synthetic `pageshow` (`persisted: true`). It verifies the handler's condition, not that a real back/forward-cache restore keeps the hook instance and fires the event in that sequence.
+- Playwright's Chromium launches with the cache disabled, so no real restore is exercised here.
+- M6 and later records MUST NOT claim real-restore coverage.
+- An end-to-end check is to be added if a browser environment with the cache enabled becomes available.
+
+The pre-validation was not re-run by the reviewer; M6 re-observes it.
