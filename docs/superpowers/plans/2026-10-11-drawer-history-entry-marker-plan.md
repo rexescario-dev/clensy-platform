@@ -840,3 +840,34 @@ Verification: 19 relative links and anchors in the touched files resolve (script
 Accepted (revision 2), M6 complete, M7 Approved, M8 complete (comment-only, independent review below), PR #174 open.
 Gate: Documentation complete. Code unchanged in M9.
 ```
+
+### M8 review — Approved (2026-10-12, fresh independent review)
+
+A fresh agent context on Opus 5.5 reviewed `997e120` (`CLAUDE.md`: application code). It did not write it, and it ran read-only.
+
+**Decision: Approved. Blocking findings: none.**
+
+- **Scope:** the commit touches exactly the two declared files, and every changed line is a `//` comment.
+- **Accuracy:** the new wording matches `use-detail-drawer.ts` (marked → `router.back()`, unmarked → `replaceState`), `setState`'s `drawerEntryState()`, and Next 16.3.1's history-state handling. The old "direct link or refresh" wording was wrong after `93c747b`.
+- **Stale-text sweep of `apps/web`:** no other comment describes the old flag as current. One P3 was raised, the README "Drawer hook" paragraph ("unchanged for every other page"), and it is already fixed by the M9 commit `4be9c68`. The reviewer checked that rewrite against the code.
+- **`tsc --noEmit -p .`:** exit 0.
+
+### M10 — Accepted, workflow validated (2026-10-12)
+
+The asset inventory is unchanged: nine prompts for M2–M10, plus `prompt-library.md` for M1.
+
+- **§2.5:** the M5 record `cc938e9` precedes the code commit `93c747b`.
+- **One PR:** #174 carries the plan, code, M8 comments and docs (§2.8).
+- **Providers:** GitHub via `gh` for #173, the branch and PR #174.
+- **M7:** a fresh, independent, read-only review on the most capable model. The M8 code delta had its own fresh review, because it touched application code outside the plan's allowlist.
+- **Slice Completion Reports** were emitted at M6 and M7–M10.
+
+Earlier lessons applied:
+- **#163:** reviewers used their own scratch directories, and the plan named every consumer of the shared hook.
+- **#171:** records state anomalies as unexplained rather than guessing. The one console error, a `favicon.ico` 404, was read and attributed from the log.
+
+**Blocking findings:** none.
+
+**Non-blocking observation:** the plan's File Map did not include comments elsewhere that describe the changed behaviour (`laundry/page.tsx`). M7 did not catch them; the author found them at M9. For a change to shared behaviour, a planning step should grep for prose that describes it.
+
+Gate: **Workflow validated.**
