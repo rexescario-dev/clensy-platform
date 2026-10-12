@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted (revision 3); revision 2 implemented |
+| Status | Draft (revision 4); revisions 2 and 3 Accepted and implemented |
 | M5 decision (revision 3) | **Accepted** — 2026-10-13, at `d04212e`, by the owner. No blocking findings. One clarification is an M6 requirement: show that an unrelated traversal cannot clear the guard early and allow a second Back (see Gate outcomes). The browser checks are mandatory against the committed implementation, especially × then the backdrop in one task, and two Escape keydowns. Scope: the hook and its test only. M7 MUST be a fresh independent review. |
 | M5 decision (revision 2) | **Accepted** — 2026-10-11, at `d8f0ac2`, by the owner. No blocking findings. M6 MUST run Final verification in full; the production-build browser matrix is required before merge, because the test harness models history and cannot prove the installed Next.js keeps the marker. M7 MUST be a fresh independent review (`CLAUDE.md`: application code). Pre-validation counts are author-reported until M6 re-observes them. |
 | M5 decision (revision 1) | Request changes — 2026-10-11, at `b0eec89`. See Gate outcomes. |
@@ -23,6 +23,11 @@
 - **The flag** is removed.
 
 ## Revision log
+
+**Revision 4** (owner decision, 2026-10-13, on the revision 3 M7 P2-1: "Fix in this PR"):
+- The guard is also released on `pageshow` with `persisted`, a back/forward-cache restore.
+- The header comment is tightened for M7 P3-2: a server-action redirect pushes a new, unmarked entry.
+- The revision 3 "Risk considered" paragraph is corrected for P3-1 under "Revision 4 tasks".
 
 **Revision 3** (owner request, 2026-10-13, after M7 approved revision 2: "lets do that now. append to this PR"):
 - **M7 P3-1, the double close,** is now fixed in this PR instead of deferred. A pending-Back guard means a second close before the browser reports the first Back is ignored.
@@ -885,6 +890,143 @@ Applied on the branch at `a81fb02`, then removed before this Draft was committed
 | Browser, with the guard | 18 of 18 (6 pages × 3 double-close ways): on the list, Forward reopens, × closes again. Matrix a–f on the 6 pages: all pass. Refresh then ×: laundry and bookings pass. |
 
 Jobs, cleaners and add-ons had no local rows, so they were not in the revision 3 browser run. They share the hook unchanged in wiring with the six pages that were run.
+
+## Revision 4 tasks (edit anchor: PR head `9db8ae0`, code as of `3253a5f`)
+
+**Why.** M7 (revision 3) P2-1: if the hook's Back crosses documents, the drawer document may be frozen in the back/forward cache with `backPendingRef` still `true`. A later Forward restores it with `pageshow` (`persisted: true`), not `popstate`, so ×, Escape and the backdrop would do nothing.
+
+**Correction to revision 3 "Risk considered"** (M7 P3-1): "leaving the document unmounts the hook" does not hold under the back/forward cache. A frozen document keeps its React tree and refs. This revision covers that case.
+
+**What the author observed** (Chromium via Playwright, production build of `3253a5f`). Playwright launches Chromium with the back/forward cache disabled, so a restore cannot be produced here.
+- **Refresh then × did not cross documents.** A page-object token set after the reload survived the Back to the list, and `popstate` fired. That fits the HTML spec: a reload replaces the document for every entry that shared it.
+- **Leaving by a full page load and coming Back, then ×, did not cross documents either.** The restored document serves both the drawer entry and the list entry.
+- **In both flows,** ×, Forward and × again worked.
+
+So the reviewer's refresh scenario is not reachable in Chromium. A cross-document Back from a marked entry remains possible in principle: a duplicated or restored tab, or other engines. The fix is defensive and cheap.
+
+**Fix.** The same effect also listens for `pageshow` and clears the guard when `event.persisted` is true. A non-persisted `pageshow` is a fresh load, whose ref is already `false`; the test pins that it is not treated as a release.
+
+### Task 4: Release the guard on a back/forward-cache restore (red first)
+
+- [ ] **Step 1:** Apply the test diff:
+
+```diff
+diff --git a/apps/web/lib/use-detail-drawer.test.tsx b/apps/web/lib/use-detail-drawer.test.tsx
+--- a/apps/web/lib/use-detail-drawer.test.tsx
++++ b/apps/web/lib/use-detail-drawer.test.tsx
+@@ -326,6 +326,29 @@ describe('useDetailDrawer: a second close before the Back lands is ignored', ()
+     expect(nav.replace).not.toHaveBeenCalled();
+   });
+ 
++  // #173 revision 4 (M7 P2-1): a Back that crosses documents may leave this
++  // document in the back/forward cache with the guard set. Restoring it fires
++  // `pageshow` with `persisted`, not `popstate`; × must work again after it.
++  it('releases the guard when the page is restored from the back/forward cache', () => {
++    start('/app/bookings?status=A', ['/app/jobs']);
++    act(() => root.render(<BookingsLikePage />));
++    act(() => button('Open o1').click());
++    deferBack();
++    act(() => button('Close').click()); // the Back crosses documents: no popstate here
++    expect(nav.back).toHaveBeenCalledTimes(1);
++    act(() => {
++      window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: false })); // a fresh load: not a release
++    });
++    act(() => button('Close').click());
++    expect(nav.back).toHaveBeenCalledTimes(1);
++    act(() => {
++      window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true })); // Forward restores it
++    });
++    act(() => button('Close').click());
++    expect(nav.back).toHaveBeenCalledTimes(2);
++    expect(nav.replace).not.toHaveBeenCalled();
++  });
++
+   it('closeWithHref goes Back once for × then × again, and never replaces the entry', () => {
+     start('/app/bookings?status=A', ['/app/jobs']);
+     act(() => root.render(<LaundryLikePage />));
+```
+
+- [ ] **Step 2:** Run `pnpm --filter web exec vitest run lib/use-detail-drawer.test.tsx`. Expected: `Tests 1 failed | 12 passed (13)`; the failure is the new test.
+- [ ] **Step 3:** Apply the hook diff (the `pageshow` release and the tightened header comment):
+
+```diff
+diff --git a/apps/web/lib/use-detail-drawer.ts b/apps/web/lib/use-detail-drawer.ts
+--- a/apps/web/lib/use-detail-drawer.ts
++++ b/apps/web/lib/use-detail-drawer.ts
+@@ -25,10 +25,11 @@ import { useCallback, useEffect, useRef } from 'react';
+ // custom `history.state` across Back/Forward (traverse navigations preserve
+ // it) and copies its own keys into the state object passed to a native
+ // `pushState`. So each drawer entry is pushed natively, with the marker.
+-// (A `router.refresh()` or server-action navigation does not preserve custom
+-// history state, so it would drop the marker and × would fall back to
+-// replacing the entry: safe, but the duplicate returns. No drawer page uses
+-// either today; keep it that way or re-mark the entry after one.)
++// (A `router.refresh()` rewrites the current entry's state without custom
++// keys, so it would drop the marker and × would fall back to replacing the
++// entry: safe, but the duplicate returns. A server-action redirect pushes a
++// new, unmarked entry instead. No drawer page uses either today; keep it
++// that way or re-mark the entry after one.)
+ const DRAWER_ENTRY_KEY = '__clensyDetailDrawer';
+ 
+ // The current entry's drawer marker, as a fresh state object for a native
+@@ -61,13 +62,25 @@ export function useDetailDrawer(paramName = 'detail') {
+   // `popstate` arrives the drawer entry is still current, marker and all, so
+   // a second close in that window (a double Escape, × then the backdrop)
+   // would go Back twice, past the list entry. It is ignored instead.
++  //
++  // `popstate` reports a same-document Back. If the Back crosses documents,
++  // this one may be frozen in the back/forward cache with the guard still
++  // set, and a later Forward restores it with `pageshow` (`persisted`), not
++  // `popstate`; that clears the guard too, or × would do nothing.
+   const backPendingRef = useRef(false);
+   useEffect(() => {
+     const settled = () => {
+       backPendingRef.current = false;
+     };
++    const restored = (event: PageTransitionEvent) => {
++      if (event.persisted) settled();
++    };
+     window.addEventListener('popstate', settled);
+-    return () => window.removeEventListener('popstate', settled);
++    window.addEventListener('pageshow', restored);
++    return () => {
++      window.removeEventListener('popstate', settled);
++      window.removeEventListener('pageshow', restored);
++    };
+   }, []);
+ 
+   const back = useCallback(() => {
+```
+
+- [ ] **Step 4:** Run both test files. Expected: `Tests 30 passed (30)`. eslint and `tsc --noEmit -p .` are clean.
+- [ ] **Step 5:** One commit: `fix(web): release the drawer close guard on a back/forward-cache restore (#173)`.
+
+### Revision 4 final verification
+
+- [ ] **Allowlist:** `git diff --name-only 9db8ae0...HEAD -- . ':!docs'` is exactly the two hook files.
+- [ ] **Mutations** (each alone, both test files, then revert; G1–G4 from revision 3 still apply):
+
+  | Mutation | Change | Expected (pre-validation) |
+  | --- | --- | --- |
+  | G5 | remove `window.addEventListener('pageshow', restored);` | 1 failed / 29 passed |
+  | G6 | `if (event.persisted) settled();` → `settled();` | 1 failed / 29 passed |
+
+- [ ] **Full suites:** `pnpm --filter web test` (682 at pre-validation), `lint`, `tsc --noEmit -p .` and `build`.
+- [ ] **Browser** (production build of the commit, fresh tabs):
+  - the revision 3 double-close set: 6 pages × 3 ways;
+  - on laundry and bookings, (a) refresh and (b) a full-page load away and Back, each followed by ×, Forward and × again. × must work every time.
+
+### Revision 4 pre-validation
+
+Applied on the branch at `9db8ae0`, then removed before this Draft was committed.
+
+| Check | Result |
+| --- | --- |
+| RED (new test, `3253a5f` hook) | 1 failed / 12 passed (13), the new test |
+| GREEN | 30 passed (30) |
+| G5 / G6 | 1 failed / 29 passed each |
+| `web` / lint / `tsc` / Next build | 682 passed; exit 0; clean; build succeeded |
+| Browser (with revision 4) | Double close: 18 of 18. Refresh, and full-load away and Back, each then ×, Forward, ×: 4 of 4 on laundry and bookings |
 
 ## Final verification
 
