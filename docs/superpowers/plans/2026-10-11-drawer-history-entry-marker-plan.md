@@ -1111,3 +1111,41 @@ Revision 3 final verification:
 Deviation: none.
 
 Next gate: **M7**, a fresh independent review (`CLAUDE.md`: application code).
+
+### M7 — Approved for merge (2026-10-13, fresh independent review of revision 3)
+
+A fresh agent context on Opus 5.5 reviewed the revision 3 delta, `a81fb02...7a19265` (code commit `3253a5f`). It did not implement the change. It was read-only, worked in a temporary worktree that it removed, and left the tree clean.
+
+**Decision: Approved for merge. Blocking findings: none.**
+
+The reviewer independently confirmed:
+
+- **Gate order:** `d04212e` → `348ed2f` → `3253a5f` → `7a19265`. No attribution lines in any commit or the PR body.
+- **Exact application:** the embedded diffs, applied to `a81fb02`, are byte-identical to `3253a5f`, and the allowlist is exact.
+- **Tests and suites:**
+  - RED was 2 failed / 10 passed; GREEN was 29 passed.
+  - G1–G4 at the recorded counts.
+  - `web` 681 passed; lint and `tsc` exit 0.
+- **Next 16.3.1:** `router.back()` is exactly `window.history.back()`. Next's `onPopState`, and the rest of `next/dist/client`, never stops propagation. So every same-document `popstate` reaches the hook.
+- **The M5 clarification:** the author's argument holds.
+- **Other behaviour:**
+  - StrictMode and remount are safe.
+  - Each page has exactly one hook instance, and its close is wired to that instance.
+  - Bookings' programmatic close after a delete is correctly ignored while a Back is pending.
+  - Direct links are unchanged.
+- **Tests are faithful and not vacuous.**
+
+Reported only by M6, not re-run: the Next build and all the browser results.
+
+**P2-1 (non-blocking, but introduced by this revision): the guard can stay set after a cross-document Back followed by a bfcache restore** (`use-detail-drawer.ts:64-77`).
+- **Scenario:** open a row, refresh, press ×. The Back crosses to the list in the older document. Then press Forward: if the drawer document is restored from bfcache, the browser fires `pageshow` (`persisted`), not `popstate`. The ref stays `true`, so ×, Escape and the backdrop do nothing.
+- **Recovery:** browser Back and the sidebar still work.
+- **Likelihood:** narrow. It needs a cross-document Back, a bfcache-eligible page (the `/app` pages are dynamic and likely `no-store`), and then Forward.
+- **Before revision 3,** the same flow worked.
+- **Suggested fix:** also clear the guard on `pageshow` with `persisted` (or on `pagehide`).
+- **Status:** reasoned from Next and HTML semantics; not reproduced.
+- **Plan correction:** the "Risk considered" paragraph's "leaving the document unmounts the hook" is not true under bfcache (P3-1).
+
+**P3-2:** the header comment is accurate for `router.refresh()`. "Server-action navigation" is loose: a server-action redirect pushes a new, unmarked entry rather than stripping the current one. The stated outcome (× replaces, which is safe) holds.
+
+**Owner decision pending** on P2-1: fix it in this PR (revision 4) or track it.
