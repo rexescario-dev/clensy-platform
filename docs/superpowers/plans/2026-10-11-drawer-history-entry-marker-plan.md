@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted (revision 2) |
+| Status | Draft (revision 3); revision 2 Accepted and implemented |
 | M5 decision (revision 2) | **Accepted** — 2026-10-11, at `d8f0ac2`, by the owner. No blocking findings. M6 MUST run Final verification in full; the production-build browser matrix is required before merge, because the test harness models history and cannot prove the installed Next.js keeps the marker. M7 MUST be a fresh independent review (`CLAUDE.md`: application code). Pre-validation counts are author-reported until M6 re-observes them. |
 | M5 decision (revision 1) | Request changes — 2026-10-11, at `b0eec89`. See Gate outcomes. |
 | Date | 2026-10-11 |
@@ -22,6 +22,13 @@
 - **The flag** is removed.
 
 ## Revision log
+
+**Revision 3** (owner request, 2026-10-13, after M7 approved revision 2: "lets do that now. append to this PR"):
+- **M7 P3-1, the double close,** is now fixed in this PR instead of deferred. A pending-Back guard means a second close before the browser reports the first Back is ignored.
+- **M7 P3-2, `router.refresh()`,** is documented in the hook's header comment instead of only in Deferred. There is no behaviour change for it.
+- **The #161 follow-up** is recorded as a comment on issue #161: once laundry leaves the drawer, remove `openWithHref`/`closeWithHref` and the marker copy in `setState`, unless another page uses them by then.
+
+See "Revision 3 tasks".
 
 **Revision 2** answers the first M5 review (request changes):
 
@@ -684,6 +691,200 @@ diff --git a/apps/web/lib/use-laundry-order-list-url-state.ts b/apps/web/lib/use
 - [ ] **Step 2:** Run both test files. Expected: `Tests 27 passed (27)`. `pnpm --filter web exec tsc --noEmit -p .` and eslint are clean.
 - [ ] **Step 3:** One commit for Tasks 1–2, so no commit has failing tests: `fix(web): decide drawer close from a history-entry marker, not component memory (#173)`.
 
+## Revision 3 tasks (edit anchor: PR head `a81fb02`)
+
+**Why.** `router.back()` is `window.history.back()` (`app-router-instance.js` line 286): the Back lands asynchronously. Until `popstate` arrives, the drawer entry is still current, marker and all. So a second `close`/`closeWithHref` in that window calls `history.back()` again and goes past the list entry. `DetailDrawer` closes on ×, on the backdrop and on Escape (`useDialogBehavior`), so two closes in one moment are reachable.
+
+**Reproduced in a browser** (production build of `a81fb02`, Chromium): history `/app/customers` → `/app/<page>` → open a row → × and a backdrop click in the same task. The result was `/app/customers` on both laundry and bookings: the user left the list. Two separate Escape presses at Playwright speed did *not* reproduce it, because the first Back had landed before the second press.
+
+**Fix.** A per-hook `backPendingRef` is set when the hook calls `router.back()` and cleared on the next `popstate`. While it is set, a marked close does nothing. Direct-link closes (replace) are unaffected. The ref lives in the hook instance, so it does not survive a remount: a remount comes from a refresh or a navigation, and either one ends the pending Back.
+
+**Risk considered.** If a `popstate` never came, the guard would stay set and × would do nothing. `history.back()` from a marked entry always has an entry behind it (the invariant), so a same-document traversal always fires `popstate`. Leaving the document unmounts the hook.
+
+### Task 3: Double-close guard (red first)
+
+- [ ] **Step 1:** Apply the test diff:
+
+```diff
+diff --git a/apps/web/lib/use-detail-drawer.test.tsx b/apps/web/lib/use-detail-drawer.test.tsx
+--- a/apps/web/lib/use-detail-drawer.test.tsx
++++ b/apps/web/lib/use-detail-drawer.test.tsx
+@@ -293,3 +293,50 @@ describe('useDetailDrawer: entries this page pushed go Back to the list entry be
+     expect(nav.entries).toEqual(['/app/bookings?status=A', '/app/bookings?status=A&detail=o1']);
+   });
+ });
++
++// #173 M7 P3-1: `router.back()` lands asynchronously, and until `popstate`
++// the drawer entry, marker and all, is still current. A second close in that
++// window must not go Back again, past the list entry.
++describe('useDetailDrawer: a second close before the Back lands is ignored', () => {
++  // `router.back()` that lands only when the test says so.
++  function deferBack() {
++    nav.back.mockImplementation(() => undefined);
++  }
++
++  function pressEscape() {
++    act(() => {
++      document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Escape' }));
++    });
++  }
++
++  it('goes Back once for a double Escape, then closes normally after Forward', () => {
++    start('/app/bookings?status=A', ['/app/jobs']);
++    act(() => root.render(<BookingsLikePage />));
++    act(() => button('Open o1').click());
++    deferBack();
++    pressEscape();
++    pressEscape();
++    expect(nav.back).toHaveBeenCalledTimes(1);
++    traverse(-1); // the one Back lands: the list entry
++    expect(nav.index).toBe(1);
++    expect(window.location.pathname + window.location.search).toBe('/app/bookings?status=A');
++    traverse(1); // Forward: the drawer entry again
++    act(() => button('Close').click());
++    expect(nav.back).toHaveBeenCalledTimes(2); // released by the popstate
++    expect(nav.replace).not.toHaveBeenCalled();
++  });
++
++  it('closeWithHref goes Back once for × then × again, and never replaces the entry', () => {
++    start('/app/bookings?status=A', ['/app/jobs']);
++    act(() => root.render(<LaundryLikePage />));
++    act(() => button('Open o1').click());
++    deferBack();
++    act(() => button('Close').click());
++    act(() => button('Close').click());
++    expect(nav.back).toHaveBeenCalledTimes(1);
++    expect(window.history.replaceState).not.toHaveBeenCalled();
++    traverse(-1);
++    expect(nav.entries).toEqual(['/app/jobs', '/app/bookings?status=A', '/app/bookings?status=A&detail=o1']);
++    expect(nav.index).toBe(1);
++  });
++});
+```
+
+- [ ] **Step 2:** Run `pnpm --filter web exec vitest run lib/use-detail-drawer.test.tsx`. Expected: `Tests 2 failed | 10 passed (12)`, and the failures are exactly the two new tests.
+- [ ] **Step 3:** Apply the hook diff (the guard, plus the `router.refresh()` note):
+
+```diff
+diff --git a/apps/web/lib/use-detail-drawer.ts b/apps/web/lib/use-detail-drawer.ts
+--- a/apps/web/lib/use-detail-drawer.ts
++++ b/apps/web/lib/use-detail-drawer.ts
+@@ -1,6 +1,6 @@
+ 'use client';
+ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+-import { useCallback } from 'react';
++import { useCallback, useEffect, useRef } from 'react';
+ 
+ // Resolves the "close behavior" question spec §4.4 deliberately leaves as a
+ // plan-level implementation decision (design doc §4.4: "A same-page-origin
+@@ -25,6 +25,10 @@ import { useCallback } from 'react';
+ // custom `history.state` across Back/Forward (traverse navigations preserve
+ // it) and copies its own keys into the state object passed to a native
+ // `pushState`. So each drawer entry is pushed natively, with the marker.
++// (A `router.refresh()` or server-action navigation does not preserve custom
++// history state, so it would drop the marker and × would fall back to
++// replacing the entry: safe, but the duplicate returns. No drawer page uses
++// either today; keep it that way or re-mark the entry after one.)
+ const DRAWER_ENTRY_KEY = '__clensyDetailDrawer';
+ 
+ // The current entry's drawer marker, as a fresh state object for a native
+@@ -53,6 +57,25 @@ export function useDetailDrawer(paramName = 'detail') {
+ 
+   const activeId = searchParams.get(paramName);
+ 
++  // A Back this hook started that the browser has not reported yet. Until
++  // `popstate` arrives the drawer entry is still current, marker and all, so
++  // a second close in that window (a double Escape, × then the backdrop)
++  // would go Back twice, past the list entry. It is ignored instead.
++  const backPendingRef = useRef(false);
++  useEffect(() => {
++    const settled = () => {
++      backPendingRef.current = false;
++    };
++    window.addEventListener('popstate', settled);
++    return () => window.removeEventListener('popstate', settled);
++  }, []);
++
++  const back = useCallback(() => {
++    if (backPendingRef.current) return;
++    backPendingRef.current = true;
++    router.back();
++  }, [router]);
++
+   const push = useCallback(
+     (href: string) => window.history.pushState({ [DRAWER_ENTRY_KEY]: paramName }, '', href),
+     [paramName],
+@@ -66,14 +89,14 @@ export function useDetailDrawer(paramName = 'detail') {
+ 
+   const close = useCallback(() => {
+     if (isDrawerEntryPushedHere(paramName)) {
+-      router.back();
++      back();
+       return;
+     }
+     const params = new URLSearchParams(searchParams.toString());
+     params.delete(paramName);
+     const query = params.toString();
+     router.replace(query ? `${pathname}?${query}` : pathname);
+-  }, [router, pathname, searchParams, paramName]);
++  }, [back, router, pathname, searchParams, paramName]);
+ 
+   // Laundry list only (#163): open and close with an exact URL the caller
+   // built from the live `window.location`, written with the native History
+@@ -88,11 +111,11 @@ export function useDetailDrawer(paramName = 'detail') {
+   // carry `<paramName>`.
+   const closeWithHref = useCallback((href: string) => {
+     if (isDrawerEntryPushedHere(paramName)) {
+-      router.back();
++      back();
+       return;
+     }
+     window.history.replaceState(null, '', href);
+-  }, [router, paramName]);
++  }, [back, paramName]);
+ 
+   return { activeId, close, closeWithHref, open, openWithHref };
+ }
+```
+
+- [ ] **Step 4:** Run both test files. Expected: `Tests 29 passed (29)`. eslint and `tsc --noEmit -p .` are clean.
+- [ ] **Step 5:** One commit: `fix(web): ignore a second drawer close until the first Back lands (#173)`.
+
+### Revision 3 final verification
+
+- [ ] **Allowlist:** `git diff --name-only a81fb02...HEAD -- . ':!docs'` is exactly `apps/web/lib/use-detail-drawer.ts` and `apps/web/lib/use-detail-drawer.test.tsx`.
+- [ ] **Mutations:** apply each alone, run both test files, and revert.
+
+  | Mutation | Change | Expected (pre-validation) |
+  | --- | --- | --- |
+  | G1 | remove `if (backPendingRef.current) return;` | 2 failed / 27 passed |
+  | G2 | remove `backPendingRef.current = false;` in the `popstate` listener | 5 failed / 24 passed |
+  | G3 | remove `backPendingRef.current = true;` | 2 failed / 27 passed |
+  | G4 | in `closeWithHref`, `back();` → `router.back();` | 1 failed / 28 passed |
+
+- [ ] **Full suites:** `pnpm --filter web test` (681 at pre-validation), `lint`, `tsc --noEmit -p .` and `build`.
+- [ ] **Browser** (production build, fresh tabs): history `/app/customers` (or `/app/bookings` for customers) → `/app/<page>` → open a row. Then each of these must land on the list, with Forward reopening the drawer and × closing it again:
+  - × then the backdrop, in one task;
+  - two Escape keydowns, in one task;
+  - two Escape presses.
+
+  Run this on bookings, billing, catalog, customers, cleaners/teams and laundry. Also re-run the regression matrix columns a–f on the same pages, and refresh-then-× on laundry and bookings.
+
+### Revision 3 pre-validation
+
+Applied on the branch at `a81fb02`, then removed before this Draft was committed.
+
+| Check | Result |
+| --- | --- |
+| RED (new tests, `a81fb02` hook) | 2 failed / 10 passed (12), the two new tests |
+| GREEN | 29 passed (29) |
+| Mutations G1–G4 | as in the table above |
+| `web` / lint / `tsc` / Next build | 681 passed; exit 0; clean; build succeeded |
+| Browser, without the guard (`a81fb02`) | × then backdrop: left the list for `/app/customers` (laundry, bookings) |
+| Browser, with the guard | 18 of 18 (6 pages × 3 double-close ways): on the list, Forward reopens, × closes again. Matrix a–f on the 6 pages: all pass. Refresh then ×: laundry and bookings pass. |
+
+Jobs, cleaners and add-ons had no local rows, so they were not in the revision 3 browser run. They share the hook unchanged in wiring with the six pages that were run.
+
 ## Final verification
 
 - [ ] **Next version:** in `apps/web`, `node -p "require('next/package.json').version"` prints `16.3.1`. If not, re-check the two source points in "Why it works" against the installed version before going on, and record the result.
@@ -712,8 +913,9 @@ diff --git a/apps/web/lib/use-laundry-order-list-url-state.ts b/apps/web/lib/use
 
 ## Deferred
 
-- **Double close within one traversal** (M7 P3-1): ignore a second `close`/`closeWithHref` until the next `popstate`.
-- **Marker loss on `router.refresh()` or a server-action retry** (M7 P3-2). It fails safe, to replace. Revisit if either is adopted on a drawer page.
+- ~~**Double close within one traversal** (M7 P3-1)~~: done in revision 3.
+- **Marker loss on `router.refresh()` or a server-action retry** (M7 P3-2). It fails safe, to replace. Revisit if either is adopted on a drawer page; revision 3 notes it in the hook's header comment.
+- **#161 cutover:** remove the laundry-only `openWithHref`/`closeWithHref` and the marker copy in `setState` when laundry leaves the drawer (recorded on #161).
 
 ## Gate outcomes
 
