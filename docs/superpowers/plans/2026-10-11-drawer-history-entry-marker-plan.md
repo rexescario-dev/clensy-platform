@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted (revision 4); revisions 2 and 3 implemented |
+| Status | Draft (revision 5); revisions 2–4 Accepted and implemented |
 | M5 decision (revision 4) | **Accepted** — 2026-10-13, at `b014706`, by the owner. No blocking findings. Keep the synthetic `pageshow` test and G5/G6. Record that a real back/forward-cache restore is **not** browser-verified (Playwright's Chromium disables it): the synthetic event proves the handler's logic, not a real restore. Add an end-to-end check if an environment with the cache enabled becomes available. |
 | M5 decision (revision 3) | **Accepted** — 2026-10-13, at `d04212e`, by the owner. No blocking findings. One clarification is an M6 requirement: show that an unrelated traversal cannot clear the guard early and allow a second Back (see Gate outcomes). The browser checks are mandatory against the committed implementation, especially × then the backdrop in one task, and two Escape keydowns. Scope: the hook and its test only. M7 MUST be a fresh independent review. |
 | M5 decision (revision 2) | **Accepted** — 2026-10-11, at `d8f0ac2`, by the owner. No blocking findings. M6 MUST run Final verification in full; the production-build browser matrix is required before merge, because the test harness models history and cannot prove the installed Next.js keeps the marker. M7 MUST be a fresh independent review (`CLAUDE.md`: application code). Pre-validation counts are author-reported until M6 re-observes them. |
@@ -24,6 +24,10 @@
 - **The flag** is removed.
 
 ## Revision log
+
+**Revision 5** (owner request, 2026-10-13: "fix that as well", the deferred marker loss on `router.refresh()` / server actions; the owner chose the guard-test option):
+- **A guard test** fails if a `router.refresh()`, a `'use server'` module or function, `useActionState` or `useFormState` appears where a drawer could be open.
+- **No runtime change.** Next 16.3.1 rewrites the entry with only `{__NA, tree}` (`HistoryUpdater`, `app-router.js:51-66`) and exposes no event to re-mark from, so a runtime fix would mean wrapping Next's patched `history.replaceState`. The owner declined that as fragile.
 
 **Revision 4** (owner decision, 2026-10-13, on the revision 3 M7 P2-1: "Fix in this PR"):
 - The guard is also released on `pageshow` with `persisted`, a back/forward-cache restore.
@@ -1029,6 +1033,153 @@ Applied on the branch at `9db8ae0`, then removed before this Draft was committed
 | `web` / lint / `tsc` / Next build | 682 passed; exit 0; clean; build succeeded |
 | Browser (with revision 4) | Double close: 18 of 18. Refresh, and full-load away and Back, each then ×, Forward, ×: 4 of 4 on laundry and bookings |
 
+## Revision 5 tasks (edit anchor: PR head `4c028b5`)
+
+**Why.** The marker is dropped from the current entry by:
+- `router.refresh()` (`refresh-reducer.js:75`);
+- a server action that revalidates or refreshes (`server-action-reducer.js:240, 266-330`).
+
+Both reach `HistoryUpdater` with `preserveCustomHistoryState: false`. A server-action redirect pushes or replaces with an unmarked entry. In each case × silently falls back to replace, and the #173 duplicate returns. Nothing triggers this today: a scan of the scope below finds only the hook's own comment. The guard keeps it that way until someone handles the marker on purpose.
+
+**Scope scanned** (every non-test `.ts`/`.tsx`, with comments stripped):
+- `apps/web/app/app`: every drawer page, with the drawer defined in the page;
+- `apps/web/lib`: the hooks;
+- `packages/web/src`: the shared domain components those pages render.
+
+**Forbidden:**
+- `.refresh()`, which allows spaces;
+- a `'use server'` directive at the start of a line;
+- `useActionState`;
+- `useFormState`.
+
+### Task 5: Guard test
+
+- [ ] **Step 1:** Add the test, a new file:
+
+```diff
+diff --git a/apps/web/lib/use-detail-drawer.guard.test.ts b/apps/web/lib/use-detail-drawer.guard.test.ts
+new file mode 100644
+--- /dev/null
++++ b/apps/web/lib/use-detail-drawer.guard.test.ts
+@@ -0,0 +1,66 @@
++import { readdirSync, readFileSync } from 'node:fs';
++import { join, relative } from 'node:path';
++import { fileURLToPath } from 'node:url';
++import { describe, expect, it } from 'vitest';
++
++// #173 revision 5: the drawer's close decision reads a marker in
++// `history.state` (`use-detail-drawer.ts`). Next.js drops custom history state
++// when it rewrites the current entry for a `router.refresh()` or a server
++// action, and gives the page no event to restore it from. So × would quietly
++// fall back to replacing the entry, and the duplicate list entry of #173
++// would return. Nothing uses either today; this test keeps it that way until
++// someone handles the marker on purpose.
++const WEB_ROOT = fileURLToPath(new URL('..', import.meta.url));
++const REPO_ROOT = join(WEB_ROOT, '..', '..');
++
++// The authenticated app (every drawer page and its drawer), the hooks, and
++// the shared domain components those pages render.
++const SCANNED = [join(WEB_ROOT, 'app', 'app'), join(WEB_ROOT, 'lib'), join(REPO_ROOT, 'packages', 'web', 'src')];
++
++const FORBIDDEN: readonly { pattern: RegExp; what: string }[] = [
++  { pattern: /\.refresh\s*\(\s*\)/, what: '`router.refresh()`' },
++  { pattern: /^\s*['"]use server['"]/m, what: "a `'use server'` module or function" },
++  { pattern: /\buseActionState\b/, what: '`useActionState`' },
++  { pattern: /\buseFormState\b/, what: '`useFormState`' },
++];
++
++function sourceFiles(dir: string): string[] {
++  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
++    const path = join(dir, entry.name);
++    if (entry.isDirectory()) return entry.name === 'node_modules' ? [] : sourceFiles(path);
++    return /\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [path] : [];
++  });
++}
++
++// Comments may name these APIs (the hook's header does); code may not.
++function withoutComments(source: string): string {
++  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
++}
++
++function findDrawerHistoryHazards(files: readonly string[]): string[] {
++  return files.flatMap((file) => {
++    const code = withoutComments(readFileSync(file, 'utf8'));
++    return FORBIDDEN.filter(({ pattern }) => pattern.test(code)).map(
++      ({ what }) => `${relative(REPO_ROOT, file)} uses ${what}`,
++    );
++  });
++}
++
++describe('drawer history marker guard (#173)', () => {
++  it('scans the drawer pages, the hooks and the shared components', () => {
++    const files = SCANNED.flatMap(sourceFiles).map((file) => relative(REPO_ROOT, file));
++    expect(files).toContain('apps/web/lib/use-detail-drawer.ts');
++    expect(files).toContain('apps/web/app/app/laundry/page.tsx');
++    expect(files).toContain('apps/web/app/app/bookings/page.tsx');
++    expect(files.some((file) => file.startsWith('packages/web/src/'))).toBe(true);
++  });
++
++  it('finds no router.refresh() or server action where a drawer could be open', () => {
++    const hazards = findDrawerHistoryHazards(SCANNED.flatMap(sourceFiles));
++    // If this fails: these drop the drawer marker from the current history
++    // entry, so × would replace it instead of going Back. Re-mark the entry
++    // after the refresh or action (see the header of use-detail-drawer.ts),
++    // with a test, before allowing it here.
++    expect(hazards).toEqual([]);
++  });
++});
+```
+
+- [ ] **Step 2:** Point the hook's header note at the guard (comment only):
+
+```diff
+diff --git a/apps/web/lib/use-detail-drawer.ts b/apps/web/lib/use-detail-drawer.ts
+--- a/apps/web/lib/use-detail-drawer.ts
++++ b/apps/web/lib/use-detail-drawer.ts
+@@ -30,7 +30,8 @@ import { useCallback, useEffect, useRef } from 'react';
+ // and × would fall back to replacing the entry: safe, but the duplicate
+ // returns. A server action that redirects pushes or replaces with an
+ // unmarked entry, to the same effect. No drawer page uses either today;
+-// keep it that way or re-mark the entry after one.)
++// keep it that way or re-mark the entry after one.
++// `use-detail-drawer.guard.test.ts` fails if either appears.)
+ const DRAWER_ENTRY_KEY = '__clensyDetailDrawer';
+ 
+ // The current entry's drawer marker, as a fresh state object for a native
+```
+
+- [ ] **Step 3:** Run `pnpm --filter web exec vitest run lib/use-detail-drawer.guard.test.ts`. Expected: `Tests 2 passed (2)`. eslint and `tsc` are clean.
+- [ ] **Step 4: Failure evidence**, not committed. Plant each hazard alone, run the guard, and revert. Expected:
+
+  | Plant | Expected |
+  | --- | --- |
+  | H1: `router.refresh();` in `bookings/page.tsx` | 1 failed / 1 passed |
+  | H2: a `'use server'` module in `apps/web/lib` | 1 failed / 1 passed |
+  | H3: `useActionState` in `packages/web/src/auth/login-form.tsx` | 1 failed / 1 passed |
+  | H4: `// router.refresh() …` as a comment only | 2 passed |
+  | H5: `router.refresh ( );` (spaced) | 1 failed / 1 passed |
+
+  Characterization note: the guard pins today's state (none present). It is not a red-first behaviour test, so H1–H5 are its failure evidence, as M8's characterization rule requires.
+- [ ] **Step 5:** One commit: `test(web): guard drawer pages against marker-dropping refreshes and server actions (#173)`.
+
+### Revision 5 final verification
+
+- [ ] **Allowlist:** `git diff --name-only 4c028b5...HEAD -- . ':!docs'` is exactly `apps/web/lib/use-detail-drawer.guard.test.ts` and `apps/web/lib/use-detail-drawer.ts` (the latter comment-only; scripted check).
+- [ ] **H1–H5** as above.
+- [ ] **Full suites:** `pnpm --filter web test` (684 at pre-validation), `lint`, `tsc --noEmit -p .`. A Next build is not needed: no runtime file changes, only a comment.
+- [ ] **Browser:** not needed, since behaviour is unchanged.
+
+### Revision 5 pre-validation
+
+Applied on the branch at `4c028b5`, then removed before this Draft was committed.
+
+| Check | Result |
+| --- | --- |
+| Guard test | 2 passed (2) |
+| H1, H2, H3, H5 | 1 failed / 1 passed each |
+| H4 | 2 passed |
+| `web` / lint / `tsc` | 684 passed; exit 0; clean |
+
 ## Final verification
 
 - [ ] **Next version:** in `apps/web`, `node -p "require('next/package.json').version"` prints `16.3.1`. If not, re-check the two source points in "Why it works" against the installed version before going on, and record the result.
@@ -1058,7 +1209,7 @@ Applied on the branch at `9db8ae0`, then removed before this Draft was committed
 ## Deferred
 
 - ~~**Double close within one traversal** (M7 P3-1)~~: done in revision 3.
-- **Marker loss on `router.refresh()` or a server-action retry** (M7 P3-2). It fails safe, to replace. Revisit if either is adopted on a drawer page; revision 3 notes it in the hook's header comment.
+- **Marker loss on `router.refresh()` or a server action** (M7 P3-2). It fails safe, to replace. The hook's header notes it (revisions 3–4), and revision 5 adds a guard test that fails if either appears. Handling the marker at runtime stays deferred until a drawer page needs one.
 - **#161 cutover:** remove the laundry-only `openWithHref`/`closeWithHref` and the marker copy in `setState` when laundry leaves the drawer (recorded on #161).
 
 ## Gate outcomes
