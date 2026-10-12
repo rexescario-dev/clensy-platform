@@ -1337,3 +1337,83 @@ Revision 4 final verification:
 Deviation: none.
 
 Next gate: **M7**, a fresh independent review (`CLAUDE.md`: application code).
+
+### M7 — Approved for merge (2026-10-13, fresh independent review of revision 4)
+
+A fresh agent context on Opus 5.5 reviewed the revision 4 delta, `9db8ae0...24e9622` (code commit `6785ac2`). It did not implement the change. It was read-only, worked in a temporary worktree that it removed, and left the tree clean.
+
+**Decision: Approved for merge. Blocking findings: none.**
+
+The reviewer independently confirmed:
+- **Gate order:** `b014706` → `dfcf3a2` → `6785ac2` → `24e9622`. No attribution lines.
+- **Exact application:** the embedded Task 4 diffs, applied to `3253a5f`, are byte-identical to `6785ac2`, and the allowlist is exact.
+- **Tests:** RED was 1 failed / 12 passed; GREEN was 30 passed. G1–G6 matched the recorded counts (3, 6, 3, 1, 1, 1 failed).
+- **Suites:** `web` 682 passed; lint and `tsc` exit 0.
+
+Its correctness findings, reasoned and not reproduced:
+- **`pageshow` semantics:** releasing only on `persisted` is right.
+- **Listeners:** they are added and removed symmetrically, and StrictMode is safe.
+- **No sequence gives a double Back:** a persisted restore cannot arrive while this hook's same-document Back is still in flight.
+- **The author's Chromium observation fits the HTML spec:** `pushState` entries share their document state, and a reload or re-fetch fills it with one new document. The "defensive" label is fair.
+- **The header comment** was checked against Next 16.3.1 (`refresh-reducer.js:75`, `redirect.js:52`, `server-action-reducer.js:240`).
+
+It confirmed that the M5 limitation is recorded honestly: no record claims real-restore coverage.
+
+**Non-blocking (P3):**
+1. **The header comment is narrower than before** (`use-detail-drawer.ts:28-32`). A server action that revalidates without redirecting replaces the current entry's state without custom keys, as `router.refresh()` does. `redirect(url, RedirectType.replace)` replaces the entry. Each outcome is the same safe fallback. Suggested wording: "a server action that revalidates or redirects". → M8.
+2. **The PR body is stale:** it describes revision 2, says the double close is deferred, and gives the old counts. → M9.
+
+Reported only by M6, not re-run: the Next build, the browser results, and the Chromium document-reuse observations (checked for consistency with the spec only).
+
+### M8 — Complete, comment-only (2026-10-13, revisions 3–4)
+
+```text
+Decision: Complete
+Subject: PR #174, branch fix/173-drawer-history-entry-marker
+Scope: apps/web/lib/use-detail-drawer.ts (the header note on router.refresh() and server actions)
+M7 / authorization: revision 4 Approved for merge; the owner chose to fix in this PR and continue to merge
+Goal: M7 (revision 4) P3-1. The note now says a server action that revalidates drops the marker as router.refresh()
+does, and that a server action that redirects pushes or replaces with an unmarked entry.
+Behaviour: unchanged. Comment lines only (scripted check). `web` 682 passed; lint exit 0; `tsc` clean.
+Commit: c87c334
+Review: a fresh independent reviewer approved c87c334 (CLAUDE.md: application code). Its wording was checked against
+Next 16.3.1 (server-action-reducer.js:240, 290-327; redirect.js:52; navigation.js:350/461; app-router.js
+HistoryUpdater). Optional P3, no change: "revalidates or refreshes" would be exact, because an action calling
+refresh() or returning new Flight data without revalidating also drops the marker. The comment's guidance still holds.
+```
+
+### M9 — Complete (2026-10-13, revisions 3–4)
+
+```text
+Decision: Complete
+Subject: #173, PR #174
+Documentation scope: apps/web/README.md (Drawer hook, one sentence); PR #174 body; this plan (Gate outcomes)
+Content updates:
+- apps/web/README.md: a second close before the Back lands is ignored, so it never goes Back past the list (← Task 3).
+- PR #174 body: rewritten for revisions 2–4, the current counts, the per-revision gates, the back/forward-cache
+  limitation and the Deferred items (← M7 revision 4 P3-2).
+Unchanged, with reason: packages/web/README.md and docs/README.md (no package, API or schema change); the spec (§4.4
+leaves the mechanism to M4).
+Verification: relative links and anchors in the touched files resolve (scripted scan). Status consistency: plan
+Accepted (revision 4); M6 complete and M7 Approved for revisions 2, 3 and 4; M8 complete; PR #174 open.
+Gate: Documentation complete. Code unchanged in M9.
+```
+
+### M10 — Accepted, workflow validated (2026-10-13, revisions 3–4)
+
+The asset inventory is unchanged. Two post-approval revisions each followed the gates in order:
+- **Revision 3:** the owner's request → M4 → owner M5 → M6 red first → fresh M7.
+- **Revision 4:** M7 P2-1 → owner decision → M4 → owner M5 → M6 red first → fresh M7.
+
+That honours §2.4 and §2.5 for changed application code. Every application-code delta, including both comment-only M8 commits, had a fresh independent review (`CLAUDE.md`).
+
+- **One PR:** #174 carries the plan, code and docs.
+- **Providers:** GitHub via `gh`, for the PR and the #161 note.
+
+**Blocking findings:** none.
+
+**Observations:**
+1. **A reviewer's failure scenario is a hypothesis until observed.** The revision 3 P2-1 refresh scenario turned out not to cross documents in Chromium. Probing the scenario before writing the fix kept the plan accurate about what was, and was not, reproduced.
+2. **Record verification limits explicitly.** Here that is a back/forward-cache restore that Playwright cannot produce. An unverified path must not be implied as covered.
+
+Gate: **Workflow validated.**

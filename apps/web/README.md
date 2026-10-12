@@ -43,7 +43,7 @@ The page makes no `router.push` or `router.replace` of its own.
 
 **Drawer hook.** `lib/use-detail-drawer.ts` serves every drawer page. It has two laundry-only methods, `openWithHref(href)` and `closeWithHref(href)`, beside `open` and `close`.
 - **Opening** pushes the drawer entry natively, with a marker in `history.state` (`__clensyDetailDrawer: <param>`). Next.js keeps that marker across Back, Forward and refresh ([#173](https://github.com/rexescario-dev/clensy-platform/issues/173)).
-- **Closing** goes Back when the current entry carries the marker for its param. Otherwise it replaces the entry, so a direct link never leaves the app.
+- **Closing** goes Back when the current entry carries the marker for its param. Otherwise it replaces the entry, so a direct link never leaves the app. A second close before that Back lands (× and the backdrop together, a double Escape) is ignored, so it never goes Back past the list.
 - **`close` takes no argument.** The other pages pass it straight to `onClose`, which `DetailDrawer`'s × button calls with a click event. `lib/use-detail-drawer.test.tsx` pins that.
 
 Until [#161](https://github.com/rexescario-dev/clensy-platform/issues/161), a row opens the drawer (`?detail=<id>`), not `/app/laundry/[id]`.
