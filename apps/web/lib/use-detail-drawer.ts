@@ -25,11 +25,12 @@ import { useCallback, useEffect, useRef } from 'react';
 // custom `history.state` across Back/Forward (traverse navigations preserve
 // it) and copies its own keys into the state object passed to a native
 // `pushState`. So each drawer entry is pushed natively, with the marker.
-// (A `router.refresh()` rewrites the current entry's state without custom
-// keys, so it would drop the marker and × would fall back to replacing the
-// entry: safe, but the duplicate returns. A server-action redirect pushes a
-// new, unmarked entry instead. No drawer page uses either today; keep it
-// that way or re-mark the entry after one.)
+// (A `router.refresh()`, or a server action that revalidates, rewrites the
+// current entry's state without custom keys, so it would drop the marker
+// and × would fall back to replacing the entry: safe, but the duplicate
+// returns. A server action that redirects pushes or replaces with an
+// unmarked entry, to the same effect. No drawer page uses either today;
+// keep it that way or re-mark the entry after one.)
 const DRAWER_ENTRY_KEY = '__clensyDetailDrawer';
 
 // The current entry's drawer marker, as a fresh state object for a native
