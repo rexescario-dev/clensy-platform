@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft (revision 3); revision 2 Accepted and implemented |
+| Status | Accepted (revision 3); revision 2 implemented |
+| M5 decision (revision 3) | **Accepted** — 2026-10-13, at `d04212e`, by the owner. No blocking findings. One clarification is an M6 requirement: show that an unrelated traversal cannot clear the guard early and allow a second Back (see Gate outcomes). The browser checks are mandatory against the committed implementation, especially × then the backdrop in one task, and two Escape keydowns. Scope: the hook and its test only. M7 MUST be a fresh independent review. |
 | M5 decision (revision 2) | **Accepted** — 2026-10-11, at `d8f0ac2`, by the owner. No blocking findings. M6 MUST run Final verification in full; the production-build browser matrix is required before merge, because the test harness models history and cannot prove the installed Next.js keeps the marker. M7 MUST be a fresh independent review (`CLAUDE.md`: application code). Pre-validation counts are author-reported until M6 re-observes them. |
 | M5 decision (revision 1) | Request changes — 2026-10-11, at `b0eec89`. See Gate outcomes. |
 | Date | 2026-10-11 |
@@ -1073,3 +1074,17 @@ Earlier lessons applied:
 **Non-blocking observation:** the plan's File Map did not include comments elsewhere that describe the changed behaviour (`laundry/page.tsx`). M7 did not catch them; the author found them at M9. For a change to shared behaviour, a planning step should grep for prose that describes it.
 
 Gate: **Workflow validated.**
+
+### M5 — Accepted (2026-10-13, revision 3)
+
+Accepted at `d04212e` by the owner. No blocking findings.
+
+**Clarification raised:** the guard clears on *any* `popstate`, not specifically on the one from the hook's own Back. Could an unrelated traversal clear it early and allow a second Back?
+
+**Author's answer (recorded before M6):** a close goes Back only while the *current* entry carries the marker (`isDrawerEntryPushedHere`). By the HTML spec, `popstate` fires only on a traversal to a different session-history entry. So any `popstate`, related or not, means the current entry has changed:
+- If the user is then on an unmarked entry, a close replaces, or no drawer is shown.
+- If the user is on a marked entry again, they traversed back to a drawer deliberately, and a close there is a genuine close of that drawer.
+
+A second Back from the *same* drawer entry needs a `popstate` that leaves the current entry unchanged, which does not occur. No code change is needed. M6 adds a browser check that interleaves an unrelated traversal: ×, browser Forward and × again, in one task, with a forward entry present. It must never end before the list entry.
+
+The pre-validation was not re-run by the reviewer; M6 re-observes it against the committed implementation.
