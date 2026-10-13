@@ -2401,3 +2401,41 @@ Revision 7 final verification:
 Deviation: none.
 
 Next gate: **M7**, a fresh independent review (`CLAUDE.md`).
+
+### M7 — Returned for revision (2026-10-13, fresh independent review of revision 7)
+
+A fresh agent context on Opus 5.5 reviewed `a3a8e6c...6f738cc` (code commit `544edf1`). It did not implement the change. It worked from a worktree outside `.git/`, removed it, and left the main tree and index clean.
+
+**Decision: Return** (M4/M5 amendment → M6). Do not merge.
+
+**P2 (blocking): the discovery tests race another test file.**
+- The guard's discovery tests (`use-detail-drawer.guard.test.ts:219-233`) write `zz-guard-discovery-<pid>.ts` into `apps/web` and the package roots, then delete it.
+- `lib/web-shell-regressions.test.ts` (`nonTestSources`, lines 565-571) walks `apps/web` in another vitest worker and `readFileSync`s every listed path. If it lists the planted file before the guard deletes it, the read throws ENOENT.
+- **Reproduced:** 1 of 25 paired runs failed (`ENOENT … zz-guard-discovery-3346303.ts`); a simulated loop failed 1 of 3 runs; 16 of 17 full runs passed.
+- The cause is the M5-folded discovery adjustment, which no one reviewed as code before it was applied.
+- Required: stop writing into the source roots, for example by proving discovery against a temporary `git init` repository. Re-run R4, then run the full suite at least 20 times plus a pairwise loop.
+
+**Re-observed:**
+- the gate order, and no attribution;
+- the Task 7 diffs reproduce `544edf1` exactly, the allowlist is exact, and the hook change is comment-only;
+- guard 28/28;
+- H8, H15, H17, H19, H20 (index restored), H21, H22, R2 and R4 as tabulated;
+- lint and `tsc` exit 0; no line over 120 characters.
+
+Design notes from the reviewer:
+- **Git dependency:** a missing git or a non-repository fails loudly. A depth-1 clone lists the same 104 files. A sparse checkout fails loudly via coverage.
+- **Discovery files:** the planted file never leaks into the scan test, because `files` is computed at collection time.
+- **Router rules** are a superset of revision 6's.
+- **`scriptKind`** is correct, including `.d.ts`.
+- **The Next comments** are accurate.
+
+**P3:**
+1. **The M5 fold** went beyond "small adjustments" (new tests that write to disk). Future folds that add tests should get a re-review before code.
+2. **The hook comment's "its plan"** should cite the plan's path.
+3. **Known limits omissions:**
+   - an aliased or namespaced `useRouter`;
+   - a wrapped initializer (`useRouter() as X`, `!`, parentheses);
+   - quoted or computed destructuring keys (`{ 'refresh': r }`; `getText()` keeps the quotes, a gap since revision 6).
+
+   A zero-argument call is still caught in each case.
+4. **A hard kill mid-test** can leave a committable `zz-guard-discovery-*.ts`. A temporary repository removes that risk.
