@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted (revision 6); revisions 2–5 implemented |
+| Status | Draft (revision 7); revisions 2–6 implemented; revision 6 approved at M7 |
 | M5 decision (revision 6) | **Accepted** — 2026-10-13, at `4f0e026`, by the owner, subject to confirming the file-extension assumption. Confirmed: only `eslint.config.mjs` and `postcss.config.mjs` are non-TS in the scanned roots today, but `apps/web` has `allowJs: true` and Next accepts `.js`/`.jsx` pages. So, as the acceptance allows, the guard also scans JavaScript extensions (one-line filter, folded into Task 6 in the record commit; H13/H14). The aliased `useDetailDrawer` import stays a documented limitation. Run H1–H14, the full `web` suite, lint and `tsc`. M7 MUST be a fresh independent review. |
 | M5 decision (revision 5) | **Accepted** — 2026-10-13, at `13863e2`, by the owner, with two test changes applied in the M5 record commit: a TypeScript-syntax-tree detector (so trailing comments and strings never count), and coverage asserting all nine drawer pages. Keep the no-runtime-change decision. Run H1–H7, then the full `web` suite, lint and `tsc`. No browser run. M7 MUST be a fresh independent review. |
 | M5 decision (revision 4) | **Accepted** — 2026-10-13, at `b014706`, by the owner. No blocking findings. Keep the synthetic `pageshow` test and G5/G6. Record that a real back/forward-cache restore is **not** browser-verified (Playwright's Chromium disables it): the synthetic event proves the handler's logic, not a real restore. Add an end-to-end check if an environment with the cache enabled becomes available. |
@@ -26,6 +26,13 @@
 - **The flag** is removed.
 
 ## Revision log
+
+**Revision 7** (owner decision, 2026-10-13, on the revision 6 M7 P3s: "fix all three"):
+- **P3-1:** the guard also catches `refresh` read from a `useRouter()` value without calling it (`onClick={router.refresh}`, `startTransition(router.refresh)`, `router['refresh']`, `useRouter().refresh`), and `refresh` destructured from a router variable.
+- **P3-2:** it skips gitignored output (`public`, `dist`, `build`, `coverage`) and every hidden directory.
+- **P3-3:** each file is parsed as its extension says (TS, TSX, JS or JSX).
+- **The hook comment** no longer claims the guard catches every case; it points at the plan's limits.
+- **P3-4:** the File Map, the revision 2 allowlist wording and the Deferred bullet are corrected.
 
 **Revision 6** (M7 return of revision 5, 2026-10-13):
 - **P1:** the guard scans all of `apps/web` (skipping `node_modules`, `.next` and `.turbo`), plus `packages/web/src` and `packages/ui/src`. It now covers the dashboard shell mounted around every drawer page, and any server-action file.
@@ -160,6 +167,8 @@ Applied on `fix/173-drawer-history-entry-marker` at `8553a04`, then removed befo
 | `apps/web/lib/laundry-list-page.interaction.test.tsx` | Modify: per-entry `history.state` in the harness; two #173 tests |
 | `apps/web/lib/use-detail-drawer.ts` | Modify: marker push and close decision; `drawerEntryState`, `isDrawerEntryPushedHere` |
 | `apps/web/lib/use-laundry-order-list-url-state.ts` | Modify: `setState` keeps the marker |
+| `apps/web/lib/use-detail-drawer.guard.test.ts` | Add (revision 5; widened in revisions 6–7): a guard against marker-dropping refreshes and server actions |
+| `apps/web/app/app/laundry/page.tsx` | M8, comment-only: the drawer-close comment |
 
 ### Task 1: Tests first (red)
 
@@ -1478,10 +1487,249 @@ Applied on the branch at `75cde5e`, then removed before this Draft was committed
 | `web` / lint / `tsc` | 699 passed; exit 0; clean |
 | Vitest's "ESM syntax … `vitest.config.ts`" message | pre-existing; appears without this change too |
 
+## Revision 7 tasks (edit anchor: PR head `a3a8e6c`, code as of `d66e55e`)
+
+**Why.** The revision 6 M7 approved it, with three guard P3s the owner chose to fix:
+1. **References to `refresh`:** `refresh` used without being called (`onClick={router.refresh}`), or destructured from a router variable, was not caught.
+2. **Gitignored output:** local build or coverage output under `apps/web` was scanned, so it could turn the guard red locally while CI stayed green.
+3. **Parse mode:** `.ts` files were parsed as TSX, so `<Router>router;` would open a JSX element and swallow the code after it.
+
+**Change.**
+- **Router references:** for each file, the guard collects the names bound to `useRouter()`. It flags a `.refresh` or `['refresh']` access on such a name, or on `useRouter()` itself, whether or not it is called, and `const { refresh } = <router>`. The broad zero-argument `.refresh()` call rule stays, which catches a router passed in as a parameter.
+- **Skipped directories:** `build`, `coverage`, `dist`, `node_modules`, `public`, and any directory whose name starts with `.`. Coverage asserts that no scanned path is inside one.
+- **Parse mode:** `.tsx` → TSX, `.ts`/`.mts`/`.cts` → TS, `.jsx` → JSX, everything else → JS.
+- **Hook comment:** "looks for both in …; its plan lists what a static scan cannot see".
+
+**Known limits** (documented, not enforced):
+- **Unrelated names:** a `refresh` *reference* on a name not bound to `useRouter()` in the same file. A prop named `router` is the example; a zero-argument *call* on it is caught.
+- **Aliased hook import:** `import { useDetailDrawer as x }` evades the coverage check. The file is still scanned for hazards.
+- **Outside the scan:** server functions defined outside the scanned roots, and the unscanned workspace packages `@clensy/client` and `@clensy/validation`. Neither package uses any of these APIs today.
+- **False positives,** which fail loudly: a zero-argument `.refresh()` on an unrelated object, and identifiers named `useActionState`/`useFormState`.
+
+### Task 7: Close the guard's remaining gaps
+
+- [ ] **Step 1:** Apply the guard test diff:
+
+```diff
+diff --git a/apps/web/lib/use-detail-drawer.guard.test.ts b/apps/web/lib/use-detail-drawer.guard.test.ts
+--- a/apps/web/lib/use-detail-drawer.guard.test.ts
++++ b/apps/web/lib/use-detail-drawer.guard.test.ts
+@@ -8,9 +8,8 @@ import { describe, expect, it } from 'vitest';
+ // `history.state` (`use-detail-drawer.ts`). Next.js drops custom history state
+ // when it rewrites the current entry for a `router.refresh()` or a server
+ // action that revalidates, refreshes or redirects, and gives the page no
+-// event to restore it from. So × would quietly
+-// fall back to replacing the entry, and the duplicate list entry of #173
+-// would return. Nothing uses either today; this test keeps it that way until
++// event to restore it from. So × would quietly fall back to replacing the
++// entry, and the duplicate list entry of #173 would return. Nothing uses either today; this test keeps it that way until
+ // someone handles the marker on purpose.
+ const WEB_ROOT = fileURLToPath(new URL('..', import.meta.url));
+ const REPO_ROOT = join(WEB_ROOT, '..', '..');
+@@ -19,7 +18,9 @@ const REPO_ROOT = join(WEB_ROOT, '..', '..');
+ // them, the hooks, and any server-action file), and the shared component
+ // packages those pages render.
+ const SCANNED = [WEB_ROOT, join(REPO_ROOT, 'packages', 'web', 'src'), join(REPO_ROOT, 'packages', 'ui', 'src')];
+-const SKIPPED_DIRECTORIES = new Set(['.next', '.turbo', 'node_modules']);
++// Dependencies, and output a build, test run or tool writes locally (all
++// gitignored); hidden directories such as `.next` and `.turbo` are skipped too.
++const SKIPPED_DIRECTORIES = new Set(['build', 'coverage', 'dist', 'node_modules', 'public']);
+ 
+ // Every page that opens a drawer through `useDetailDrawer`, with its drawer
+ // defined in the same file.
+@@ -43,7 +44,9 @@ const FORBIDDEN_IDENTIFIERS = new Map([
+ function sourceFiles(dir: string): string[] {
+   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+     const path = join(dir, entry.name);
+-    if (entry.isDirectory()) return SKIPPED_DIRECTORIES.has(entry.name) ? [] : sourceFiles(path);
++    if (entry.isDirectory()) {
++      return entry.name.startsWith('.') || SKIPPED_DIRECTORIES.has(entry.name) ? [] : sourceFiles(path);
++    }
+     // `apps/web` allows JavaScript (`allowJs`), and Next accepts `.js`/`.jsx` pages.
+     return /\.[cm]?[jt]sx?$/.test(entry.name) && !/\.test\.[cm]?[jt]sx?$/.test(entry.name) ? [path] : [];
+   });
+@@ -58,8 +61,51 @@ function isUseServerDirective(statements: ts.NodeArray<ts.Statement>): boolean {
+   return false;
+ }
+ 
++// Parsed as what the extension says: a `.ts` file read as TSX would misread
++// an angle-bracket type assertion as JSX.
++function scriptKind(fileName: string): ts.ScriptKind {
++  if (/\.tsx$/.test(fileName)) return ts.ScriptKind.TSX;
++  if (/\.[cm]?ts$/.test(fileName)) return ts.ScriptKind.TS;
++  if (/\.jsx$/.test(fileName)) return ts.ScriptKind.JSX;
++  return ts.ScriptKind.JS;
++}
++
+ function parse(fileName: string, source: string): ts.SourceFile {
+-  return ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
++  return ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, scriptKind(fileName));
++}
++
++function isUseRouterCall(node: ts.Node): boolean {
++  return ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'useRouter';
++}
++
++// Names bound to `useRouter()` in this file: `const router = useRouter()`.
++function routerNames(file: ts.SourceFile): Set<string> {
++  const names = new Set<string>();
++  const visit = (node: ts.Node) => {
++    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer && isUseRouterCall(node.initializer)) {
++      names.add(node.name.text);
++    }
++    ts.forEachChild(node, visit);
++  };
++  visit(file);
++  return names;
++}
++
++// `useRouter()` itself, or a name bound to it.
++function isRouter(node: ts.Expression, routers: ReadonlySet<string>): boolean {
++  return isUseRouterCall(node) || (ts.isIdentifier(node) && routers.has(node.text));
++}
++
++// `router.refresh` or `router['refresh']`, called or not
++// (`onClick={router.refresh}`, `startTransition(router.refresh)`).
++function isRouterRefreshAccess(node: ts.Node, routers: ReadonlySet<string>): boolean {
++  if (ts.isPropertyAccessExpression(node)) return node.name.text === 'refresh' && isRouter(node.expression, routers);
++  return (
++    ts.isElementAccessExpression(node) &&
++    ts.isStringLiteralLike(node.argumentExpression) &&
++    node.argumentExpression.text === 'refresh' &&
++    isRouter(node.expression, routers)
++  );
+ }
+ 
+ // `x.refresh()` or `x['refresh']()`, with no arguments.
+@@ -74,15 +120,13 @@ function isRefreshCall(node: ts.Node): boolean {
+   );
+ }
+ 
+-// `const { refresh } = useRouter()`, renamed or not.
+-function isRefreshDestructuredFromRouter(node: ts.Node): boolean {
++// `const { refresh } = useRouter()` or `= router`, renamed or not.
++function isRefreshDestructuredFromRouter(node: ts.Node, routers: ReadonlySet<string>): boolean {
+   return (
+     ts.isVariableDeclaration(node) &&
+     ts.isObjectBindingPattern(node.name) &&
+     node.initializer !== undefined &&
+-    ts.isCallExpression(node.initializer) &&
+-    ts.isIdentifier(node.initializer.expression) &&
+-    node.initializer.expression.text === 'useRouter' &&
++    isRouter(node.initializer, routers) &&
+     node.name.elements.some((element) => (element.propertyName ?? element.name).getText() === 'refresh')
+   );
+ }
+@@ -91,9 +135,10 @@ function isRefreshDestructuredFromRouter(node: ts.Node): boolean {
+ // never count; only code that uses them does.
+ function drawerHistoryHazards(fileName: string, source: string): string[] {
+   const file = parse(fileName, source);
++  const routers = routerNames(file);
+   const found = new Set<string>();
+   const visit = (node: ts.Node) => {
+-    if (isRefreshCall(node) || isRefreshDestructuredFromRouter(node)) {
++    if (isRefreshCall(node) || isRouterRefreshAccess(node, routers) || isRefreshDestructuredFromRouter(node, routers)) {
+       found.add('`router.refresh()`');
+     }
+     if ((ts.isSourceFile(node) || ts.isBlock(node)) && isUseServerDirective(node.statements)) {
+@@ -125,7 +170,7 @@ describe('drawer history marker guard (#173)', () => {
+     expect(scanned.some((file) => file.startsWith('packages/web/src/'))).toBe(true);
+     expect(scanned.some((file) => file.startsWith('packages/ui/src/'))).toBe(true);
+     expect(scanned).toContain('apps/web/eslint.config.mjs');
+-    expect(scanned.some((file) => /(^|\/)(node_modules|\.next|\.turbo)\//.test(file))).toBe(false);
++    expect(scanned.some((file) => /(^|\/)(\.[^/]+|build|coverage|dist|node_modules|public)\//.test(file))).toBe(false);
+     // A file that starts calling the hook must be added to DRAWER_PAGES.
+     const callsHook = (file: string) => {
+       let calls = false;
+@@ -160,6 +205,12 @@ describe('drawer history marker guard (#173)', () => {
+     ['a bracket call', "router['refresh']();", ['`router.refresh()`']],
+     ['a destructured refresh', 'const { refresh } = useRouter();', ['`router.refresh()`']],
+     ['a renamed destructured refresh', 'const { refresh: reload } = useRouter();', ['`router.refresh()`']],
++    ['a refresh reference', 'const router = useRouter();\nconst onClick = router.refresh;', ['`router.refresh()`']],
++    ['a refresh passed on', 'const router = useRouter();\nstartTransition(router.refresh);', ['`router.refresh()`']],
++    ['a bracket reference', "const router = useRouter();\nretry(router['refresh']);", ['`router.refresh()`']],
++    ['refresh destructured from a router', 'const router = useRouter();\nconst { refresh } = router;', ['`router.refresh()`']],
++    ['a reference on useRouter()', 'const reload = useRouter().refresh;', ['`router.refresh()`']],
++    ['a refresh reference on another object', 'const reload = cache.refresh;', []],
+     ['an aliased import', "import { useActionState as useAction } from 'react';", ['`useActionState`']],
+     ['a module directive', "'use server';\nexport async function save() {}", ["a `'use server'` module or function"]],
+     ['a function directive', "async function save() {\n  'use server';\n}", ["a `'use server'` module or function"]],
+@@ -173,4 +224,12 @@ describe('drawer history marker guard (#173)', () => {
+   ])('%s', (_label, source, expected) => {
+     expect(drawerHistoryHazards('inline.tsx', source)).toEqual(expected);
+   });
++
++  // A `.ts` file is parsed as TS: as TSX, `<Router>router;` would open a JSX
++  // element and swallow the call after it.
++  it('parses a .ts file as TypeScript, not TSX', () => {
++    const source = 'const r = <Router>router;\nr.refresh();';
++    expect(drawerHistoryHazards('inline.ts', source)).toEqual(['`router.refresh()`']);
++    expect(drawerHistoryHazards('inline.tsx', source)).toEqual([]);
++  });
+ });
+```
+
+- [ ] **Step 2:** Apply the hook comment diff (comment only):
+
+```diff
+diff --git a/apps/web/lib/use-detail-drawer.ts b/apps/web/lib/use-detail-drawer.ts
+--- a/apps/web/lib/use-detail-drawer.ts
++++ b/apps/web/lib/use-detail-drawer.ts
+@@ -31,8 +31,9 @@ import { useCallback, useEffect, useRef } from 'react';
+ // returns. A server action that redirects pushes or replaces with an
+ // unmarked entry, to the same effect. No drawer page uses either today;
+ // keep it that way or re-mark the entry after one.
+-// `use-detail-drawer.guard.test.ts` fails if either appears anywhere in
+-// `apps/web`, `packages/web/src` or `packages/ui/src`.)
++// `use-detail-drawer.guard.test.ts` looks for both in `apps/web`,
++// `packages/web/src` and `packages/ui/src`; its plan lists what a static
++// scan cannot see.)
+ const DRAWER_ENTRY_KEY = '__clensyDetailDrawer';
+ 
+ // The current entry's drawer marker, as a fresh state object for a native
+```
+
+- [ ] **Step 3:** Run `pnpm --filter web exec vitest run lib/use-detail-drawer.guard.test.ts`. Expected: `Tests 24 passed (24)`. eslint and `tsc` are clean.
+- [ ] **Step 4: Failure evidence**, not committed. Plant or mutate each alone, then revert.
+  - **H1–H14:** as in revision 6, now out of 24. The code plants give 1 failed / 23 passed; H4 and H6 give 24 passed.
+  - **New plants and mutations:**
+
+  | Plant or mutation | Expected |
+  | --- | --- |
+  | H15: `router.refresh()` in `apps/web/public/zz-planted.js` (gitignored) | 24 passed (skipped) |
+  | H16: `'use server'` in `apps/web/coverage/zz.js` | 24 passed (skipped) |
+  | H17: `const zzPlanted = router.refresh;` in `components/layout/user-menu.tsx` | 1 failed / 23 passed |
+  | H18: `const { refresh } = zzRouter;` from a `useRouter()` variable, in bookings | 1 failed / 23 passed |
+  | H19: `const r = <Router>router; r.refresh();` in a new `apps/web/lib/zz-planted.ts` | 1 failed / 23 passed |
+  | R1: parse every file as TSX | 1 failed / 23 passed |
+  | R2: drop the router-reference rule | 4 failed / 20 passed |
+  | R3: skip only `node_modules`, `.next` and `.turbo` | 24 passed alone, because no output directory exists. With the H15 plant: 2 failed / 22 passed. |
+
+- [ ] **Step 5:** One commit: `test(web): catch router.refresh references, skip ignored output, parse by extension (#173)`.
+
+### Revision 7 final verification
+
+- [ ] **Allowlist:** `git diff --name-only a3a8e6c...HEAD -- . ':!docs'` is exactly the guard test and `use-detail-drawer.ts`. The latter is comment-only (scripted check).
+- [ ] **H1–H19 and R1–R3** as above.
+- [ ] **Full suites:** `pnpm --filter web test` (706 at pre-validation), `lint`, `tsc --noEmit -p .`. No build or browser run is needed. Run the full suite from a worktree outside `.git/`, or from the main tree.
+
+### Revision 7 pre-validation
+
+Applied on the branch at `a3a8e6c`, then removed before this Draft was committed.
+
+| Check | Result |
+| --- | --- |
+| Guard test | 24 passed (24) |
+| H15, H16 | 24 passed (skipped) |
+| H17, H18, H19, R1 | 1 failed / 23 passed each |
+| R2 | 4 failed / 20 passed |
+| R3 alone / with H15 | 24 passed / 2 failed / 22 passed |
+| `web` / lint / `tsc` | 706 passed; exit 0; clean |
+
 ## Final verification
 
 - [ ] **Next version:** in `apps/web`, `node -p "require('next/package.json').version"` prints `16.3.1`. If not, re-check the two source points in "Why it works" against the installed version before going on, and record the result.
-- [ ] **Allowlist:** `git diff --name-only 8553a04...HEAD -- . ':!docs' | sort` equals exactly the four File Map paths.
+- [ ] **Allowlist:** `git diff --name-only 8553a04...HEAD -- . ':!docs' | sort` equals exactly the four revision 2 File Map paths (the revision 2 scope; later revisions have their own allowlists).
 - [ ] **Mutations:** apply each alone, run both test files, and revert. Expected: M1–M6 as in Pre-validation.
   - M1: in `close`, `if (isDrawerEntryPushedHere(paramName)) {` → `if (false) {`.
   - M2: `window.history.pushState({ [DRAWER_ENTRY_KEY]: paramName }, '', href)` → `window.history.pushState(null, '', href)`.
@@ -1507,7 +1755,7 @@ Applied on the branch at `75cde5e`, then removed before this Draft was committed
 ## Deferred
 
 - ~~**Double close within one traversal** (M7 P3-1)~~: done in revision 3.
-- **Marker loss on `router.refresh()` or a server action** (M7 P3-2). It fails safe, to replace. The hook's header notes it (revisions 3–4), and revision 5 adds a guard test that fails if either appears. Handling the marker at runtime stays deferred until a drawer page needs one.
+- **Marker loss on `router.refresh()` or a server action** (M7 P3-2). It fails safe, to replace. The hook's header notes it (revisions 3–4), and revisions 5–7 add a guard test that looks for either in `apps/web`, `packages/web/src` and `packages/ui/src`, within its known limits (see Revision 7). Handling the marker at runtime stays deferred until a drawer page needs one.
 - **#161 cutover:** remove the laundry-only `openWithHref`/`closeWithHref` and the marker copy in `setState` when laundry leaves the drawer (recorded on #161).
 
 ## Gate outcomes
