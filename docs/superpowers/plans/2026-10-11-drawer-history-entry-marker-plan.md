@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft (revision 6); revisions 2–5 implemented; revision 5 returned at M7 |
+| Status | Accepted (revision 6); revisions 2–5 implemented |
+| M5 decision (revision 6) | **Accepted** — 2026-10-13, at `4f0e026`, by the owner, subject to confirming the file-extension assumption. Confirmed: only `eslint.config.mjs` and `postcss.config.mjs` are non-TS in the scanned roots today, but `apps/web` has `allowJs: true` and Next accepts `.js`/`.jsx` pages. So, as the acceptance allows, the guard also scans JavaScript extensions (one-line filter, folded into Task 6 in the record commit; H13/H14). The aliased `useDetailDrawer` import stays a documented limitation. Run H1–H14, the full `web` suite, lint and `tsc`. M7 MUST be a fresh independent review. |
 | M5 decision (revision 5) | **Accepted** — 2026-10-13, at `13863e2`, by the owner, with two test changes applied in the M5 record commit: a TypeScript-syntax-tree detector (so trailing comments and strings never count), and coverage asserting all nine drawer pages. Keep the no-runtime-change decision. Run H1–H7, then the full `web` suite, lint and `tsc`. No browser run. M7 MUST be a fresh independent review. |
 | M5 decision (revision 4) | **Accepted** — 2026-10-13, at `b014706`, by the owner. No blocking findings. Keep the synthetic `pageshow` test and G5/G6. Record that a real back/forward-cache restore is **not** browser-verified (Playwright's Chromium disables it): the synthetic event proves the handler's logic, not a real restore. Add an end-to-end check if an environment with the cache enabled becomes available. |
 | M5 decision (revision 3) | **Accepted** — 2026-10-13, at `d04212e`, by the owner. No blocking findings. One clarification is an M6 requirement: show that an unrelated traversal cannot clear the guard early and allow a second Back (see Gate outcomes). The browser checks are mandatory against the committed implementation, especially × then the backdrop in one task, and two Escape keydowns. Scope: the hook and its test only. M7 MUST be a fresh independent review. |
@@ -1272,7 +1273,7 @@ These are the results for the M5-amended version. The first Draft's regex guard 
 
 ### Task 6: Widen the guard
 
-- [ ] **Step 1:** Apply the guard test diff:
+- [ ] **Step 1:** Apply the guard test diff (as amended at M5 to include `.js`, `.jsx`, `.mjs`, `.cjs`, `.mts` and `.cts`):
 
 ```diff
 diff --git a/apps/web/lib/use-detail-drawer.guard.test.ts b/apps/web/lib/use-detail-drawer.guard.test.ts
@@ -1302,16 +1303,19 @@ diff --git a/apps/web/lib/use-detail-drawer.guard.test.ts b/apps/web/lib/use-det
  
  // Every page that opens a drawer through `useDetailDrawer`, with its drawer
  // defined in the same file.
-@@ -40,7 +43,7 @@ const FORBIDDEN_IDENTIFIERS = new Map([
+@@ -40,8 +43,9 @@ const FORBIDDEN_IDENTIFIERS = new Map([
  function sourceFiles(dir: string): string[] {
    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
      const path = join(dir, entry.name);
 -    if (entry.isDirectory()) return entry.name === 'node_modules' ? [] : sourceFiles(path);
+-    return /\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [path] : [];
 +    if (entry.isDirectory()) return SKIPPED_DIRECTORIES.has(entry.name) ? [] : sourceFiles(path);
-     return /\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [path] : [];
++    // `apps/web` allows JavaScript (`allowJs`), and Next accepts `.js`/`.jsx` pages.
++    return /\.[cm]?[jt]sx?$/.test(entry.name) && !/\.test\.[cm]?[jt]sx?$/.test(entry.name) ? [path] : [];
    });
  }
-@@ -54,18 +57,42 @@ function isUseServerDirective(statements: ts.NodeArray<ts.Statement>): boolean {
+ 
+@@ -54,18 +58,42 @@ function isUseServerDirective(statements: ts.NodeArray<ts.Statement>): boolean {
    return false;
  }
  
@@ -1361,7 +1365,7 @@ diff --git a/apps/web/lib/use-detail-drawer.guard.test.ts b/apps/web/lib/use-det
        found.add('`router.refresh()`');
      }
      if ((ts.isSourceFile(node) || ts.isBlock(node)) && isUseServerDirective(node.statements)) {
-@@ -84,18 +111,36 @@ describe('drawer history marker guard (#173)', () => {
+@@ -84,18 +112,37 @@ describe('drawer history marker guard (#173)', () => {
    const files = SCANNED.flatMap(sourceFiles);
    const scanned = files.map((file) => relative(REPO_ROOT, file));
  
@@ -1384,6 +1388,7 @@ diff --git a/apps/web/lib/use-detail-drawer.guard.test.ts b/apps/web/lib/use-det
 -      .map((file) => relative(REPO_ROOT, file))
 -      .filter((file) => file.startsWith('apps/web/app/'));
 +    expect(scanned.some((file) => file.startsWith('packages/ui/src/'))).toBe(true);
++    expect(scanned).toContain('apps/web/eslint.config.mjs');
 +    expect(scanned.some((file) => /(^|\/)(node_modules|\.next|\.turbo)\//.test(file))).toBe(false);
 +    // A file that starts calling the hook must be added to DRAWER_PAGES.
 +    const callsHook = (file: string) => {
@@ -1406,7 +1411,7 @@ diff --git a/apps/web/lib/use-detail-drawer.guard.test.ts b/apps/web/lib/use-det
      const hazards = files.flatMap((file) =>
        drawerHistoryHazards(file, readFileSync(file, 'utf8')).map((what) => `${relative(REPO_ROOT, file)} uses ${what}`),
      );
-@@ -110,6 +155,10 @@ describe('drawer history marker guard (#173)', () => {
+@@ -110,6 +157,10 @@ describe('drawer history marker guard (#173)', () => {
    it.each([
      ['a call', 'router.refresh();', ['`router.refresh()`']],
      ['a spaced call', 'router.refresh ( );', ['`router.refresh()`']],
@@ -1449,13 +1454,15 @@ diff --git a/apps/web/lib/use-detail-drawer.ts b/apps/web/lib/use-detail-drawer.
   | H10: `const { refresh } = useRouter();` in bookings | 1 failed / 16 passed |
   | H11: `r['refresh']()` in a `packages/ui/src/base` component | 1 failed / 16 passed |
   | H12: a `useDetailDrawer()` call in a new `apps/web/components/…` file | 1 failed / 16 passed (coverage) |
+  | H13: `router.refresh()` in a new `apps/web/components/…/x.jsx` (M5) | 1 failed / 16 passed |
+  | H14: a `'use server'` file at `apps/web/app/zz-actions.js` (M5) | 1 failed / 16 passed |
 
 - [ ] **Step 5:** One commit: `test(web): widen the drawer history guard to the whole web app and shared packages (#173)`.
 
 ### Revision 6 final verification
 
 - [ ] **Allowlist:** `git diff --name-only 75cde5e...HEAD -- . ':!docs'` is exactly the guard test and `use-detail-drawer.ts`. The latter is comment-only (scripted check).
-- [ ] **H1–H12** as above.
+- [ ] **H1–H14** as above.
 - [ ] **Full suites:** `pnpm --filter web test` (699 at pre-validation), `lint`, `tsc --noEmit -p .`. No Next build or browser run is needed, because no runtime code changes.
 
 ### Revision 6 pre-validation
@@ -1466,6 +1473,7 @@ Applied on the branch at `75cde5e`, then removed before this Draft was committed
 | --- | --- |
 | Guard test | 17 passed (17) |
 | H1, H2, H3, H5, H7, H8, H9, H10, H11, H12 | 1 failed / 16 passed each |
+| H13, H14 (M5 amendment) | 1 failed / 16 passed each |
 | H4, H6 | 17 passed |
 | `web` / lint / `tsc` | 699 passed; exit 0; clean |
 | Vitest's "ESM syntax … `vitest.config.ts`" message | pre-existing; appears without this change too |
@@ -1916,3 +1924,13 @@ A fresh agent context on Opus 5.5 reviewed `4c028b5...2b4e6a6` (code commit `865
 4. **`packages/ui`:** no router use today; cheap to add.
 5. **Next accuracy:** the refresh claim is accurate. The test header's "or a server action" could say "that revalidates, refreshes or redirects" (`server-action-reducer.js:266-273`).
 6. **Workflow:** folding the reviewer's changes into the M5 record commit was acceptable as an owner decision, but substantive rewrites are better sent back as a Return plus a Draft revision (`plan-review.md`).
+
+### M5 — Accepted (2026-10-13, revision 6)
+
+Accepted at `4f0e026` by the owner, subject to confirming the file-extension assumption.
+- **Confirmed by scan:** in `apps/web`, `packages/web/src` and `packages/ui/src`, the only non-TypeScript files are `apps/web/eslint.config.mjs` and `apps/web/postcss.config.mjs`. Both are config, not app code.
+- **But it is not enforced:** `apps/web/tsconfig.json` has `allowJs: true`, and Next's default page extensions include `.js`/`.jsx`.
+- **Resolution:** the acceptance allows including JavaScript when it is supported, so the filter now takes `.[cm]?[jt]sx?`, and the coverage test asserts that `eslint.config.mjs` is scanned. This is a one-line change, folded into Task 6 in this record commit.
+- **Pre-validation:** guard 17 passed; H13 (`.jsx`) and H14 (`.js` with `'use server'`) each gave 1 failed / 16 passed.
+
+The second point, an aliased `useDetailDrawer` import evading the coverage check, is accepted as a documented limitation. The hazard scan still covers such a file.
