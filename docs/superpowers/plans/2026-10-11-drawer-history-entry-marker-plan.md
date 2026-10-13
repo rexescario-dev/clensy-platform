@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft (revision 5); revisions 2–4 Accepted and implemented |
+| Status | Accepted (revision 5); revisions 2–4 implemented |
+| M5 decision (revision 5) | **Accepted** — 2026-10-13, at `13863e2`, by the owner, with two test changes applied in the M5 record commit: a TypeScript-syntax-tree detector (so trailing comments and strings never count), and coverage asserting all nine drawer pages. Keep the no-runtime-change decision. Run H1–H7, then the full `web` suite, lint and `tsc`. No browser run. M7 MUST be a fresh independent review. |
 | M5 decision (revision 4) | **Accepted** — 2026-10-13, at `b014706`, by the owner. No blocking findings. Keep the synthetic `pageshow` test and G5/G6. Record that a real back/forward-cache restore is **not** browser-verified (Playwright's Chromium disables it): the synthetic event proves the handler's logic, not a real restore. Add an end-to-end check if an environment with the cache enabled becomes available. |
 | M5 decision (revision 3) | **Accepted** — 2026-10-13, at `d04212e`, by the owner. No blocking findings. One clarification is an M6 requirement: show that an unrelated traversal cannot clear the guard early and allow a second Back (see Gate outcomes). The browser checks are mandatory against the committed implementation, especially × then the backdrop in one task, and two Escape keydowns. Scope: the hook and its test only. M7 MUST be a fresh independent review. |
 | M5 decision (revision 2) | **Accepted** — 2026-10-11, at `d8f0ac2`, by the owner. No blocking findings. M6 MUST run Final verification in full; the production-build browser matrix is required before merge, because the test harness models history and cannot prove the installed Next.js keeps the marker. M7 MUST be a fresh independent review (`CLAUDE.md`: application code). Pre-validation counts are author-reported until M6 re-observes them. |
@@ -1052,7 +1053,16 @@ Both reach `HistoryUpdater` with `preserveCustomHistoryState: false`. A server-a
 - `useActionState`;
 - `useFormState`.
 
-### Task 5: Guard test
+### Task 5: Guard test (as accepted at M5, with the reviewer's two changes)
+
+**M5 changes, applied in the M5 record commit:**
+1. **The detector reads the TypeScript syntax tree** (`ts.createSourceFile`) instead of stripping comments with regexes. Comments, including trailing ones, and strings can never count.
+   - **`router.refresh()`:** a call to a `refresh` property with no arguments.
+   - **`'use server'`:** a directive, meaning a leading string-literal statement in a file or function body.
+   - **`useActionState` / `useFormState`:** any identifier with that name, imports included.
+
+   Inline cases pin each rule, including the reviewer's trailing comment `const value = true; // router.refresh()`.
+2. **Coverage lists all nine drawer pages** (`DRAWER_PAGES`). It also requires that every `apps/web/app` file calling `useDetailDrawer(` is in that list, so a new drawer page cannot be missed.
 
 - [ ] **Step 1:** Add the test, a new file:
 
@@ -1061,10 +1071,11 @@ diff --git a/apps/web/lib/use-detail-drawer.guard.test.ts b/apps/web/lib/use-det
 new file mode 100644
 --- /dev/null
 +++ b/apps/web/lib/use-detail-drawer.guard.test.ts
-@@ -0,0 +1,66 @@
+@@ -0,0 +1,125 @@
 +import { readdirSync, readFileSync } from 'node:fs';
 +import { join, relative } from 'node:path';
 +import { fileURLToPath } from 'node:url';
++import ts from 'typescript';
 +import { describe, expect, it } from 'vitest';
 +
 +// #173 revision 5: the drawer's close decision reads a marker in
@@ -1081,12 +1092,24 @@ new file mode 100644
 +// the shared domain components those pages render.
 +const SCANNED = [join(WEB_ROOT, 'app', 'app'), join(WEB_ROOT, 'lib'), join(REPO_ROOT, 'packages', 'web', 'src')];
 +
-+const FORBIDDEN: readonly { pattern: RegExp; what: string }[] = [
-+  { pattern: /\.refresh\s*\(\s*\)/, what: '`router.refresh()`' },
-+  { pattern: /^\s*['"]use server['"]/m, what: "a `'use server'` module or function" },
-+  { pattern: /\buseActionState\b/, what: '`useActionState`' },
-+  { pattern: /\buseFormState\b/, what: '`useFormState`' },
++// Every page that opens a drawer through `useDetailDrawer`, with its drawer
++// defined in the same file.
++const DRAWER_PAGES = [
++  'apps/web/app/app/billing/page.tsx',
++  'apps/web/app/app/bookings/page.tsx',
++  'apps/web/app/app/catalog/add-ons/page.tsx',
++  'apps/web/app/app/catalog/page.tsx',
++  'apps/web/app/app/cleaners/page.tsx',
++  'apps/web/app/app/cleaners/teams/page.tsx',
++  'apps/web/app/app/customers/page.tsx',
++  'apps/web/app/app/jobs/page.tsx',
++  'apps/web/app/app/laundry/page.tsx',
 +];
++
++const FORBIDDEN_IDENTIFIERS = new Map([
++  ['useActionState', '`useActionState`'],
++  ['useFormState', '`useFormState`'],
++]);
 +
 +function sourceFiles(dir: string): string[] {
 +  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -1096,36 +1119,82 @@ new file mode 100644
 +  });
 +}
 +
-+// Comments may name these APIs (the hook's header does); code may not.
-+function withoutComments(source: string): string {
-+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
++// A string-literal statement at the start of a file or function body.
++function isUseServerDirective(statements: ts.NodeArray<ts.Statement>): boolean {
++  for (const statement of statements) {
++    if (!ts.isExpressionStatement(statement) || !ts.isStringLiteral(statement.expression)) return false;
++    if (statement.expression.text === 'use server') return true;
++  }
++  return false;
 +}
 +
-+function findDrawerHistoryHazards(files: readonly string[]): string[] {
-+  return files.flatMap((file) => {
-+    const code = withoutComments(readFileSync(file, 'utf8'));
-+    return FORBIDDEN.filter(({ pattern }) => pattern.test(code)).map(
-+      ({ what }) => `${relative(REPO_ROOT, file)} uses ${what}`,
-+    );
-+  });
++// Reads the syntax tree, so comments and strings that merely name these APIs
++// never count; only code that uses them does.
++function drawerHistoryHazards(fileName: string, source: string): string[] {
++  const file = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
++  const found = new Set<string>();
++  const visit = (node: ts.Node) => {
++    if (
++      ts.isCallExpression(node) &&
++      ts.isPropertyAccessExpression(node.expression) &&
++      node.expression.name.text === 'refresh' &&
++      node.arguments.length === 0
++    ) {
++      found.add('`router.refresh()`');
++    }
++    if ((ts.isSourceFile(node) || ts.isBlock(node)) && isUseServerDirective(node.statements)) {
++      found.add("a `'use server'` module or function");
++    }
++    if (ts.isIdentifier(node) && FORBIDDEN_IDENTIFIERS.has(node.text)) {
++      found.add(FORBIDDEN_IDENTIFIERS.get(node.text)!);
++    }
++    ts.forEachChild(node, visit);
++  };
++  visit(file);
++  return [...found];
 +}
 +
 +describe('drawer history marker guard (#173)', () => {
-+  it('scans the drawer pages, the hooks and the shared components', () => {
-+    const files = SCANNED.flatMap(sourceFiles).map((file) => relative(REPO_ROOT, file));
-+    expect(files).toContain('apps/web/lib/use-detail-drawer.ts');
-+    expect(files).toContain('apps/web/app/app/laundry/page.tsx');
-+    expect(files).toContain('apps/web/app/app/bookings/page.tsx');
-+    expect(files.some((file) => file.startsWith('packages/web/src/'))).toBe(true);
++  const files = SCANNED.flatMap(sourceFiles);
++  const scanned = files.map((file) => relative(REPO_ROOT, file));
++
++  it('scans every drawer page, the hooks and the shared components', () => {
++    expect(scanned).toEqual(expect.arrayContaining([...DRAWER_PAGES, 'apps/web/lib/use-detail-drawer.ts']));
++    expect(scanned.some((file) => file.startsWith('packages/web/src/'))).toBe(true);
++    // A page that starts using the hook must be added to DRAWER_PAGES.
++    const usingHook = files
++      .filter((file) => /\buseDetailDrawer\(/.test(readFileSync(file, 'utf8')))
++      .map((file) => relative(REPO_ROOT, file))
++      .filter((file) => file.startsWith('apps/web/app/'));
++    expect(usingHook.sort()).toEqual([...DRAWER_PAGES].sort());
 +  });
 +
 +  it('finds no router.refresh() or server action where a drawer could be open', () => {
-+    const hazards = findDrawerHistoryHazards(SCANNED.flatMap(sourceFiles));
++    const hazards = files.flatMap((file) =>
++      drawerHistoryHazards(file, readFileSync(file, 'utf8')).map((what) => `${relative(REPO_ROOT, file)} uses ${what}`),
++    );
 +    // If this fails: these drop the drawer marker from the current history
 +    // entry, so × would replace it instead of going Back. Re-mark the entry
 +    // after the refresh or action (see the header of use-detail-drawer.ts),
 +    // with a test, before allowing it here.
 +    expect(hazards).toEqual([]);
++  });
++
++  // What the detector counts, pinned on inline sources.
++  it.each([
++    ['a call', 'router.refresh();', ['`router.refresh()`']],
++    ['a spaced call', 'router.refresh ( );', ['`router.refresh()`']],
++    ['a module directive', "'use server';\nexport async function save() {}", ["a `'use server'` module or function"]],
++    ['a function directive', "async function save() {\n  'use server';\n}", ["a `'use server'` module or function"]],
++    ['an import', "import { useActionState } from 'react';", ['`useActionState`']],
++    ['a line comment', '// router.refresh()', []],
++    ['a trailing comment', "const value = true; // router.refresh() and 'use server'", []],
++    ['a block comment', '/* useFormState; router.refresh(); */', []],
++    ['a string', "const text = 'router.refresh() useActionState';", []],
++    ['a non-directive string', "save();\n'use server';", []],
++    ['refresh with arguments', 'cache.refresh(key);', []],
++  ])('%s', (_label, source, expected) => {
++    expect(drawerHistoryHazards('inline.tsx', source)).toEqual(expected);
 +  });
 +});
 ```
@@ -1148,37 +1217,39 @@ diff --git a/apps/web/lib/use-detail-drawer.ts b/apps/web/lib/use-detail-drawer.
  // The current entry's drawer marker, as a fresh state object for a native
 ```
 
-- [ ] **Step 3:** Run `pnpm --filter web exec vitest run lib/use-detail-drawer.guard.test.ts`. Expected: `Tests 2 passed (2)`. eslint and `tsc` are clean.
-- [ ] **Step 4: Failure evidence**, not committed. Plant each hazard alone, run the guard, and revert. Expected:
+- [ ] **Step 3:** Run `pnpm --filter web exec vitest run lib/use-detail-drawer.guard.test.ts`. Expected: `Tests 13 passed (13)`: coverage, the scan, and 11 inline detector cases. eslint and `tsc` are clean.
+- [ ] **Step 4: Failure evidence**, not committed. Plant each hazard alone in a real file, run the guard, and revert. Expected:
 
   | Plant | Expected |
   | --- | --- |
-  | H1: `router.refresh();` in `bookings/page.tsx` | 1 failed / 1 passed |
-  | H2: a `'use server'` module in `apps/web/lib` | 1 failed / 1 passed |
-  | H3: `useActionState` in `packages/web/src/auth/login-form.tsx` | 1 failed / 1 passed |
-  | H4: `// router.refresh() …` as a comment only | 2 passed |
-  | H5: `router.refresh ( );` (spaced) | 1 failed / 1 passed |
+  | H1: `router.refresh();` in `bookings/page.tsx` | 1 failed / 12 passed |
+  | H2: a `'use server'` module in `apps/web/lib` | 1 failed / 12 passed |
+  | H3: `useActionState` in `packages/web/src/auth/login-form.tsx` | 1 failed / 12 passed |
+  | H4: `// router.refresh() …`, a line comment, in bookings | 13 passed |
+  | H5: `router.refresh ( );` (spaced) in bookings | 1 failed / 12 passed |
+  | H6: `const note = true; // router.refresh() and 'use server'`, a trailing comment, in bookings | 13 passed |
+  | H7: a new `apps/web/app/app/zz-planted/page.tsx` calling `useDetailDrawer()` | 1 failed / 12 passed (coverage) |
 
-  Characterization note: the guard pins today's state (none present). It is not a red-first behaviour test, so H1–H5 are its failure evidence, as M8's characterization rule requires.
+  Characterization note: the guard pins today's state (none present). H1–H7 are its failure evidence.
 - [ ] **Step 5:** One commit: `test(web): guard drawer pages against marker-dropping refreshes and server actions (#173)`.
 
 ### Revision 5 final verification
 
 - [ ] **Allowlist:** `git diff --name-only 4c028b5...HEAD -- . ':!docs'` is exactly `apps/web/lib/use-detail-drawer.guard.test.ts` and `apps/web/lib/use-detail-drawer.ts` (the latter comment-only; scripted check).
-- [ ] **H1–H5** as above.
-- [ ] **Full suites:** `pnpm --filter web test` (684 at pre-validation), `lint`, `tsc --noEmit -p .`. A Next build is not needed: no runtime file changes, only a comment.
+- [ ] **H1–H7** as above.
+- [ ] **Full suites:** `pnpm --filter web test` (695 at pre-validation), `lint`, `tsc --noEmit -p .`. A Next build is not needed: no runtime file changes, only a comment.
 - [ ] **Browser:** not needed, since behaviour is unchanged.
 
 ### Revision 5 pre-validation
 
-Applied on the branch at `4c028b5`, then removed before this Draft was committed.
+These are the results for the M5-amended version. The first Draft's regex guard gave 2 passed and H1–H5 as planned, and that version is superseded.
 
 | Check | Result |
 | --- | --- |
-| Guard test | 2 passed (2) |
-| H1, H2, H3, H5 | 1 failed / 1 passed each |
-| H4 | 2 passed |
-| `web` / lint / `tsc` | 684 passed; exit 0; clean |
+| Guard test | 13 passed (13) |
+| H1, H2, H3, H5, H7 | 1 failed / 12 passed each |
+| H4, H6 | 13 passed |
+| `web` / lint / `tsc` | 695 passed; exit 0; clean |
 
 ## Final verification
 
@@ -1568,3 +1639,12 @@ That honours §2.4 and §2.5 for changed application code. Every application-cod
 2. **Record verification limits explicitly.** Here that is a back/forward-cache restore that Playwright cannot produce. An unverified path must not be implied as covered.
 
 Gate: **Workflow validated.**
+
+### M5 — Accepted (2026-10-13, revision 5)
+
+Accepted at `13863e2` by the owner, with two test changes. Both are applied in this record commit (Task 5 above), as the #171 revision 2 precedent allows:
+
+1. **Inline comments were not stripped.** `withoutComments()` missed trailing comments: `const value = true; // router.refresh()` would have tripped the guard. The detector now walks the TypeScript syntax tree instead of stripping comments with regexes. Inline cases, H4 and H6 pin this.
+2. **Coverage now asserts all nine drawer pages** (`DRAWER_PAGES`), and that every `apps/web/app` file calling `useDetailDrawer(` is listed. H7 pins this.
+
+The no-runtime-change decision stands. The amended version was pre-validated before this record (see "Revision 5 pre-validation"), and M6 re-observes it.
