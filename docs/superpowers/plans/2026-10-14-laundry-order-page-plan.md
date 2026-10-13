@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft, revision 4** (M4). Awaiting Plan Review (M5). |
+| Status | **Accepted (revision 4)** — M5, 2026-10-14. Ready for M6. |
+| M5 decision | **Accepted** — 2026-10-14, revision 4 (`76650be`), by the owner, after a fourth pass on the changed pieces: `resolvedInvoiceNodes` validates the result shape; a confirmed empty list alone means no invoice; missing or malformed data and loading or failed queries stay unresolved; the nav and the Invoice section read one validated value; the two page regressions check that an incomplete result neither selects Invoice nor shows the empty-invoice or error message. One P3 coverage suggestion (an explicit `nodes: null` case) was folded into Task 2 at acceptance, as an eighth `resolvedInvoiceNodes` test; no other change. This accepts the plan only: no planned suite, lint, type-check or build has run. M7 MUST be a fresh independent review (`CLAUDE.md`: application code). |
 | M5 history | First pass (2026-10-14, owner): **Returned for Revision**. One P2 finding: the current-section rule could read invoice data that Apollo retains while the invoice query is loading or has failed. Resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). Second pass (2026-10-14, owner): **Returned for Revision**. The invoice finding confirmed resolved. One new P2 finding: the loading check skipped `LoadingState` when Apollo retains earlier order data while the order query loads. Resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). Third pass (2026-10-14, owner, reviewed in five parts): **Returned for Revision**. Both earlier findings confirmed resolved. One P2: a finished invoice result without the invoice connection must stay unresolved, never "no invoice", and needs a regression test. Resolved in [Revision 4 (M5 review 3)](#revision-4-m5-review-3). |
 | Date | 2026-10-14 |
 | Tracking issue | [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) "Dedicated laundry order detail page and overview". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#157](https://github.com/rexescario-dev/clensy-platform/issues/157) (closed: `LaundryOrderProgress`, `formatWeightGrams`, `laundryOrderActions`, the `laundry` copy). The sections are filled later by #155, #158, #162, #166 and #165. The list cutover is [#161](https://github.com/rexescario-dev/clensy-platform/issues/161). |
@@ -160,7 +161,7 @@ Read-only checks run at planning time, for M5. They are not pre-validation of an
 
 | Finding | Resolution |
 | --- | --- |
-| **P2: invoice absence is inferred from an incomplete result.** Only a confirmed, successful result with the invoice connection and an empty node list may show "No invoice yet." or let the nav pass over Invoice as resolved; the plan did not pin that. | Confirmed, and worse than the review assumed: revision 3's `resolvedQueryData(invoiceQuery)?.invoices.nodes` had no optional step before `.nodes`, so a finished result without the `invoices` connection would have **thrown**, not stayed unresolved. New pure helper `resolvedInvoiceNodes` (Task 2) returns the node array only from a finished, error-free result whose `invoices.nodes` is an array, and `undefined` otherwise (no data, `invoices` missing or `null`, `nodes` missing or `null`, loading, error). The page derives `invoices` through it (Task 3, Step 4); nav and Invoice body still read that one value. The Global Constraints bullet "Invoice result" states the rule. Regression tests: seven `resolvedInvoiceNodes` cases in Task 2, and two render tests in Task 3 (`invoiceShape: 'noData'` and `'noConnection'`), each asserting a `PRICED` order seen by TENANT_OWNER marks Actions, not Invoice, and shows neither "No invoice yet." nor the error message. The schema makes `invoices` non-null, so this guards a contract break rather than a normal response. Review Focus 11 records it. |
+| **P2: invoice absence is inferred from an incomplete result.** Only a confirmed, successful result with the invoice connection and an empty node list may show "No invoice yet." or let the nav pass over Invoice as resolved; the plan did not pin that. | Confirmed, and worse than the review assumed: revision 3's `resolvedQueryData(invoiceQuery)?.invoices.nodes` had no optional step before `.nodes`, so a finished result without the `invoices` connection would have **thrown**, not stayed unresolved. New pure helper `resolvedInvoiceNodes` (Task 2) returns the node array only from a finished, error-free result whose `invoices.nodes` is an array, and `undefined` otherwise (no data, `invoices` missing or `null`, `nodes` missing or `null`, loading, error). The page derives `invoices` through it (Task 3, Step 4); nav and Invoice body still read that one value. The Global Constraints bullet "Invoice result" states the rule. Regression tests: seven `resolvedInvoiceNodes` cases in Task 2 (eight after the M5 acceptance added `nodes: null`), and two render tests in Task 3 (`invoiceShape: 'noData'` and `'noConnection'`), each asserting a `PRICED` order seen by TENANT_OWNER marks Actions, not Invoice, and shows neither "No invoice yet." nor the error message. The schema makes `invoices` non-null, so this guards a contract break rather than a normal response. Review Focus 11 records it. |
 
 ---
 
@@ -400,6 +401,7 @@ describe('resolvedInvoiceNodes', () => {
     ['no invoices connection', {}],
     ['a null invoices connection', { invoices: null }],
     ['no nodes array', { invoices: {} }],
+    ['null nodes', { invoices: { nodes: null } }],
   ])('treats a finished result with %s as unresolved', (_label, data) => {
     expect(resolvedInvoiceNodes({ ...done, data: data as never })).toBeUndefined();
   });
@@ -1521,4 +1523,15 @@ Push `feat/156-laundry-order-page` and open the PR against `main` with `gh pr cr
 
 ## Gate outcomes
 
-*(Appended after M5.)*
+### M5 — Accepted (2026-10-14, fourth pass)
+
+Owner review of revision 4, on the changed pieces after a five-part review of revision 3. Disposition:
+
+| Finding | Severity | Status |
+| --- | --- | --- |
+| Invoice nav based on retained Apollo data (review 1) | P2 | Resolved in revision 2 |
+| Order page renders retained order data while loading (review 2) | P2 | Resolved in revision 3 |
+| Invoice absence inferred from an incomplete result; revision 3 could throw (review 3) | P2 | Resolved in revision 4 |
+| Explicit `nodes: null` test (review 4) | P3 | Added to Task 2 at acceptance |
+
+Verdict: **Accepted.** This is a plan review, not execution evidence. The type-check and lint spike for `resolvedInvoiceNodes` is the only code that ran; every planned test, lint, type-check and build runs in M6.
