@@ -4,8 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft, revision 3** (M4). Awaiting Plan Review (M5). |
-| M5 history | First pass (2026-10-14, owner): **Returned for Revision**. One P2 finding: the current-section rule could read invoice data that Apollo retains while the invoice query is loading or has failed. Resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). Second pass (2026-10-14, owner): **Returned for Revision**. The invoice finding confirmed resolved. One new P2 finding: the loading check skipped `LoadingState` when Apollo retains earlier order data while the order query loads. Resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). |
+| Status | **Draft, revision 4** (M4). Awaiting Plan Review (M5). |
+| M5 history | First pass (2026-10-14, owner): **Returned for Revision**. One P2 finding: the current-section rule could read invoice data that Apollo retains while the invoice query is loading or has failed. Resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). Second pass (2026-10-14, owner): **Returned for Revision**. The invoice finding confirmed resolved. One new P2 finding: the loading check skipped `LoadingState` when Apollo retains earlier order data while the order query loads. Resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). Third pass (2026-10-14, owner, reviewed in five parts): **Returned for Revision**. Both earlier findings confirmed resolved. One P2: a finished invoice result without the invoice connection must stay unresolved, never "no invoice", and needs a regression test. Resolved in [Revision 4 (M5 review 3)](#revision-4-m5-review-3). |
 | Date | 2026-10-14 |
 | Tracking issue | [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) "Dedicated laundry order detail page and overview". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#157](https://github.com/rexescario-dev/clensy-platform/issues/157) (closed: `LaundryOrderProgress`, `formatWeightGrams`, `laundryOrderActions`, the `laundry` copy). The sections are filled later by #155, #158, #162, #166 and #165. The list cutover is [#161](https://github.com/rexescario-dev/clensy-platform/issues/161). |
 | Branch | `feat/156-laundry-order-page`, from `main` at `55a84a7`. One PR for this plan, its M5 record and the implementation. |
@@ -54,7 +54,7 @@ Derived from the Accepted spec, issue #156 and the owner decisions above. Every 
   5. else none.
 
   Overview and Price are never current: Overview has no action, and pricing starts in Services. While the role or the invoice query is unresolved, a rule that needs it does not match.
-- **Invoice result (one source for nav and body):** the invoice query counts as resolved only when it is not loading, has no error, and has data (`resolvedQueryData`). Data that Apollo retains while a query is loading or after it fails is **never** read: the current-section rule gets `invoiceExists: undefined`, and the Invoice section shows the error message (on an error) or nothing (while loading), never the retained invoice or "No invoice yet."
+- **Invoice result (one source for nav and body):** the invoice query counts as resolved only when it is not loading, has no error, and its data carries the `invoices` connection with a `nodes` array (`resolvedInvoiceNodes`, built on `resolvedQueryData`). Only that confirmed list decides: empty means no invoice; one node means an invoice exists. A finished result with no data, with no `invoices` connection, or with no `nodes` array is **unresolved**, exactly like loading: no current-section match, no "No invoice yet.", no error message, and no exception. Data that Apollo retains while a query is loading or after it fails is **never** read: the current-section rule gets `invoiceExists: undefined`, and the Invoice section shows the error message (on an error) or nothing (while loading), never the retained invoice or "No invoice yet."
 - **Sections:** each is a `section` with `id="laundry-order-<section>"`, `scroll-mt-6`, an `h2` with `text-base font-semibold text-slate-900`, and a body with `mt-3`. Contents (owner decision 1):
   - **Overview:** the lines, when `lines.nodes` is non-empty; otherwise "No lines yet. Lines are added when the order is priced." The summary facts are not repeated. Each line shows "Base service" (`serviceId` set) or "Add-on", its unit label, its quantity per §8.4.4 (`PER_KG`: weight via `formatWeightGrams`; `PER_ITEM`: item count; `FLAT` / `PER_SERVICE`: none), its amount, and "Minimum charge applied" when `minimumChargeApplied` is true. No line name until #159's line-label API exists.
   - **Weighing:** "Recorded weight" and the weight, or "Not weighed yet."
@@ -84,6 +84,7 @@ Conditions a person will meet. Each has a test in the owning task.
 8. **Section-nav clicks and Back.** The section links are native in-page anchors, so each click adds a history entry, as any in-page link does. Back from the page without such clicks returns to the list. This is a planning choice, flagged for M5: avoiding the extra entries needs a scripted scroll that replaces the URL, which #156 does not ask for.
 9. **Retained invoice data (M5 review 1).** Apollo can keep earlier `data` while a query reloads or after it fails. With retained "no invoice" data and an error, the nav must not mark Invoice, and the Invoice section must show the error, not "No invoice yet." → Task 2 (`resolvedQueryData`), Task 3 (`ignores retained invoice data while the invoice query has failed`, `ignores retained invoice data while the invoice query reloads`).
 10. **Retained order data (M5 review 2).** Apollo can keep an earlier order's data while the order query loads or after it fails. The page shows the loading state, or the error state, and never the retained order's header or sections. → Task 3 (`shows the loading state, not a retained order, while the order query loads`, `shows the error state, not a retained order, when the order query fails`).
+11. **Incomplete invoice result (M5 review 3).** A finished, error-free invoice result with no data or without the `invoices` connection is not proof that no invoice exists. The nav must not mark Invoice, the section must not say "No invoice yet.", and the page must not throw. → Task 2 (`resolvedInvoiceNodes`), Task 3 (`treats a finished invoice result with no data as unresolved`, `treats a finished invoice result without the invoice connection as unresolved`).
 
 ## Planning spikes
 
@@ -97,6 +98,7 @@ Read-only checks run at planning time, for M5. They are not pre-validation of an
 - **API read behavior:** `LaundryOrderResolver.laundryOrder` is a hand-written nullable `@Query` guarded by `VIEW_ROLES` (TENANT_OWNER, OPS_MANAGER, SCHEDULER, CUSTOMER_SUPPORT, FINANCE, ANALYST). A missing or cross-tenant order returns `null`. `invoices` (`InvoiceForOrder`) uses the same six roles, so every viewer can run both queries.
 - **Lines connection:** `LaundryOrder.lines(paging: OffsetPaging! = { limit: 20 })`, sorted `createdAt ASC, id ASC`, `maxResultsSize: PLATFORM_PAGE_MAX` (100).
 - **Nav matching:** `findActiveHref` keeps the longest nav href whose segment matches, so `/app/laundry/<id>` → `/app/laundry`. `pageTitleKey` and `canViewPath` use the same match.
+- **`resolvedInvoiceNodes` typing (M5 review 3 spike):** a throwaway `apps/web/lib` module held the Task 2 helper and called it with the real `useInvoiceForOrderQuery` result. `pnpm exec tsc --noEmit` reported no error for it, `invoices?.[0]?.invoiceNumber` typed as `string`, and `eslint` on the file was clean (no unnecessary-condition complaint about the runtime checks). The file was deleted.
 - **i18n:** `useClensyTranslations`' `t()` has no interpolation, so no copy contains a count or name placeholder.
 
 ## File map
@@ -124,7 +126,7 @@ Read-only checks run at planning time, for M5. They are not pre-validation of an
 | Progress with payment branch and terminal statuses | §8.4.4; #156 AC5 | 3 (wiring); #157 tests (step logic) |
 | Summary grid, em dashes | #156 §Page structure 4, §States | 3 |
 | Section nav, current section | #156 §Page structure 5; owner decision 2 | 2, 3 |
-| Unresolved invoice query never decides the nav or the Invoice body | Global Constraints (Invoice result); M5 review 1 | 2, 3 |
+| Unresolved or incomplete invoice result never decides the nav or the Invoice body | Global Constraints (Invoice result); M5 reviews 1 and 3 | 2, 3 |
 | Sections and their read-only facts | §8.4.4; #156 §Page structure 6; owner decision 1 | 2, 3 |
 | Lines complete up to 100, warning beyond | #156 §Overview | 1, 3 |
 | Line quantity per unit | §8.4.4 services bullet | 2, 3 |
@@ -153,6 +155,12 @@ Read-only checks run at planning time, for M5. They are not pre-validation of an
 | Finding | Resolution |
 | --- | --- |
 | **P2: the loading state could be bypassed when Apollo retains order data.** The check was `validId && orderQuery.loading && !orderQuery.data`, so a load with retained data fell through and rendered the earlier order. | Decision: retained order data is **hidden** while loading, as the loading constraint already required. The check is now `validId && orderQuery.loading` (Task 3, Step 4); the error and not-found checks after it are unchanged, so an error with retained data also shows the error state. The Global Constraints Loading bullet now says so explicitly. The render-test mock can retain order data (`orderRetained`), and two regression tests pin it: loading with a retained order shows the back link and `LoadingState` with no heading, customer name, summary, nav or sections; an error with a retained order shows the error state with none of them. Review Focus 10 records it. The invoice finding from review 1 is confirmed resolved and is unchanged. |
+
+## Revision 4 (M5 review 3)
+
+| Finding | Resolution |
+| --- | --- |
+| **P2: invoice absence is inferred from an incomplete result.** Only a confirmed, successful result with the invoice connection and an empty node list may show "No invoice yet." or let the nav pass over Invoice as resolved; the plan did not pin that. | Confirmed, and worse than the review assumed: revision 3's `resolvedQueryData(invoiceQuery)?.invoices.nodes` had no optional step before `.nodes`, so a finished result without the `invoices` connection would have **thrown**, not stayed unresolved. New pure helper `resolvedInvoiceNodes` (Task 2) returns the node array only from a finished, error-free result whose `invoices.nodes` is an array, and `undefined` otherwise (no data, `invoices` missing or `null`, `nodes` missing or `null`, loading, error). The page derives `invoices` through it (Task 3, Step 4); nav and Invoice body still read that one value. The Global Constraints bullet "Invoice result" states the rule. Regression tests: seven `resolvedInvoiceNodes` cases in Task 2, and two render tests in Task 3 (`invoiceShape: 'noData'` and `'noConnection'`), each asserting a `PRICED` order seen by TENANT_OWNER marks Actions, not Invoice, and shows neither "No invoice yet." nor the error message. The schema makes `invoices` non-null, so this guards a contract break rather than a normal response. Review Focus 11 records it. |
 
 ---
 
@@ -263,6 +271,7 @@ import {
   laundryLineQuantity,
   laundryOrderHref,
   laundryOrderSectionId,
+  resolvedInvoiceNodes,
   resolvedQueryData,
 } from './laundry-order-page';
 
@@ -376,6 +385,32 @@ describe('resolvedQueryData', () => {
   });
 });
 
+describe('resolvedInvoiceNodes', () => {
+  const done = { error: undefined, loading: false };
+
+  it('returns the nodes of a finished result, empty or not', () => {
+    expect(resolvedInvoiceNodes({ ...done, data: { invoices: { nodes: [] } } })).toEqual([]);
+    expect(resolvedInvoiceNodes({ ...done, data: { invoices: { nodes: [{ id: 'i1' }] } } })).toEqual([{ id: 'i1' }]);
+  });
+
+  // Only a confirmed node list says whether an invoice exists (M5 review 3).
+  it.each<[string, unknown]>([
+    ['no data', undefined],
+    ['null data', null],
+    ['no invoices connection', {}],
+    ['a null invoices connection', { invoices: null }],
+    ['no nodes array', { invoices: {} }],
+  ])('treats a finished result with %s as unresolved', (_label, data) => {
+    expect(resolvedInvoiceNodes({ ...done, data: data as never })).toBeUndefined();
+  });
+
+  it('treats a loading or failed query as unresolved, whatever data it retains', () => {
+    const data = { invoices: { nodes: [] } };
+    expect(resolvedInvoiceNodes({ data, error: undefined, loading: true })).toBeUndefined();
+    expect(resolvedInvoiceNodes({ data, error: new Error('network down'), loading: false })).toBeUndefined();
+  });
+});
+
 describe('laundryLifecycleVerbs', () => {
   it('drops the verbs that belong to the weighing, services and invoice sections', () => {
     expect(laundryLifecycleVerbs(['weigh', 'price', 'generateInvoice', 'markPaid', 'cancel'])).toEqual([
@@ -403,7 +438,7 @@ describe('laundryLineQuantity', () => {
 - [ ] **Step 2: Run them and watch them fail**
 
 Run: `pnpm --filter web test -- laundry-order-page.test`
-Expected: FAIL. The suite cannot resolve `./laundry-order-page` (so `resolvedQueryData` and the other helpers are missing), and `isUuid` is not exported from `./laundry-order-list-query`.
+Expected: FAIL. The suite cannot resolve `./laundry-order-page` (so `resolvedQueryData`, `resolvedInvoiceNodes` and the other helpers are missing), and `isUuid` is not exported from `./laundry-order-list-query`.
 
 - [ ] **Step 3: Export `isUuid`**
 
@@ -481,6 +516,21 @@ export function resolvedQueryData<T>(query: { data?: T; error?: unknown; loading
   return query.loading || query.error ? undefined : query.data;
 }
 
+// The invoice query's nodes, only from a finished, error-free result that
+// carries the `invoices` connection with a `nodes` array. Anything else,
+// including a result with no data or no connection, is unresolved
+// (`undefined`), never "no invoice" (M5 review 3). The parameter type is
+// looser than the generated result on purpose, so the checks below are
+// real runtime checks and not flagged as unnecessary.
+export function resolvedInvoiceNodes<T>(query: {
+  data?: { invoices?: { nodes?: readonly T[] | null } | null } | null;
+  error?: unknown;
+  loading: boolean;
+}): readonly T[] | undefined {
+  const nodes = resolvedQueryData(query)?.invoices?.nodes;
+  return Array.isArray(nodes) ? nodes : undefined;
+}
+
 // Verbs that the Weighing, Services and Invoice sections own. The Actions
 // section names the rest.
 const SECTION_VERBS: ReadonlySet<LaundryOrderVerb> = new Set<LaundryOrderVerb>(['weigh', 'price', 'generateInvoice']);
@@ -490,8 +540,9 @@ export function laundryLifecycleVerbs(verbs: readonly LaundryOrderVerb[]): Laund
 }
 
 export interface CurrentLaundryOrderSectionInput {
-  // `undefined` unless the invoice query has finished without an error
-  // (`resolvedQueryData`), including while it reloads with retained data.
+  // `undefined` unless `resolvedInvoiceNodes` returned a node list:
+  // while loading (even with retained data), after an error, and for a
+  // finished result without the invoice connection.
   invoiceExists: boolean | undefined;
   status: LaundryOrderStatus;
   // `laundryOrderActions(status, fulfillmentType, role)`.
@@ -695,6 +746,8 @@ const page = vi.hoisted(() => ({
   invoiceOptions: [] as Array<{ skip?: boolean; variables?: unknown }>,
   // Apollo keeps earlier data while a query reloads or after it fails.
   invoiceRetained: false,
+  // A finished result that lacks data or the invoice connection (M5 review 3).
+  invoiceShape: 'nodes' as 'noConnection' | 'noData' | 'nodes',
   order: undefined as unknown,
   orderError: undefined as Error | undefined,
   orderLoading: false,
@@ -717,6 +770,9 @@ vi.mock('@clensy/client', () => ({
   }),
   useInvoiceForOrderQuery: (options: { skip?: boolean; variables?: unknown }) => {
     page.invoiceOptions.push(options);
+    if (page.invoiceShape !== 'nodes') {
+      return { data: page.invoiceShape === 'noData' ? undefined : {}, error: undefined, loading: false };
+    }
     return {
       data:
         page.invoiceRetained || (!page.invoiceLoading && !page.invoiceError)
@@ -764,6 +820,7 @@ beforeEach(() => {
   page.invoiceNodes = [];
   page.invoiceOptions.length = 0;
   page.invoiceRetained = false;
+  page.invoiceShape = 'nodes';
   page.order = order();
   page.orderError = undefined;
   page.orderLoading = false;
@@ -974,6 +1031,20 @@ describe('laundry order page', () => {
     expect(section(html, 'invoice')).not.toContain('Unable to load the invoice.');
   });
 
+  // M5 review 3: only a confirmed node list says whether an invoice exists.
+  it.each([
+    ['with no data', 'noData'],
+    ['without the invoice connection', 'noConnection'],
+  ] as const)('treats a finished invoice result %s as unresolved', async (_label, shape) => {
+    page.order = order({ status: 'PRICED' });
+    page.invoiceShape = shape;
+    const html = await renderPage();
+    expect(html).not.toMatch(/<a[^>]*href="#laundry-order-invoice"[^>]*aria-current="true"/);
+    expect(html).toMatch(/<a[^>]*href="#laundry-order-actions"[^>]*aria-current="true"/);
+    expect(section(html, 'invoice')).not.toContain('No invoice yet.');
+    expect(section(html, 'invoice')).not.toContain('Unable to load the invoice.');
+  });
+
   it('renders the shared progress with the payment branch current', async () => {
     const html = await renderPage();
     expect(html).toContain('aria-label="Order progress"');
@@ -1081,7 +1152,7 @@ import {
   laundryLifecycleVerbs,
   laundryLineQuantity,
   laundryOrderSectionId,
-  resolvedQueryData,
+  resolvedInvoiceNodes,
   type LaundryOrderSection,
 } from '../../../../lib/laundry-order-page';
 
@@ -1143,10 +1214,11 @@ function LaundryOrderWorkspace({ id }: { id: string }) {
     );
   }
 
-  // Only a finished, successful invoice query decides the nav and the
-  // Invoice section; data retained while it reloads or after it fails is
-  // ignored by both (M5 review 1).
-  const invoices = resolvedQueryData(invoiceQuery)?.invoices.nodes;
+  // Only a finished, successful invoice result with its node list decides
+  // the nav and the Invoice section. Data retained while it reloads or
+  // after it fails (M5 review 1), and a result without the connection
+  // (M5 review 3), leave both unresolved.
+  const invoices = resolvedInvoiceNodes(invoiceQuery);
   const verbs = laundryOrderActions(order.status, order.fulfillmentType, role);
   const current = currentLaundryOrderSection({
     invoiceExists: invoices === undefined ? undefined : invoices.length > 0,
@@ -1316,7 +1388,8 @@ function InvoiceBody({
 }: {
   error: boolean;
   invoice: Invoice | undefined;
-  // `resolvedQueryData` returned data: finished, no error.
+  // `resolvedInvoiceNodes` returned a node list: finished, no error,
+  // connection present.
   resolved: boolean;
   t: Translate;
 }) {
@@ -1444,6 +1517,7 @@ Push `feat/156-laundry-order-page` and open the PR against `main` with `gh pr cr
 | Characterization tests labelled | None in this plan: every new test fails before its implementation. |
 | Every M5 review 1 finding answered | Yes; see [Revision 2 (M5 review 1)](#revision-2-m5-review-1). |
 | Every M5 review 2 finding answered | Yes; see [Revision 3 (M5 review 2)](#revision-3-m5-review-2). |
+| Every M5 review 3 finding answered | Yes; see [Revision 4 (M5 review 3)](#revision-4-m5-review-3). |
 
 ## Gate outcomes
 
