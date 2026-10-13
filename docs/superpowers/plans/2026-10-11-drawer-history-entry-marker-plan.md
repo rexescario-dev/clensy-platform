@@ -1526,7 +1526,7 @@ Applied on the branch at `75cde5e`, then removed before this Draft was committed
 - **Aliased hook import:** `import { useDetailDrawer as x }` evades the coverage check.
 - **Outside the scan:** server functions defined outside the scanned roots, and `@clensy/client` / `@clensy/validation`, which use none of these APIs today.
 - **False positives:** a zero-argument `.refresh()` on an unrelated object, and identifiers named `useActionState`/`useFormState`.
-- **Observation, outside this PR:** `.gitignore`'s `/coverage` is root-anchored, so `apps/web/coverage/` is not ignored. Local coverage output there is scanned, as git would let it be committed (H21).
+- ~~**Observation, outside this PR:** `.gitignore`'s `/coverage` is root-anchored, so `apps/web/coverage/` is not ignored.~~ **Resolved in #176** ([plan](2026-10-13-ignore-nested-coverage-plan.md)): `coverage/` and `.nyc_output/` are now ignored at any depth, so the guard's `--exclude-standard` scan skips them.
 
 ### Task 7: Close the guard's remaining gaps
 
