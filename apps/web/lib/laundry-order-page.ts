@@ -21,7 +21,7 @@ export function laundryOrderHref(id: string): string {
 // with no `detail` param; the order page for a UUID-shaped `detail`; and
 // otherwise the list without `detail`, keeping every other list param.
 // Not wired in yet: #161 replaces the drawer with this at cutover.
-export function laundryDetailRedirectHref(search: string | URLSearchParams): string | null {
+export function laundryDetailRedirectHref(search: URLSearchParams | string): string | null {
   const params = new URLSearchParams(search);
   if (!params.has('detail')) return null;
   const id = params.get('detail') ?? '';

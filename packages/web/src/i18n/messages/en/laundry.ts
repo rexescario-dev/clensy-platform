@@ -108,6 +108,65 @@ export const laundry = {
     title: 'Laundry',
   },
   noActions: 'No further actions for this order.',
+  order: {
+    actions: {
+      available: 'Available to your role:',
+    },
+    back: 'Back to laundry orders',
+    invoice: {
+      error: 'Unable to load the invoice.',
+      none: 'No invoice yet.',
+      number: 'Invoice number',
+      paymentStatus: 'Payment status',
+      total: 'Invoice total',
+    },
+    lines: {
+      addOn: 'Add-on',
+      amount: 'Amount',
+      items: 'Items',
+      minimumCharge: 'Minimum charge applied',
+      more: 'More lines are not loaded.',
+      service: 'Base service',
+      unit: 'Unit',
+      weight: 'Weight',
+    },
+    overview: {
+      noLines: 'No lines yet. Lines are added when the order is priced.',
+    },
+    price: {
+      notPriced: 'Not priced yet.',
+      total: 'Order total',
+    },
+    sections: {
+      actions: 'Actions',
+      invoice: 'Invoice',
+      overview: 'Overview',
+      price: 'Price',
+      services: 'Services',
+      weighing: 'Weighing',
+    },
+    sectionsLabel: 'Order sections',
+    services: {
+      none: 'No services selected yet.',
+      priced: 'Services are priced. The lines are listed under Overview.',
+    },
+    summary: {
+      customer: 'Customer',
+      fulfillment: 'Fulfillment',
+      total: 'Total',
+      weight: 'Weight',
+    },
+    unit: {
+      FLAT: 'Flat',
+      PER_ITEM: 'Per item',
+      PER_KG: 'Per kg',
+      PER_SERVICE: 'Per service',
+    },
+    weighing: {
+      notWeighed: 'Not weighed yet.',
+      recorded: 'Recorded weight',
+    },
+  },
   paymentTerms: {
     PAY_NOW: 'Pay now',
     PAY_ON_COMPLETION: 'Pay on completion',
