@@ -36,6 +36,12 @@ export { LaundryOrderProgress } from './laundry/laundry-order-progress';
 export type { LaundryOrderProgressProps } from './laundry/laundry-order-progress';
 export { LaundryFulfillmentFieldset } from './laundry/laundry-fulfillment-fieldset';
 export type { LaundryFulfillmentFieldsetProps } from './laundry/laundry-fulfillment-fieldset';
+export { LaundryCustomerPicker } from './laundry/laundry-customer-picker';
+export type {
+  LaundryCustomerOption,
+  LaundryCustomerPickerProps,
+  LaundryCustomerSearchStatus,
+} from './laundry/laundry-customer-picker';
 export { laundryProgressSteps } from './laundry/laundry-progress-steps';
 export type { LaundryProgressState, LaundryProgressStep } from './laundry/laundry-progress-steps';
 export { LaundryOrderDataTable } from './laundry/laundry-order-data-table';
