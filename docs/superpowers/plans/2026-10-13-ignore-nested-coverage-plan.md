@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft (second draft) |
+| Status | Accepted (second draft) |
+| M5 decision | **Accepted** — 2026-10-13, at `552b519` (second draft), by the owner. The owner withdrew first-draft P1 (the count is 28: 13 roots × 2 directories + 2 files). Before accepting, the owner asked whether V3's status assertion could pass with unrelated changes. It cannot: Task 1 requires a clean tree and index before Step 1, and Step 5 compares the whole of `git status --porcelain` against exactly ` M .gitignore`. Scope stays `.gitignore` and this plan. |
 | M5 (first draft) | Request changes — 2026-10-13, at `24858e8`, by the owner. See Revision log. |
 | Date | 2026-10-13 |
 | Tracking issue | [#176](https://github.com/rexescario-dev/clensy-platform/issues/176). Also affects the [#173](https://github.com/rexescario-dev/clensy-platform/issues/173) drawer history guard (merged in #174). |
