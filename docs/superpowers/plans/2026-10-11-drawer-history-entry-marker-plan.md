@@ -2373,3 +2373,31 @@ Accepted by the owner at `8542255`, after small adjustments. The review's own ve
 4. **(P3) Long lines:** wrapped; none is over 120 characters. The header comment, which an earlier rewrap had run together, is reflowed.
 
 The scope stays two files, with the hook comment-only. The pre-validation is the author's; M6 re-runs every row on the committed code.
+
+### M6 — Revision 7 implemented (2026-10-13)
+
+Implemented from the Accepted revision 7, as amended at M5 (`ce39c51`). Task 7's two diffs were extracted from this plan and `git apply`-ed exactly as embedded.
+
+| Task | Commit | Evidence |
+| --- | --- | --- |
+| 7 Close the guard's remaining gaps | `544edf1` | Guard 28 passed (28). eslint and `tsc` clean. The hook change is comment-only (scripted check). The applied code is byte-identical to the pre-validated code. |
+
+Revision 7 final verification:
+- **Allowlist:** OK, exactly the guard test and `use-detail-drawer.ts`.
+- **Every Step 4 row was re-observed on the committed code:**
+
+  | Plants and mutations | Result |
+  | --- | --- |
+  | H1–H3, H5, H7–H14, H17–H23 | 1 failed / 27 passed each |
+  | H4, H6, H15, H16 | 28 passed |
+  | R1 | 1 failed / 27 passed |
+  | R2 | 5 failed / 23 passed |
+  | R3 + H15 | 2 failed / 26 passed |
+  | R4 | 3 failed / 25 passed |
+
+- **Cleanup, verified explicitly:** after H20 and after the whole table, the tree was clean, the index was empty, and no `zz*` file remained.
+- **Full suites** (main tree): `web` 710 passed; lint exit 0; `tsc --noEmit -p .` clean.
+
+Deviation: none.
+
+Next gate: **M7**, a fresh independent review (`CLAUDE.md`).
