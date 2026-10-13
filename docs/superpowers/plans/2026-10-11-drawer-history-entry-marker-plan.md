@@ -1883,7 +1883,7 @@ Applied on the branch at `734fed8`, then removed before this Draft was committed
   - assignment-pattern destructuring (`({ refresh: r } = router)`);
   - parameter destructuring;
   - a `TMPDIR` inside `apps/web`, which would let the temporary repository race `web-shell-regressions.test.ts` (contrived).
-- **Tracked in [#175](https://github.com/rexescario-dev/clensy-platform/issues/175):** the temporary repository's git calls inherit `GIT_DIR`/`GIT_INDEX_FILE`. Run from inside a git hook, they could act on the developer's real repository. That is not reachable today, because no hooks exist.
+- ~~**Tracked in [#175](https://github.com/rexescario-dev/clensy-platform/issues/175):** the temporary repository's git calls inherit `GIT_DIR`/`GIT_INDEX_FILE`.~~ **Resolved in #175** ([plan](2026-10-13-drawer-guard-git-env-isolation-plan.md)): every git call in the guard drops git's repository-local variables.
 
 **Evidence note** (revision 8 M7 P3-2):
 - R3's "3 failed" assumes ignored `.next` output exists locally; it is 1 in a fresh checkout.
