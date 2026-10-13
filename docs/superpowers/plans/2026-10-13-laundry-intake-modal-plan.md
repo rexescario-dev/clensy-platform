@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 3)**. M6 complete; ready for M7. |
+| Status | **Accepted (revision 3)**. M6 complete; M7 Approved for merge (independent review); M8 N/A; M9 complete; M10 validated. |
 | M5 decision | **Accepted** — 2026-10-14, at `40e2888` (revision 3), by the owner, after a consistency check of revision 3: every second-pass finding has a log row; planned test counts match the stated expectations (e2e 4, fieldset 4, picker static 5, picker interaction 10, variables 2, hook 9, intake 16, plus the list-error characterization test); the picker clears its stored active id; the hook skips at once on an empty input; the fulfillment error describes the radio group. This accepts the plan only. No planned suite, lint, typecheck, build or e2e has run. M6 runs **subagent-driven** from `40e2888`: task order and per-task commits as written, `git status --short` before each commit, stop on any unexpected failure (Task 1: never change API code to make it pass), subagent reports checked against the actual diff and command output, and actual results recorded in the M6 Slice Completion Report. M7 MUST be a fresh independent review (`CLAUDE.md`: application code). |
 | M5 second pass | 2026-10-13/14, owner, reviewed `be71c1c` in five topical parts: **Returned for Revision**. Part 1 acceptable. Part 2 blocking: an emptied input must skip the query at once, and a lingering earlier result must stay unavailable during a search change. Part 3 blocking: a stale active id could come back; the blur test should move focus for real. Part 4 P2: test a `fulfillmentType` server error and its clearing. Part 5 P2: prove the list's error after a failed background refresh; tighten the Step 2 expected failure. All resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). |
 | M5 history | First pass (2026-10-13, owner, reviewed in five parts): **Returned for Revision**. Findings covered customer-search completeness, stale search results, the submit guard's lifecycle, picker active-option state, hook-level tests, a search mock keyed on variables, a create response without an order id, the success ordering, and test and command details. Every finding is resolved or answered in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). |
@@ -86,7 +86,7 @@ Read-only checks run at planning time, for M5. They are not pre-validation of an
 - **`next/link` under jsdom:** a throwaway `apps/web/lib` test rendered `<Link href="/app/customers">` with `next/navigation` mocked as the page harness mocks it. It rendered `href="/app/customers"` and passed. The file was deleted.
 - **Customers query:** `packages/client/src/operations/customers.graphql` already declares `$filter: CustomerFilter` and `$sorting`, and selects `totalCount`; `CustomerFilter.fullName` is a `StringFieldComparison` (has `iLike`); `CustomerSortFields` includes `fullName` and `id`; nodes carry non-null `email` and `phone`. No client change or regeneration is needed.
 - **RBAC:** `customer.type.ts` `VIEW_ROLES` (mirrored in `nav-groups.ts`) include every intake role (TENANT_OWNER, OPS_MANAGER, SCHEDULER, CUSTOMER_SUPPORT), so `canViewPath` shows the link to all of them. `createCustomer` is OWNER, OPS_MANAGER, CUSTOMER_SUPPORT; a SCHEDULER `createCustomer` → `FORBIDDEN` is already e2e-pinned in `customers-properties.e2e-spec.ts` and is not duplicated here.
-- **Escape:** `useDialogBehavior` listens for Escape on `document` (bubble). React 19 dispatches from the root container, so a synthetic `stopPropagation()` on the input's `keydown` keeps the event from `document`. Task 3 pins it against a stand-in listener and Task 5 against the real `Modal`.
+- **Escape:** `useDialogBehavior` listens for Escape on `document` (bubble). React 19 dispatches from the root container, so a synthetic `stopPropagation()` on the input's `keydown` keeps the event from `document`. Task 3 pins it against a stand-in listener and Task 5 against the real `Modal`. **Corrected in M6 (fix round `9a0e67a`):** that holds only for a non-document root. Next.js hydrates React on `document`, so React's listener and `Modal`'s share a node and `stopPropagation()` does not stop `Modal`'s; the picker also calls `nativeEvent.stopImmediatePropagation()`. See Gate outcomes → M6.
 - **Validation:** `required` treats `''` as empty (`packages/validation/src/rules.ts`, `isEmpty`). `formatMessage` substitutes `:attribute` from `options.attributes`, so a template of `':attribute'` with a per-field attribute prints a whole localized sentence per field.
 - **Server field-error shape:** `normalizeApiValidationErrors` reads Apollo's thrown `graphQLErrors` array, and in it `extensions.originalError.message` (an array of `"<field> <constraint>"` strings). `packages/validation/src/normalize.test.ts` pins that Apollo-shaped case against `__fixtures__/create-customer-validation-error.json`, a captured real response (`"email must be an email"`). The Task 5 mock uses that shape with `customerId` as the field.
 - **Typing in jsdom:** the merged `laundry-list-page.interaction.test.tsx` already types into a controlled input with the native `HTMLInputElement.prototype.value` setter plus a bubbling `input` event (`typeSearch`), and that suite passes today. The repo has no `@testing-library/user-event`. The new tests use the same helper rather than add a dependency.
@@ -135,6 +135,8 @@ Read-only checks run at planning time, for M5. They are not pre-validation of an
 - Editing fulfillment after create, the customer form, and order-page sections: #160 §Out of scope.
 - A load-more or second page of customer matches. Narrowing the text is the supported path (Global Constraints, Search guarantee). A tenant with more than 20 customers whose full names are identical cannot reach the 21st by name alone. Searching by phone or email would need a filter the `customers` query does not offer today, so it would need its own issue.
 - A live result-count announcement (for example "3 customers found"). Neither #160 nor the spec asks for it, and `useClensyTranslations`' `t()` has no interpolation for a count. Screen readers already hear the expanded state, the active option, and the Searching / no-match / more-match / error lines, which use `role="status"` or `role="alert"`. This can be a follow-up if the owner wants it.
+- **Follow-up from M7 (T5-a):** Escape or a backdrop click can close the dialog while a create is pending (`FormDialog` disables only Cancel and does not pass `submitting` to `Modal`). The create still completes (toast and drawer), but a failure after the close is silent, and reopening can start a second create. The fix belongs in `@clensy/ui` (`FormDialog`/`Modal` ignore close while `submitting`), for every form dialog, which this slice could not change. Recommended as its own issue.
+- **Live-region timing (M7 observation):** the picker's status lines mount with their text inside a container that leaves `hidden`; some screen readers announce only changes to a live region that already exists. A persistent, initially empty status node would be more robust. Not required by #160 or the spec.
 
 ## Revision 2 (M5 review 1)
 
@@ -2527,3 +2529,161 @@ Deferred task-review minors (for M7 triage), from the execution ledger:
 - Task 5: Escape can close the dialog while a create is pending (Cancel is disabled, Escape is not). The create still completes (toast and drawer), and a reopened dialog has a fresh guard. A malformed `receiveLaundryOrder: null` response would show "Unable to create…" rather than the "may have been created" message (the schema is non-nullable). No test pins guard release after a client-validation failure followed by a successful submit.
 
 Next gate: **M7 — Code Review**. A fresh independent reviewer on the most capable model is required (`CLAUDE.md`: application code).
+
+### M7 — Approved for merge (2026-10-14, fresh independent review)
+
+A fresh agent context on Opus 5.5 reviewed this slice. It did not implement the change (`CLAUDE.md`: application code). It was given the Accepted spec, this Accepted plan, the issue and the branch diff `47503f5..e3f27fd`, and it made no repository edits. This record cites that review; it is **not** a self-review.
+
+```text
+Decision: Approved for merge
+Subject: PR #179, branch feat/160-laundry-intake-modal, merge-base 47503f5 → head e3f27fd (12 commits)
+Accepted specification: docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md
+  (Amendment #164 §8.4.4 second bullet; §8.2; §8.6; §4.4)
+Accepted implementation plan: this plan (revision 3, M5 Accepted at 40e2888, recorded at 59cfffb)
+
+Plan tasks reviewed:
+- Task 1 (API characterization e2e): ✓ — 8b26fc3, lint follow-up de3204c
+- Task 2 (copy + LaundryFulfillmentFieldset): ✓ — f50d6af
+- Task 3 (LaundryCustomerPicker): ✓ — 216d8b0, fix round 9a0e67a
+- Task 4 (search variables + hook): ✓ — d4b97fa
+- Task 5 (dialog + page): ✓ — 6f5b7a8
+- Task 6 (verification + PR): ✓ — PR #179 body carries "Closes #160.", the Cutover sentence, "Not changed",
+  the search guarantee and the manual check table
+
+Verification evidence (re-run by the reviewer at e3f27fd; working tree clean before and after):
+- @clensy/web test 411 passed; lint and build clean
+- web test 752 passed; lint, tsc --noEmit and build clean
+- api e2e laundry-intake-customer-search 4 passed
+- api lint / root lint not re-run (the api script applies --fix); M6 recorded both clean
+- Scope: 16 files, exactly the File map plus this plan; nothing under apps/api/src, schema, migrations,
+  packages/ui, packages/client, packages/validation or docs/workflows; no package.json or lockfile change
+- Plan fidelity: the dialog, hook and fieldset are identical to the plan's code (whitespace-insensitive);
+  the picker differs only by the recorded 9a0e67a fix round
+- Commit hygiene: no Co-Authored-By or "Generated with" line in any commit or in the PR body
+- M6 gate: the first implementation commit 8b26fc3 follows the M5 record 59cfffb
+
+Review summary: Tasks 1–6 implemented faithfully; no invented semantics. The 9a0e67a Escape fix is correct for
+Next.js's document-root hydration (only nativeEvent.stopImmediatePropagation() stops a same-node listener) and is
+pinned by a regression test. "Success opens /app/laundry/[id]" is authorized staged delivery (#161).
+
+Blocking findings: None (no merge blockers)
+
+Deferred task-review minors, triaged — required before merge: none.
+- T2-a fieldset error <p> without role="alert" / aria-invalid: may be deferred (plan-mandated; practically unreachable)
+- T2-b description announced twice: may be deferred (verbosity only)
+- T3-a arrows while idle set `open`: may be deferred (no observable effect)
+- T3-b click test does not assert close: may be deferred (shared select() → close(); Enter test asserts it)
+- T4 clear-and-retype within 300 ms skips a fresh debounce: may be deferred (no stale option; one extra request)
+- T5-a Escape/backdrop can close the dialog while a create is pending: may be deferred; follow-up issue
+  recommended, fixed once in @clensy/ui FormDialog/Modal (listed under Deferred)
+- T5-b receiveLaundryOrder: null in non-null data: may be deferred (schema non-null; data: null case is handled)
+- T5-c no test of guard release after a validation failure then success: may be deferred (release is structural)
+
+Non-blocking observations (do not affect the decision): the T5-a follow-up; the Planning-spikes Escape line
+(annotated in M9); one extra search per selection (harmless); live-region timing (listed under Deferred);
+stopImmediatePropagation also hides Escape from later same-node listeners (intended; none besides Modal);
+namesakes sharing a phone (product/data question outside #160).
+
+Gate: Merge per human/project norms. M8/M9 may follow when appropriate.
+```
+
+### M8 — N/A (2026-10-14)
+
+```text
+Decision: N/A
+Subject: PR #179, branch feat/160-laundry-intake-modal, head e3f27fd
+Accepted specification: docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md (Amendment #164 §8.4.4)
+Accepted implementation plan: this plan (revision 3)
+M7 / authorization: Approved for merge (e3f27fd); M7–M10 requested by the owner ("m7-m10")
+
+Candidates considered, and why none is an M8 refactor:
+- The page tests' typeCustomer duplicates the list's typeSearch helper (native value setter + input event).
+  Both are four-line test helpers bound to different element ids in the same file; extracting a shared helper
+  saves little and touches #163's tests outside this slice's need.
+- T3-a (arrows while idle set `open`) would change state-transition behaviour, however invisibly — not M8.
+- T5-a/T5-b/T5-c are a @clensy/ui behaviour change, an error-path change and a test addition — none is a
+  behaviour-preserving refactor; all are recorded under Deferred or in the M7 triage.
+- The dialog, hook, picker and fieldset are each one small, single-purpose module, already matching the plan;
+  no duplication or complexity worth the risk.
+No code changed in M8.
+```
+
+### M9 — Complete (2026-10-14)
+
+```text
+Decision: Complete
+Subject: #160 Laundry intake modal, PR #179
+Accepted specification: docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md (with Amendment #164)
+Accepted implementation plan: this plan (revision 3)
+M7: Approved for merge (e3f27fd). M8: N/A.
+
+Documentation scope:
+- packages/web/README.md (laundry section)
+- apps/web/README.md (UI component list; new laundry intake section)
+- this plan (Planning-spikes Escape line, Deferred list, Status row, Gate outcomes)
+
+Updated artifacts:
+- packages/web/README.md ← M6 Tasks 2–3 and fix 9a0e67a: the section intro names the intake dialog (#160);
+  new bullets for <LaundryCustomerPicker> (ownership, selection contract, id-tracked active option, keyboard and
+  the document-root Escape handling, row and status lines) and <LaundryFulfillmentFieldset>; the copy bullet names
+  the `create` keys.
+- apps/web/README.md ← M6 Tasks 4–5: the two components added to the consumed @clensy/web list; a new
+  "Laundry intake (`/app/laundry`)" section (search hook and its stale-result rule, form and the three failure
+  paths plus the missing-id message, one-mutation guard, key reset, roles and link, pre-#161 success behaviour).
+- this plan ← M7: the Escape planning-spike line now carries the M6 correction; the T5-a follow-up and the
+  live-region observation are under Deferred; the Status row and the M7–M10 records.
+
+Editorial changes: none needed beyond the above; existing links were already correct.
+
+Unchanged, with reason:
+- docs/README.md records API and tenant-isolation slices; this slice adds only a test under apps/api.
+- The lifecycle spec: #160 implements §8.4.4 without amending it; implementation slices are tracked by epic #154
+  (#157/#163 precedent).
+- No changelog or roadmap file exists in the repository.
+
+Verification:
+- Links: every relative link and in-page anchor in both READMEs and this plan resolves (scripted scan,
+  48 checked, 0 broken).
+- Heading hierarchy: the new `##` section in apps/web/README.md follows "Laundry list" and precedes i18n; in
+  packages/web/README.md the new content is bullets inside the existing `##` laundry section.
+- Status consistency: plan Accepted (revision 3); M6 complete; M7 Approved; M8 N/A; M9 complete; PR #179 open.
+- Terminology follows the spec and the plan: intake, fulfillment, pickup/delivery, drawer / `?detail=`,
+  cutover (#161), `receiveLaundryOrder`.
+- Duplicates / outdated refs: the plan's Escape spike line was the only outdated statement; it is annotated
+  rather than rewritten (Accepted text keeps its history).
+
+Gate: Documentation complete. Code, behaviour and contracts are unchanged by this stage.
+```
+
+### M10 — Accepted, workflow validated (2026-10-14)
+
+```text
+Decision: Accepted
+Subject: workflow prompt library
+Governing specification: docs/workflows/specs/agent-workflow-design.md
+```
+
+**Subject:** the installed workflow prompt library (`docs/workflows/`, generic 1.4.1 / claude 0.2.0), run on #160 from M4 to M9. There was no M2/M3 for this slice: #160 implements the already-Accepted Amendment #164 §8.4.4, as #157 and #163 did. The Context Forge dispatch asked for "Brainstorm (project default)"; the workflow's own selection rule (an Accepted spec exists → M4) governed, and the owner accepted that route by reviewing the plan.
+
+**Asset inventory:** unchanged. Nine prompts map to M2–M10, with `conventions/prompt-library.md` as M1 and `conventions/reporting-conventions.md` for Slice Completion Reports. There are no orphan assets.
+
+**Checks:**
+- §2.5: M5 Accept of revision 3 (`40e2888`, recorded `59cfffb`) precedes the first M6 commit `8b26fc3`.
+- M5's Return path worked as specified twice: revision 1 and revision 2 were each Returned with findings, revised at M4 with a resolution log, and re-reviewed; no Accepted artifact was rewritten silently.
+- The authority model held: the spec governed semantics (the search guarantee and the missing-id message were decided against §8.4.4 and the issue); the plan governed sequencing (Tasks 1–5 in order, one commit each; the deviations were test- or lint-only rulings and one fix round, all recorded).
+- CLAUDE.md's M7 rule was honoured: a fresh, independent reviewer on the most capable model, read-only, given the spec, plan and diff.
+- Providers were honoured: GitHub for issues #160/#154/#161/#156, the branch and PR #179, all through `gh`.
+- Slice Completion Reports were emitted at M6, M7 and M8–M10.
+- §2.8 was honoured: one PR (#179) carries the plan, implementation, fix round and docs.
+- No commit on the branch carries a `Co-Authored-By` trailer or "Generated with" line (M7 checked; the PR body has none).
+
+**Blocking findings:** none.
+
+**Non-blocking observations:**
+1. **jsdom renders into a `<div>`; Next.js hydrates on `document`.** Every unit and page test passed while the real app's first Escape closed the whole dialog, because a same-node listener is invisible to a div-rooted test. Only the manual browser check found it. Lesson: when a component stops an event that a `document`-level listener also handles, M4 should add a test that puts that listener on the React root node, and the manual checks must include the interaction.
+2. **Topic-based M5 parts worked better than line-range parts.** The second pass split the plan by topic (search, hook, picker, submission, page) with the matching revision-log rows; the reviewer could judge each finding's resolution in one place.
+3. **Small real spikes settled review disputes quickly.** Two throwaway jsdom traces of the real Apollo 3.14.1 `useQuery` (a change of variables; a failed refetch) answered M5 questions that mocks alone could not.
+4. **Subagent-driven M6 with controller re-runs** caught nothing the implementers misreported, but the per-task reviews did surface the minors that M7 later triaged, and the ledger kept every ruling. The API lint script runs `eslint --fix`, so a verification run can change files; Task 6 should note that, or use `eslint` without `--fix` for checking.
+5. **The local dev web container serves a stale build without source mounts**, and CORS allows only port 3001, so manual checks need the branch API and web on spare ports with `WEB_ORIGIN` set; the Next dev server can hit the OS file-watch limit beside `nest --watch`, so a production build is the reliable path.
+
+Gate: **Workflow validated.**

@@ -18,7 +18,7 @@ Full application shell (sidebar/header/user menu/logout) mounted once for every 
 
 `apps/web` does still keep `cn` and `lucide-react` as ordinary dependencies for its own non-primitive needs (its own `className` composition, its own icons) — that isn't an exception to the rule above, since neither is a shadcn-specific dependency.
 
-`apps/web` also consumes reusable Clensy domain components (e.g. `LoginForm`, `BookingDataTable`, `LaundryOrderDataTable`, `StaffDataTable`, `CreateStaffForm`) through [`@clensy/web`](../../packages/web/README.md)'s public API. Unlike `@clensy/ui`, these are self-translating — they own their own UI copy via `@clensy/web`'s own i18n context, not via translated-strings-as-props from `apps/web`.
+`apps/web` also consumes reusable Clensy domain components (e.g. `LoginForm`, `BookingDataTable`, `LaundryOrderDataTable`, `LaundryCustomerPicker`, `LaundryFulfillmentFieldset`, `StaffDataTable`, `CreateStaffForm`) through [`@clensy/web`](../../packages/web/README.md)'s public API. Unlike `@clensy/ui`, these are self-translating — they own their own UI copy via `@clensy/web`'s own i18n context, not via translated-strings-as-props from `apps/web`.
 
 `apps/web` also still depends on the `shadcn` package itself, and `app/globals.css` still has `@import "shadcn/tailwind.css"`. This is not an exception to the rule above either: it's a CSS token dependency, not a component dependency. `apps/web/app/globals.css` owns the base theme-token layer that `@clensy/ui`'s primitives consume by class name (see the design spec §4.7), and that CSS import is the only reason the `shadcn` package stays in `apps/web/package.json`. Do not remove it — doing so breaks the Tailwind build.
 
@@ -48,6 +48,16 @@ The page makes no `router.push` or `router.replace` of its own.
 - **No `router.refresh()` or server actions near a drawer.** Next.js drops the marker when it rewrites the entry for either, and × would then replace the entry again. `lib/use-detail-drawer.guard.test.ts` fails if either appears in `apps/web`, `packages/web/src` or `packages/ui/src`. Its known limits are listed in the [#173 plan](../../docs/superpowers/plans/2026-10-11-drawer-history-entry-marker-plan.md).
 
 Until [#161](https://github.com/rexescario-dev/clensy-platform/issues/161), a row opens the drawer (`?detail=<id>`), not `/app/laundry/[id]`.
+
+## Laundry intake (`/app/laundry`)
+
+"+ New Laundry Order" opens `components/laundry/create-laundry-order-dialog.tsx` ([#160](https://github.com/rexescario-dev/clensy-platform/issues/160); [plan](../../docs/superpowers/plans/2026-10-13-laundry-intake-modal-plan.md); [lifecycle spec](../../docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md) Amendment #164 §8.4.4). It is a `FormDialog` with `@clensy/web`'s `LaundryCustomerPicker` and `LaundryFulfillmentFieldset`, and it calls the existing `receiveLaundryOrder`.
+- **Customer search** (`lib/use-laundry-customer-search.ts`): the trimmed text is searched on the server after 300 ms, as `fullName` `iLike` (escaped like the list's search), 20 per search, by name then id. An empty input sends no query. While the searched text differs from the input, or the query is loading, the hook returns `loading` with no options, so an older text's results are never offered. `truncated` drives "More customers match…": narrowing the text is the way past 20 matches; there is no load-more.
+- **Form:** `react-hook-form` with `clensyResolver` ("Select a customer."). Any edit after choosing clears the chosen id. Server field errors (`normalizeApiValidationErrors`) show on their field and clear when it changes; anything else shows "Unable to create laundry order." as a `role="alert"` in the dialog, with the fields kept. A success response without an order id shows "The order may have been created. Check the laundry list before trying again." and is not retried.
+- **One mutation per submit:** a synchronous guard is taken before validation and released when the attempt settles, so two submits fired in one turn send one mutation and a failed attempt can be retried.
+- **Reset:** the page gives the dialog a new React `key` on every opening.
+- **Roles:** the button shows for `canReceiveLaundryOrder`. The "Add a customer" link to `/app/customers` shows only when `canViewPath` allows it; there is no inline customer form.
+- **Success:** the page closes the dialog, toasts "Laundry order created.", and opens the drawer on the returned id at once with `openWithHref`; the list refresh runs behind it and is not awaited. Until #161, a successful create opens the drawer, not `/app/laundry/[id]`.
 
 ## i18n
 
