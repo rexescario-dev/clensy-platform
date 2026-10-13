@@ -1934,3 +1934,27 @@ Accepted at `4f0e026` by the owner, subject to confirming the file-extension ass
 - **Pre-validation:** guard 17 passed; H13 (`.jsx`) and H14 (`.js` with `'use server'`) each gave 1 failed / 16 passed.
 
 The second point, an aliased `useDetailDrawer` import evading the coverage check, is accepted as a documented limitation. The hazard scan still covers such a file.
+
+### M6 — Revision 6 implemented (2026-10-13)
+
+Implemented from the Accepted revision 6, as amended at M5 (`e7d8474`). Task 6's two diffs were extracted from this plan and `git apply`-ed exactly as embedded.
+
+| Task | Commit | Evidence |
+| --- | --- | --- |
+| 6 Widen the guard | `d66e55e` | Guard 17 passed (17). eslint and `tsc` clean. The hook change is comment-only (scripted check). The applied code is byte-identical to the pre-validated code. |
+
+Revision 6 final verification:
+- **Allowlist:** OK, exactly the guard test and `use-detail-drawer.ts`.
+- **H1–H14** (each planted alone and reverted; the tree was clean afterwards):
+
+  | Plant | Result |
+  | --- | --- |
+  | H1, H2, H3, H5, H7–H14 | 1 failed / 16 passed each |
+  | H4, H6 (comments) | 17 passed |
+
+- **Full suites:** `web` 699 passed; lint exit 0; `tsc --noEmit -p .` clean.
+- **Not needed:** a Next build or browser run, because no runtime code changed.
+
+Deviation: none.
+
+Next gate: **M7**, a fresh independent review (`CLAUDE.md`).
