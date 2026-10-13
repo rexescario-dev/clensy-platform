@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft (second draft, after M5 review 1) |
+| Status | Accepted (second draft) |
+| M5 decision | **Accepted** — 2026-10-13, at `4ee1ad7` (second draft), by the owner. No amendment; nothing folded into this acceptance. M6 MUST, on the implemented branch: run all 25 paired runs, investigating any failure rather than re-running it away; re-run the guard, ESLint, `tsc` and the full `web` suite; apply Task 2 and verify no unrelated line changed; confirm the diff is exactly the two planned files plus this plan; run the Step 6 and Step 7 scripts; and confirm no temporary repository is left and the tree and index are clean. M7 MUST be a fresh independent review. |
 | M5 (first draft) | Request changes — 2026-10-13, at `aa6cc74`, by the owner. See Revision log. |
 | Date | 2026-10-13 |
 | Tracking issue | [#175](https://github.com/rexescario-dev/clensy-platform/issues/175). Follows [#173](https://github.com/rexescario-dev/clensy-platform/issues/173) (merged in #174 at `99d20f8`): revision 8 M7 P3-1. |
@@ -486,3 +487,11 @@ The first draft's first `tsc` run failed: `Object.fromEntries` loses `NODE_ENV`,
 - The other Known limits in the #173 plan (detector reference misses, `TMPDIR` inside `apps/web`) stay as recorded; #175 lists them only as references.
 
 ## Gate outcomes
+
+### M5 — Request changes (2026-10-13, first draft)
+
+At `aa6cc74`, by the owner. Two P1s (H5's baseline run not reproducible; mutation restoration by `git checkout`) and two P2s (H5's working directory and cleanup; red-first not operationalized). The second draft answers each; see the Revision log.
+
+### M5 — Accepted (2026-10-13, second draft)
+
+At `4ee1ad7`, by the owner. All four findings addressed. Conditions for M6 are in the header's M5 decision row. No additional M2 spec is needed.
