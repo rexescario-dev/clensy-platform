@@ -2708,3 +2708,38 @@ Revision 8 final verification, on the committed code, per the M5 note:
 Deviation: none.
 
 Next gate: **M7**, a fresh independent review (`CLAUDE.md`).
+
+### M7 — Approved for merge (2026-10-13, fresh independent review of revision 8)
+
+A fresh agent context on Opus 5.5 reviewed `6f738cc...7b4e032` (code commit `8e43b78`). It did not implement the change. It worked outside `.git/`, removed its worktrees and sandboxes, and left the main tree and index clean.
+
+**Decision: Approved for merge. Blocking findings: none.**
+
+**Re-observed:**
+- **Gate order:** `ef1f96d` folds nothing. No attribution lines.
+- **Exact application:** the Task 8 diffs reproduce `8e43b78` byte for byte; the allowlist is exact; the hook change is comment-only.
+- **Checks:** guard 28/28; lint and `tsc` exit 0.
+- **R1–R6:**
+  - R1, R2, R4 and R6 as planned.
+  - R3 gives 1 in a fresh worktree, or 3 with ignored `.next` output present.
+  - R5 gives 1 for the narrow `key.getText()` mutation, or 2 if the whole key check is dropped.
+- **Stability:** 25 paired runs and 6 full runs, all passing, with logs kept.
+- **Race removed:** only the guard writes files, and only under `os.tmpdir()`. No temporary repository was left.
+- **Hostile global git config:** a global excludes file ignoring `*.js`/`public/`, a failing template hook, and `safe.directory=*`. The guard still passed 28/28.
+- **Destructuring:** identifier, quoted, computed and template keys are all caught. The Known limits are accurate.
+- **Next 16.3.1 comments:** accurate.
+
+**Non-blocking (P3):**
+1. **Git environment leaks from hooks** (reproduced in a sandbox). The guard's git calls inherit `process.env`.
+   - Run from a worktree pre-commit hook (`GIT_DIR` exported), the temporary repository's `git add` staged six files into the developer's real commit.
+   - Run from `commit -a` (`GIT_INDEX_FILE`), the commit failed.
+   - It is not reachable today (no husky or lefthook; CI does not set these), but it contradicts "nothing touches the real tree".
+   - Fix: drop `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_OBJECT_DIRECTORY`, `GIT_COMMON_DIR` and `GIT_ALTERNATE_OBJECT_DIRECTORIES` from the temporary repository's git calls.
+2. **R3 and R5 counts depend on setup** (see above). The evidence wording could say so.
+3. **Undocumented reference misses:**
+   - a computed key through a variable;
+   - assignment-pattern destructuring (`({ refresh: r } = router)`);
+   - parameter destructuring.
+
+   `const { ...refresh } = useRouter()` is a harmless false positive.
+4. **A `TMPDIR` inside `apps/web`** would bring the race back. That is contrived.
