@@ -109,6 +109,11 @@ export function LaundryCustomerPicker({
     if (event.key === 'Escape' && expanded) {
       event.preventDefault();
       event.stopPropagation();
+      // Next.js hydrates React on `document`, the node Modal also listens on,
+      // and React's listener was registered first, so it runs first. A
+      // synthetic stopPropagation does not stop other listeners on that same
+      // node; the native stopImmediatePropagation does.
+      event.nativeEvent.stopImmediatePropagation();
       close();
     }
   }
@@ -142,6 +147,10 @@ export function LaundryCustomerPicker({
       />
       <div
         hidden={!expanded}
+        // Keeps focus in the input, so blur does not close the list before a
+        // click selects, or when the popup's padding, scrollbar or status
+        // lines are pressed.
+        onMouseDown={(event) => event.preventDefault()}
         className="absolute left-0 right-0 top-full z-10 mt-1 rounded-md border border-slate-200 bg-white py-1 shadow-lg"
       >
         <ul id={listboxId} role="listbox" aria-label={t('create.customer.label')} className="max-h-60 overflow-y-auto">
@@ -153,9 +162,6 @@ export function LaundryCustomerPicker({
                 id={`${id}-option-${option.id}`}
                 role="option"
                 aria-selected={index === active}
-                // Keeps focus in the input, so blur does not close the list
-                // before the click selects.
-                onMouseDown={(event) => event.preventDefault()}
                 onClick={() => select(option)}
                 className={`cursor-pointer px-3 py-2 ${index === active ? 'bg-slate-100' : ''}`}
               >

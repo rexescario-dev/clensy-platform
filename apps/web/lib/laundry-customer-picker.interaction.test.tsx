@@ -199,6 +199,38 @@ describe('LaundryCustomerPicker interactions', () => {
     expect(field().value).toBe('Ben Cruz');
   });
 
+  it('cancels a mousedown anywhere on the popup, so the input keeps focus', () => {
+    render();
+    type('b');
+    const popup = container.querySelector<HTMLElement>('#customer-listbox')!.parentElement!;
+    let notCancelled = true;
+    act(() => {
+      notCancelled = popup.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    });
+    expect(notCancelled).toBe(false);
+  });
+
+  it('keeps Escape from a listener on the same node as the React root, until the list is closed', () => {
+    // Next.js hydrates React on `document`, the node Modal also listens on, so
+    // a synthetic stopPropagation alone cannot hide Escape from Modal.
+    const sameNode = vi.fn();
+    const listener = (event: Event) => {
+      if ((event as KeyboardEvent).key === 'Escape') sameNode();
+    };
+    container.addEventListener('keydown', listener);
+    try {
+      render();
+      type('a');
+      press('Escape');
+      expect(field().getAttribute('aria-expanded')).toBe('false');
+      expect(sameNode).not.toHaveBeenCalled();
+      press('Escape');
+      expect(sameNode).toHaveBeenCalledTimes(1);
+    } finally {
+      container.removeEventListener('keydown', listener);
+    }
+  });
+
   it('keeps the active option on the same customer when results change, and drops it when that customer leaves', () => {
     render();
     type('a');
