@@ -1,3 +1,4 @@
+import { ToastProvider } from '@clensy/ui';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -16,6 +17,7 @@ const order = {
 
 const page = vi.hoisted(() => ({
   orderQueryOptions: [] as unknown[],
+  ordersError: undefined as Error | undefined,
   ordersQueryOptions: [] as unknown[],
   role: 'TENANT_OWNER' as string | undefined,
   search: '',
@@ -48,7 +50,7 @@ vi.mock('@clensy/client', () => {
       page.ordersQueryOptions.push(options);
       return {
         data: { laundryOrders: { nodes: [order], totalCount: page.totalCount } },
-        error: undefined,
+        error: page.ordersError,
         loading: false,
         previousData: undefined,
         refetch: vi.fn(),
@@ -73,11 +75,16 @@ vi.mock('@clensy/client', () => {
 
 async function renderPage(): Promise<string> {
   const { default: LaundryPage } = await import('../app/app/laundry/page');
-  return renderToStaticMarkup(<LaundryPage />);
+  return renderToStaticMarkup(
+    <ToastProvider>
+      <LaundryPage />
+    </ToastProvider>,
+  );
 }
 
 beforeEach(() => {
   page.orderQueryOptions = [];
+  page.ordersError = undefined;
   page.ordersQueryOptions = [];
   page.role = 'TENANT_OWNER';
   page.search = '';
@@ -85,6 +92,15 @@ beforeEach(() => {
 });
 
 describe('/app/laundry list', () => {
+  it('shows the list error after a failed background refresh, and keeps the rows', async () => {
+    // A failed refetch leaves Apollo's `data` in place and sets `error`
+    // (plan, Planning spikes); the page passes it on as `hasError`.
+    page.ordersError = new Error('network down');
+    const html = await renderPage();
+    expect(html).toContain('Unable to load laundry orders.');
+    expect(html).toContain('Ana Reyes');
+  });
+
   it('shows human status and fulfillment labels and the shared weight and money formats', async () => {
     const html = await renderPage();
     expect(html).toContain('Ana Reyes');

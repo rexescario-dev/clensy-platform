@@ -28,6 +28,32 @@ export const laundry = {
     refund: "Refund this order? This records that the order's collected payment is returned. This cannot be undone.",
     reject: 'Reject this order? The shop is refusing it at intake. This cannot be undone.',
   },
+  create: {
+    addCustomer: 'Add a customer',
+    creating: 'Creating…',
+    customer: {
+      empty: 'No customers match.',
+      error: 'Unable to search customers.',
+      label: 'Customer',
+      more: 'More customers match. Type more of the name to narrow the search.',
+      required: 'Select a customer.',
+      searching: 'Searching…',
+    },
+    failure: 'Unable to create laundry order.',
+    fulfillment: {
+      description: {
+        DELIVERY: 'The shop returns the finished laundry. This does not schedule a route.',
+        PICKUP: 'The customer collects the finished laundry.',
+      },
+      fixed: 'This choice is fixed at intake.',
+      legend: 'Fulfillment',
+      required: 'Select how the finished laundry comes back.',
+    },
+    submit: 'Create order',
+    success: 'Laundry order created.',
+    title: 'New laundry order',
+    unconfirmed: 'The order may have been created. Check the laundry list before trying again.',
+  },
   empty: 'No laundry orders.',
   error: {
     list: 'Unable to load laundry orders.',
