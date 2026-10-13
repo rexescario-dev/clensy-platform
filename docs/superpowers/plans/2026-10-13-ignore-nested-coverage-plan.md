@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted (second draft) |
+| Status | Accepted (second draft); implemented; M7 Approved for merge (self-review); M8 N/A; M9 complete; M10 validated |
 | M5 decision | **Accepted** — 2026-10-13, at `552b519` (second draft), by the owner. The owner withdrew first-draft P1 (the count is 28: 13 roots × 2 directories + 2 files). Before accepting, the owner asked whether V3's status assertion could pass with unrelated changes. It cannot: Task 1 requires a clean tree and index before Step 1, and Step 5 compares the whole of `git status --porcelain` against exactly ` M .gitignore`. Scope stays `.gitignore` and this plan. |
 | M5 (first draft) | Request changes — 2026-10-13, at `24858e8`, by the owner. See Revision log. |
 | Date | 2026-10-13 |
@@ -245,3 +245,92 @@ Implemented from the Accepted second draft. The `.gitignore` diff, `check-ignore
 Deviation: none.
 
 Next gate: **M7**, a **self-review** (`CLAUDE.md`: a settings/configuration-only slice).
+
+### M7 — Approved for merge (2026-10-13, **self-review**)
+
+**Self-review** by the M6 implementer, as `CLAUDE.md` permits for a settings/configuration-only slice (owner confirmed, 2026-10-13). No fresh reviewer was dispatched.
+
+```text
+Decision: Approved for merge
+Subject: PR #178, branch fix/176-ignore-nested-coverage (code 0ca818f, M6 record 4e1fb28)
+Accepted specification: none (owner waiver, 2026-10-13: configuration-only, no product semantics)
+Accepted implementation plan: docs/superpowers/plans/2026-10-13-ignore-nested-coverage-plan.md (second draft, 552b519)
+
+Plan tasks reviewed:
+- Task 1, Steps 1–8: ✓ (each with the M6 evidence above)
+
+Verification evidence (re-observed at 4e1fb28, not copied from M6):
+- git diff main...HEAD -- .gitignore: exactly lines 36–37, /coverage → coverage/, /.nyc_output → .nyc_output/.
+- git diff --name-only main...HEAD: .gitignore and this plan.
+- check-ignore.sh, extracted from this plan (identical to the M6 copy): after → 28 checks, 0 mismatches.
+- git ls-files | grep -E '(^|/)(coverage|\.nyc_output)(/|$)': no output. git ls-files -ci --exclude-standard:
+  no output (no tracked file is ignored by any rule).
+- No coverage or .nyc_output directory exists on disk outside node_modules, so no local file is newly hidden.
+- The guard's sourceFiles() lists with --exclude-standard (use-detail-drawer.guard.test.ts:79–84), so the new
+  rules remove apps/web/coverage/ from its scan, as #176 intended.
+- CI on PR #178 (run 38401236494): Test, Lint, API e2e, Release gate all pass.
+
+Review summary: The change is the two lines the Accepted plan authorizes, in place. The directory-only patterns
+match at any depth and leave a file named coverage trackable, as the owner approved. No scope beyond the plan.
+Blocking findings: None (no merge blockers)
+
+Non-blocking observations:
+- .gitignore still has another root-anchored rule from the NestJS scaffold (/.idea). Out of scope by plan.
+
+Gate: Merge per human/project norms. M8/M9 may follow.
+```
+
+### M8 — N/A (2026-10-13)
+
+```text
+Decision: N/A
+Subject: PR #178, branch fix/176-ignore-nested-coverage
+Scope: .gitignore
+Accepted implementation plan: docs/superpowers/plans/2026-10-13-ignore-nested-coverage-plan.md
+M7 / authorization: Approved for merge (self-review)
+Rationale: a two-line configuration change has no structure to refactor. M7's one observation (/.idea) is a
+behaviour change, not a refactor, and is out of scope by plan.
+Verification: N/A, nothing changed in M8.
+```
+
+### M9 — Complete (2026-10-13)
+
+```text
+Decision: Complete
+Subject: #176, PR #178
+Documentation scope: this plan (Status, Gate outcomes); the #173 plan's revision 8 Known limits; PR #178 body
+Content updates:
+- #173 plan, revision 8 Known limits: the "Observation, outside this PR" bullet about root-anchored /coverage is
+  marked resolved, with a link to this plan (← Task 1, 0ca818f).
+- This plan: Status and the M7–M10 records.
+- PR #178 body: M7–M10 outcomes.
+Unchanged, with reason: the #173 plan's H21 evidence row (a record of what that run observed, still true of it);
+README.md, apps/*/README.md, packages/* READMEs (none mentions coverage output or .gitignore); no spec.
+Verification: the new relative link (#173 plan → this plan) resolves; no other link added.
+Gate: Documentation complete. Code unchanged in M9.
+```
+
+### M10 — Accepted, workflow validated (2026-10-13)
+
+```text
+Decision: Accepted
+Subject: #176 delivery slice
+Governing specification: docs/workflows/specs/agent-workflow-design.md
+
+Asset inventory: unchanged.
+
+Blocking findings:
+- None. The slice went M4 → owner M5 (returned once, then Accepted) → M6 → M7 self-review (CLAUDE.md,
+  configuration-only) → M8 N/A → M9. No M2 spec, by owner decision. One PR (#178). Providers: gh, for the issue
+  and the PR. Each stage record is in this section; M6 began only after M5 Accept (52dbf3b before 0ca818f).
+
+Non-blocking observations:
+1. Pre-validating the plan surfaced a wrong prediction before M6: the failure path of Step 5 fails at the
+   --ignored assertion, not the status one. Running the block on main caught it, and the plan was corrected.
+2. An M5 finding (P1, the check count) was settled by the script's own output rather than by re-counting;
+   the script prints its count, which made the disagreement checkable.
+3. A matrix check that names the expected rule (file:line:pattern), not just "ignored or not", would catch a
+   path ignored by the wrong rule.
+
+Gate: Workflow validated
+```
