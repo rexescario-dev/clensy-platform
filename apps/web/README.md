@@ -45,6 +45,7 @@ The page makes no `router.push` or `router.replace` of its own.
 - **Opening** pushes the drawer entry natively, with a marker in `history.state` (`__clensyDetailDrawer: <param>`). Next.js keeps that marker across Back, Forward and refresh ([#173](https://github.com/rexescario-dev/clensy-platform/issues/173)).
 - **Closing** goes Back when the current entry carries the marker for its param. Otherwise it replaces the entry, so a direct link never leaves the app. A second close before that Back lands (× and the backdrop together, a double Escape) is ignored, so it never goes Back past the list.
 - **`close` takes no argument.** The other pages pass it straight to `onClose`, which `DetailDrawer`'s × button calls with a click event. `lib/use-detail-drawer.test.tsx` pins that.
+- **No `router.refresh()` or server actions near a drawer.** Next.js drops the marker when it rewrites the entry for either, and × would then replace the entry again. `lib/use-detail-drawer.guard.test.ts` fails if either appears in `apps/web`, `packages/web/src` or `packages/ui/src`. Its known limits are listed in the [#173 plan](../../docs/superpowers/plans/2026-10-11-drawer-history-entry-marker-plan.md).
 
 Until [#161](https://github.com/rexescario-dev/clensy-platform/issues/161), a row opens the drawer (`?detail=<id>`), not `/app/laundry/[id]`.
 

@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted (revision 8); revisions 2–7 implemented |
+| Status | Accepted (revision 8); implemented; M7 Approved for merge |
 | M5 decision (revision 8) | **Accepted** — 2026-10-13, at `8ad0d92` (second draft), by the owner. No amendment; nothing folded into this acceptance. M6 MUST, on the committed code: run the guard, lint and `tsc`; run R1–R6; repeat the 25 paired and 20 full-suite runs, keeping their output and investigating any failure; verify the two-file allowlist; and confirm a clean tree, an empty index and no temporary repository left. M7 MUST be a fresh independent review. |
 | M5 (revision 8, first draft) | Request changes — 2026-10-13, at `eca11b3`: the temporary-repository test must prove the tracked side too. See Gate outcomes. |
 | M5 decision (revision 7) | **Accepted** — 2026-10-13, at `8542255` (second draft), by the owner, after small adjustments. They are folded into Task 7 in the record commit: (1) the shadowing claim is narrowed to that case; (2) cleanup of the tree and index is verified explicitly after H20 and after the full run; (3) a discovery test, one per scanned root, requires a new untracked file to be listed; (4) long lines are wrapped. Keep the two-file allowlist. Re-run the whole table on the committed code. M7 MUST be a fresh independent review. |
@@ -1878,6 +1878,18 @@ Applied on the branch at `734fed8`, then removed before this Draft was committed
 **Known limits, additions** (to Revision 7's list; a zero-argument *call* is still caught in each case, and only references are missed):
 - an aliased or namespaced `useRouter`;
 - a wrapped initializer (`useRouter() as X`, `useRouter()!`, `(router).refresh`).
+- *(added at M9, from the revision 8 M7)*:
+  - a computed key through a variable (`const k = 'refresh'; const { [k]: r } = useRouter()`);
+  - assignment-pattern destructuring (`({ refresh: r } = router)`);
+  - parameter destructuring;
+  - a `TMPDIR` inside `apps/web`, which would let the temporary repository race `web-shell-regressions.test.ts` (contrived).
+- **Tracked in [#175](https://github.com/rexescario-dev/clensy-platform/issues/175):** the temporary repository's git calls inherit `GIT_DIR`/`GIT_INDEX_FILE`. Run from inside a git hook, they could act on the developer's real repository. That is not reachable today, because no hooks exist.
+
+**Evidence note** (revision 8 M7 P3-2):
+- R3's "3 failed" assumes ignored `.next` output exists locally; it is 1 in a fresh checkout.
+- R5's "1 failed" is the narrow `key.text` → `key.getText()` mutation; dropping the whole key check gives 2.
+
+Both discriminate either way.
 
 ### Task 8: Stop writing into the source tree
 
@@ -2743,3 +2755,53 @@ A fresh agent context on Opus 5.5 reviewed `6f738cc...7b4e032` (code commit `8e4
 
    `const { ...refresh } = useRouter()` is a harmless false positive.
 4. **A `TMPDIR` inside `apps/web`** would bring the race back. That is contrived.
+
+### M8 — N/A (2026-10-13, revisions 5–8)
+
+```text
+Decision: N/A
+Subject: PR #174, revisions 5–8 (the guard test)
+M7 / authorization: revision 8 Approved for merge; the owner chose "Track it, finish now"
+Rationale: the revision 8 M7 found the comments accurate and raised nothing that is a behaviour-preserving
+refactor. P3-1 (git environment isolation) is a behaviour change, tracked in #175. P3-2 and P3-3 are
+documentation (M9).
+No code changed in M8.
+```
+
+### M9 — Complete (2026-10-13, revisions 5–8)
+
+```text
+Decision: Complete
+Subject: #173, PR #174
+Documentation scope: apps/web/README.md (Drawer hook, one bullet); this plan (Revision 8 Known limits, evidence
+note, Status, Gate outcomes); PR #174 body; issue #175 (opened)
+Content updates:
+- apps/web/README.md: no router.refresh() or server actions near a drawer; the guard test and where its limits
+  are listed (← Tasks 5–8).
+- Plan, Revision 8 Known limits: computed key through a variable, assignment-pattern and parameter destructuring,
+  TMPDIR inside apps/web (← M7 r8 P3-3, P3-4); the #175 git-environment item (← P3-1).
+- Plan, Revision 8 evidence note: the R3 and R5 counts depend on setup (← P3-2).
+- PR #174 body: rewritten for revisions 2–8, the per-revision gate outcomes, the final evidence and the follow-ups.
+- Issue #175: the git-environment hardening, plus the extra limits.
+Unchanged, with reason: packages/* READMEs and docs/README.md (no package, API or schema change); the spec.
+Verification: relative links and anchors in the touched files resolve (scripted scan). Status consistency: plan
+Accepted (revision 8), implemented, M7 Approved for merge.
+Gate: Documentation complete. Code unchanged in M9.
+```
+
+### M10 — Accepted, workflow validated (2026-10-13, revisions 5–8)
+
+The asset inventory is unchanged. Revisions 5–8 each went M4 → owner M5 → M6 → a fresh M7.
+- **M7 returned two of them:** revision 5 (scan scope) and revision 7 (a test race). Each was fixed through a new Draft revision, not patched in place.
+- **Every application-code delta had a fresh independent review** (`CLAUDE.md`).
+- **One PR:** #174. **Providers:** `gh`, for the PR and issues #161 and #175.
+
+**Blocking findings:** none.
+
+**Observations:**
+1. **Folds at M5 need care.** Folding a reviewer's change into the acceptance commit was fine for a mechanical one-liner (revision 6). It was not fine for new test code (revision 7): that fold introduced the race M7 later caught. A change that adds or alters tests goes back as a Draft revision (revision 8 did this).
+2. **Tests that write files must not write where other tests read.** Prove file-system or git behaviour in a temporary directory or repository.
+3. **Record flakiness evidence with kept logs and many runs.** A single passing run did not show the revision 7 race; 25 paired runs did.
+4. **A static guard's value depends on honest limits.** Each M7 found a real miss or an overclaim. Keeping "Known limits" current, and comments that point to it, was what made the guard trustworthy.
+
+Gate: **Workflow validated.**
