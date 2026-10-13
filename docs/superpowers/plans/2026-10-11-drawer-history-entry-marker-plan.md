@@ -1666,3 +1666,34 @@ Revision 5 final verification:
 Deviation: none.
 
 Next gate: **M7**, a fresh independent review (`CLAUDE.md`: application code, test and comment).
+
+### M7 — Returned for revision (2026-10-13, fresh independent review of revision 5)
+
+A fresh agent context on Opus 5.5 reviewed `4c028b5...2b4e6a6` (code commit `865a5d0`). It did not implement the change. It was read-only, worked in a temporary worktree that it removed, and left the tree clean.
+
+**Decision: Return** (M4 amendment → M5 → M6). Do not merge.
+
+**Re-observed:**
+- the gate order, and no attribution lines;
+- the plan diffs reproduce `865a5d0` exactly, and the allowlist is exact;
+- the hook change is comment-only;
+- guard 13 passed; H1–H7 as tabulated;
+- `web` 695 passed; lint and `tsc` exit 0;
+- the scan test takes about 122 ms.
+
+**P1 (blocking): the scan misses code that is mounted while a drawer is open.**
+- `SCANNED` leaves out the dashboard shell, `apps/web/components/layout/*` (header, user menu, session guard, i18n provider), which `app/app/layout.tsx` mounts around every drawer page. It also leaves out `'use server'` files outside the scanned roots.
+- Re-observed: `r.refresh()` planted in `user-menu.tsx` left the guard green.
+- Realistic case: a language or tenant switcher that refreshes while a drawer is open.
+- The hook comment ("fails if either appears") and the test's name overclaim.
+- Preferred fix: scan all of `apps/web` (skipping `node_modules` and `.next`) plus `packages/web/src`. The reviewer verified that this is clean on today's tree and catches the plant.
+
+**P2: stale plan text.** The revision 5 Why/Scope block still describes the superseded regex detector, and the header Scope row says "two test files".
+
+**P3 (notes):**
+1. **False negatives:** `router['refresh']()` and `const { refresh } = useRouter(); refresh()` are not caught. Aliased imports and `React.useActionState` are caught.
+2. **False positives:** any zero-argument `.refresh()` on an unrelated object, and identifiers named `useActionState`/`useFormState`. They fail loudly, which is acceptable.
+3. **Coverage regex:** `useDetailDrawer(` misses an aliased import.
+4. **`packages/ui`:** no router use today; cheap to add.
+5. **Next accuracy:** the refresh claim is accurate. The test header's "or a server action" could say "that revalidates, refreshes or redirects" (`server-action-reducer.js:266-273`).
+6. **Workflow:** folding the reviewer's changes into the M5 record commit was acceptable as an owner decision, but substantive rewrites are better sent back as a Return plus a Draft revision (`plan-review.md`).
