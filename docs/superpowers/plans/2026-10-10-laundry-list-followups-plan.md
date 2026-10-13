@@ -373,7 +373,7 @@ Revision 2 pre-validation: these diffs were applied to `4413351`, then removed b
 
 ## Deferred
 
-- Changing what "close after Forward" does (Review Focus 1; refined by M7 P3-2: the duplicate list entry arises only after an in-page × close, not after leaving the drawer with the browser Back button). That would be a behaviour change for all drawer pages.
+- Changing what "close after Forward" does (Review Focus 1; refined by M7 P3-2: the duplicate list entry arises only after an in-page × close, not after leaving the drawer with the browser Back button). That would be a behaviour change for all drawer pages. **Resolved by [#173](https://github.com/rexescario-dev/clensy-platform/issues/173)** ([plan](2026-10-11-drawer-history-entry-marker-plan.md), PR #174): × now decides from a marker on the history entry, so closing after Forward goes Back and leaves no duplicate.
 
 ## Gate outcomes
 

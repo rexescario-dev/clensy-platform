@@ -20,6 +20,8 @@ const ORDER_ID = '3f2a9c1e-0b7d-4e55-9a10-6c2b8d4e7f01';
 
 const nav = vi.hoisted(() => ({
   entries: [] as string[],
+  // `history.state` per entry, parallel to `entries` (#173: the drawer marker).
+  entryStates: [] as unknown[],
   holdRenders: false,
   index: 0,
   listeners: new Set<() => void>(),
@@ -119,9 +121,10 @@ function notify() {
   for (const listener of nav.listeners) listener();
 }
 
-// The entry the fake history is on, applied to `window.location`.
+// The entry the fake history is on, applied to `window.location` and
+// `history.state`.
 function showEntry() {
-  nativeReplaceState(null, '', nav.entries[nav.index]);
+  nativeReplaceState(nav.entryStates[nav.index] ?? null, '', nav.entries[nav.index]);
 }
 
 function goBack() {
@@ -149,6 +152,7 @@ function url(): URLSearchParams {
 // `history` holds the entries before the current one, oldest first.
 function start(query = '', hash = '', history: string[] = []) {
   nav.entries = [...history.map((entry) => `/app/laundry?${entry}`), `/app/laundry${query ? `?${query}` : ''}${hash}`];
+  nav.entryStates = nav.entries.map(() => null);
   nav.index = nav.entries.length - 1;
   showEntry();
   nav.rendered = window.location.search;
@@ -199,14 +203,16 @@ beforeEach(() => {
   nav.orderQueryIds = [];
   nav.queryVariables = [];
   nav.routerCalls = [];
-  vi.spyOn(window.history, 'pushState').mockImplementation((_data, _unused, href) => {
+  vi.spyOn(window.history, 'pushState').mockImplementation((data, _unused, href) => {
     nav.entries = [...nav.entries.slice(0, nav.index + 1), String(href)];
+    nav.entryStates = [...nav.entryStates.slice(0, nav.index + 1), data];
     nav.index += 1;
     showEntry();
     if (!nav.holdRenders) notify();
   });
-  vi.spyOn(window.history, 'replaceState').mockImplementation((_data, _unused, href) => {
+  vi.spyOn(window.history, 'replaceState').mockImplementation((data, _unused, href) => {
     nav.entries[nav.index] = String(href);
+    nav.entryStates[nav.index] = data;
     showEntry();
     if (!nav.holdRenders) notify();
   });
@@ -338,6 +344,32 @@ describe('/app/laundry list interactions', () => {
     expect(url().has('detail')).toBe(false);
     expect(url().get('status')).toBe('PAID');
     expect(nav.routerCalls).toEqual([]);
+  });
+
+  // #173: the drawer entry carries a history-state marker, so × after Forward goes Back again
+  // instead of replacing the entry with a duplicate list URL.
+  it('goes Back again when the drawer reappears through Forward, leaving no duplicate entry', () => {
+    start('status=PAID');
+    act(() => clickRow());
+    expect(nav.entryStates[1]).toEqual({ __clensyDetailDrawer: 'detail' });
+    act(() => button('Close').click()); // Back
+    goForward();
+    expect(url().get('detail')).toBe(ORDER_ID);
+    act(() => button('Close').click()); // Back again, not a replace
+    expect(nav.index).toBe(0);
+    expect(nav.entries).toHaveLength(2);
+    expect(new URLSearchParams(nav.entries[1].split('?')[1]).get('detail')).toBe(ORDER_ID); // the drawer entry survives
+    expect(nav.routerCalls).toEqual([]);
+  });
+
+  it('keeps the drawer marker through a list update made while the drawer is open', () => {
+    start('status=PAID');
+    act(() => clickRow());
+    act(() => selectStatus('READY')); // replaceState on the drawer entry
+    expect(nav.entryStates[1]).toEqual({ __clensyDetailDrawer: 'detail' });
+    act(() => button('Close').click());
+    expect(nav.index).toBe(0); // went Back, not replaced
+    expect(nav.entries).toHaveLength(2);
   });
 
   it('lets Back and Forward restore the URL, controls, query and drawer of the entry the user goes to', () => {

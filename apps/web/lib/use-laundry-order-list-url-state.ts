@@ -10,6 +10,7 @@ import {
 } from '@clensy/web';
 import { useSearchParams } from 'next/navigation';
 import { useCallback } from 'react';
+import { drawerEntryState } from './use-detail-drawer';
 
 // `/app/laundry` list state, kept in the URL so a refresh, or back from an
 // order, restores it (lifecycle spec §8.4.4). Params the list does not own,
@@ -133,11 +134,14 @@ export function serializeLaundryOrderListState(
 // - Opening the drawer, from a row or after creating an order,
 //   `pushState`s the same kind of URL plus `detail`
 //   (`useDetailDrawer().openWithHref(href)`), so Back, and the drawer's
-//   own `router.back()`, return to the list.
-// - Closing a drawer reached by a direct link or refresh `replaceState`s
-//   the URL without `detail` (`useDetailDrawer().closeWithHref(href)`). The page
-//   therefore makes no `router.push` or `router.replace` of its own, so no
-//   async router navigation can land over a native write.
+//   own `router.back()`, return to the list. That entry carries the drawer
+//   marker in `history.state` (#173); list updates keep it.
+// - Closing a drawer whose entry has no marker, one reached by a direct
+//   link, `replaceState`s the URL without `detail`
+//   (`useDetailDrawer().closeWithHref(href)`); a marked entry, including
+//   after Forward or a refresh, goes Back. The page therefore makes no
+//   `router.push` or `router.replace` of its own, so no async router
+//   navigation can land over a native write.
 // - Back and Forward are the browser's: the URL, and therefore the list
 //   state, is whatever entry the user went to.
 export function useLaundryOrderListUrlState() {
@@ -168,7 +172,9 @@ export function useLaundryOrderListUrlState() {
     (update: LaundryOrderListUpdate) => {
       const href = hrefFor(update);
       const live = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-      if (href !== live) window.history.replaceState(null, '', href);
+      // Keeps a drawer entry's marker (#173), so a list update made while the
+      // drawer is open does not turn its × into a replace.
+      if (href !== live) window.history.replaceState(drawerEntryState(), '', href);
     },
     [hrefFor],
   );
