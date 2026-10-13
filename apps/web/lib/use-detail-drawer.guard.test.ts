@@ -41,6 +41,31 @@ const FORBIDDEN_IDENTIFIERS = new Map([
   ['useFormState', '`useFormState`'],
 ]);
 
+// Git exports repository-local variables (`GIT_DIR`, `GIT_INDEX_FILE` and
+// others) to hooks. Inherited, they would point these git calls at the
+// repository that ran the hook, not the one in `cwd` (#175). Git lists them
+// itself, as the ones it clears before working in a submodule; it is asked
+// with no `GIT_*` variable set, so the question cannot be redirected either.
+function envWithout(drop: (name: string) => boolean): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  for (const name of Object.keys(env)) if (drop(name)) delete env[name];
+  return env;
+}
+
+const GIT_LOCAL_ENV_VARS = new Set(
+  execFileSync('git', ['rev-parse', '--local-env-vars'], {
+    encoding: 'utf8',
+    env: envWithout((name) => name.startsWith('GIT_')),
+  })
+    .split('\n')
+    .filter(Boolean),
+);
+
+// The environment as it is now, without those variables.
+function gitEnv(): NodeJS.ProcessEnv {
+  return envWithout((name) => GIT_LOCAL_ENV_VARS.has(name));
+}
+
 // The files git tracks or would track under the scanned roots: tracked files,
 // plus new ones not yet added, minus anything gitignored (dependencies,
 // `.next`, and local build, coverage or `public/` output). So ignored output
@@ -59,7 +84,7 @@ function sourceFiles(repoRoot = REPO_ROOT, roots = SCANNED): string[] {
       '--',
       ...roots.map((root) => relative(repoRoot, root)),
     ],
-    { cwd: repoRoot, encoding: 'utf8' },
+    { cwd: repoRoot, encoding: 'utf8', env: gitEnv() },
   );
   return listed
     .split('\0')
@@ -187,6 +212,51 @@ function drawerHistoryHazards(fileName: string, source: string): string[] {
   return [...found];
 }
 
+// Sets these variables while `run` runs, then puts back what was there,
+// unsetting any that were unset.
+function withEnv(vars: Record<string, string>, run: () => void): void {
+  const saved = Object.keys(vars).map((name) => [name, process.env[name]] as const);
+  Object.assign(process.env, vars);
+  try {
+    run();
+  } finally {
+    for (const [name, value] of saved) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+}
+
+// `sourceFiles` on a throwaway repository with, in each root, a tracked file,
+// a new one, an ignored one and a force-added one under an ignored directory.
+function expectGitFileList(): void {
+  const repo = mkdtempSync(join(tmpdir(), 'drawer-guard-'));
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: repo, env: gitEnv() });
+  try {
+    git('init', '-q');
+    // Created here, not in a repository named by an inherited `GIT_DIR`.
+    expect(existsSync(join(repo, '.git'))).toBe(true);
+    writeFileSync(join(repo, '.gitignore'), 'public/\n');
+    const roots = SCANNED.map((root) => join(repo, relative(REPO_ROOT, root)));
+    for (const root of roots) {
+      mkdirSync(join(root, 'public'), { recursive: true });
+      for (const name of ['tracked.ts', 'new.ts', join('public', 'ignored.js'), join('public', 'forced.js')]) {
+        writeFileSync(join(root, name), 'export {};\n');
+      }
+      git('add', join(root, 'tracked.ts'));
+      git('add', '-f', join(root, 'public', 'forced.js'));
+    }
+    const expected = roots.flatMap((root) => [
+      join(root, 'tracked.ts'),
+      join(root, 'new.ts'),
+      join(root, 'public', 'forced.js'),
+    ]);
+    expect(sourceFiles(repo, roots).sort()).toEqual(expected.sort());
+  } finally {
+    rmSync(repo, { force: true, recursive: true });
+  }
+}
+
 describe('drawer history marker guard (#173)', () => {
   const files = sourceFiles();
   const scanned = files.map((file) => relative(REPO_ROOT, file));
@@ -232,28 +302,38 @@ describe('drawer history marker guard (#173)', () => {
   // written into the real source tree, which other test files walk in
   // parallel.
   it('lists tracked and new files and skips ignored ones, in every root', () => {
-    const repo = mkdtempSync(join(tmpdir(), 'drawer-guard-'));
-    const git = (...args: string[]) => execFileSync('git', args, { cwd: repo });
+    expectGitFileList();
+  });
+
+  // #175: run from a git hook, the guard inherits `GIT_DIR` and
+  // `GIT_INDEX_FILE` pointing at the hook's repository (here, another
+  // throwaway one). The proof must still act on its own repository and leave
+  // the other untouched.
+  it('keeps the temporary repository isolated from an inherited GIT_DIR', () => {
+    const other = mkdtempSync(join(tmpdir(), 'drawer-guard-other-'));
     try {
-      git('init', '-q');
-      writeFileSync(join(repo, '.gitignore'), 'public/\n');
-      const roots = SCANNED.map((root) => join(repo, relative(REPO_ROOT, root)));
-      for (const root of roots) {
-        mkdirSync(join(root, 'public'), { recursive: true });
-        for (const name of ['tracked.ts', 'new.ts', join('public', 'ignored.js'), join('public', 'forced.js')]) {
-          writeFileSync(join(root, name), 'export {};\n');
-        }
-        git('add', join(root, 'tracked.ts'));
-        git('add', '-f', join(root, 'public', 'forced.js'));
-      }
-      const expected = roots.flatMap((root) => [
-        join(root, 'tracked.ts'),
-        join(root, 'new.ts'),
-        join(root, 'public', 'forced.js'),
-      ]);
-      expect(sourceFiles(repo, roots).sort()).toEqual(expected.sort());
+      execFileSync('git', ['init', '-q'], { cwd: other, env: gitEnv() });
+      withEnv({ GIT_DIR: join(other, '.git'), GIT_INDEX_FILE: join(other, '.git', 'index') }, expectGitFileList);
+      expect(existsSync(join(other, '.git', 'index'))).toBe(false);
+      expect(execFileSync('git', ['ls-files'], { cwd: other, encoding: 'utf8', env: gitEnv() })).toBe('');
     } finally {
-      rmSync(repo, { force: true, recursive: true });
+      rmSync(other, { force: true, recursive: true });
+    }
+  });
+
+  // #175: and the real scan still lists the real files. The other
+  // repository ignores everything (`info/exclude`), so a scan that read its
+  // `GIT_DIR` would come back empty.
+  it('scans the real repository despite an inherited GIT_DIR', () => {
+    const other = mkdtempSync(join(tmpdir(), 'drawer-guard-other-'));
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: other, env: gitEnv() });
+      writeFileSync(join(other, '.git', 'info', 'exclude'), '*\n');
+      withEnv({ GIT_DIR: join(other, '.git'), GIT_INDEX_FILE: join(other, '.git', 'index') }, () => {
+        expect(sourceFiles()).toEqual(files);
+      });
+    } finally {
+      rmSync(other, { force: true, recursive: true });
     }
   });
 
