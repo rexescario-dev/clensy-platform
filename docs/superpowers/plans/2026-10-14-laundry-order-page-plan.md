@@ -1535,3 +1535,86 @@ Owner review of revision 4, on the changed pieces after a five-part review of re
 | Explicit `nodes: null` test (review 4) | P3 | Added to Task 2 at acceptance |
 
 Verdict: **Accepted.** This is a plan review, not execution evidence. The type-check and lint spike for `resolvedInvoiceNodes` is the only code that ran; every planned test, lint, type-check and build runs in M6.
+
+### M6 — Implementation complete (2026-10-14)
+
+Executed inline from `4df0667`, in plan order, one commit per task: Task 1 `662be9b`, Task 2 `7a3fa31`, Task 3 `6148073`. Code was taken verbatim from the plan's fenced blocks.
+
+**TDD evidence.** Each task's new tests failed first for the planned reason: Task 1 `expected [ '' ] to deeply equal [ 'paging: { limit: 100 }' ]`; Task 2 "Cannot find module './laundry-order-page'"; Task 3 29 render tests failing on "Cannot find module '…/app/laundry/[id]/page'". No characterization tests.
+
+**Deviations from the plan text (no change to behavior or scope):**
+
+1. **Task 2 test helper default.** The plan's `current(status, role, invoiceExists = false)` turned the explicit `undefined` row into `false`, so `PRICED as TENANT_OWNER, invoice exists undefined → actions` failed (`'invoice'`). The implementation was right and the test was not; the default was removed (all rows pass three arguments). Commit `7a3fa31` says so.
+2. **Lint ordering.** `pnpm --filter web lint` flagged the repository's `contextforge/record-key-order` rule on four render-test fixture objects and `@typescript-eslint/sort-type-constituents` on `string | URLSearchParams`. Keys and the union were reordered (`URLSearchParams | string`). Folded into `6148073`.
+
+**Validation (Task 4, Step 2), run at `6148073`:**
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter @clensy/client test` | Passed, 11 tests |
+| `pnpm --filter @clensy/client build` | Passed |
+| `pnpm --filter @clensy/client lint` | Passed |
+| `pnpm --filter @clensy/web test` | Passed, 15 files, 411 tests |
+| `pnpm --filter @clensy/web lint` | Passed |
+| `pnpm --filter @clensy/web build` | Passed |
+| `pnpm --filter web test` | Passed, 34 files, 831 tests (752 before; +79) |
+| `pnpm --filter web lint` | Passed |
+| `pnpm --filter web exec tsc --noEmit` | Passed |
+| `pnpm --filter web build` | Passed; route list shows `ƒ /app/laundry/[id]` |
+| `pnpm lint` | Passed |
+
+Scope check (Step 1): `git diff --name-only main...HEAD` lists exactly the File map plus this plan.
+
+**Manual browser check (Step 3).** Setup per the #160 precedent: this branch's API built and run on 3010 (`WEB_ORIGIN=http://localhost:3011`), this branch's web as a production build on 3011 (`NEXT_PUBLIC_API_URL=http://localhost:3010/graphql`), local Postgres; Docker containers untouched. Driven with Playwright; screenshot `.playwright-mcp/156-order-page-mobile.png` (gitignored).
+
+| # | Viewport | Role | Result |
+| --- | --- | --- | --- |
+| 1 | 1850 px | TENANT_OWNER | PRICED order with invoice: back link, `h1` customer, id, "Priced" badge, "Customer pickup"; progress; summary 4 columns; six links; one line (Base service, Per kg, 2.00 kg, ₱20.00); Invoice INV-2026-000317 / ₱20.00 / Unpaid; Actions lists Mark awaiting payment, Mark paid, Cancel order; current = Actions (invoice exists); sidebar Laundry `aria-current="page"`; title "Laundry · Clensy"; 0 buttons/inputs/forms in `main`. **Pass** |
+| 1b | 1850 px | TENANT_OWNER | RECEIVED: em dashes for weight and total, all "not yet" facts, current = Weighing, Actions = Cancel order, Reject order. WEIGHED: Recorded weight 1.20 kg, current = Services. **Pass** |
+| 2 | 1850 px | TENANT_OWNER | Reload of the order URL renders the same order. **Pass** |
+| 3 | 1850 px | TENANT_OWNER | `/app/laundry?status=PRICED` → order URL → Back returns to `/app/laundry?status=PRICED`. **Pass** |
+| 4 | 1850 px | TENANT_OWNER | "Back to laundry orders" opens `/app/laundry`. **Pass** |
+| 5 | 1850 / 375 px | TENANT_OWNER | Section links set the hash and scroll; `scroll-margin-top` 24px applied. On this data the target sections sit near the page end, so the scroll stopped at the document bottom (`scrollY` = max) rather than at 24px. **Pass** (behavior as specified; noted) |
+| 6 | 1850 px | TENANT_OWNER | `/app/laundry/not-an-id`: error + back link; only GraphQL request was the shell's `CurrentAdmin` (no order or invoice query). Non-existent UUID: error + back link. No other-tenant order exists locally; the API returns `null` for cross-tenant exactly as for missing, which this case covers. **Pass** |
+| 7 | 375 px | TENANT_OWNER | Document scroll width 360 ≤ viewport; summary one column; section nav scrolls in its own box (365 > 312, `overflow-x: auto`); header badge and fulfillment fit, id wraps. **Pass** |
+| 8 | 375 px | ANALYST | Page opens; 0 controls; no current link; "No further actions for this order."; invoice facts visible. **Pass** |
+
+A throwaway `qa156-analyst-…@example.com` ANALYST was created through `createAdmin` for row 8 and disabled afterwards with `disableAdmin`. Console showed only the existing favicon 404 and the Apollo DevTools notice.
+
+## Slice Completion Report
+
+| Field | Result |
+| --- | --- |
+| Slice | #156 Laundry order page |
+| Tracking | https://github.com/rexescario-dev/clensy-platform/issues/156 |
+| M4 | Plan **Accepted** |
+| M5 | Review **Accepted** |
+| M6 | **Complete** |
+| M7 | Pending |
+| M8 | Pending |
+| M9 | Pending |
+| Branch | `feat/156-laundry-order-page` |
+| PR | (opened after this record) |
+| Status | **Ready for M7** |
+
+### Shipped
+
+- `/app/laundry/<id>`: read-only order page reachable by direct URL and refresh; back link, header, shared progress, summary, section nav, six sections.
+- Next-step current section (Weighing / Services / Invoice / Actions) by status, role and a validated invoice result.
+- Loading and error states take precedence over Apollo-retained order data; an unresolved or incomplete invoice result never reads as "no invoice".
+- The detail query loads up to 100 lines and warns when more exist.
+- Pure helpers ready for #161: `laundryOrderHref`, `laundryDetailRedirectHref` (not wired).
+
+### Validation
+
+| Check | Result |
+| --- | --- |
+| Tests | **Passed** |
+| Typecheck | **Passed** |
+| Lint | **Passed** |
+| Build | **Passed** |
+| Package validation | N/A |
+
+### Next Gate
+
+**M7 — Code Review**
