@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Draft (second draft) |
+| M5 (first draft) | Request changes — 2026-10-13, at `24858e8`, by the owner. See Revision log. |
 | Date | 2026-10-13 |
 | Tracking issue | [#176](https://github.com/rexescario-dev/clensy-platform/issues/176). Also affects the [#173](https://github.com/rexescario-dev/clensy-platform/issues/173) drawer history guard (merged in #174). |
 | Scope | One file, `.gitignore`: two lines under `# Tests`. No application code, no coverage configuration, no other ignore rule. |
@@ -14,6 +15,14 @@
 | Edit anchor | `.gitignore` on `main` at `8dd247a`, lines 36–37. |
 
 **Goal:** generated `coverage/` and `.nyc_output/` directories are ignored in every app and package, not only at the repository root. Today `.gitignore:36–37` are `/coverage` and `/.nyc_output`, from the initial NestJS setup (`9f3cf72`), when the API lived at the root. The leading slash anchors them there. So `pnpm --filter api test:cov`, which writes to `apps/api/coverage/` (`coverageDirectory: "../coverage"` with `rootDir: "src"`), leaves an untracked directory that `git add -A` would commit. The #173 drawer guard scans every file git tracks or would track under `apps/web`, so it would also scan any `apps/web/coverage/`.
+
+## Revision log
+
+**Second draft** (M5 review 1, 2026-10-13: request changes):
+- **P1, V1 check count:** no change to the count, which is 28. The script checks 13 roots × 2 directories (26) plus 2 files: the root `coverage`, whose expectation is the conditional, and `apps/api/coverage`, the line after it. The conditional runs one `expect` per mode, not two. Both runs print `28 checks`. The plan now spells this arithmetic out under Verification strategy.
+- **P2, V3 cleanup:** Step 5 is now a subshell with `set -euo pipefail` and an `EXIT` trap that removes `apps/api/coverage`. It first asserts the directory does not exist, so the trap can only remove output this step created. Afterwards it asserts the directory is gone. It keeps the three assertions: the producer exits 0, the directory exists, and `git status --porcelain` is exactly ` M .gitignore`. It adds a positive one: `git status --porcelain --ignored` lists `!! apps/api/coverage/`. Pre-validated on `main`: the status assertion fails there, as expected, and the trap still removed the directory.
+- **P2, script modes:** `check-ignore.sh` now exits 2 with a usage line unless the mode is exactly `before` or `after`, including an empty mode. Step 1 checks this.
+- **Unchanged:** the design, the `.gitignore` diff, the 28-path matrix, V2, V4 and V5.
 
 ## Global Constraints
 
@@ -26,9 +35,11 @@
 
 TDD does not apply: there is no unit test for an ignore file. A command-level red/green replaces it.
 
-- **Check script (V1).** `check-ignore.sh` (below) asks `git check-ignore -v --no-index` which rule matches each path. It compares that with the expected rule for `before` (`main`) or `after` (Task 1). It checks 28 paths:
+- **Check script (V1).** `check-ignore.sh` (below) asks `git check-ignore -v --no-index` which rule matches each path. It compares that with the expected rule for `before` (`main`) or `after` (Task 1). It checks 28 paths, 13 roots × 2 directories plus 2 files:
   - `coverage/x` and `.nyc_output/x` under the root, `apps/api`, `apps/web`, every package (`packages/{auth,client,config,domain,graphql,testing,ui,validation,web}`), and one deeper path, `apps/api/src`;
   - two *files* named `coverage` (root and `apps/api`), for the trailing-slash rule.
+
+  Any mode other than exactly `before` or `after` exits 2 with a usage line.
 
   `--no-index` makes the answer depend on the ignore rules only, not on whether the paths exist or are tracked.
 - **Red:** on `main`, `before` passes (only the root paths match, nested ones match nothing) and `after` fails with 27 mismatches. **Green:** after Task 1, `after` passes with 0 mismatches.
@@ -38,10 +49,11 @@ TDD does not apply: there is no unit test for an ignore file. A command-level re
 - **Diff (V5).** `git diff --stat main...HEAD` lists exactly `.gitignore` and this plan; tree and index clean.
 
 **Pre-validation** (run 2026-10-13 on `main` at `8dd247a`, before M5). Every command named in an `Expected:` line was run:
-- V1: `before` on `main` → 28 checks, 0 mismatches, exit 0. `after` on `main` → 27 mismatches, exit 1.
+- V1: `bogus` and an empty mode → usage line, exit 2. `before` on `main` → 28 checks, 0 mismatches, exit 0. `after` on `main` → 27 mismatches, exit 1.
 - V1 green, simulated: `after` in a scratch repository whose `.gitignore` is `main`'s with exactly lines 36–37 replaced → 0 mismatches, exit 0. The real `.gitignore` was not touched.
 - V2 → no output (grep exit 1).
 - V3 red half: `pnpm --filter api test:cov` → exit 0 (74 suites, 1029 tests), wrote `apps/api/coverage/` (`clover.xml`, `coverage-final.json`, `lcov.info`, `lcov-report/`). `git status --porcelain` → `?? apps/api/coverage/`. The directory was then removed. V3 green runs only after Task 1.
+- V3 failure path (second draft): the Step 5 block run on `main` → the producer passed, then the status assertion failed (exit 1, `?? apps/api/coverage/`). The trap removed the directory, and `test ! -e apps/api/coverage` → exit 0.
 - V4 → 1 file, 30 tests passed.
 
 ## Task 1: Ignore coverage output at any depth
@@ -51,6 +63,7 @@ Run every step from the repository root. Before Step 1 the tree and index MUST b
 - [ ] **Step 1 (red): save the check script and run it against `main`.** Save `check-ignore.sh` (below) outside the repository, for example in a scratch directory as `$CHECK`. Then:
 
 ```bash
+bash "$CHECK" bogus    # Expected: "usage: check-ignore.sh before|after", exit 2
 bash "$CHECK" before   # Expected: "28 checks, 0 mismatches", exit 0
 bash "$CHECK" after    # Expected: "28 checks, 27 mismatches", exit 1
 ```
@@ -90,13 +103,20 @@ bash "$CHECK" after    # Expected: "28 checks, 0 mismatches", exit 0
 git ls-files | grep -E '(^|/)(coverage|\.nyc_output)(/|$)'   # Expected: no output, exit 1
 ```
 
-- [ ] **Step 5: real producer (V3).**
+- [ ] **Step 5: real producer (V3).** Run as one block. The subshell's `EXIT` trap removes the coverage output whether the block passes or fails. The precondition check means it removes only what this step created.
 
 ```bash
-pnpm --filter api test:cov          # Expected: exit 0
-test -d apps/api/coverage           # Expected: exit 0 (the output exists)
-git status --porcelain              # Expected: only " M .gitignore"; no apps/api/coverage/
-rm -rf apps/api/coverage
+test ! -e apps/api/coverage || { echo 'apps/api/coverage already exists: stop' >&2; false; }
+(
+  set -euo pipefail
+  trap 'rm -rf apps/api/coverage' EXIT
+  pnpm --filter api test:cov                  # the producer must succeed
+  test -d apps/api/coverage                   # the output exists
+  git status --porcelain --ignored -- apps/api | grep -qxF '!! apps/api/coverage/'   # it is ignored
+  [ "$(git status --porcelain)" = ' M .gitignore' ]   # and invisible to status
+)
+echo "V3 exit=$?"                             # Expected: V3 exit=0
+test ! -e apps/api/coverage                   # Expected: exit 0 (cleaned up)
 ```
 
 - [ ] **Step 6: guard (V4).**
@@ -127,7 +147,11 @@ git status --porcelain        # Expected: no output
 # Asks git which .gitignore rule, if any, matches each path, and compares
 # it with what `before` (main at 8dd247a) or `after` (Task 1) expects.
 set -euo pipefail
-mode=${1:?usage: check-ignore.sh before|after}
+mode=${1:-}
+case $mode in
+  before|after) ;;
+  *) echo 'usage: check-ignore.sh before|after' >&2; exit 2 ;;
+esac
 
 roots=(. apps/api apps/web apps/api/src
   packages/auth packages/client packages/config packages/domain
