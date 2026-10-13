@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted (revision 7); revisions 2–6 implemented |
+| Status | Draft (revision 8); revisions 2–7 implemented; revision 7 returned at M7 |
 | M5 decision (revision 7) | **Accepted** — 2026-10-13, at `8542255` (second draft), by the owner, after small adjustments. They are folded into Task 7 in the record commit: (1) the shadowing claim is narrowed to that case; (2) cleanup of the tree and index is verified explicitly after H20 and after the full run; (3) a discovery test, one per scanned root, requires a new untracked file to be listed; (4) long lines are wrapped. Keep the two-file allowlist. Re-run the whole table on the committed code. M7 MUST be a fresh independent review. |
 | M5 (revision 7, first draft) | Request changes — 2026-10-13, at `734fed8`. See Gate outcomes. |
 | M5 decision (revision 6) | **Accepted** — 2026-10-13, at `4f0e026`, by the owner, subject to confirming the file-extension assumption. Confirmed: only `eslint.config.mjs` and `postcss.config.mjs` are non-TS in the scanned roots today, but `apps/web` has `allowJs: true` and Next accepts `.js`/`.jsx` pages. So, as the acceptance allows, the guard also scans JavaScript extensions (one-line filter, folded into Task 6 in the record commit; H13/H14). The aliased `useDetailDrawer` import stays a documented limitation. Run H1–H14, the full `web` suite, lint and `tsc`. M7 MUST be a fresh independent review. |
@@ -28,6 +28,12 @@
 - **The flag** is removed.
 
 ## Revision log
+
+**Revision 8** (M7 return of revision 7, 2026-10-13):
+- **P2 (blocking), the race:** the discovery tests no longer write into the source tree. `sourceFiles(repoRoot, roots)` is proved in a throwaway `git init` repository: in each root, a new file is listed and an ignored `public/` file is not. That removes the race with `web-shell-regressions.test.ts`, and a hard kill can no longer leave a committable file (P3-4).
+- **P3-2:** the hook comment cites the plan's path and its "Known limits".
+- **P3-3:** quoted and computed destructuring keys (`{ 'refresh': r }`, `{ ["refresh"]: r }`) are now caught, closing a gap that dates from revision 6. Aliased or namespaced `useRouter` and wrapped initializers are added to Known limits.
+- **P3-1, acknowledged:** this revision adds tests, so it goes to M5 as a Draft. Nothing is folded at acceptance.
 
 **Revision 7** (owner decision, 2026-10-13, on the revision 6 M7 P3s: "fix all three"):
 - **P3-1:** the guard also catches `refresh` read from a `useRouter()` value without calling it (`onClick={router.refresh}`, `startTransition(router.refresh)`, `router['refresh']`, `useRouter().refresh`), and `refresh` destructured from a router variable.
@@ -1842,6 +1848,195 @@ Applied on the branch at `734fed8`, then removed before this Draft was committed
 | Guard (as amended at M5) | 28 passed; 104 files scanned, including `eslint.config.mjs` |
 | Every Step 4 row | as stated; tree and index clean after H20 and at the end; no `zz*` files left |
 | `web` / lint / `tsc` | 710 passed; exit 0; clean |
+
+## Revision 8 tasks (edit anchor: PR head `d215d09`, code as of `544edf1`)
+
+**Why.** The revision 7 M7 returned it.
+- **P2, the race:** the M5-folded discovery tests wrote `zz-guard-discovery-<pid>.ts` into `apps/web` and the package roots. `lib/web-shell-regressions.test.ts` walks `apps/web` in a parallel worker and reads every file it lists, so it could read the planted file just after deletion (ENOENT). The reviewer reproduced this in 1 of 25 paired runs.
+- **P3s:** the hook comment did not name the plan; quoted destructuring keys were missed; some limits were undocumented.
+
+**Change.**
+- **The file list is parameterised:** `sourceFiles(repoRoot = REPO_ROOT, roots = SCANNED)`.
+- **One discovery test** replaces the three. It creates a temporary repository (`mkdtempSync` + `git init -q`) with `.gitignore` `public/`. In each of the three roots it writes `new.ts` and `public/ignored.js`, then requires the listing to equal exactly the three `new.ts` files. The temporary directory is removed in `finally`. Nothing touches the real tree.
+- **Destructuring keys** are compared by their text for identifiers and string literals, and by the literal inside a computed key.
+- **Hook comment:** it cites `docs/superpowers/plans/2026-10-11-drawer-history-entry-marker-plan.md` "Known limits".
+
+**Known limits, additions** (to Revision 7's list; in each case a zero-argument *call* is still caught, and only references are missed):
+- an aliased or namespaced `useRouter` (`import { useRouter as useNav }`, `nav.useRouter()`);
+- a wrapped initializer (`useRouter() as X`, `useRouter()!`, `(router).refresh`).
+
+### Task 8: Stop writing into the source tree
+
+- [ ] **Step 1:** Apply the guard test diff:
+
+```diff
+diff --git a/apps/web/lib/use-detail-drawer.guard.test.ts b/apps/web/lib/use-detail-drawer.guard.test.ts
+--- a/apps/web/lib/use-detail-drawer.guard.test.ts
++++ b/apps/web/lib/use-detail-drawer.guard.test.ts
+@@ -1,5 +1,6 @@
+ import { execFileSync } from 'node:child_process';
+-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
++import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
++import { tmpdir } from 'node:os';
+ import { join, relative } from 'node:path';
+ import { fileURLToPath } from 'node:url';
+ import ts from 'typescript';
+@@ -46,7 +47,7 @@ const FORBIDDEN_IDENTIFIERS = new Map([
+ // never turns the guard red, and tracked code is never skipped, whatever its
+ // directory is called. `apps/web` allows JavaScript (`allowJs`), and Next
+ // accepts `.js`/`.jsx` pages, so those count too.
+-function sourceFiles(): string[] {
++function sourceFiles(repoRoot = REPO_ROOT, roots = SCANNED): string[] {
+   const listed = execFileSync(
+     'git',
+     [
+@@ -56,14 +57,14 @@ function sourceFiles(): string[] {
+       '--others',
+       '--exclude-standard',
+       '--',
+-      ...SCANNED.map((root) => relative(REPO_ROOT, root)),
++      ...roots.map((root) => relative(repoRoot, root)),
+     ],
+-    { cwd: REPO_ROOT, encoding: 'utf8' },
++    { cwd: repoRoot, encoding: 'utf8' },
+   );
+   return listed
+     .split('\0')
+     .filter((file) => /\.[cm]?[jt]sx?$/.test(file) && !/\.test\.[cm]?[jt]sx?$/.test(file))
+-    .map((file) => join(REPO_ROOT, file))
++    .map((file) => join(repoRoot, file))
+     .filter((file) => existsSync(file));
+ }
+ 
+@@ -151,7 +152,16 @@ function isRefreshDestructuredFromRouter(node: ts.Node, routers: ReadonlySet<str
+     ts.isObjectBindingPattern(node.name) &&
+     node.initializer !== undefined &&
+     isRouter(node.initializer, routers) &&
+-    node.name.elements.some((element) => (element.propertyName ?? element.name).getText() === 'refresh')
++    node.name.elements.some((element) => {
++      const key = element.propertyName ?? element.name;
++      // `refresh`, `'refresh'` or `["refresh"]`.
++      if (ts.isIdentifier(key) || ts.isStringLiteralLike(key)) return key.text === 'refresh';
++      return (
++        ts.isComputedPropertyName(key) &&
++        ts.isStringLiteralLike(key.expression) &&
++        key.expression.text === 'refresh'
++      );
++    })
+   );
+ }
+ 
+@@ -216,21 +226,27 @@ describe('drawer history marker guard (#173)', () => {
+     expect(usingHook.sort()).toEqual([...DRAWER_PAGES].sort());
+   });
+ 
+-  // Git's list, not a directory walk: a new file nobody has added yet must
+-  // still be scanned, in each root. A harmless file is written and always
+-  // removed.
+-  it.each(SCANNED.map((root) => [relative(REPO_ROOT, root), root]))(
+-    'discovers a new, untracked source file in %s',
+-    (_label, root) => {
+-      const planted = join(root, `zz-guard-discovery-${process.pid}.ts`);
+-      try {
+-        writeFileSync(planted, 'export {};\n');
+-        expect(sourceFiles()).toContain(planted);
+-      } finally {
+-        rmSync(planted, { force: true });
++  // Git's list, not a directory walk: in each root, a new file nobody has
++  // added yet is listed, and an ignored one is not. Proved in a throwaway
++  // repository, so nothing is written into the real source tree, which other
++  // test files walk in parallel.
++  it('lists new files and skips ignored ones, in every root', () => {
++    const repo = mkdtempSync(join(tmpdir(), 'drawer-guard-'));
++    try {
++      execFileSync('git', ['init', '-q'], { cwd: repo });
++      writeFileSync(join(repo, '.gitignore'), 'public/\n');
++      const roots = SCANNED.map((root) => join(repo, relative(REPO_ROOT, root)));
++      for (const root of roots) {
++        mkdirSync(join(root, 'public'), { recursive: true });
++        writeFileSync(join(root, 'new.ts'), 'export {};\n');
++        writeFileSync(join(root, 'public', 'ignored.js'), 'export {};\n');
+       }
+-    },
+-  );
++      const listed = sourceFiles(repo, roots);
++      expect(listed.sort()).toEqual(roots.map((root) => join(root, 'new.ts')).sort());
++    } finally {
++      rmSync(repo, { force: true, recursive: true });
++    }
++  });
+ 
+   it('finds no router.refresh() or server action in the web app or the shared components', () => {
+     const hazards = files.flatMap((file) =>
+@@ -253,6 +269,12 @@ describe('drawer history marker guard (#173)', () => {
+     ['a refresh reference', 'const router = useRouter();\nconst onClick = router.refresh;', ['`router.refresh()`']],
+     ['a refresh passed on', 'const router = useRouter();\nstartTransition(router.refresh);', ['`router.refresh()`']],
+     ['a bracket reference', "const router = useRouter();\nretry(router['refresh']);", ['`router.refresh()`']],
++    [
++      'a quoted destructured refresh',
++      "const router = useRouter();\nconst { 'refresh': reload } = router;",
++      ['`router.refresh()`'],
++    ],
++    ['a computed destructured refresh', 'const { ["refresh"]: reload } = useRouter();', ['`router.refresh()`']],
+     [
+       'refresh destructured from a router',
+       'const router = useRouter();\nconst { refresh } = router;',
+```
+
+- [ ] **Step 2:** Apply the hook comment diff (comment only):
+
+```diff
+diff --git a/apps/web/lib/use-detail-drawer.ts b/apps/web/lib/use-detail-drawer.ts
+--- a/apps/web/lib/use-detail-drawer.ts
++++ b/apps/web/lib/use-detail-drawer.ts
+@@ -32,8 +32,9 @@ import { useCallback, useEffect, useRef } from 'react';
+ // unmarked entry, to the same effect. No drawer page uses either today;
+ // keep it that way or re-mark the entry after one.
+ // `use-detail-drawer.guard.test.ts` looks for both in `apps/web`,
+-// `packages/web/src` and `packages/ui/src`; its plan lists what a static
+-// scan cannot see.)
++// `packages/web/src` and `packages/ui/src`. What a static scan cannot see is
++// listed under "Known limits" in
++// docs/superpowers/plans/2026-10-11-drawer-history-entry-marker-plan.md.)
+ const DRAWER_ENTRY_KEY = '__clensyDetailDrawer';
+ 
+ // The current entry's drawer marker, as a fresh state object for a native
+```
+
+- [ ] **Step 3:** Run the guard. Expected: `Tests 28 passed (28)`: coverage, the temporary-repository discovery test, the scan, 24 inline cases and the `.ts` parse test. eslint and `tsc` are clean; no line is over 120 characters; no `drawer-guard-*` directory remains in the temp directory.
+- [ ] **Step 4: Failure evidence**, not committed. Mutate each alone, then revert.
+
+  | Mutation | Expected |
+  | --- | --- |
+  | R1: parse every file as TSX | 1 failed / 27 passed |
+  | R2: drop the router-reference rule | 5 failed / 23 passed |
+  | R3: drop `--exclude-standard` | 3 failed / 25 passed (the discovery test now catches it without a plant) |
+  | R4: drop `--others` | 1 failed / 27 passed |
+  | R5: compare destructuring keys with `getText()` (revision 6 behaviour) | 1 failed / 27 passed |
+
+  The revision 7 plant rows H1–H23 still apply, with totals out of 28. Re-run a representative set: H8, H15, H17, H20 (with index restore), H21 and H22. Then verify that the tree and index are clean.
+- [ ] **Step 5: Stability:**
+  - `vitest run lib/web-shell-regressions.test.ts lib/use-detail-drawer.guard.test.ts` 25 times: no failures.
+  - `pnpm --filter web test` 20 times: no failures.
+- [ ] **Step 6:** One commit: `test(web): prove the guard's file list in a temporary repository (#173)`.
+
+### Revision 8 final verification
+
+- [ ] **Allowlist:** `git diff --name-only d215d09...HEAD -- . ':!docs'` is exactly the guard test and `use-detail-drawer.ts` (comment-only).
+- [ ] **Steps 3–5,** on the committed code.
+- [ ] **Full suites:** `web` (710 at pre-validation), lint, `tsc`.
+
+### Revision 8 pre-validation
+
+Applied on the branch at `d215d09`, then removed before this Draft was committed.
+
+| Check | Result |
+| --- | --- |
+| Guard | 28 passed; no `drawer-guard-*` directory left |
+| R1 / R2 / R3 / R4 / R5 | 1 / 5 / 3 / 1 / 1 failed |
+| Paired runs (`web-shell-regressions` + guard) | 25 of 25 passed (224 tests each) |
+| Full `web` suite | 20 of 20 passed (710 each) |
+| lint / `tsc` | exit 0 / clean |
 
 ## Final verification
 
