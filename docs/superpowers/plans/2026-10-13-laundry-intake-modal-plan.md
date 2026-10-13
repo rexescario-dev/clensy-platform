@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 3)**. M6 in progress. |
+| Status | **Accepted (revision 3)**. M6 complete; ready for M7. |
 | M5 decision | **Accepted** — 2026-10-14, at `40e2888` (revision 3), by the owner, after a consistency check of revision 3: every second-pass finding has a log row; planned test counts match the stated expectations (e2e 4, fieldset 4, picker static 5, picker interaction 10, variables 2, hook 9, intake 16, plus the list-error characterization test); the picker clears its stored active id; the hook skips at once on an empty input; the fulfillment error describes the radio group. This accepts the plan only. No planned suite, lint, typecheck, build or e2e has run. M6 runs **subagent-driven** from `40e2888`: task order and per-task commits as written, `git status --short` before each commit, stop on any unexpected failure (Task 1: never change API code to make it pass), subagent reports checked against the actual diff and command output, and actual results recorded in the M6 Slice Completion Report. M7 MUST be a fresh independent review (`CLAUDE.md`: application code). |
 | M5 second pass | 2026-10-13/14, owner, reviewed `be71c1c` in five topical parts: **Returned for Revision**. Part 1 acceptable. Part 2 blocking: an emptied input must skip the query at once, and a lingering earlier result must stay unavailable during a search change. Part 3 blocking: a stale active id could come back; the blur test should move focus for real. Part 4 P2: test a `fulfillmentType` server error and its clearing. Part 5 P2: prove the list's error after a failed background refresh; tighten the Step 2 expected failure. All resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). |
 | M5 history | First pass (2026-10-13, owner, reviewed in five parts): **Returned for Revision**. Findings covered customer-search completeness, stale search results, the submit guard's lifecycle, picker active-option state, hook-level tests, a search mock keyed on variables, a create response without an order id, the success ordering, and test and command details. Every finding is resolved or answered in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). |
@@ -2465,3 +2465,65 @@ Push `feat/160-laundry-intake-modal` and open the PR against `main` with `gh pr 
 | Characterization tests labelled | Task 1, and the Task 5 Step 1 list-error test. |
 | Every M5 review 1 finding answered | Yes; see [Revision 2 (M5 review 1)](#revision-2-m5-review-1). |
 | Every M5 review 2 finding answered | Yes; see [Revision 3 (M5 review 2)](#revision-3-m5-review-2). |
+
+## Gate outcomes
+
+### M5 — Accepted (2026-10-14, third pass)
+
+Accepted at `40e2888` (revision 3) by the owner, recorded at `59cfffb`. The first two passes returned findings, each resolved in the Revision 2 and Revision 3 logs. The acceptance covers the plan only.
+
+### M6 — Implementation complete (2026-10-14)
+
+Implemented on `feat/160-laundry-intake-modal` from the Accepted plan (`40e2888`) and the Accepted lifecycle spec with Amendment #164, **subagent-driven**: a fresh implementer per task, then a task-scoped review (spec compliance and code quality) of each task's diff. Tasks 1–5 in plan order, one commit each, plus one lint follow-up on Task 1 and one fix round on Task 3 found by the manual browser check. The controller re-ran each task's tests rather than relying on subagent reports. No task was split, merged or reordered, and no product semantics were added.
+
+| Task | Commit | Evidence |
+| --- | --- | --- |
+| 1 API search and intake (**characterization**) | `8b26fc3`, lint follow-up `de3204c` | 4 passed (controller re-run). Failure evidence, not committed: expected phone mutated to `555-9999` → 1 failed / 3 passed, then restored byte-identical. The follow-up commits the formatting that `pnpm --filter api lint` (`eslint --fix`) applied and types the search result, clearing a new `no-unsafe-argument` warning; assertions unchanged. |
+| 2 Copy and fulfillment fieldset | `f50d6af` | RED `Cannot find module` → GREEN 4 passed. `@clensy/web` 406 passed (controller re-run), lint and build clean. |
+| 3 Customer picker | `216d8b0`, fix round `9a0e67a` | Static RED → GREEN 5 passed. Interaction test RED with the export reverted (10 failed) → GREEN 10 passed (controller re-run). Fix round: 2 new tests RED before the fix, then 12 passed. |
+| 4 Search hook | `d4b97fa` | RED `Cannot find module` → GREEN 2 + 9 passed (controller re-run). Lint clean. |
+| 5 Dialog and page | `6f5b7a8` | Step 2 gate: only the create-race test failed (`'set value' called on an object that is not a valid instance of HTMLInputElement`, thrown from `typeCustomer`). The list-error **characterization** test failed against `hasError={false}` (not committed) and passes restored. GREEN: 16 new intake tests, the static list-error test and every existing page test pass. `web` 750 passed, lint and `tsc` clean. |
+
+Deviations, each a test-only or lint-only change recorded as a ruling during execution:
+
+- Task 3 static test asserts `autoComplete="off"`: React 19 server markup emits the camelCase attribute. Its `input`/`render` helpers were swapped in source order for `contextforge/function-order`.
+- Task 5 test file: the hoisted `nav` keys were reordered for `record-key-order`. `dialog()` matches only the `role="dialog"` element that contains a form, because the `DetailDrawer` (also `role="dialog"`) opens after a create and has no form. Two server-error-clearing assertions wait one `act` turn, because react-hook-form clears asynchronously.
+- Task 5 Step 2 and Step 4: the RED runs were wider than the plan predicted. The per-variables customer mock crashes on the old page's unfiltered `limit: 100` query. A temporary mock guard, not committed, ran the Step 2 gate.
+- Task 1 follow-up `de3204c`: as above.
+- Task 3 fix round `9a0e67a`, from the manual check below. The Escape branch also calls `event.nativeEvent.stopImmediatePropagation()`. Next.js hydrates React on `document`, so React's root listener and `Modal`'s `document` keydown listener share a node, and a synthetic `stopPropagation()` did not stop `Modal`'s listener. The jsdom tests render into a `<div>`, so they could not see it. A regression test now puts the stand-in `Modal` listener on the React root node. The same round moved the option `onMouseDown` `preventDefault` to the popup container (a deferred task-review minor), so a mousedown on padding, the scrollbar or a status line no longer closes the list.
+
+Final verification, after the fix round:
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter @clensy/web test` | 15 files, 411 passed |
+| `pnpm --filter @clensy/web lint` / `build` | clean / clean |
+| `pnpm --filter web test` | 32 files, 752 passed |
+| `pnpm --filter web lint` / `exec tsc --noEmit` / `build` | clean / clean / compiled |
+| `pnpm --filter api lint` | clean, 0 warnings |
+| `pnpm --filter api test:e2e -- laundry-intake-customer-search laundry-order-list-filters laundry.e2e` | 3 suites, 13 passed (before the fix round; it touched no API file) |
+| `pnpm lint` | exit 0 (before the fix round; its only warning was the one `de3204c` cleared) |
+| Scope: `git diff --name-only main...HEAD` | exactly the File map plus this plan |
+
+Manual browser check, on the real `/app/laundry`. Setup: this branch's API on port 3010 (`WEB_ORIGIN=http://localhost:3011`) and this branch's web as a production build on 3011 (the dev server hit the OS file-watch limit), with the local Postgres. Throwaway local staff (`qa160-{owner,scheduler,finance,analyst}-…@example.com`) were created through `createAdmin` and disabled afterwards with `disableAdmin`. Two laundry orders created during the check remain in the local dev data. Driven with Playwright; screenshots in `.playwright-mcp/` (gitignored).
+
+| # | Viewport, role | Result |
+| --- | --- | --- |
+| 1 | 1280, TENANT_OWNER | Focus starts in Customer. Both descriptions and "This choice is fixed at intake." show; the selected row has the dark border; rows sit side by side. Typing "ana re" sent one `Customers` query (`%ana re%`, limit 20, `fullName` then `id` ASC), listed 20 options and "More customers match…" (52 match). Arrows move the active option. Escape: **failed on the first build** (closed the dialog); **passes after `9a0e67a`**: the first Escape closes the list and keeps the dialog, text and focus; the second closes the dialog. |
+| 2 | 1280, TENANT_OWNER | Submit with no customer: "Select a customer.", `aria-invalid="true"`, focus in the field, no `ReceiveLaundryOrder`. |
+| 3 | 1280, TENANT_OWNER | Mouse-chosen customer, Delivery: one `ReceiveLaundryOrder {customerId, DELIVERY}`; dialog closed; "Laundry order created."; the drawer opened on the returned id with the weigh form. |
+| 4 | 1280, TENANT_OWNER | "Laundry Jane", past position 100 by name among 126 customers, is found by name. |
+| 5 | 390, TENANT_OWNER | No horizontal scroll (`scrollWidth` 375); dialog 343 px; fulfillment rows stacked; the result list is usable. |
+| 6 | 1280, SCHEDULER | "Add a customer" link, one text input, no customer form. ArrowDown + Enter chose without submitting; create succeeded with toast and drawer. |
+| 7 | 1280, FINANCE and ANALYST | List visible; no "+ New Laundry Order". |
+
+An observation for the owner, not a defect: the local e2e fixtures include many namesakes sharing the phone `555-1`. Under the issue's "phone, or email when phone is empty" rule those rows cannot be told apart. Real customers rarely share a phone, but the rule cannot separate two people with the same name and phone.
+
+Deferred task-review minors (for M7 triage), from the execution ledger:
+
+- Task 2: the fieldset's server error `<p>` has no `role="alert"` and the fieldset no `aria-invalid`. The option description is inside the label and also in `aria-describedby`, so it may be announced twice. Both are plan-mandated markup.
+- Task 3: Arrow keys while the search is `idle` set the list open (cosmetic). The click test does not assert that the list closes.
+- Task 4: clearing and retyping the same text within 300 ms sends a query without a fresh debounce; no stale option is offered.
+- Task 5: Escape can close the dialog while a create is pending (Cancel is disabled, Escape is not). The create still completes (toast and drawer), and a reopened dialog has a fresh guard. A malformed `receiveLaundryOrder: null` response would show "Unable to create…" rather than the "may have been created" message (the schema is non-nullable). No test pins guard release after a client-validation failure followed by a successful submit.
+
+Next gate: **M7 — Code Review**. A fresh independent reviewer on the most capable model is required (`CLAUDE.md`: application code).
