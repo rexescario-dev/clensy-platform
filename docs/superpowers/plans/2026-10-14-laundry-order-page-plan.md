@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 4)** — M5, 2026-10-14. Ready for M6. |
+| Status | **Accepted (revision 4)**. M6 complete; M7 Approved for merge (independent review); M8 N/A; M9 complete; M10 validated. |
 | M5 decision | **Accepted** — 2026-10-14, revision 4 (`76650be`), by the owner, after a fourth pass on the changed pieces: `resolvedInvoiceNodes` validates the result shape; a confirmed empty list alone means no invoice; missing or malformed data and loading or failed queries stay unresolved; the nav and the Invoice section read one validated value; the two page regressions check that an incomplete result neither selects Invoice nor shows the empty-invoice or error message. One P3 coverage suggestion (an explicit `nodes: null` case) was folded into Task 2 at acceptance, as an eighth `resolvedInvoiceNodes` test; no other change. This accepts the plan only: no planned suite, lint, type-check or build has run. M7 MUST be a fresh independent review (`CLAUDE.md`: application code). |
 | M5 history | First pass (2026-10-14, owner): **Returned for Revision**. One P2 finding: the current-section rule could read invoice data that Apollo retains while the invoice query is loading or has failed. Resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). Second pass (2026-10-14, owner): **Returned for Revision**. The invoice finding confirmed resolved. One new P2 finding: the loading check skipped `LoadingState` when Apollo retains earlier order data while the order query loads. Resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). Third pass (2026-10-14, owner, reviewed in five parts): **Returned for Revision**. Both earlier findings confirmed resolved. One P2: a finished invoice result without the invoice connection must stay unresolved, never "no invoice", and needs a regression test. Resolved in [Revision 4 (M5 review 3)](#revision-4-m5-review-3). |
 | Date | 2026-10-14 |
@@ -1594,7 +1594,7 @@ A throwaway `qa156-analyst-…@example.com` ANALYST was created through `createA
 | M8 | Pending |
 | M9 | Pending |
 | Branch | `feat/156-laundry-order-page` |
-| PR | (opened after this record) |
+| PR | https://github.com/rexescario-dev/clensy-platform/pull/183 (opened after this record) |
 | Status | **Ready for M7** |
 
 ### Shipped
@@ -1618,3 +1618,177 @@ A throwaway `qa156-analyst-…@example.com` ANALYST was created through `createA
 ### Next Gate
 
 **M7 — Code Review**
+
+### M7 — Approved for merge (2026-10-14, fresh independent review)
+
+Per `CLAUDE.md` (application code), the review was done by a fresh agent on the most capable model that did not implement the change. It was read-only and was given the Accepted spec, this plan and the branch diff. **This is not a self-review.** Its record, condensed:
+
+```text
+Decision: Approved for merge
+Subject: PR #183, branch feat/156-laundry-order-page, head ea85869
+Accepted specification: docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md (Amendment #164 §8.4.4; §8.2, §4.9, §4.4)
+Accepted implementation plan: this plan, revision 4 (M5 accept recorded at 4df0667)
+
+M6 gate: every M6 commit (662be9b, 7a3fa31, 6148073, ea85869) follows the M5 accept 4df0667.
+The PR delivers the whole plan (Tasks 1–4), not a subset.
+
+Plan tasks reviewed:
+- Task 1: ✓ the paging change is in LaundryOrderDetail; codegen changed one line; the test matches the plan;
+  the API's lines connection allows maxResultsSize 100.
+- Task 2: ✓ code matches the plan apart from the lint-required `URLSearchParams | string` union order.
+- Task 3: ✓ page.tsx is byte-identical to the plan; copy is identical; the render test differs only in
+  fixture key order.
+- Task 4: ✓ scope check holds; suites, builds and manual checks are recorded; the PR body has every
+  required element.
+
+Declared deviations, both judged legitimate:
+1. The `invoiceExists = false` default was removed from the Task 2 test helper.
+   An explicit undefined still triggers a JavaScript default parameter, so the planned row
+   (PRICED, TENANT_OWNER, undefined → actions) ran with false. Only the test harness changed.
+2. Lint-driven reordering of fixture keys and one union. Lines moved; no value changed.
+
+Scope: exactly the File map plus this plan. Nothing under apps/api, packages/ui, docs/workflows,
+package.json or lockfiles. The list page is untouched.
+
+Verification evidence (reviewer re-ran at ea85869, clean worktree):
+- pnpm --filter web test: 34 files, 831 tests passed
+- pnpm --filter web lint: passed
+- pnpm --filter web exec tsc --noEmit: passed
+- pnpm --filter @clensy/client test: 11 tests passed
+- pnpm --filter @clensy/web test: 15 files, 411 tests passed
+- PR CI run 38442220509: Lint, Test, Release gate and API e2e passed
+- Builds not re-run (optional); the M6 record shows them passing.
+- The +79 web tests reconcile with 50 helper tests plus 29 render tests.
+
+Review summary: a faithful realization of revision 4, conforming to the spec and Global Constraints:
+- no controls or mutations;
+- loading and error take precedence over retained order data;
+- one validated invoice result feeds both the nav and the Invoice section;
+- a non-UUID id skips both queries;
+- the 100-line page and its warning are in place;
+- the current-section rule matches the owner's decision;
+- the redirect helper is unwired.
+
+Edge cases checked:
+- The shared fragment is consistent across the drawer query and 14 mutations; the plain InMemoryCache
+  has no lines policy.
+- SSR and hydration of the useParams client page.
+- Role loading and terminal statuses.
+- Every enum-keyed i18n lookup resolves.
+
+Blocking findings: None (no merge blockers)
+
+Non-blocking observations (P3):
+- If currentAdmin fails rather than loads, Actions stays empty and no section is current, with no message.
+  This matches the Accepted rule; #165 could add a role-error message.
+- The invoice query runs in parallel even when the order is null or fails. One extra read, no visible effect.
+- invoices[0] comes from InvoiceForOrder (limit 1, unsorted), the same as the drawer. #166 should confirm
+  which invoice is shown if an order can ever have more than one (for example after a VOID).
+- Native anchors add a history entry per section click (Review Focus 8).
+- Process: a default parameter in a table-driven test helper slipped past M5.
+
+Gate: Merge per human/project norms. M8/M9 may follow.
+```
+
+### M8 — N/A (2026-10-14)
+
+```text
+Decision: N/A
+Subject: PR #183, branch feat/156-laundry-order-page, head ea85869
+Accepted specification: docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md (Amendment #164 §8.4.4)
+Accepted implementation plan: this plan (revision 4)
+M7 / authorization: Approved for merge; M6–M10 requested by the owner ("m6-m10")
+
+Candidates considered, and why none is an M8 refactor:
+- The render test's section()/count() helpers resemble other page tests' string helpers. They are small,
+  file-local, and sharing them would reach into #163/#160 tests outside this slice.
+- The two-way attribute-order regexes in the render test could be simplified now that the page's prop
+  order is fixed. That rewrites assertions without changing behavior; the gain is cosmetic, and the
+  current form is robust to a future prop reorder.
+- The M7 P3 observations (role-error message, a skipped invoice query for a failed order, invoice choice)
+  each change behavior. They belong to #165/#166 or to a product decision, not to M8.
+- The page and helpers match the Accepted plan byte for byte; no duplication or complexity worth the risk.
+No code changed in M8.
+```
+
+### M9 — Complete (2026-10-14)
+
+```text
+Decision: Complete
+Subject: #156 Laundry order page, PR #183
+Accepted specification: docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md (with Amendment #164)
+Accepted implementation plan: this plan (revision 4)
+M7: Approved for merge. M8: N/A.
+
+Documentation scope:
+- apps/web/README.md
+- packages/web/README.md
+- this plan (Status row, PR row of the M6 report, Gate outcomes)
+
+Updated artifacts:
+- apps/web/README.md ← M6 Tasks 1–3:
+  - LaundryOrderProgress added to the list of consumed @clensy/web components.
+  - New "Laundry order page (`/app/laundry/[id]`)" section: layout, read-only scope and the issues that
+    replace each section, data and the non-UUID skip, the 100-line page and its effect on the drawer,
+    query-state precedence and resolvedInvoiceNodes, the current-section rule, and the unwired cutover
+    helpers for #161.
+- packages/web/README.md ← M6 Task 3:
+  - The laundry section intro names the order page (#156) and the helpers it uses.
+  - The copy bullet names the `order` keys and the existing keys it reuses.
+- this plan ← M6/M7: Status row; the M6 report's PR link; the M7–M10 records.
+
+Editorial changes: none beyond the above.
+
+Unchanged, with reason:
+- docs/README.md records API and tenant-isolation slices; this slice changes no API.
+- The lifecycle spec: #156 implements §8.4.4 without amending it (the #157/#163/#160 precedent).
+- No changelog or roadmap file exists in the repository.
+
+Verification:
+- Links: every relative link and in-page anchor in both READMEs and this plan resolves
+  (scripted scan, 52 checked, 0 broken).
+- Heading hierarchy: the new `##` section in apps/web/README.md follows "Laundry intake" and precedes
+  "i18n"; the packages/web changes sit inside the existing `##` laundry section.
+- Status consistency: plan Accepted (revision 4); M6 complete; M7 Approved; M8 N/A; M9 complete;
+  PR #183 open.
+- Terminology follows the spec and the plan: order page, section, current section, cutover (#161),
+  drawer / `?detail=`.
+
+Gate: Documentation complete. Code, behavior and contracts are unchanged by this stage.
+```
+
+### M10 — Accepted, workflow validated (2026-10-14)
+
+```text
+Decision: Accepted
+Subject: workflow prompt library
+Governing specification: docs/workflows/specs/agent-workflow-design.md
+```
+
+**Subject:** the installed workflow prompt library (`docs/workflows/`, generic 1.4.1 / claude 0.2.0), run on #156 from M4 to M9. There was no M2/M3: #156 implements the already-Accepted Amendment #164 §8.4.4. The Context Forge dispatch asked for "Brainstorm (project default)", but the workflow's selection rule governed (an Accepted spec exists → M4). The owner accepted that route by reviewing the plan; two presentation questions that #156 left open were put to the owner at M4 and recorded as owner decisions.
+
+**Asset inventory:** unchanged. No orphan assets.
+
+**Checks:**
+- §2.5: the M5 accept of revision 4 (recorded `4df0667`) precedes the first M6 commit `662be9b`.
+- The M5 Return path worked three times. Each Return named a finding; M4 revised the plan with a resolution log (revisions 2–4) and M5 re-reviewed; no Accepted text was rewritten silently. The fourth pass accepted, with one P3 folded in and recorded.
+- The authority model held:
+  - The spec governed semantics: the page is read-only, the redirect is deferred to #161 per the issue's AC, and the owner decisions sit within §8.4.4's latitude.
+  - The plan governed sequencing: Tasks 1–4 in order, one commit each, code taken verbatim from the plan.
+  - Both M6 deviations were test- or lint-only, declared in commits and the M6 record, and judged legitimate by M7.
+- `CLAUDE.md`'s M7 rule was honored: a fresh, independent reviewer on the most capable model, read-only, given the spec, the plan and the diff.
+- Providers were honored: GitHub for issues #156/#154/#161, the branch and PR #183, all through `gh`.
+- Slice Completion Reports were emitted at M6 and M7; M8–M10 are recorded here.
+- §2.8 was honored: one PR (#183) carries the plan, its M5 record, the implementation and the docs.
+- No commit on the branch carries a `Co-Authored-By` trailer or "Generated with" line, and the PR body has none (the owner's global rule).
+
+**Blocking findings:** none.
+
+**Non-blocking observations:**
+1. **Plan test text can be wrong in ways reading cannot catch.** Four M5 passes reviewed the Task 2 table, but the `= false` default parameter only surfaced when the test ran. Lesson: when a table-driven helper must receive `undefined` explicitly, M4 should not give that parameter a default, and M5 should check for it.
+2. **Reviewing a long plan by line-range parts with a changed-pieces follow-up worked.** The final pass needed only the revision-4 excerpt. Topic-based parts (the #160 lesson) would have kept the page code in the same part as its tests; Part 4 and Part 5 split them, and the reviewer had to defer a judgment until Part 5.
+3. **Extracting code verbatim from the plan's fenced blocks** (a small script keyed on step headings) made M6 a mechanical transcription, so M7 could confirm byte-identity instead of re-reviewing logic.
+4. **The local-environment lesson from #160 repeated.** The Docker web container serves a stale build, and CORS allows only port 3001. Running this branch's API on 3010 (`WEB_ORIGIN=http://localhost:3011`) and a production web build on 3011 worked first time and left the containers untouched.
+5. **Retained-data bugs were found only by review, not by tests.** All three P2 findings concerned Apollo data surviving a load or an error. A standing M4 checklist item ("for every query: loading-with-data, error-with-data, finished-without-data") would have caught them before M5.
+
+Gate: **Workflow validated.**

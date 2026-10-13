@@ -18,7 +18,7 @@ Full application shell (sidebar/header/user menu/logout) mounted once for every 
 
 `apps/web` does still keep `cn` and `lucide-react` as ordinary dependencies for its own non-primitive needs (its own `className` composition, its own icons) — that isn't an exception to the rule above, since neither is a shadcn-specific dependency.
 
-`apps/web` also consumes reusable Clensy domain components (e.g. `LoginForm`, `BookingDataTable`, `LaundryOrderDataTable`, `LaundryCustomerPicker`, `LaundryFulfillmentFieldset`, `StaffDataTable`, `CreateStaffForm`) through [`@clensy/web`](../../packages/web/README.md)'s public API. Unlike `@clensy/ui`, these are self-translating — they own their own UI copy via `@clensy/web`'s own i18n context, not via translated-strings-as-props from `apps/web`.
+`apps/web` also consumes reusable Clensy domain components (e.g. `LoginForm`, `BookingDataTable`, `LaundryOrderDataTable`, `LaundryOrderProgress`, `LaundryCustomerPicker`, `LaundryFulfillmentFieldset`, `StaffDataTable`, `CreateStaffForm`) through [`@clensy/web`](../../packages/web/README.md)'s public API. Unlike `@clensy/ui`, these are self-translating — they own their own UI copy via `@clensy/web`'s own i18n context, not via translated-strings-as-props from `apps/web`.
 
 `apps/web` also still depends on the `shadcn` package itself, and `app/globals.css` still has `@import "shadcn/tailwind.css"`. This is not an exception to the rule above either: it's a CSS token dependency, not a component dependency. `apps/web/app/globals.css` owns the base theme-token layer that `@clensy/ui`'s primitives consume by class name (see the design spec §4.7), and that CSS import is the only reason the `shadcn` package stays in `apps/web/package.json`. Do not remove it — doing so breaks the Tailwind build.
 
@@ -58,6 +58,16 @@ Until [#161](https://github.com/rexescario-dev/clensy-platform/issues/161), a ro
 - **Reset:** the page gives the dialog a new React `key` on every opening.
 - **Roles:** the button shows for `canReceiveLaundryOrder`. The "Add a customer" link to `/app/customers` shows only when `canViewPath` allows it; there is no inline customer form.
 - **Success:** the page closes the dialog, toasts "Laundry order created.", and opens the drawer on the returned id at once with `openWithHref`; the list refresh runs behind it and is not awaited. Until #161, a successful create opens the drawer, not `/app/laundry/[id]`.
+
+## Laundry order page (`/app/laundry/[id]`)
+
+`app/app/laundry/[id]/page.tsx` is the focused, read-only page for one order ([#156](https://github.com/rexescario-dev/clensy-platform/issues/156); [plan](../../docs/superpowers/plans/2026-10-14-laundry-order-page-plan.md); [lifecycle spec](../../docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md) Amendment #164 §8.4.4). It is a client page that reads `id` with `useParams` and keys its content by `id`.
+- **Layout:** back link to `/app/laundry`, `PageHeader` (customer as the only `h1`, order id, status badge and fulfillment), `LaundryOrderProgress`, a four-card summary `dl`, an in-page section nav (`nav aria-label="Order sections"`, plain `#laundry-order-<section>` anchors), and six sections: Overview (the lines), Weighing, Services, Price, Invoice, Actions.
+- **Read-only:** the page renders no button, form or mutation. Weighing, Services, Price and Invoice show the facts the order already records; Actions names the lifecycle verbs the role may take as text. #155, #158, #162, #166 and #165 replace those bodies with controls.
+- **Data:** `laundryOrder(id)` (`LaundryOrderDetail`, `network-only`) and `InvoiceForOrder`. An id that is not UUID-shaped (`isUuid` in `lib/laundry-order-list-query.ts`) skips both queries and shows the not-found state. The fragment requests `lines(paging: { limit: 100 })`, so the drawer and the laundry mutations get up to 100 lines too; "More lines are not loaded." shows when `hasNextPage` is true.
+- **Query states:** while the order query loads, the page shows `LoadingState`, even if Apollo still holds an earlier order; an error or a `null` order shows "Unable to load laundry order." The invoice result goes through `resolvedInvoiceNodes` (`lib/laundry-order-page.ts`): only a finished, error-free result with an `invoices.nodes` array counts, and the nav and the Invoice section read that one value. Loading, failed and incomplete results stay unresolved, never "No invoice yet."
+- **Current section:** `currentLaundryOrderSection` marks the next step forward from `laundryOrderActions`: Weighing for `RECEIVED`, Services when pricing is offered, Invoice when one can be generated and none exists, otherwise Actions; none when the role has nothing to do or is still loading.
+- **Cutover helpers:** `laundryOrderHref(id)` and `laundryDetailRedirectHref(search)` are tested but not wired; [#161](https://github.com/rexescario-dev/clensy-platform/issues/161) uses them to send rows, post-create navigation and `?detail=` links here and to remove the drawer.
 
 ## i18n
 
