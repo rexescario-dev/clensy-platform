@@ -1193,7 +1193,7 @@ export const LaundryOrderRowFragmentDoc = gql`
 export const LaundryOrderDetailFragmentDoc = gql`
     fragment LaundryOrderDetail on LaundryOrder {
   ...LaundryOrderRow
-  lines {
+  lines(paging: { limit: 100 }) {
     nodes {
       id
       serviceId
