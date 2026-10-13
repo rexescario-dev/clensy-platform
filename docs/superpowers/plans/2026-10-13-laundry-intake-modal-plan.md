@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft (revision 2)** (M4). Awaiting Plan Review (M5), second pass. |
+| Status | **Draft (revision 3)** (M4). Awaiting Plan Review (M5), third pass. |
+| M5 second pass | 2026-10-13/14, owner, reviewed `be71c1c` in five topical parts: **Returned for Revision**. Part 1 acceptable. Part 2 blocking: an emptied input must skip the query at once, and a lingering earlier result must stay unavailable during a search change. Part 3 blocking: a stale active id could come back; the blur test should move focus for real. Part 4 P2: test a `fulfillmentType` server error and its clearing. Part 5 P2: prove the list's error after a failed background refresh; tighten the Step 2 expected failure. All resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). |
 | M5 history | First pass (2026-10-13, owner, reviewed in five parts): **Returned for Revision**. Findings covered customer-search completeness, stale search results, the submit guard's lifecycle, picker active-option state, hook-level tests, a search mock keyed on variables, a create response without an order id, the success ordering, and test and command details. Every finding is resolved or answered in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). |
 | Date | 2026-10-13 |
 | Tracking issue | [#160](https://github.com/rexescario-dev/clensy-platform/issues/160) "Redesign the laundry order creation modal". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#157](https://github.com/rexescario-dev/clensy-platform/issues/157) (closed; shared `laundry` copy, `canReceiveLaundryOrder`) and [#163](https://github.com/rexescario-dev/clensy-platform/issues/163) (closed; the list and its create button, merged in #170). Cutover navigation is [#161](https://github.com/rexescario-dev/clensy-platform/issues/161) (open). The order page is [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) (open). |
@@ -89,6 +90,8 @@ Read-only checks run at planning time, for M5. They are not pre-validation of an
 - **Server field-error shape:** `normalizeApiValidationErrors` reads Apollo's thrown `graphQLErrors` array, and in it `extensions.originalError.message` (an array of `"<field> <constraint>"` strings). `packages/validation/src/normalize.test.ts` pins that Apollo-shaped case against `__fixtures__/create-customer-validation-error.json`, a captured real response (`"email must be an email"`). The Task 5 mock uses that shape with `customerId` as the field.
 - **Typing in jsdom:** the merged `laundry-list-page.interaction.test.tsx` already types into a controlled input with the native `HTMLInputElement.prototype.value` setter plus a bubbling `input` event (`typeSearch`), and that suite passes today. The repo has no `@testing-library/user-event`. The new tests use the same helper rather than add a dependency.
 - **E2e fixtures:** `laundry-order-list-filters.e2e-spec.ts` (#163) keeps its customers and orders in the shared bootstrap tenant and isolates them with a per-run name tag, with no cleanup. Task 1 follows that convention.
+- **Apollo on a variable change (M5 review 2 spike, 2026-10-14):** a throwaway jsdom test drove the real `useQuery` of the installed `@apollo/client` 3.14.1 under `MockedProvider`, `fetchPolicy: 'network-only'`, changing `fullName.iLike` from `%an%` to a delayed `%ana%`. Per-render trace: `%an% loading=true data=none` → `%an% loading=false data=an` → `%ana% loading=true data=none prev=an` → `%ana% loading=false data=ana`. Apollo never pairs the new variables with the old data; the old data appears only in `previousData`, which the hook does not read. The hook does not rely on that alone: it also returns `loading` with no options whenever `result.loading` is true, and Task 4 pins that against a mock that returns lingering data with `loading: true`. The file was deleted.
+- **Apollo on a failed `refetch()` (M5 review 2 spike, 2026-10-14):** same setup, a successful first response, then a refetch that errors. Trace: `loading=false error=none data=1` → `loading=true data=1` → `loading=false error="network down" data=1`, and the `refetch()` promise rejected with "network down". So the page's `.catch(() => undefined)` only stops an unhandled rejection; the failure still reaches `ordersQuery.error`, which the page passes as `hasError`. `LaundryOrderDataTable` then renders "Unable to load laundry orders." (pinned in `laundry-order-data-table.test.tsx`), and the rows stay on screen. Task 5 adds a page-level test of that wiring. The file was deleted.
 
 ## File map
 
@@ -170,6 +173,21 @@ The owner reviewed revision 1 in five parts on 2026-10-13 and returned it for re
 | 5 · P2 Drawer waits on refetch | **Changed.** See Part 1 · P2 Success ordering. |
 | 5 · P2 Clearing a server field error | **Changed.** `react-hook-form`'s default `reValidateMode: 'onChange'` re-runs the resolver when the field changes after a submit, which removes the server error once the value is valid. The server-field-error test now pins it. |
 | 5 · P2 Missing-id test | **Changed.** See Part 5 · P1. |
+
+## Revision 3 (M5 review 2)
+
+The owner reviewed revision 2 (`be71c1c`) in five topical parts. Same legend as above.
+
+| Part / finding | Resolution |
+| --- | --- |
+| 1 · Mixed-case e2e (withdrawn by the reviewer) | **Answered.** No change. The test stays unrun until M6 (header "Pre-validation"), and Task 1 Step 2 still says to stop and report on failure, with no API change. |
+| 2 · Blocking: emptied input must skip at once | **Changed.** `skip: text === '' \|\| searched === ''` (Task 4 Step 4). The clear-in-flight hook test now asserts the last query call after clearing is skipped. |
+| 2 · Blocking: lingering result during a search change | **Changed.** New hook test: the mock returns the previous search's nodes **with** `loading: true` for the new pattern; the hook returns `loading` with no options. The real Apollo trace is recorded under Planning spikes. |
+| 3 · Blocking: stale active id can come back | **Changed.** The picker clears the stored `activeId` during render whenever the search is not `ready` or that customer is not in the rendered results (a guarded state update during render, React's documented pattern for adjusting state to props). A reorder that keeps the customer keeps it active. New regression test: active `c2` → loading → results without `c2` → results with `c2` again → nothing active until an arrow key. |
+| 3 · Blur test with a real focus move | **Changed.** The harness has a second focusable button; the test calls `.focus()` on it, so jsdom fires the real focus events. The mouse-selection test is unchanged. |
+| 4 · P2 `fulfillmentType` server error | **Changed.** `LaundryFulfillmentFieldset` gains an optional `error` (Task 2). It was missing, so a server error on that field had nowhere to show. The dialog passes it (Task 5). New page test: the message appears on the fulfillment field, no generic alert, dialog open, submit enabled; choosing the other radio clears it; a second submit sends a second mutation. |
+| 5 · P2 Failed background refresh shows the list's error | **Changed.** Evidence under Planning spikes (Apollo sets `error` after a failed refetch). New page test in `laundry-list-page.test.tsx`: an orders query with rows and an error renders "Unable to load laundry orders." and keeps the rows. |
+| 5 · P2 Step 2 expected failure | **Changed.** Task 5 Step 2 now states the acceptance criterion: every other existing page test passes, and the create-race test fails only because the old dialog has no `#laundry-customer` combobox. Any other failure in that test or elsewhere is a harness defect to fix first. |
 
 ---
 
@@ -364,7 +382,7 @@ git commit -m "test(api): characterize the customer search and intake the laundr
 
 **Interfaces:**
 - Consumes: `LaundryFulfillmentType` (`./laundry-order-status`), `useClensyTranslations`; the existing catalog keys `fulfillment.PICKUP` ("Customer pickup") and `fulfillment.DELIVERY` ("Delivery"), present on `main` and not changed.
-- Produces: `LaundryFulfillmentFieldset({ name, onChange, value })`, `LaundryFulfillmentFieldsetProps`; copy keys under `laundry.create.*` used by Tasks 3 and 5:
+- Produces: `LaundryFulfillmentFieldset({ name, error, onChange, value })` (`error?: string`, shown as `<p id="${name}-error">` and added to the fieldset's `aria-describedby`), `LaundryFulfillmentFieldsetProps`; copy keys under `laundry.create.*` used by Tasks 3 and 5:
   `create.addCustomer`, `create.creating`, `create.customer.{empty,error,label,more,required,searching}`, `create.failure`, `create.fulfillment.{description.DELIVERY,description.PICKUP,fixed,legend,required}`, `create.submit`, `create.success`, `create.title`, `create.unconfirmed`.
 
 - [ ] **Step 1: Write the failing test**
@@ -406,6 +424,18 @@ describe('LaundryFulfillmentFieldset', () => {
       expect(html).toContain(`id="fulfillment-${option}-description"`);
     }
     expect(html).toMatch(/<fieldset[^>]*aria-describedby="fulfillment-fixed"/);
+  });
+
+  it('shows a field error under the radios and describes the group with it', () => {
+    const html = renderToStaticMarkup(
+      <LaundryFulfillmentFieldset name="fulfillment" value="PICKUP" error="fulfillmentType must be one of the following values: PICKUP, DELIVERY" onChange={noop} />,
+    );
+    expect(html).toMatch(/<fieldset[^>]*aria-describedby="fulfillment-fixed fulfillment-error"/);
+    expect(html).toContain(
+      '<p id="fulfillment-error" class="text-sm text-red-600">fulfillmentType must be one of the following values: PICKUP, DELIVERY</p>',
+    );
+    const clean = renderToStaticMarkup(<LaundryFulfillmentFieldset name="fulfillment" value="PICKUP" onChange={noop} />);
+    expect(clean).not.toContain('fulfillment-error');
   });
 
   it('checks the current value and borders the selected row darker', () => {
@@ -472,6 +502,7 @@ import type { LaundryFulfillmentType } from './laundry-order-status';
 
 export interface LaundryFulfillmentFieldsetProps {
   name: string;
+  error?: string;
   onChange: (value: LaundryFulfillmentType) => void;
   value: LaundryFulfillmentType;
 }
@@ -480,13 +511,16 @@ const OPTIONS: readonly LaundryFulfillmentType[] = ['PICKUP', 'DELIVERY'];
 
 // How the finished laundry comes back, chosen once at intake (lifecycle spec
 // §8.4.4: immutable after create; delivery does not schedule a route). Two
-// native radios in a fieldset; each whole row is the radio's label.
-export function LaundryFulfillmentFieldset({ name, onChange, value }: LaundryFulfillmentFieldsetProps) {
+// native radios in a fieldset; each whole row is the radio's label. A field
+// error (in practice only a server one: a radio is always checked) shows
+// under the rows and describes the group.
+export function LaundryFulfillmentFieldset({ name, error, onChange, value }: LaundryFulfillmentFieldsetProps) {
   const t = useClensyTranslations('laundry');
   const helperId = `${name}-fixed`;
+  const errorId = `${name}-error`;
 
   return (
-    <fieldset className="flex flex-col gap-2" aria-describedby={helperId}>
+    <fieldset className="flex flex-col gap-2" aria-describedby={error ? `${helperId} ${errorId}` : helperId}>
       <legend className="text-sm font-medium text-slate-700">{t('create.fulfillment.legend')}</legend>
       <p id={helperId} className="text-sm text-slate-500">
         {t('create.fulfillment.fixed')}
@@ -523,6 +557,11 @@ export function LaundryFulfillmentFieldset({ name, onChange, value }: LaundryFul
           );
         })}
       </div>
+      {error ? (
+        <p id={errorId} className="text-sm text-red-600">
+          {error}
+        </p>
+      ) : null}
     </fieldset>
   );
 }
@@ -540,7 +579,7 @@ export type { LaundryFulfillmentFieldsetProps } from './laundry/laundry-fulfillm
 - [ ] **Step 6: Run the tests**
 
 Run: `pnpm --filter @clensy/web test && pnpm --filter @clensy/web lint && pnpm --filter @clensy/web build`
-Expected: all pass (the new file's 3 tests included); lint clean (`sort-keys` on the catalog); `tsc --noEmit` clean.
+Expected: all pass (the new file's 4 tests included); lint clean (`sort-keys` on the catalog); `tsc --noEmit` clean.
 
 - [ ] **Step 7: Commit**
 
@@ -723,9 +762,10 @@ const INPUT_CLASSES =
 // name itself, so a selection is never cleared by its own display text.
 //
 // The active option is a customer id, not a position: when the results
-// change, it stays on the same customer or, if that customer is gone, no
-// option is active. Options render only for a `ready` search, so nothing
-// from an older search can be active or chosen while a newer one loads.
+// change, it stays on the same customer or, if that customer is gone, it is
+// cleared and stays cleared until the user moves again. Options render only
+// for a `ready` search, so nothing from an older search can be active or
+// chosen while a newer one loads.
 //
 // Escape closes an open list and stops there, so the surrounding Modal,
 // which listens for Escape on `document`, stays open. With the list closed,
@@ -748,6 +788,12 @@ export function LaundryCustomerPicker({
   const errorId = `${id}-error`;
   const expanded = open && status !== 'idle';
   const rendered = status === 'ready' ? options : [];
+  // A stored active id that no longer names a rendered option (the search
+  // left `ready`, or that customer left the results) is dropped here, so it
+  // cannot come back by itself when a later result set includes it again.
+  // Guarded, so it settles in one extra render (React's pattern for
+  // adjusting state to props during render).
+  if (activeId !== null && !rendered.some((option) => option.id === activeId)) setActiveId(null);
   const active = expanded ? rendered.findIndex((option) => option.id === activeId) : -1;
 
   function close() {
@@ -951,6 +997,9 @@ function Harness({ options, status }: { options: LaundryCustomerOption[]; status
         }}
       />
       <output id="selected-id">{selectedId}</output>
+      <button type="button" id="elsewhere">
+        Elsewhere
+      </button>
     </form>
   );
 }
@@ -1011,13 +1060,16 @@ afterEach(() => {
 });
 
 describe('LaundryCustomerPicker interactions', () => {
-  it('opens the list as the user types and closes it on blur', () => {
+  it('opens the list as the user types and closes it when focus moves elsewhere', () => {
     render();
+    act(() => field().focus());
     expect(field().getAttribute('aria-expanded')).toBe('false');
     type('an');
     expect(field().getAttribute('aria-expanded')).toBe('true');
     expect(container.querySelector<HTMLElement>('#customer-listbox')!.parentElement!.hidden).toBe(false);
-    act(() => field().dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+    // A real focus move: jsdom fires blur/focusout on the input.
+    act(() => container.querySelector<HTMLButtonElement>('#elsewhere')!.focus());
+    expect(document.activeElement!.id).toBe('elsewhere');
     expect(field().getAttribute('aria-expanded')).toBe('false');
   });
 
@@ -1123,6 +1175,25 @@ describe('LaundryCustomerPicker interactions', () => {
     expect(selected).toEqual([]);
   });
 
+  it('does not bring back an active customer that left the results, until the user moves again', () => {
+    render();
+    type('a');
+    press('ArrowDown');
+    press('ArrowDown');
+    expect(activeDescendant()).toBe('customer-option-c2');
+    render('loading');
+    expect(activeDescendant()).toBeNull();
+    render('ready', [C1, C3]); // results without c2
+    expect(activeDescendant()).toBeNull();
+    render('ready', OPTIONS); // c2 is back
+    expect(activeDescendant()).toBeNull();
+    expect(container.querySelector('[aria-selected="true"]')).toBeNull();
+    press('Enter');
+    expect(selected).toEqual([]);
+    press('ArrowDown');
+    expect(activeDescendant()).toBe('customer-option-c1');
+  });
+
   it('collapses with nothing active when the text is cleared', () => {
     render();
     type('a');
@@ -1140,7 +1211,7 @@ Every `aria-activedescendant` assertion above also checks, by construction, that
 - [ ] **Step 7: Run it**
 
 Run: `pnpm --filter web exec vitest run lib/laundry-customer-picker.interaction.test.tsx`
-Expected: PASS, 9 tests. (It is red without Steps 3–4: `LaundryCustomerPicker` is not exported from `@clensy/web` on `main`. M6 MUST confirm red by running this step once with the Step 4 export temporarily reverted, and record it.)
+Expected: PASS, 10 tests. (It is red without Steps 3–4: `LaundryCustomerPicker` is not exported from `@clensy/web` on `main`. M6 MUST confirm red by running this step once with the Step 4 export temporarily reverted, and record it.)
 
 - [ ] **Step 8: Lint, typecheck, full package tests**
 
@@ -1223,7 +1294,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // data). So a response for one text can never come back for another.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-type Response = { error?: Error; nodes?: LaundryCustomerOption[]; totalCount?: number };
+// `lingering` returns `nodes` while still `loading: true`: stricter than the
+// real Apollo 3.14.1 trace (Planning spikes), which shows no data until the
+// new variables settle. The hook must not offer them either way.
+type Response = { error?: Error; lingering?: boolean; nodes?: LaundryCustomerOption[]; totalCount?: number };
 
 const search = vi.hoisted(() => ({
   calls: [] as { skip?: boolean; variables: { filter?: { fullName?: { iLike?: string } } } }[],
@@ -1241,7 +1315,7 @@ vi.mock('@clensy/client', () => ({
     return {
       data: { customers: { nodes, totalCount: response.totalCount ?? nodes.length } },
       error: undefined,
-      loading: false,
+      loading: response.lingering === true,
     };
   },
 }));
@@ -1342,9 +1416,29 @@ describe('useLaundryCustomerSearch', () => {
     expect(latest.status).toBe('loading');
     render('');
     expect(latest).toEqual({ options: [], status: 'idle', truncated: false });
+    // Skipped at once, not after the debounce: the empty input sends no query.
+    expect(search.calls.at(-1)?.skip).toBe(true);
     search.responses.set('%ana%', { nodes: [ANA] });
     render('');
     expect(latest).toEqual({ options: [], status: 'idle', truncated: false });
+    expect(search.calls.at(-1)?.skip).toBe(true);
+    wait(300);
+    expect(search.calls.at(-1)?.skip).toBe(true);
+  });
+
+  it('offers nothing while a new search is loading, even if the previous result lingers', () => {
+    render('an');
+    wait(300);
+    expect(latest.options).toEqual([AN, ANA]);
+    // The "ana" query reports loading but still carries the "an" nodes.
+    search.responses.set('%ana%', { lingering: true, nodes: [AN, ANA] });
+    render('ana');
+    wait(300);
+    expect(searchedPatterns().at(-1)).toBe('%ana%');
+    expect(latest).toEqual({ options: [], status: 'loading', truncated: false });
+    search.responses.set('%ana%', { nodes: [ANA] }); // settles
+    render('ana');
+    expect(latest).toEqual({ options: [ANA], status: 'ready', truncated: false });
   });
 
   it('maps a failed search and an empty result', () => {
@@ -1419,7 +1513,7 @@ export function laundryCustomerSearchVariables(text: string): CustomersQueryVari
 
 // The trimmed text is searched once typing pauses. The searched text starts
 // empty, so even a first non-empty text waits out the debounce, and an
-// empty text sends no query. Options are returned only when the searched
+// empty input sends no query, at once rather than after the debounce. Options are returned only when the searched
 // text is the input's text and its query has settled: while they differ,
 // or the query is loading, the result is `loading` with no options, so a
 // result for an older text is never offered for a newer one. `truncated`
@@ -1435,7 +1529,8 @@ export function useLaundryCustomerSearch(query: string): LaundryCustomerSearch {
 
   const result = useCustomersQuery({
     fetchPolicy: 'network-only',
-    skip: searched === '',
+    // An empty input skips at once; a pending debounce never re-enables it.
+    skip: text === '' || searched === '',
     variables: laundryCustomerSearchVariables(searched),
   });
 
@@ -1454,7 +1549,7 @@ export function useLaundryCustomerSearch(query: string): LaundryCustomerSearch {
 - [ ] **Step 5: Run the tests**
 
 Run: `pnpm --filter web exec vitest run lib/use-laundry-customer-search.test.ts lib/use-laundry-customer-search.hook.test.tsx && pnpm --filter web lint`
-Expected: PASS, 2 + 8 tests; lint clean.
+Expected: PASS, 2 + 9 tests; lint clean.
 
 - [ ] **Step 6: Commit**
 
@@ -1480,7 +1575,7 @@ git commit -m "feat(web): server-side customer search for laundry intake (#160)"
 
 Element ids used by the tests: customer input `#laundry-customer`, error `#laundry-customer-error`, radios `#laundry-fulfillment-PICKUP` / `#laundry-fulfillment-DELIVERY`.
 
-- [ ] **Step 1: Update the page tests' mocks and harness (no new behavior asserted yet)**
+- [ ] **Step 1: Update the page tests' mocks and harness (no new intake behavior asserted yet)**
 
 `apps/web/lib/laundry-list-page.test.tsx`, wrap the render in `ToastProvider` (the page now calls `useToast`, which throws outside a provider; the app provides it in `dashboard-layout.tsx`):
 
@@ -1498,6 +1593,31 @@ Element ids used by the tests: customer input `#laundry-customer`, error `#laund
 +  );
  }
 ```
+
+Also in `apps/web/lib/laundry-list-page.test.tsx`, let a test give the orders query an error (M5 review 2, Part 5). Add `ordersError: undefined as Error | undefined,` to the hoisted `page` object, reset it in `beforeEach` (`page.ordersError = undefined;`), and use it in the `useLaundryOrdersQuery` mock:
+
+```diff
+       return {
+         data: { laundryOrders: { nodes: [order], totalCount: page.totalCount } },
+-        error: undefined,
++        error: page.ordersError,
+         loading: false,
+```
+
+Then add, inside `describe('/app/laundry list', …)`:
+
+```tsx
+  it('shows the list error after a failed background refresh, and keeps the rows', async () => {
+    // A failed refetch leaves Apollo's `data` in place and sets `error`
+    // (plan, Planning spikes); the page passes it on as `hasError`.
+    page.ordersError = new Error('network down');
+    const html = await renderPage();
+    expect(html).toContain('Unable to load laundry orders.');
+    expect(html).toContain('Ana Reyes');
+  });
+```
+
+This is a **characterization test**: the page already passes `hasError={Boolean(ordersQuery.error)}` on `main`, so it passes before and after this task. It pins the wiring that the success handler's unawaited `refetch().catch(() => undefined)` relies on.
 
 `apps/web/lib/laundry-list-page.interaction.test.tsx`:
 
@@ -1688,7 +1808,11 @@ The rest of that test is unchanged.
 - [ ] **Step 2: Run the existing page tests alone**
 
 Run: `pnpm --filter web exec vitest run lib/laundry-list-page.test.tsx lib/laundry-list-page.interaction.test.tsx`
-Expected: FAIL only in the create-race test, which cannot find `#laundry-customer` (the old dialog has a `<select>`). Every other existing test passes with the new harness. Any other failure means the harness change broke an unrelated assumption; fix the harness before going on.
+Expected, as the acceptance criterion for this step:
+- every existing test except the create-race test passes with the new harness; and
+- the create-race test fails **only** because the old dialog provides no `#laundry-customer` combobox: the failure is thrown from `chooseCustomer` / `typeCustomer` reaching for that element (a `null` dereference or a not-found error, depending on which helper line throws first).
+
+Any other failure, in that test or elsewhere, is a harness defect. Fix the harness before going on. Record the observed failure message in the M6 report.
 
 - [ ] **Step 3: Write the failing intake tests**
 
@@ -1856,6 +1980,36 @@ describe('/app/laundry intake modal', () => {
     expect(button('Create order').disabled).toBe(false);
     chooseCustomer();
     expect(document.querySelector('#laundry-customer-error')).toBeNull();
+  });
+
+  it('shows a server fulfillment error on the fulfillment field, and clears it when fulfillment changes', async () => {
+    start();
+    openCreate();
+    chooseCustomer();
+    await submitCreate();
+    await act(async () =>
+      nav.rejectReceive({
+        graphQLErrors: [
+          { extensions: { originalError: { message: ['fulfillmentType must be one of the following values: PICKUP, DELIVERY'] } } },
+        ],
+      }),
+    );
+    const error = () => document.querySelector('#laundry-fulfillment-error');
+    expect(error()!.textContent).toBe('fulfillmentType must be one of the following values: PICKUP, DELIVERY');
+    expect(document.querySelector('fieldset')!.getAttribute('aria-describedby')).toBe(
+      'laundry-fulfillment-fixed laundry-fulfillment-error',
+    );
+    expect(dialog()).not.toBeNull();
+    expect(dialog()!.querySelector('[role="alert"]')).toBeNull();
+    expect(button('Create order').disabled).toBe(false);
+    // The checked radio fires no change; choosing the other one does.
+    act(() => document.querySelector<HTMLInputElement>('#laundry-fulfillment-DELIVERY')!.click());
+    expect(error()).toBeNull();
+    await submitCreate();
+    expect(nav.receiveCalls).toEqual([
+      { customerId: 'c1', fulfillmentType: 'PICKUP' },
+      { customerId: 'c1', fulfillmentType: 'DELIVERY' },
+    ]);
   });
 
   it('keeps the dialog open and asks to check the list when the create response names no order', async () => {
@@ -2077,8 +2231,13 @@ export function CreateLaundryOrderDialog({ onClose, onCreated, open, showAddCust
       <Controller
         control={form.control}
         name="fulfillmentType"
-        render={({ field }) => (
-          <LaundryFulfillmentFieldset name="laundry-fulfillment" value={field.value} onChange={field.onChange} />
+        render={({ field, fieldState }) => (
+          <LaundryFulfillmentFieldset
+            name="laundry-fulfillment"
+            value={field.value}
+            error={fieldState.error?.message}
+            onChange={field.onChange}
+          />
         )}
       />
       {formError ? (
@@ -2224,7 +2383,7 @@ pnpm --filter web exec vitest run lib/laundry-customer-picker.interaction.test.t
 pnpm --filter web exec vitest run lib/laundry-list-page.test.tsx lib/laundry-list-page.interaction.test.tsx
 ```
 
-Expected: PASS. Every existing page test (create-race included) and the 15 new intake tests pass.
+Expected: PASS. Every existing page test (create-race included) and the 16 new intake tests pass, and the new static list-error test.
 
 - [ ] **Step 8: Typecheck, lint, the whole web suite**
 
@@ -2302,5 +2461,6 @@ Push `feat/160-laundry-intake-modal` and open the PR against `main` with `gh pr 
 | Deferred work explicitly identified | Yes; see [Deferred](#deferred-not-in-this-plan). |
 | Missing design semantics | None found. |
 | Pre-validation claim | None claimed. |
-| Characterization tests labelled | Task 1. |
+| Characterization tests labelled | Task 1, and the Task 5 Step 1 list-error test. |
 | Every M5 review 1 finding answered | Yes; see [Revision 2 (M5 review 1)](#revision-2-m5-review-1). |
+| Every M5 review 2 finding answered | Yes; see [Revision 3 (M5 review 2)](#revision-3-m5-review-2). |
