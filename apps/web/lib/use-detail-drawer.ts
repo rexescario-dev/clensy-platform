@@ -32,8 +32,9 @@ import { useCallback, useEffect, useRef } from 'react';
 // unmarked entry, to the same effect. No drawer page uses either today;
 // keep it that way or re-mark the entry after one.
 // `use-detail-drawer.guard.test.ts` looks for both in `apps/web`,
-// `packages/web/src` and `packages/ui/src`; its plan lists what a static
-// scan cannot see.)
+// `packages/web/src` and `packages/ui/src`. What a static scan cannot see is
+// listed under "Known limits" in
+// docs/superpowers/plans/2026-10-11-drawer-history-entry-marker-plan.md.)
 const DRAWER_ENTRY_KEY = '__clensyDetailDrawer';
 
 // The current entry's drawer marker, as a fresh state object for a native

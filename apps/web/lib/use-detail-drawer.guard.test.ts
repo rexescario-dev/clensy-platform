@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
@@ -46,7 +47,7 @@ const FORBIDDEN_IDENTIFIERS = new Map([
 // never turns the guard red, and tracked code is never skipped, whatever its
 // directory is called. `apps/web` allows JavaScript (`allowJs`), and Next
 // accepts `.js`/`.jsx` pages, so those count too.
-function sourceFiles(): string[] {
+function sourceFiles(repoRoot = REPO_ROOT, roots = SCANNED): string[] {
   const listed = execFileSync(
     'git',
     [
@@ -56,14 +57,14 @@ function sourceFiles(): string[] {
       '--others',
       '--exclude-standard',
       '--',
-      ...SCANNED.map((root) => relative(REPO_ROOT, root)),
+      ...roots.map((root) => relative(repoRoot, root)),
     ],
-    { cwd: REPO_ROOT, encoding: 'utf8' },
+    { cwd: repoRoot, encoding: 'utf8' },
   );
   return listed
     .split('\0')
     .filter((file) => /\.[cm]?[jt]sx?$/.test(file) && !/\.test\.[cm]?[jt]sx?$/.test(file))
-    .map((file) => join(REPO_ROOT, file))
+    .map((file) => join(repoRoot, file))
     .filter((file) => existsSync(file));
 }
 
@@ -151,7 +152,16 @@ function isRefreshDestructuredFromRouter(node: ts.Node, routers: ReadonlySet<str
     ts.isObjectBindingPattern(node.name) &&
     node.initializer !== undefined &&
     isRouter(node.initializer, routers) &&
-    node.name.elements.some((element) => (element.propertyName ?? element.name).getText() === 'refresh')
+    node.name.elements.some((element) => {
+      const key = element.propertyName ?? element.name;
+      // `refresh`, `'refresh'` or `["refresh"]`.
+      if (ts.isIdentifier(key) || ts.isStringLiteralLike(key)) return key.text === 'refresh';
+      return (
+        ts.isComputedPropertyName(key) &&
+        ts.isStringLiteralLike(key.expression) &&
+        key.expression.text === 'refresh'
+      );
+    })
   );
 }
 
@@ -216,21 +226,36 @@ describe('drawer history marker guard (#173)', () => {
     expect(usingHook.sort()).toEqual([...DRAWER_PAGES].sort());
   });
 
-  // Git's list, not a directory walk: a new file nobody has added yet must
-  // still be scanned, in each root. A harmless file is written and always
-  // removed.
-  it.each(SCANNED.map((root) => [relative(REPO_ROOT, root), root]))(
-    'discovers a new, untracked source file in %s',
-    (_label, root) => {
-      const planted = join(root, `zz-guard-discovery-${process.pid}.ts`);
-      try {
-        writeFileSync(planted, 'export {};\n');
-        expect(sourceFiles()).toContain(planted);
-      } finally {
-        rmSync(planted, { force: true });
+  // Git's list, not a directory walk. In each root: a tracked file and a new,
+  // untracked one are listed; an ignored one is not, unless it is tracked
+  // anyway (force-added). Proved in a throwaway repository, so nothing is
+  // written into the real source tree, which other test files walk in
+  // parallel.
+  it('lists tracked and new files and skips ignored ones, in every root', () => {
+    const repo = mkdtempSync(join(tmpdir(), 'drawer-guard-'));
+    const git = (...args: string[]) => execFileSync('git', args, { cwd: repo });
+    try {
+      git('init', '-q');
+      writeFileSync(join(repo, '.gitignore'), 'public/\n');
+      const roots = SCANNED.map((root) => join(repo, relative(REPO_ROOT, root)));
+      for (const root of roots) {
+        mkdirSync(join(root, 'public'), { recursive: true });
+        for (const name of ['tracked.ts', 'new.ts', join('public', 'ignored.js'), join('public', 'forced.js')]) {
+          writeFileSync(join(root, name), 'export {};\n');
+        }
+        git('add', join(root, 'tracked.ts'));
+        git('add', '-f', join(root, 'public', 'forced.js'));
       }
-    },
-  );
+      const expected = roots.flatMap((root) => [
+        join(root, 'tracked.ts'),
+        join(root, 'new.ts'),
+        join(root, 'public', 'forced.js'),
+      ]);
+      expect(sourceFiles(repo, roots).sort()).toEqual(expected.sort());
+    } finally {
+      rmSync(repo, { force: true, recursive: true });
+    }
+  });
 
   it('finds no router.refresh() or server action in the web app or the shared components', () => {
     const hazards = files.flatMap((file) =>
@@ -253,6 +278,12 @@ describe('drawer history marker guard (#173)', () => {
     ['a refresh reference', 'const router = useRouter();\nconst onClick = router.refresh;', ['`router.refresh()`']],
     ['a refresh passed on', 'const router = useRouter();\nstartTransition(router.refresh);', ['`router.refresh()`']],
     ['a bracket reference', "const router = useRouter();\nretry(router['refresh']);", ['`router.refresh()`']],
+    [
+      'a quoted destructured refresh',
+      "const router = useRouter();\nconst { 'refresh': reload } = router;",
+      ['`router.refresh()`'],
+    ],
+    ['a computed destructured refresh', 'const { ["refresh"]: reload } = useRouter();', ['`router.refresh()`']],
     [
       'refresh destructured from a router',
       'const router = useRouter();\nconst { refresh } = router;',
