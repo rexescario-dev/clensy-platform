@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { ToastProvider } from '@clensy/ui';
 import { act, useSyncExternalStore } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -18,7 +19,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const ORDER_ID = '3f2a9c1e-0b7d-4e55-9a10-6c2b8d4e7f01';
 
+type Customer = { id: string; email: string; fullName: string; phone: string };
+type CustomerQueryOptions = {
+  skip?: boolean;
+  variables?: { filter?: { fullName?: { iLike?: string } }; paging?: { limit?: number } };
+};
+type CustomerResult = { error?: Error; nodes: Customer[]; totalCount?: number };
+
+const ANA: Customer = { id: 'c1', email: 'ana@example.com', fullName: 'Ana Reyes', phone: '555-0101' };
+const ANA_NO_PHONE: Customer = { id: 'c2', email: 'ana.r@example.com', fullName: 'Ana Reyes', phone: '' };
+
 const nav = vi.hoisted(() => ({
+  // Settles the pending `receiveLaundryOrder` call with no order in the response.
+  resolveReceiveWithoutId: (() => {}) as () => void,
+  // Every `useCustomersQuery` options object, in render order.
+  customerQueries: [] as CustomerQueryOptions[],
+  // Responses by lower-cased `iLike` pattern (the search is case-insensitive).
+  // A pattern with no entry is still in flight, as in Apollo.
+  customerResults: {} as Record<string, CustomerResult>,
   entries: [] as string[],
   // `history.state` per entry, parallel to `entries` (#173: the drawer marker).
   entryStates: [] as unknown[],
@@ -27,11 +45,19 @@ const nav = vi.hoisted(() => ({
   listeners: new Set<() => void>(),
   orderQueryIds: [] as string[],
   queryVariables: [] as { filter?: unknown; paging: unknown; sorting: unknown }[],
+  // Every `receiveLaundryOrder` input, in call order.
+  receiveCalls: [] as unknown[],
+  // The list's `refetch`; a test may make it hang.
+  refetch: (() => Promise.resolve()) as () => Promise<unknown>,
+  refetchCalls: 0,
+  // Settles the pending `receiveLaundryOrder` call with an error.
+  rejectReceive: (() => {}) as (error: unknown) => void,
   // The query `useSearchParams` serves: router state, which follows
   // `window.location` only when `notify()` runs.
   rendered: '',
   // Settles the pending `receiveLaundryOrder` call with the new order's id.
   resolveReceive: (() => {}) as (id: string) => void,
+  role: 'TENANT_OWNER',
   routerCalls: [] as string[],
 }));
 
@@ -69,8 +95,19 @@ vi.mock('@clensy/client', () => {
   return {
     useCancelLaundryOrderMutation: idle,
     useCompleteLaundryOrderMutation: idle,
-    useCurrentAdminQuery: () => ({ data: { currentAdmin: { role: 'TENANT_OWNER' } } }),
-    useCustomersQuery: () => ({ data: { customers: { nodes: [{ id: 'c1', fullName: 'Ana Reyes' }] } } }),
+    useCurrentAdminQuery: () => ({ data: { currentAdmin: { role: nav.role, scope: 'TENANT' } } }),
+    useCustomersQuery: (options: CustomerQueryOptions) => {
+      nav.customerQueries.push(options);
+      if (options.skip) return { data: undefined, error: undefined, loading: false };
+      const response = nav.customerResults[options.variables!.filter!.fullName!.iLike!.toLowerCase()];
+      if (!response) return { data: undefined, error: undefined, loading: true };
+      if (response.error) return { data: undefined, error: response.error, loading: false };
+      return {
+        data: { customers: { nodes: response.nodes, totalCount: response.totalCount ?? response.nodes.length } },
+        error: undefined,
+        loading: false,
+      };
+    },
     useGenerateInvoiceFromOrderMutation: idle,
     useInvoiceForOrderQuery: query,
     useLaundryOrderQuery: (options: { variables: { id: string } }) => {
@@ -83,7 +120,10 @@ vi.mock('@clensy/client', () => {
         data: { laundryOrders: { nodes: [row], totalCount: 1 } },
         error: undefined,
         loading: false,
-        refetch: () => Promise.resolve(),
+        refetch: () => {
+          nav.refetchCalls += 1;
+          return nav.refetch();
+        },
       };
     },
     useMarkLaundryOrderAwaitingDeliveryMutation: idle,
@@ -95,10 +135,14 @@ vi.mock('@clensy/client', () => {
     useMarkLaundryOrderReadyMutation: idle,
     usePriceLaundryOrderMutation: idle,
     useReceiveLaundryOrderMutation: () => [
-      () =>
-        new Promise((resolve) => {
+      (options: { variables: { input: unknown } }) => {
+        nav.receiveCalls.push(options.variables.input);
+        return new Promise((resolve, reject) => {
           nav.resolveReceive = (id: string) => resolve({ data: { receiveLaundryOrder: { id } } });
-        }),
+          nav.resolveReceiveWithoutId = () => resolve({ data: null });
+          nav.rejectReceive = reject;
+        });
+      },
       { loading: false },
     ],
     useRefundLaundryOrderMutation: idle,
@@ -156,7 +200,13 @@ function start(query = '', hash = '', history: string[] = []) {
   nav.index = nav.entries.length - 1;
   showEntry();
   nav.rendered = window.location.search;
-  act(() => root.render(<LaundryPage />));
+  act(() =>
+    root.render(
+      <ToastProvider>
+        <LaundryPage />
+      </ToastProvider>,
+    ),
+  );
 }
 
 function typeSearch(text: string) {
@@ -197,11 +247,72 @@ function statusSelect(): string {
   return container.querySelector<HTMLSelectElement>('#laundry-order-status-filter')!.value;
 }
 
+// The intake dialog (the one with a form); the detail drawer is also a
+// `role="dialog"` and opens after a create.
+function dialog(): HTMLElement | null {
+  return [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].find((d) => d.querySelector('form')) ?? null;
+}
+
+function customerField(): HTMLInputElement {
+  return document.querySelector<HTMLInputElement>('#laundry-customer')!;
+}
+
+function customerOptions(): HTMLElement[] {
+  return [...document.querySelectorAll<HTMLElement>('#laundry-customer-listbox [role="option"]')];
+}
+
+// The same native-setter helper as `typeSearch`, on the customer field.
+function typeCustomer(text: string) {
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(customerField(), text);
+    customerField().dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+
+function pressInCustomer(key: string) {
+  act(() => {
+    customerField().dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key }));
+  });
+}
+
+function openCreate() {
+  act(() => button('+ New Laundry Order').click());
+}
+
+// Types, waits out the debounce, and clicks the first match.
+function chooseCustomer(text = 'Ana') {
+  typeCustomer(text);
+  act(() => vi.advanceTimersByTime(300));
+  act(() => customerOptions()[0].click());
+}
+
+// Dispatches `times` submit events synchronously, in one turn, then lets
+// react-hook-form's asynchronous validation and the handlers settle.
+async function submitCreate(times = 1) {
+  await act(async () => {
+    for (let index = 0; index < times; index += 1) {
+      dialog()!.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    }
+  });
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
+  nav.customerQueries = [];
+  nav.customerResults = {
+    '%ana%': { nodes: [ANA, ANA_NO_PHONE] },
+    '%zz%': { nodes: [] },
+  };
   nav.holdRenders = false;
   nav.orderQueryIds = [];
   nav.queryVariables = [];
+  nav.receiveCalls = [];
+  nav.refetch = () => Promise.resolve();
+  nav.refetchCalls = 0;
+  nav.rejectReceive = () => {};
+  nav.resolveReceive = () => {};
+  nav.resolveReceiveWithoutId = () => {};
+  nav.role = 'TENANT_OWNER';
   nav.routerCalls = [];
   vi.spyOn(window.history, 'pushState').mockImplementation((data, _unused, href) => {
     nav.entries = [...nav.entries.slice(0, nav.index + 1), String(href)];
@@ -292,10 +403,10 @@ describe('/app/laundry list interactions', () => {
 
   it('opens the new order after create with the live list URL, natively, before React re-renders', async () => {
     start('tab=a&status=PAID', '#orders');
-    act(() => button('+ New Laundry Order').click());
-    act(() => {
-      document.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-    });
+    openCreate();
+    chooseCustomer();
+    await submitCreate();
+    expect(nav.receiveCalls).toHaveLength(1);
     // The filter changes the URL, and the create request settles, before
     // React renders the new filter. The drawer URL must come from the live
     // URL, not from the last rendered `searchParams` (still PAID).
@@ -450,5 +561,257 @@ describe('/app/laundry list interactions', () => {
       expect(nav.queryVariables.at(-1)!.sorting).toEqual(sorting);
     }
     expect(ariaSort('Status')).toBe('none');
+  });
+});
+
+describe('/app/laundry intake modal', () => {
+  it('searches customers by name on the server, 20 at most, never the first 100 unfiltered', () => {
+    start();
+    expect(nav.customerQueries.every((options) => options.skip === true)).toBe(true);
+    openCreate();
+    typeCustomer('  ana ');
+    expect(nav.customerQueries.at(-1)?.skip).toBe(true); // debouncing
+    act(() => vi.advanceTimersByTime(300));
+    expect(nav.customerQueries.at(-1)).toMatchObject({
+      skip: false,
+      variables: { filter: { fullName: { iLike: '%ana%' } }, paging: { limit: 20 } },
+    });
+    for (const options of nav.customerQueries) {
+      expect(options.skip === true || options.variables?.paging?.limit === 20).toBe(true);
+      expect(options.skip === true || options.variables?.filter !== undefined).toBe(true);
+    }
+  });
+
+  it('shows Searching…, then results with phone or email', () => {
+    start();
+    openCreate();
+    typeCustomer('ana');
+    expect(dialog()!.textContent).toContain('Searching…');
+    expect(customerOptions()).toHaveLength(0);
+    act(() => vi.advanceTimersByTime(300));
+    expect(customerOptions().map((option) => option.textContent)).toEqual([
+      'Ana Reyes555-0101',
+      'Ana Reyesana.r@example.com',
+    ]);
+  });
+
+  it('says No customers match. for a search with no result', () => {
+    start();
+    openCreate();
+    typeCustomer('zz'); // preset empty response
+    act(() => vi.advanceTimersByTime(300));
+    expect(customerOptions()).toHaveLength(0);
+    expect(dialog()!.textContent).toContain('No customers match.');
+  });
+
+  it('shows a failed search inline', () => {
+    nav.customerResults['%ana%'] = { error: new Error('down'), nodes: [] };
+    start();
+    openCreate();
+    typeCustomer('ana');
+    act(() => vi.advanceTimersByTime(300));
+    expect(dialog()!.querySelector('[role="alert"]')!.textContent).toBe('Unable to search customers.');
+  });
+
+  it('never lets a result for an earlier text be chosen while the next search runs', async () => {
+    start();
+    openCreate();
+    typeCustomer('ana');
+    act(() => vi.advanceTimersByTime(300));
+    expect(customerOptions()).toHaveLength(2);
+    pressInCustomer('ArrowDown');
+    typeCustomer('anaz'); // no response: stays in flight
+    expect(customerOptions()).toHaveLength(0);
+    act(() => vi.advanceTimersByTime(300));
+    expect(customerOptions()).toHaveLength(0);
+    expect(dialog()!.textContent).toContain('Searching…');
+    expect(customerField().getAttribute('aria-activedescendant')).toBeNull();
+    pressInCustomer('Enter');
+    await submitCreate();
+    expect(nav.receiveCalls).toEqual([]);
+    expect(document.querySelector('#laundry-customer-error')!.textContent).toBe('Select a customer.');
+  });
+
+  it('requires a customer: "Select a customer.", focus on the field, and no mutation', async () => {
+    start();
+    openCreate();
+    await submitCreate();
+    expect(nav.receiveCalls).toEqual([]);
+    expect(document.querySelector('#laundry-customer-error')!.textContent).toBe('Select a customer.');
+    expect(customerField().getAttribute('aria-invalid')).toBe('true');
+    expect(document.activeElement).toBe(customerField());
+  });
+
+  it('clears the selection when the text changes after choosing', async () => {
+    start();
+    openCreate();
+    chooseCustomer();
+    expect(customerField().value).toBe('Ana Reyes');
+    typeCustomer('Ana R');
+    await submitCreate();
+    expect(nav.receiveCalls).toEqual([]);
+    expect(document.querySelector('#laundry-customer-error')!.textContent).toBe('Select a customer.');
+    typeCustomer('');
+    await submitCreate();
+    expect(nav.receiveCalls).toEqual([]);
+  });
+
+  it('creates with the chosen customer and fulfillment, toasts, and opens the drawer on the returned id without waiting for the refresh', async () => {
+    nav.refetch = () => new Promise(() => {}); // the list refresh never settles
+    start('status=PAID');
+    openCreate();
+    expect(dialog()!.textContent).toContain('New laundry order');
+    expect(document.querySelector<HTMLInputElement>('#laundry-fulfillment-PICKUP')!.checked).toBe(true);
+    chooseCustomer();
+    act(() => document.querySelector<HTMLInputElement>('#laundry-fulfillment-DELIVERY')!.click());
+    await submitCreate();
+    expect(nav.receiveCalls).toEqual([{ customerId: 'c1', fulfillmentType: 'DELIVERY' }]);
+    await act(async () => nav.resolveReceive('new-order'));
+    expect(dialog()).toBeNull();
+    expect(document.body.textContent).toContain('Laundry order created.');
+    // Until #161, the new order opens in the drawer so it can be weighed.
+    expect(url().get('detail')).toBe('new-order');
+    expect(url().get('status')).toBe('PAID');
+    expect(nav.orderQueryIds.at(-1)).toBe('new-order');
+    expect(nav.refetchCalls).toBe(1);
+    expect(nav.receiveCalls).toHaveLength(1);
+    expect(nav.routerCalls).toEqual([]);
+  });
+
+  it('sends one mutation for two submits fired in the same turn', async () => {
+    start();
+    openCreate();
+    chooseCustomer();
+    await submitCreate(2);
+    expect(nav.receiveCalls).toHaveLength(1);
+    expect(button('Creating…').disabled).toBe(true);
+    await act(async () => nav.resolveReceive('new-order'));
+    expect(nav.receiveCalls).toHaveLength(1);
+  });
+
+  it('stays open on failure with an alert, the fields intact, and submit re-enabled for a retry', async () => {
+    start();
+    openCreate();
+    chooseCustomer();
+    act(() => document.querySelector<HTMLInputElement>('#laundry-fulfillment-DELIVERY')!.click());
+    await submitCreate();
+    await act(async () => nav.rejectReceive(new Error('Network down')));
+    expect(dialog()).not.toBeNull();
+    expect(dialog()!.querySelector('[role="alert"]')!.textContent).toBe('Unable to create laundry order.');
+    expect(customerField().value).toBe('Ana Reyes');
+    expect(document.querySelector<HTMLInputElement>('#laundry-fulfillment-DELIVERY')!.checked).toBe(true);
+    expect(button('Create order').disabled).toBe(false);
+    expect(url().get('detail')).toBeNull();
+    await submitCreate();
+    expect(nav.receiveCalls).toEqual([
+      { customerId: 'c1', fulfillmentType: 'DELIVERY' },
+      { customerId: 'c1', fulfillmentType: 'DELIVERY' },
+    ]);
+  });
+
+  it('shows a server field error on the customer field, re-enables submit, and clears it when a customer is chosen again', async () => {
+    start();
+    openCreate();
+    chooseCustomer();
+    await submitCreate();
+    // The Apollo-shaped error normalize.test.ts pins (captured fixture), with customerId as the field.
+    await act(async () =>
+      nav.rejectReceive({
+        graphQLErrors: [{ extensions: { originalError: { message: ['customerId must be a string'] } } }],
+      }),
+    );
+    expect(document.querySelector('#laundry-customer-error')!.textContent).toBe('customerId must be a string');
+    expect(dialog()!.querySelector('[role="alert"]')).toBeNull();
+    expect(button('Create order').disabled).toBe(false);
+    chooseCustomer();
+    await act(async () => {}); // react-hook-form re-validates asynchronously
+    expect(document.querySelector('#laundry-customer-error')).toBeNull();
+  });
+
+  it('shows a server fulfillment error on the fulfillment field, and clears it when fulfillment changes', async () => {
+    start();
+    openCreate();
+    chooseCustomer();
+    await submitCreate();
+    await act(async () =>
+      nav.rejectReceive({
+        graphQLErrors: [
+          { extensions: { originalError: { message: ['fulfillmentType must be one of the following values: PICKUP, DELIVERY'] } } },
+        ],
+      }),
+    );
+    const error = () => document.querySelector('#laundry-fulfillment-error');
+    expect(error()!.textContent).toBe('fulfillmentType must be one of the following values: PICKUP, DELIVERY');
+    expect(document.querySelector('fieldset')!.getAttribute('aria-describedby')).toBe(
+      'laundry-fulfillment-fixed laundry-fulfillment-error',
+    );
+    expect(dialog()).not.toBeNull();
+    expect(dialog()!.querySelector('[role="alert"]')).toBeNull();
+    expect(button('Create order').disabled).toBe(false);
+    // The checked radio fires no change; choosing the other one does.
+    act(() => document.querySelector<HTMLInputElement>('#laundry-fulfillment-DELIVERY')!.click());
+    await act(async () => {}); // react-hook-form re-validates asynchronously
+    expect(error()).toBeNull();
+    await submitCreate();
+    expect(nav.receiveCalls).toEqual([
+      { customerId: 'c1', fulfillmentType: 'PICKUP' },
+      { customerId: 'c1', fulfillmentType: 'DELIVERY' },
+    ]);
+  });
+
+  it('keeps the dialog open and asks to check the list when the create response names no order', async () => {
+    start();
+    openCreate();
+    chooseCustomer();
+    await submitCreate();
+    await act(async () => nav.resolveReceiveWithoutId());
+    expect(dialog()).not.toBeNull();
+    expect(dialog()!.querySelector('[role="alert"]')!.textContent).toBe(
+      'The order may have been created. Check the laundry list before trying again.',
+    );
+    expect(document.body.textContent).not.toContain('Laundry order created.');
+    expect(url().get('detail')).toBeNull();
+    expect(nav.receiveCalls).toHaveLength(1);
+    expect(button('Create order').disabled).toBe(false);
+  });
+
+  it('resets customer, fulfillment and errors each time it opens', async () => {
+    start();
+    openCreate();
+    await submitCreate(); // "Select a customer."
+    chooseCustomer();
+    act(() => document.querySelector<HTMLInputElement>('#laundry-fulfillment-DELIVERY')!.click());
+    act(() => button('Cancel').click());
+    expect(dialog()).toBeNull();
+    openCreate();
+    expect(customerField().value).toBe('');
+    expect(document.querySelector<HTMLInputElement>('#laundry-fulfillment-PICKUP')!.checked).toBe(true);
+    expect(document.querySelector('#laundry-customer-error')).toBeNull();
+  });
+
+  it('closes the list on the first Escape and the dialog on the next', () => {
+    start();
+    openCreate();
+    typeCustomer('ana');
+    act(() => vi.advanceTimersByTime(300));
+    expect(customerField().getAttribute('aria-expanded')).toBe('true');
+    pressInCustomer('Escape');
+    expect(dialog()).not.toBeNull();
+    expect(customerField().getAttribute('aria-expanded')).toBe('false');
+    pressInCustomer('Escape');
+    expect(dialog()).toBeNull();
+  });
+
+  it('lets a SCHEDULER create, offers a link to customers, and no customer form', async () => {
+    nav.role = 'SCHEDULER';
+    start();
+    openCreate();
+    const link = dialog()!.querySelector<HTMLAnchorElement>('a[href="/app/customers"]');
+    expect(link?.textContent).toBe('Add a customer');
+    expect(dialog()!.querySelectorAll('input:not([type="radio"])')).toHaveLength(1); // the customer search only
+    expect(dialog()!.textContent).not.toContain('Full name');
+    chooseCustomer();
+    await submitCreate();
+    expect(nav.receiveCalls).toEqual([{ customerId: 'c1', fulfillmentType: 'PICKUP' }]);
   });
 });

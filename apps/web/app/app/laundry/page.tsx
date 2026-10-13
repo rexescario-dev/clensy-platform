@@ -4,7 +4,6 @@ import {
   useCancelLaundryOrderMutation,
   useCompleteLaundryOrderMutation,
   useCurrentAdminQuery,
-  useCustomersQuery,
   useGenerateInvoiceFromOrderMutation,
   useInvoiceForOrderQuery,
   useLaundryOrderQuery,
@@ -17,26 +16,22 @@ import {
   useMarkLaundryOrderPaidMutation,
   useMarkLaundryOrderReadyMutation,
   usePriceLaundryOrderMutation,
-  useReceiveLaundryOrderMutation,
   useRefundLaundryOrderMutation,
   useRejectLaundryOrderMutation,
   useServicesQuery,
   useStartLaundryProcessingMutation,
   useWeighLaundryOrderMutation,
 } from '@clensy/client';
-import type {
-  LaundryFulfillmentType,
-  LaundryOrderStatus,
-} from '@clensy/client';
+import type { LaundryOrderStatus } from '@clensy/client';
 import {
   Button,
   ConfirmDialog,
   DetailDrawer,
   ErrorState,
-  FormDialog,
   LoadingState,
   PageHeader,
   StatusBadge,
+  useToast,
 } from '@clensy/ui';
 import type { StatusTone } from '@clensy/ui';
 import {
@@ -47,8 +42,10 @@ import {
 } from '@clensy/web';
 import Link from 'next/link';
 import { Suspense, useState } from 'react';
+import { CreateLaundryOrderDialog } from '../../../components/laundry/create-laundry-order-dialog';
 import { formatMinorUnits } from '../../../lib/format-price';
 import { laundryOrdersQueryVariables } from '../../../lib/laundry-order-list-query';
+import { canViewPath } from '../../../lib/nav-groups';
 import { useDetailDrawer } from '../../../lib/use-detail-drawer';
 import {
   LAUNDRY_ORDER_PAGE_SIZE,
@@ -183,15 +180,12 @@ function LaundryPageContent() {
   });
   const { data: adminData } = useCurrentAdminQuery();
   const canCreate = canReceiveLaundryOrder(adminData?.currentAdmin.role);
+  const principal = adminData?.currentAdmin;
+  const toast = useToast();
 
   const search = useLaundrySearchDraft(listState.search, (text) =>
     setListState((current) => withLaundryFilterChange(current, { search: text })),
   );
-  const { data: customersData } = useCustomersQuery({
-    fetchPolicy: 'network-only',
-    variables: { paging: { limit: 100 } },
-  });
-  const [receive, { loading: creating }] = useReceiveLaundryOrderMutation();
   // Only the History-API entry points: `open`/`close` would route through
   // `router.push`/`router.replace`, which the list never mixes with its
   // native URL writes.
@@ -215,41 +209,33 @@ function LaundryPageContent() {
   }
 
   const [formOpen, setFormOpen] = useState(false);
-  const [customerId, setCustomerId] = useState('');
-  const [fulfillmentType, setFulfillmentType] =
-    useState<LaundryFulfillmentType>('PICKUP');
-  const [formError, setFormError] = useState<string | undefined>(undefined);
+  // A new key per opening remounts the dialog, so every opening starts with
+  // no customer, customer pickup, no errors and a released submit guard (#160).
+  const [formKey, setFormKey] = useState(0);
 
   function openCreateForm() {
-    setCustomerId('');
-    setFulfillmentType('PICKUP');
-    setFormError(undefined);
+    setFormKey((key) => key + 1);
     setFormOpen(true);
   }
 
-  async function handleCreate() {
-    setFormError(undefined);
-    try {
-      const result = await receive({
-        variables: { input: { customerId, fulfillmentType } },
-      });
-      setFormOpen(false);
-      await ordersQuery.refetch();
-      const newId = result.data?.receiveLaundryOrder.id;
-      // Only the destination URL is built here (live list state, hash,
-      // `detail`), so this open is a native write like the rest of the
-      // list. The create flow itself belongs to #160.
-      if (newId) openWithHref(hrefFor((current) => current, { set: { detail: newId } }));
-    } catch {
-      setFormError('Unable to create laundry order.');
-    }
+  // Until the order page cutover (#161), a new order opens in the drawer,
+  // so it can still be weighed; #161 sends it to `/app/laundry/[id]`. It
+  // opens at once, with the id the mutation returned. The list refresh runs
+  // behind it and is not awaited, so a slow or failed refresh cannot keep
+  // it closed; the list shows its own error. Only the destination URL is
+  // built here (live list state, hash, `detail`), so this open is a native
+  // write like the rest of the list.
+  function handleCreated(orderId: string) {
+    setFormOpen(false);
+    toast.success(t('create.success'));
+    openWithHref(hrefFor((current) => current, { set: { detail: orderId } }));
+    void ordersQuery.refetch().catch(() => undefined);
   }
 
   // Rows stay on screen while a new page, sort or filter loads, and after
   // a background error (the bookings list pattern).
   const effectiveData = ordersQuery.data ?? ordersQuery.previousData;
   const rows: LaundryOrderRow[] = effectiveData?.laundryOrders.nodes ?? [];
-  const customers = customersData?.customers.nodes ?? [];
 
   return (
     <div className="flex flex-col gap-8">
@@ -289,51 +275,13 @@ function LaundryPageContent() {
         }}
       />
 
-      <FormDialog
+      <CreateLaundryOrderDialog
+        key={formKey}
         open={formOpen}
         onClose={() => setFormOpen(false)}
-        title="New laundry order"
-        onSubmit={handleCreate}
-        submitLabel={creating ? 'Creating…' : 'Create order'}
-        submitting={creating}
-      >
-        <div className="flex flex-col gap-1">
-          <label htmlFor="laundry-customer" className="text-sm font-medium text-slate-700">
-            Customer
-          </label>
-          <select
-            id="laundry-customer"
-            required
-            value={customerId}
-            onChange={(e) => setCustomerId(e.currentTarget.value)}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-          >
-            <option value="">Select a customer</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.fullName}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="laundry-fulfillment" className="text-sm font-medium text-slate-700">
-            Fulfillment
-          </label>
-          <select
-            id="laundry-fulfillment"
-            value={fulfillmentType}
-            onChange={(e) =>
-              setFulfillmentType(e.currentTarget.value as LaundryFulfillmentType)
-            }
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-          >
-            <option value="PICKUP">Customer pickup</option>
-            <option value="DELIVERY">Delivery</option>
-          </select>
-        </div>
-        {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
-      </FormDialog>
+        onCreated={handleCreated}
+        showAddCustomerLink={principal ? canViewPath(principal, '/app/customers') : false}
+      />
 
       {activeId ? (
         <LaundryDetailDrawer
