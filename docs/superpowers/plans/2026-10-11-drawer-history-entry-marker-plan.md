@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft (revision 8, second draft); revisions 2–7 implemented; revision 7 returned at M7 |
+| Status | Accepted (revision 8); revisions 2–7 implemented |
+| M5 decision (revision 8) | **Accepted** — 2026-10-13, at `8ad0d92` (second draft), by the owner. No amendment; nothing folded into this acceptance. M6 MUST, on the committed code: run the guard, lint and `tsc`; run R1–R6; repeat the 25 paired and 20 full-suite runs, keeping their output and investigating any failure; verify the two-file allowlist; and confirm a clean tree, an empty index and no temporary repository left. M7 MUST be a fresh independent review. |
 | M5 (revision 8, first draft) | Request changes — 2026-10-13, at `eca11b3`: the temporary-repository test must prove the tracked side too. See Gate outcomes. |
 | M5 decision (revision 7) | **Accepted** — 2026-10-13, at `8542255` (second draft), by the owner, after small adjustments. They are folded into Task 7 in the record commit: (1) the shadowing claim is narrowed to that case; (2) cleanup of the tree and index is verified explicitly after H20 and after the full run; (3) a discovery test, one per scanned root, requires a new untracked file to be listed; (4) long lines are wrapped. Keep the two-file allowlist. Re-run the whole table on the committed code. M7 MUST be a fresh independent review. |
 | M5 (revision 7, first draft) | Request changes — 2026-10-13, at `734fed8`. See Gate outcomes. |
@@ -2665,3 +2666,22 @@ Reviewed at `eca11b3` by the owner. Revision 8 resolves the race.
 - **Also:** keep the test about the general contract, and keep the stability evidence.
 
 The second draft does all three; see "Revision 8 tasks".
+
+### M5 — Accepted (2026-10-13, revision 8, second draft)
+
+Accepted at `8ad0d92` by the owner, with no further amendment. The reviewer found every outstanding point resolved:
+- the source-tree race;
+- the tracked and untracked contract, proved in-test;
+- R6;
+- quoted and computed keys;
+- Known limits and the hook comment;
+- the retained stability evidence.
+
+Verification note, an M6 requirement, on the committed code:
+1. the guard, lint and `tsc`;
+2. R1–R6;
+3. the paired and full-suite stability runs, with output kept and any failure investigated;
+4. the allowlist;
+5. a clean tree, an empty index and no temporary repository.
+
+The pre-validation was not re-run by the reviewer.
