@@ -1648,3 +1648,21 @@ Accepted at `13863e2` by the owner, with two test changes. Both are applied in t
 2. **Coverage now asserts all nine drawer pages** (`DRAWER_PAGES`), and that every `apps/web/app` file calling `useDetailDrawer(` is listed. H7 pins this.
 
 The no-runtime-change decision stands. The amended version was pre-validated before this record (see "Revision 5 pre-validation"), and M6 re-observes it.
+
+### M6 — Revision 5 implemented (2026-10-13)
+
+Implemented from the Accepted revision 5, as amended at M5 (`854bb92`). Task 5's two diffs were extracted from this plan and `git apply`-ed exactly as embedded.
+
+| Task | Commit | Evidence |
+| --- | --- | --- |
+| 5 Guard test | `865a5d0` | Guard 13 passed (13). eslint and `tsc` clean. The hook change is comment-only (scripted check). The applied code is byte-identical to the pre-validated code. |
+
+Revision 5 final verification:
+- **Allowlist:** OK, exactly `use-detail-drawer.guard.test.ts` and `use-detail-drawer.ts`.
+- **H1–H7** (each planted alone in a real file and reverted; the tree was clean afterwards): H1, H2, H3, H5 and H7 gave 1 failed / 12 passed; H4 and H6 (comments) gave 13 passed.
+- **Full suites:** `web` 695 passed; lint exit 0; `tsc --noEmit -p .` clean.
+- **Not needed** (per M5): a Next build and browser checks, because no runtime code changed.
+
+Deviation: none.
+
+Next gate: **M7**, a fresh independent review (`CLAUDE.md`: application code, test and comment).
