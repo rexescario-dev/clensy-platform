@@ -47,11 +47,21 @@ describe('laundry intake customer search (e2e)', () => {
     return (res.headers['set-cookie'] as unknown as string[])[0].split(';')[0];
   }
 
-  async function customer(name: string, slug: string, phone: string): Promise<string> {
+  async function customer(
+    name: string,
+    slug: string,
+    phone: string,
+  ): Promise<string> {
     const res = await gql(
       ownerCookie,
       `mutation($i: CreateCustomerInput!){ createCustomer(input:$i){ id } }`,
-      { i: { email: `${slug}-${tag}@example.com`, fullName: `${name} ${tag}`, phone } },
+      {
+        i: {
+          email: `${slug}-${tag}@example.com`,
+          fullName: `${name} ${tag}`,
+          phone,
+        },
+      },
     );
     expect(res.body.errors).toBeUndefined();
     return res.body.data.createCustomer.id;
@@ -72,7 +82,9 @@ describe('laundry intake customer search (e2e)', () => {
   async function searchIds(text: string): Promise<string[]> {
     const res = await gql(schedulerCookie, SEARCH, searchVariables(text));
     expect(res.body.errors).toBeUndefined();
-    return res.body.data.customers.nodes.map((node: { id: string }) => node.id).sort();
+    return res.body.data.customers.nodes
+      .map((node: { id: string }) => node.id)
+      .sort();
   }
 
   beforeAll(async () => {
@@ -85,14 +97,26 @@ describe('laundry intake customer search (e2e)', () => {
     await app.init();
 
     const dataSource = moduleFixture.get(DataSource);
-    const owner = await seedTenantAdmin(dataSource, Role.TENANT_OWNER, BOOTSTRAP_TENANT_ID);
-    const scheduler = await seedTenantAdmin(dataSource, Role.SCHEDULER, BOOTSTRAP_TENANT_ID);
+    const owner = await seedTenantAdmin(
+      dataSource,
+      Role.TENANT_OWNER,
+      BOOTSTRAP_TENANT_ID,
+    );
+    const scheduler = await seedTenantAdmin(
+      dataSource,
+      Role.SCHEDULER,
+      BOOTSTRAP_TENANT_ID,
+    );
     ownerCookie = await login(owner.email, owner.password);
     schedulerCookie = await login(scheduler.email, scheduler.password);
     tag = `${scheduler.id.slice(0, 8)}${Date.now()}`;
 
     customerIds.anaFirst = await customer('Ana Reyes', 'ana-first', '555-0101');
-    customerIds.anaSecond = await customer('Ana Reyes', 'ana-second', '555-0102');
+    customerIds.anaSecond = await customer(
+      'Ana Reyes',
+      'ana-second',
+      '555-0102',
+    );
     await customer('Ben Cruz', 'ben', '555-0103');
   });
 
@@ -101,15 +125,27 @@ describe('laundry intake customer search (e2e)', () => {
   });
 
   it('finds customers by name for a SCHEDULER, with phone and email to tell namesakes apart', async () => {
-    const res = await gql(schedulerCookie, SEARCH, searchVariables(`ana reyes ${tag}`));
+    const res = await gql(
+      schedulerCookie,
+      SEARCH,
+      searchVariables(`ana reyes ${tag}`),
+    );
     expect(res.body.errors).toBeUndefined();
-    const { nodes, totalCount } = res.body.data.customers;
+    const { nodes, totalCount } = res.body.data.customers as {
+      nodes: { id: string; email: string; phone: string }[];
+      totalCount: number;
+    };
     expect(totalCount).toBe(2);
     expect(nodes.map((node: { id: string }) => node.id).sort()).toEqual(
       [customerIds.anaFirst, customerIds.anaSecond].sort(),
     );
-    expect(nodes.map((node: { phone: string }) => node.phone).sort()).toEqual(['555-0101', '555-0102']);
-    expect(new Set(nodes.map((node: { email: string }) => node.email)).size).toBe(2);
+    expect(nodes.map((node: { phone: string }) => node.phone).sort()).toEqual([
+      '555-0101',
+      '555-0102',
+    ]);
+    expect(
+      new Set(nodes.map((node: { email: string }) => node.email)).size,
+    ).toBe(2);
   });
 
   it('matches a mixed-case fragment from inside the name', async () => {
@@ -120,7 +156,11 @@ describe('laundry intake customer search (e2e)', () => {
   });
 
   it('applies the page limit on the server while totalCount still counts every match', async () => {
-    const res = await gql(schedulerCookie, SEARCH, searchVariables(`ana reyes ${tag}`, 1));
+    const res = await gql(
+      schedulerCookie,
+      SEARCH,
+      searchVariables(`ana reyes ${tag}`, 1),
+    );
     expect(res.body.errors).toBeUndefined();
     expect(res.body.data.customers.nodes).toHaveLength(1);
     expect(res.body.data.customers.totalCount).toBe(2);
