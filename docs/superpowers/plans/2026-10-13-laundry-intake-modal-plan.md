@@ -4,16 +4,18 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft** (M4). Awaiting Plan Review (M5). |
+| Status | **Draft (revision 2)** (M4). Awaiting Plan Review (M5), second pass. |
+| M5 history | First pass (2026-10-13, owner, reviewed in five parts): **Returned for Revision**. Findings covered customer-search completeness, stale search results, the submit guard's lifecycle, picker active-option state, hook-level tests, a search mock keyed on variables, a create response without an order id, the success ordering, and test and command details. Every finding is resolved or answered in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). |
 | Date | 2026-10-13 |
 | Tracking issue | [#160](https://github.com/rexescario-dev/clensy-platform/issues/160) "Redesign the laundry order creation modal". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#157](https://github.com/rexescario-dev/clensy-platform/issues/157) (closed; shared `laundry` copy, `canReceiveLaundryOrder`) and [#163](https://github.com/rexescario-dev/clensy-platform/issues/163) (closed; the list and its create button, merged in #170). Cutover navigation is [#161](https://github.com/rexescario-dev/clensy-platform/issues/161) (open). The order page is [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) (open). |
 | Branch | `feat/160-laundry-intake-modal`, from `main` at `47503f5`. One PR for this plan, its M5 record and the implementation. |
 | Scope | `packages/web` (two presentational components, `laundry` copy, exports, static tests), `apps/web` (new intake dialog component, customer-search module, page wiring, tests), one new `apps/api/test` e2e characterization file. No API source, schema, migration, GraphQL operation, generated client, or `@clensy/ui` change. No new dependency. |
 | Implements (Accepted) | [Laundry Orders & Lifecycle](../specs/2026-09-06-laundry-orders-lifecycle-design.md), Status **Accepted** (2026-09-06), with **Amendment #164**, Accepted 2026-10-10. Governing text: §8.4.4, second bullet: "Intake stays a `FormDialog` on the list. Customer selection can reach any customer the customers query returns, not only the first 100. Fulfillment is `PICKUP` (customer pickup) or `DELIVERY`, chosen at intake and immutable. The form says that the choice is fixed and that delivery does not schedule a route. Creating a customer inline is out of scope. Success opens `/app/laundry/[id]` for the new order." Also §8.2 ("No inline customer creation in the intake modal"), §8.6 (deferral of inline customer creation), §4.4 (`receiveLaundryOrder` RBAC: OWNER, OPS_MANAGER, SCHEDULER, CUSTOMER_SUPPORT). |
-| Relies on (Accepted, merged) | [Laundry UI Foundation plan](2026-10-10-laundry-ui-foundation-plan.md) (#157): `canReceiveLaundryOrder`, `LaundryFulfillmentType`, the `laundry` message catalog. [Laundry Order List plan](2026-10-10-laundry-order-list-plan.md) (#163): `escapeLikePattern`, `useDetailDrawer().openWithHref`, `hrefFor`, the native-History create-success open, and the jsdom page harness. [Role-aware typed URLs](../specs/2026-10-04-role-aware-typed-urls-design.md): `canViewPath`. [Clensy validation](../specs/2026-09-15-clensy-validation-design.md): `clensyResolver`, `normalizeApiValidationErrors`. |
+| Relies on (Accepted, merged) | [Laundry UI Foundation plan](2026-10-10-laundry-ui-foundation-plan.md) (#157): `canReceiveLaundryOrder`, `LaundryFulfillmentType`, the `laundry` message catalog (including the existing `fulfillment.PICKUP` / `fulfillment.DELIVERY` labels). [Laundry Order List plan](2026-10-10-laundry-order-list-plan.md) (#163): `escapeLikePattern`, `useDetailDrawer().openWithHref`, `hrefFor`, the native-History create-success open, and the jsdom page harness. [Role-aware typed URLs](../specs/2026-10-04-role-aware-typed-urls-design.md): `canViewPath`. [Clensy validation](../specs/2026-09-15-clensy-validation-design.md): `clensyResolver`, `normalizeApiValidationErrors`. |
 | Authority | Where this plan and the Accepted spec disagree, the **spec wins** and this plan must be revised. Issue #160 refines the spec's bullet with copy, layout and test requirements; it adds no product semantics beyond §8.4.4. File names, component and hook names, copy keys, element ids and task order are planning decisions, not product semantics. |
 | Edit anchors | New files are given in full. Edits to existing files are given against `main` at `47503f5`. Apply each by the quoted code, not by line number. |
-| Pre-validation | **None claimed.** Two read-only spikes ran at planning time and are recorded under [Planning spikes](#planning-spikes); no task's `Expected:` commands were run. |
+| Package names | `pnpm --filter web` is `apps/web` (package `web`). `pnpm --filter @clensy/web` is `packages/web`. They are two different packages; both appear in verification on purpose. `pnpm --filter api` is `apps/api`. |
+| Pre-validation | **None claimed.** Read-only spikes ran at planning time and are recorded under [Planning spikes](#planning-spikes); no task's `Expected:` commands were run. |
 | M7 | Application code changes, so `CLAUDE.md` requires a **fresh independent reviewer** on the most capable model, given this plan, the Accepted spec and the branch diff. |
 
 **Goal:** Replace the intake dialog on `/app/laundry` with the one §8.4.4 describes: a searchable customer picker that reaches every customer by name (not the first 100), an explained, fixed-at-intake fulfillment choice, `react-hook-form` validation, an in-dialog failure alert, one mutation per submit, and a success toast. Until the cutover (#161), a successful create still opens the existing drawer on the new order so it can be weighed.
@@ -21,12 +23,12 @@
 **Architecture:**
 
 - **Presentational pieces in `@clensy/web`** (the #163 `LaundryOrderDataTable` precedent: props-driven, copy from the `laundry` namespace, no `@clensy/client` import):
-  - `LaundryCustomerPicker`: a WAI-ARIA combobox built from a native `<input>` and a `role="listbox"` popup. It owns only open/closed and the active option. The caller owns the text, the options, the search status and the selection.
+  - `LaundryCustomerPicker`: a WAI-ARIA combobox built from a native `<input>` and a `role="listbox"` popup. It owns only open/closed and the active option, which it tracks by **customer id**, never by position, so a changed result set can never move it onto a different customer. The caller owns the text, the options, the search status and the selection.
   - `LaundryFulfillmentFieldset`: a `fieldset`/`legend` with two native radios, each with its label and description.
 - **Data and form in `apps/web`:**
-  - `lib/use-laundry-customer-search.ts`: the GraphQL variables (`fullName.iLike`, limit 20, escaped like the list) and a hook that debounces the text 300 ms and maps the query to `idle | loading | error | ready`. An empty text sends no query (`skip`).
-  - `components/laundry/create-laundry-order-dialog.tsx`: `FormDialog` + `react-hook-form` + `clensyResolver`, the `receiveLaundryOrder` mutation, server field errors via `normalizeApiValidationErrors`, the generic `role="alert"`, and a synchronous in-flight guard.
-  - `app/app/laundry/page.tsx`: opens the dialog (a new React `key` per opening resets it), shows the "Add a customer" link only when `canViewPath(principal, '/app/customers')`, and on success closes, toasts, refreshes and opens the drawer with `openWithHref` exactly as today.
+  - `lib/use-laundry-customer-search.ts`: the GraphQL variables (`fullName.iLike`, limit 20, escaped like the list) and a hook that debounces the trimmed text 300 ms. The searched text **starts empty**, so even the first non-empty text waits out the debounce. While the searched text differs from the input, or the query is loading, the hook returns `loading` and **no options**. An empty text sends no query (`skip`) and returns `idle`. It also reports `truncated` when the server counts more matches than the page holds.
+  - `components/laundry/create-laundry-order-dialog.tsx`: `FormDialog` + `react-hook-form` + `clensyResolver`, the `receiveLaundryOrder` mutation, server field errors via `normalizeApiValidationErrors`, the generic `role="alert"`, and a synchronous in-flight guard taken **before validation** and released when the attempt settles.
+  - `app/app/laundry/page.tsx`: opens the dialog (a new React `key` per opening remounts it, which resets the form, the search, the alert and the guard), shows the "Add a customer" link only when `canViewPath(principal, '/app/customers')`, and on success closes, toasts, **opens the drawer with the id the mutation returned**, then refreshes the list behind it without awaiting.
 - **Escape inside the dialog.** `Modal` closes on a `document`-level `keydown` Escape. The picker stops propagation of Escape only while its list is open, so the first Escape closes the list and the next one closes the dialog.
 
 **Tech Stack:** React 19, Next.js 16 app router, Apollo Client (`@clensy/client` generated hooks), `react-hook-form` 7, `@clensy/validation`, Tailwind, Vitest (`renderToStaticMarkup` in `packages/web`; jsdom in `apps/web`), Jest + supertest e2e in `apps/api`.
@@ -40,16 +42,24 @@ Derived from the Accepted spec and issue #160. Every task's requirements implici
 - **SHALL** keep intake a `FormDialog` on the list (`Modal` + form + Cancel / submit), at the existing modal width (`max-w-lg`). No full-page wizard, no second page. Content stays `flex flex-col gap-4` (provided by `FormDialog`).
 - **SHALL** title the dialog "New laundry order"; submit "Create order", and "Creating…" while submitting.
 - **SHALL** search customers on the server: `customers(filter: { fullName: { iLike: "%<text>%" } }, paging: { limit: 20 })`, debounced ~300 ms, with `%`, `_` and `\` escaped as the list does. **SHALL NOT** query `customers` with `limit: 100` or unfiltered.
-- **SHALL** show `fullName` with `phone`, or `email` when `phone` is empty, as `text-sm text-slate-500` secondary text.
-- **SHALL** give the input `role="combobox"`, `aria-expanded`, `aria-controls`, `aria-activedescendant`; the list `role="listbox"`; each row `role="option"`. ArrowUp/ArrowDown move the active option, Enter selects, Escape closes the list.
+- **Search guarantee (what "reach any customer" means here).** Every customer can be found by searching their name: the filter runs on the server over all of the tenant's customers, not over a preloaded page. Each search shows at most 20 matches. When the server counts more matches than that, the list says "More customers match. Type more of the name to narrow the search." There is no load-more control. Narrowing the text is the supported way to reach a customer beyond the first 20 matches. More than 20 customers whose full names are identical is a known limit (see [Deferred](#deferred-not-in-this-plan)).
+- **SHALL** show `fullName` with `phone`, or `email` when `phone` is empty, as `text-sm text-slate-500` secondary text. Both fields are non-null in the generated `CustomersQuery` and required by `createCustomer`, so every option shows one of them.
+- **SHALL** offer only results for the text currently in the input. While a newer search is pending, no option is rendered, none is active, and Enter selects nothing.
+- **SHALL** give the input `role="combobox"`, `aria-expanded`, `aria-controls`, `aria-activedescendant`; the list `role="listbox"`; each row `role="option"`. ArrowUp/ArrowDown move the active option, Enter selects, Escape closes the list. `aria-activedescendant` only ever names an option that is rendered.
 - **SHALL** show "Searching…" (one line in the list), "No customers match.", and "Unable to search customers." inline. No full-page `LoadingState`.
-- **SHALL** require a customer with the message "Select a customer.", through `react-hook-form` + `clensyResolver`. Server field errors map through `normalizeApiValidationErrors`. Any other failure shows "Unable to create laundry order." with `role="alert"` inside the dialog, keeps the fields and re-enables submit.
-- **SHALL** render fulfillment as a `fieldset` with `legend` "Fulfillment", helper "This choice is fixed at intake.", and two native radios: `PICKUP` "Customer pickup" / "The customer collects the finished laundry."; `DELIVERY` "Delivery" / "The shop returns the finished laundry. This does not schedule a route." Rows `rounded-md border px-3 py-2`, `border-slate-300`, selected `border-slate-900`, `sm:grid sm:grid-cols-2 sm:gap-3`. Default `PICKUP`. Required.
-- **SHALL NOT** add inline customer creation (spec §8.2, §8.6). An "Add a customer" link to `/app/customers` shows only when `canViewPath` allows that path. No nested dialog. No customer-create permission logic in this modal.
+- **Selection contract.** Choosing an option sets the selected customer id and shows that customer's name in the input. Any later user edit of the input, including clearing it, clears the selected id. Submit is then refused with "Select a customer." until an option is chosen again.
+- **SHALL** require a customer with the message "Select a customer.", through `react-hook-form` + `clensyResolver`. Three failure paths stay distinct:
+  - **Client validation:** no customer selected → "Select a customer." on the field, field focused, no mutation.
+  - **Server field validation:** errors that `normalizeApiValidationErrors` maps to `customerId` or `fulfillmentType` → shown on that field; no generic alert. The error clears when the field's value changes.
+  - **Anything else** (network, unexpected): "Unable to create laundry order." with `role="alert"` inside the dialog.
+  In every failure path the dialog stays open, the fields keep their values, and submit is re-enabled.
+- **SHALL**, if the mutation succeeds but its response carries no order id, keep the dialog open, open nothing, show no success toast, and show "The order may have been created. Check the laundry list before trying again." with `role="alert"`. Nothing is retried automatically.
+- **SHALL** render fulfillment as a `fieldset` with `legend` "Fulfillment", helper "This choice is fixed at intake.", and two native radios: `PICKUP` "Customer pickup" / "The customer collects the finished laundry."; `DELIVERY` "Delivery" / "The shop returns the finished laundry. This does not schedule a route." Rows `rounded-md border px-3 py-2`, `border-slate-300`, selected `border-slate-900`, `sm:grid sm:grid-cols-2 sm:gap-3`. These classes are the issue's own visual contract, which is why tests assert them. Default `PICKUP`. Required.
+- **SHALL NOT** add inline customer creation (spec §8.2, §8.6). An "Add a customer" link to `/app/customers` shows only when `canViewPath` allows that path. No nested dialog. No customer-create permission logic in this modal. Three authorization concerns stay separate: `canReceiveLaundryOrder` shows the create button; `canViewPath` shows the link; the server authorizes `receiveLaundryOrder` and every customer operation.
 - **SHALL** call `receiveLaundryOrder({ customerId, fulfillmentType })`, the existing mutation. **SHALL NOT** add or change any GraphQL operation, resolver, schema or migration.
-- **SHALL** on success close the dialog, `useToast().success("Laundry order created.")`, and open the existing drawer for the new id via `openWithHref` (pre-cutover). The `/app/laundry/[id]` navigation is #161's. The PR body MUST say so (see Task 6).
-- **SHALL** send at most one mutation per submit, including two submits fired before React re-renders.
-- **SHALL** reset customer, fulfillment (`PICKUP`) and errors on every opening.
+- **SHALL** on success: close the dialog, `useToast().success("Laundry order created.")`, and open the existing drawer for the **id the mutation returned** via `openWithHref`, at once (pre-cutover). The list refresh runs after that and is not awaited; a slow or failed refresh cannot keep the drawer closed. The `/app/laundry/[id]` navigation is #161's. The PR body MUST say so (see Task 6).
+- **SHALL** send at most one mutation per submit, including two submits fired in the same turn, before React re-renders. The guard is taken synchronously before validation and released when the attempt settles, so a failed attempt can be retried.
+- **SHALL** reset customer, fulfillment (`PICKUP`), errors and the submit guard on every opening.
 - **SHALL** keep the create button limited to `canReceiveLaundryOrder` (FINANCE and ANALYST never see it; unchanged from #163).
 - **SHALL** put every new user-facing string in `packages/web/src/i18n/messages/en/laundry.ts` and read it with `useClensyTranslations('laundry')`. Fulfillment labels reuse the existing `fulfillment.PICKUP` / `fulfillment.DELIVERY` keys.
 - **SHALL NOT** modify `@clensy/ui`, `apps/api/src`, `apps/api/src/schema.gql`, any migration, `packages/client`, or `docs/workflows/**`. Add no dependency. `@clensy/web` does not import `@clensy/client`.
@@ -59,11 +69,12 @@ Derived from the Accepted spec and issue #160. Every task's requirements implici
 
 Inputs and conditions the spec implies that a person will meet. Each has a test in the owning task.
 
-1. **Typing after a selection.** A user picks "Ana Reyes", then edits the text to "Ana R". The input no longer names the chosen customer, so the selection must clear and submit must say "Select a customer." rather than create an order for a customer the input no longer shows. (The issue states the clearing case; any edit is treated the same.) → Task 5, `clears the selection when the text changes after choosing`.
-2. **Escape with the list open.** Escape must close the list, not the whole dialog and the typed text with it. → Task 3 (`closes the list with Escape...`) and Task 5 (`closes the list, then the dialog`).
-3. **Namesakes.** Two customers with the same name must be told apart by phone, or email when phone is empty. → Task 3 static test, Task 1 e2e.
-4. **A search still in flight or a stale result.** Results for "an" must not be selectable as results for "ana" once the text has changed; while the debounced text differs from the input, the list shows "Searching…" and no options. → Task 4 hook status, Task 5 `shows Searching…, then results`.
+1. **Typing after a selection.** A user picks "Ana Reyes", then edits the text to "Ana R". The selection must clear, and submit must say "Select a customer." → Task 3 (`clears the selected id when the text is edited after choosing`), Task 5 (`clears the selection when the text changes after choosing`).
+2. **Escape with the list open.** Escape must close the list, not the whole dialog and the typed text with it. → Task 3 (`closes the list with Escape...`), Task 5 (`closes the list on the first Escape and the dialog on the next`), with the real `Modal`.
+3. **Namesakes.** Two customers with the same name must be told apart by phone, or email when phone is empty. → Task 1 e2e, Task 3 static test, Task 5 results test.
+4. **Fast typing and stale results.** "an" → "ana" → "an", and clearing while a request is in flight: an older text's results are never offered for a newer text. → Task 4 hook tests, Task 3 (`offers nothing while a newer search loads`), Task 5 (`never lets a result for an earlier text be chosen`).
 5. **Wildcard characters in a name.** "50% Off" is matched literally. → Task 4 variables test (escaping reuses the list's `escapeLikePattern`, already e2e-pinned for `%` in `laundry-order-list-filters.e2e-spec.ts`).
+6. **More than 20 matches.** A common name must not silently hide customers: the list says more match and asks for more of the name. → Task 4 (`flags more matches than the page holds`), Task 3 static test.
 
 ## Planning spikes
 
@@ -71,22 +82,27 @@ Read-only checks run at planning time, for M5. They are not pre-validation of an
 
 - **Baseline suites at `47503f5`:** `pnpm --filter web test` → 29 files, 712 tests passed. `pnpm --filter @clensy/web test` → 13 files, 402 tests passed.
 - **`next/link` under jsdom:** a throwaway `apps/web/lib` test rendered `<Link href="/app/customers">` with `next/navigation` mocked as the page harness mocks it. It rendered `href="/app/customers"` and passed. The file was deleted.
-- **Customers query:** `packages/client/src/operations/customers.graphql` already declares `$filter: CustomerFilter` and `$sorting`; `CustomerFilter.fullName` is a `StringFieldComparison` (has `iLike`); `CustomerSortFields` includes `fullName` and `id`; nodes carry non-null `email` and `phone`. No client change or regeneration is needed.
+- **Customers query:** `packages/client/src/operations/customers.graphql` already declares `$filter: CustomerFilter` and `$sorting`, and selects `totalCount`; `CustomerFilter.fullName` is a `StringFieldComparison` (has `iLike`); `CustomerSortFields` includes `fullName` and `id`; nodes carry non-null `email` and `phone`. No client change or regeneration is needed.
 - **RBAC:** `customer.type.ts` `VIEW_ROLES` (mirrored in `nav-groups.ts`) include every intake role (TENANT_OWNER, OPS_MANAGER, SCHEDULER, CUSTOMER_SUPPORT), so `canViewPath` shows the link to all of them. `createCustomer` is OWNER, OPS_MANAGER, CUSTOMER_SUPPORT; a SCHEDULER `createCustomer` → `FORBIDDEN` is already e2e-pinned in `customers-properties.e2e-spec.ts` and is not duplicated here.
-- **Escape:** `useDialogBehavior` listens for Escape on `document` (bubble). React 19 dispatches from the root container, so a synthetic `stopPropagation()` on the input's `keydown` keeps the event from `document`. Task 3 and Task 5 pin this.
+- **Escape:** `useDialogBehavior` listens for Escape on `document` (bubble). React 19 dispatches from the root container, so a synthetic `stopPropagation()` on the input's `keydown` keeps the event from `document`. Task 3 pins it against a stand-in listener and Task 5 against the real `Modal`.
 - **Validation:** `required` treats `''` as empty (`packages/validation/src/rules.ts`, `isEmpty`). `formatMessage` substitutes `:attribute` from `options.attributes`, so a template of `':attribute'` with a per-field attribute prints a whole localized sentence per field.
+- **Server field-error shape:** `normalizeApiValidationErrors` reads Apollo's thrown `graphQLErrors` array, and in it `extensions.originalError.message` (an array of `"<field> <constraint>"` strings). `packages/validation/src/normalize.test.ts` pins that Apollo-shaped case against `__fixtures__/create-customer-validation-error.json`, a captured real response (`"email must be an email"`). The Task 5 mock uses that shape with `customerId` as the field.
+- **Typing in jsdom:** the merged `laundry-list-page.interaction.test.tsx` already types into a controlled input with the native `HTMLInputElement.prototype.value` setter plus a bubbling `input` event (`typeSearch`), and that suite passes today. The repo has no `@testing-library/user-event`. The new tests use the same helper rather than add a dependency.
+- **E2e fixtures:** `laundry-order-list-filters.e2e-spec.ts` (#163) keeps its customers and orders in the shared bootstrap tenant and isolates them with a per-run name tag, with no cleanup. Task 1 follows that convention.
 
 ## File map
 
 | File | Change | Responsibility |
 | --- | --- | --- |
-| `apps/api/test/laundry-intake-customer-search.e2e-spec.ts` | Create | Characterization: SCHEDULER name search (paged, namesakes distinguishable) and SCHEDULER intake. |
+| `apps/api/test/laundry-intake-customer-search.e2e-spec.ts` | Create | Characterization: SCHEDULER name search (mixed-case fragment, server page limit vs total count, namesakes distinguishable) and SCHEDULER intake. |
 | `packages/web/src/i18n/messages/en/laundry.ts` | Modify | `create.*` copy. |
 | `packages/web/src/laundry/laundry-fulfillment-fieldset.tsx` (+ `.test.tsx`) | Create | Fulfillment fieldset. |
 | `packages/web/src/laundry/laundry-customer-picker.tsx` (+ `.test.tsx`) | Create | Combobox markup and keyboard. |
 | `packages/web/src/index.ts` | Modify | Export both components and their types. |
-| `apps/web/lib/laundry-customer-picker.interaction.test.tsx` | Create | jsdom keyboard, mouse, blur and Escape tests of the picker. |
-| `apps/web/lib/use-laundry-customer-search.ts` (+ `.test.ts`) | Create | Search variables, debounce, status. |
+| `apps/web/lib/laundry-customer-picker.interaction.test.tsx` | Create | jsdom keyboard, mouse, blur, Escape, result-change and selection-contract tests of the picker. |
+| `apps/web/lib/use-laundry-customer-search.ts` | Create | Search variables, debounce, status, truncation. |
+| `apps/web/lib/use-laundry-customer-search.test.ts` | Create | Variables and escaping (node). |
+| `apps/web/lib/use-laundry-customer-search.hook.test.tsx` | Create | The hook in jsdom: debounce, skip, statuses, stale-text safety, truncation. |
 | `apps/web/components/laundry/create-laundry-order-dialog.tsx` | Create | The intake form. |
 | `apps/web/app/app/laundry/page.tsx` | Modify | Mount the dialog, link visibility, success handler. |
 | `apps/web/lib/laundry-list-page.test.tsx` | Modify | Wrap in `ToastProvider`. |
@@ -113,6 +129,47 @@ Read-only checks run at planning time, for M5. They are not pre-validation of an
 - Navigating to `/app/laundry/[id]` on success, and removing the drawer: #161 (after #156).
 - Inline customer creation: spec §8.6.
 - Editing fulfillment after create, the customer form, and order-page sections: #160 §Out of scope.
+- A load-more or second page of customer matches. Narrowing the text is the supported path (Global Constraints, Search guarantee). A tenant with more than 20 customers whose full names are identical cannot reach the 21st by name alone. Searching by phone or email would need a filter the `customers` query does not offer today, so it would need its own issue.
+- A live result-count announcement (for example "3 customers found"). Neither #160 nor the spec asks for it, and `useClensyTranslations`' `t()` has no interpolation for a count. Screen readers already hear the expanded state, the active option, and the Searching / no-match / more-match / error lines, which use `role="status"` or `role="alert"`. This can be a follow-up if the owner wants it.
+
+## Revision 2 (M5 review 1)
+
+The owner reviewed revision 1 in five parts on 2026-10-13 and returned it for revision. Each finding is listed with its resolution. **Changed** means this revision changes the plan. **Covered** means revision 1 already did it, and the location is given. **Answered** means a fact or convention resolves it without a plan change.
+
+| Part / finding | Resolution |
+| --- | --- |
+| 1 · P1 Search completeness | **Changed.** Global Constraints now states the search guarantee: server-side name search over every customer, at most 20 per search, an explicit "More customers match…" line when the server counts more (`truncated`, Tasks 3–4), no load-more, narrowing as the supported path. The identical-names limit is listed under Deferred. The e2e paging test is renamed to what it asserts (Task 1). |
+| 1 · P1 Stale search results | **Changed.** The hook's searched text starts empty; options are returned only when the searched text equals the input and the query is not loading. New jsdom hook tests (Task 4, `use-laundry-customer-search.hook.test.tsx`) cover "an" → "ana" → "an", clearing in flight, and a response arriving after clearing. The page mock now answers per search text (Task 5). |
+| 1 · P1 Submit guard lifecycle | **Changed.** The guard is taken synchronously in the submit handler **before** `react-hook-form` validation and released in `finally` (Task 5 Step 5). The remount per opening gives a clean guard. Tests: two submits in one turn → one mutation; failure then retry → second mutation (Task 5). |
+| 1 · P2 Picker interaction | **Covered** for blur-before-click (`onMouseDown` `preventDefault`, Task 3 test), arrows, Enter not submitting, and Escape. **Changed:** the active option is tracked by id, and new Task 3 tests pin that `aria-activedescendant` names only a rendered option through result changes, loading, and clearing. The selection-clearing contract is now a stated picker contract and is tested at picker level too. |
+| 1 · P2 Failure paths | **Covered** in revision 1 (Task 5 tests for client validation, server field error, network failure with fields kept). **Changed:** the three paths are stated in Global Constraints; the server-field-error test now also asserts submit is re-enabled and that the error clears when the customer is chosen again. |
+| 1 · P2 Success ordering | **Changed.** The drawer opens at once with the id the mutation returned; the list refresh is no longer awaited. The test makes the refresh hang and still sees the drawer open on the returned id, with one mutation and the dialog closed. |
+| 1 · P2 RBAC boundary | **Covered.** The SCHEDULER test (Task 5) checks create, the link, and no customer form. The existing static test pins the create button by role. **Changed:** the three separate concerns are now stated in Global Constraints. |
+| 2 · P2 E2e mixed-case fragment; paging test name | **Changed.** New test searching a mixed-case fragment from inside the name. Paging test renamed to "applies the page limit on the server while totalCount still counts every match". |
+| 2 · P2 Existing `fulfillment.*` keys | **Answered.** `fulfillment.PICKUP: 'Customer pickup'` and `fulfillment.DELIVERY: 'Delivery'` exist on `main` (`laundry.ts`). **Changed:** Task 2's Interfaces now list them as consumed. |
+| 2 · P3 Class-name assertions | **Answered.** Issue #160 specifies those exact classes, so they are a stated visual contract (now said in Global Constraints). The radio state is also asserted (`checked`). |
+| 2 · P3 E2e cleanup | **Answered.** This follows the #163 `laundry-order-list-filters.e2e-spec.ts` convention: rows stay in the bootstrap tenant, with a per-run tag (Planning spikes). |
+| 3 · P1 Edit after select | **Changed.** Stated as the picker's selection contract (Task 3 Interfaces); a picker-level test with a selected-id harness, plus the Task 5 page test (covered in revision 1). |
+| 3 · P1 Stale active option | **Changed.** The active option is a customer id, not an index. A changed result set keeps it on the same customer or drops it; loading or empty results leave nothing active. New tests. |
+| 3 · P1 Typing helper | **Answered.** This is the repo's established helper (`typeSearch` in the merged list interaction test); no user-event dependency exists. See Planning spikes. |
+| 3 · P2 Empty-query behavior | **Changed.** Stated: an empty or blank text is `idle`, the list is collapsed, nothing is active, no query is sent. New picker test for clearing; hook test for blank text. |
+| 3 · P2 Stale results at picker level | **Changed.** New test: after an option was active, switching to `loading` renders no option, sets no `aria-activedescendant`, and Enter selects nothing. The hook side is in Task 4. |
+| 3 · P2 Result announcement | **Answered / deferred** (see Deferred): not asked for by #160 or the spec, and `t()` has no interpolation. Status lines are already live regions. |
+| 3 · notes | Real-`Modal` Escape: **covered** by the Task 5 page test. Empty phone and email: **answered** (both non-null and required). `JSX.Element` return type: **changed**, removed from Interfaces; the component has no explicit return type, like the other `@clensy/web` components. |
+| 4 · P1 Debounce on first value | **Changed.** `useState('')`, so a first non-empty text waits 300 ms. Hook test pins it at 299 and 300 ms. |
+| 4 · P1 Hook-level tests | **Changed.** New `use-laundry-customer-search.hook.test.tsx` (jsdom), with a mocked `useCustomersQuery` that answers per variables as Apollo's cache does. |
+| 4 · P1 Page mock lifecycle | **Changed.** The page mock answers by search text; an unknown text stays in flight (`loading: true`). A new page test pins that an earlier text's result cannot be chosen while the next search runs. |
+| 4 · P1 Guard at the mutation boundary | **Changed.** See Part 1 · P1 Submit guard. Both submit events are dispatched synchronously in one `act`; the second returns at the guard before validation. |
+| 4 · P2 Server error shape | **Answered.** The shape is the normalizer's pinned Apollo case (Planning spikes). The test asserts the message lands in `#laundry-customer-error` and no generic alert shows. |
+| 4 · P2 No-match test rerender | **Changed.** No mid-test mutation of mock data: "zz" has its own preset empty response, reached by typing and waiting out the debounce. |
+| 4 · P2 Harness breadth | **Changed.** Every added mock field is reset in `beforeEach` (listed in Task 5 Step 1); Task 5 Step 2 runs the existing page tests alone first; Step 7 runs focused files before the full suite. |
+| 5 · P1 Selection vs edit | **Covered.** `onSelect` sets the text through `setCustomerQuery` directly, not through `onQueryChange`, so a selection never clears itself; only the input's `onChange` calls `onQueryChange`. The success test submits right after choosing. **Changed:** stated in the Selection contract. |
+| 5 · P1 Response without an id | **Changed.** New copy `create.unconfirmed`, kept open with `role="alert"`, no toast, no drawer, no automatic retry. New Task 5 test. |
+| 5 · P1 Package filters | **Answered.** `web` and `@clensy/web` are two different workspace packages (header row "Package names"; both verified at planning time). |
+| 5 · P2 Commit file list | **Covered.** Tasks 2, 3 and 4 each commit their own files; Task 5 commits only its own. **Changed:** each commit step now runs `git status --short` first and expects only that task's files. |
+| 5 · P2 Drawer waits on refetch | **Changed.** See Part 1 · P2 Success ordering. |
+| 5 · P2 Clearing a server field error | **Changed.** `react-hook-form`'s default `reValidateMode: 'onChange'` re-runs the resolver when the field changes after a submit, which removes the server error once the value is valid. The server-field-error test now pins it. |
+| 5 · P2 Missing-id test | **Changed.** See Part 5 · P1. |
 
 ---
 
@@ -145,9 +202,9 @@ import { seedTenantAdmin } from './helpers/seed-tenant-admin';
 // Characterization (#160): pins the existing reads and writes the laundry
 // intake modal relies on, as a SCHEDULER: the one intake role that cannot
 // create customers (its createCustomer FORBIDDEN is pinned in
-// customers-properties.e2e-spec.ts). No API code changes in #160. Names
-// carry a per-run tag, because the bootstrap tenant is shared across suites
-// and runs.
+// customers-properties.e2e-spec.ts). No API code changes in #160. As in
+// laundry-order-list-filters.e2e-spec.ts, rows stay in the shared bootstrap
+// tenant and every name carries a per-run tag.
 describe('laundry intake customer search (e2e)', () => {
   let app: INestApplication<App>;
   let ownerCookie: string;
@@ -201,6 +258,12 @@ describe('laundry intake customer search (e2e)', () => {
     };
   }
 
+  async function searchIds(text: string): Promise<string[]> {
+    const res = await gql(schedulerCookie, SEARCH, searchVariables(text));
+    expect(res.body.errors).toBeUndefined();
+    return res.body.data.customers.nodes.map((node: { id: string }) => node.id).sort();
+  }
+
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -226,7 +289,7 @@ describe('laundry intake customer search (e2e)', () => {
     await app.close();
   });
 
-  it('finds customers by a case-insensitive name fragment for a SCHEDULER, with phone and email for namesakes', async () => {
+  it('finds customers by name for a SCHEDULER, with phone and email to tell namesakes apart', async () => {
     const res = await gql(schedulerCookie, SEARCH, searchVariables(`ana reyes ${tag}`));
     expect(res.body.errors).toBeUndefined();
     const { nodes, totalCount } = res.body.data.customers;
@@ -238,7 +301,14 @@ describe('laundry intake customer search (e2e)', () => {
     expect(new Set(nodes.map((node: { email: string }) => node.email)).size).toBe(2);
   });
 
-  it('pages the filtered result on the server, so the limit never hides a match from the count', async () => {
+  it('matches a mixed-case fragment from inside the name', async () => {
+    // "eYeS <TAG>" starts mid-word and flips the case of the stored name.
+    expect(await searchIds(`eYeS ${tag.toUpperCase()}`)).toEqual(
+      [customerIds.anaFirst, customerIds.anaSecond].sort(),
+    );
+  });
+
+  it('applies the page limit on the server while totalCount still counts every match', async () => {
     const res = await gql(schedulerCookie, SEARCH, searchVariables(`ana reyes ${tag}`, 1));
     expect(res.body.errors).toBeUndefined();
     expect(res.body.data.customers.nodes).toHaveLength(1);
@@ -272,11 +342,12 @@ describe('laundry intake customer search (e2e)', () => {
 - [ ] **Step 2: Run it (characterization: expected to pass first time)**
 
 Run: `pnpm --filter api test:e2e -- laundry-intake-customer-search`
-Expected: PASS, 3 tests. If any fails, **stop**: the API does not behave as the spec and the #160 issue assume, and M6 must report it rather than change API code.
+Expected: PASS, 4 tests. If any fails, **stop**: the API does not behave as the spec and the #160 issue assume, and M6 must report it rather than change API code.
 
 - [ ] **Step 3: Commit**
 
 ```bash
+git status --short   # expect only: ?? apps/api/test/laundry-intake-customer-search.e2e-spec.ts
 git add apps/api/test/laundry-intake-customer-search.e2e-spec.ts
 git commit -m "test(api): characterize the customer search and intake the laundry modal relies on (#160)"
 ```
@@ -292,9 +363,9 @@ git commit -m "test(api): characterize the customer search and intake the laundr
 - Modify: `packages/web/src/index.ts`
 
 **Interfaces:**
-- Consumes: `LaundryFulfillmentType` (`./laundry-order-status`), `useClensyTranslations`.
+- Consumes: `LaundryFulfillmentType` (`./laundry-order-status`), `useClensyTranslations`; the existing catalog keys `fulfillment.PICKUP` ("Customer pickup") and `fulfillment.DELIVERY` ("Delivery"), present on `main` and not changed.
 - Produces: `LaundryFulfillmentFieldset({ name, onChange, value })`, `LaundryFulfillmentFieldsetProps`; copy keys under `laundry.create.*` used by Tasks 3 and 5:
-  `create.addCustomer`, `create.creating`, `create.customer.{empty,error,label,required,searching}`, `create.failure`, `create.fulfillment.{description.DELIVERY,description.PICKUP,fixed,legend,required}`, `create.submit`, `create.success`, `create.title`.
+  `create.addCustomer`, `create.creating`, `create.customer.{empty,error,label,more,required,searching}`, `create.failure`, `create.fulfillment.{description.DELIVERY,description.PICKUP,fixed,legend,required}`, `create.submit`, `create.success`, `create.title`, `create.unconfirmed`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -308,7 +379,8 @@ import { LaundryFulfillmentFieldset } from './laundry-fulfillment-fieldset';
 const noop = () => {};
 
 // Static markup, as in the other @clensy/web tests. Clicks are covered by
-// apps/web's jsdom page test.
+// apps/web's jsdom page test. The row classes are #160's stated visual
+// contract, so they are asserted alongside the radio state.
 describe('LaundryFulfillmentFieldset', () => {
   it('explains both options and says the choice is fixed at intake', () => {
     const html = renderToStaticMarkup(<LaundryFulfillmentFieldset name="fulfillment" value="PICKUP" onChange={noop} />);
@@ -365,6 +437,7 @@ In `packages/web/src/i18n/messages/en/laundry.ts`, insert after the `confirm` bl
       empty: 'No customers match.',
       error: 'Unable to search customers.',
       label: 'Customer',
+      more: 'More customers match. Type more of the name to narrow the search.',
       required: 'Select a customer.',
       searching: 'Searching…',
     },
@@ -381,10 +454,11 @@ In `packages/web/src/i18n/messages/en/laundry.ts`, insert after the `confirm` bl
     submit: 'Create order',
     success: 'Laundry order created.',
     title: 'New laundry order',
+    unconfirmed: 'The order may have been created. Check the laundry list before trying again.',
   },
 ```
 
-`create.fulfillment.required` is never shown in practice (a radio is always checked); it exists so the `required` rule never falls back to untranslated English.
+`create.fulfillment.required` is never shown in practice (a radio is always checked). It exists so the `required` rule never falls back to untranslated English.
 
 - [ ] **Step 4: Write the component**
 
@@ -471,6 +545,7 @@ Expected: all pass (the new file's 3 tests included); lint clean (`sort-keys` on
 - [ ] **Step 7: Commit**
 
 ```bash
+git status --short   # expect only the four files below
 git add packages/web/src/i18n/messages/en/laundry.ts packages/web/src/laundry/laundry-fulfillment-fieldset.tsx packages/web/src/laundry/laundry-fulfillment-fieldset.test.tsx packages/web/src/index.ts
 git commit -m "feat(web): explain the laundry fulfillment choice at intake (#160)"
 ```
@@ -501,11 +576,14 @@ export interface LaundryCustomerPickerProps {
   options: readonly LaundryCustomerOption[];
   query: string;
   status: LaundryCustomerSearchStatus;
+  truncated?: boolean;
 }
-export function LaundryCustomerPicker(props: LaundryCustomerPickerProps): JSX.Element
+export function LaundryCustomerPicker(props: LaundryCustomerPickerProps)
 ```
 
-Element ids: input `${id}`, listbox `${id}-listbox`, option `${id}-option-${option.id}`, error `${id}-error`.
+- **Selection contract (the caller's side).** `onQueryChange` fires only for a user edit of the input. `onSelect` fires when an option is chosen, and the caller then sets the text to `option.fullName` itself, without going through `onQueryChange`. The caller MUST clear its selected customer id on every `onQueryChange`, so a selection never survives an edit and is never cleared by its own display text.
+- Options are rendered only when `status === 'ready'`. `idle` (empty or blank text) keeps the list collapsed.
+- Element ids: input `${id}`, listbox `${id}-listbox`, option `${id}-option-${option.id}`, error `${id}-error`.
 
 - [ ] **Step 1: Write the failing static test**
 
@@ -552,7 +630,7 @@ describe('LaundryCustomerPicker', () => {
     expect(field).toContain('aria-controls="customer-listbox"');
     expect(field).toContain('aria-expanded="false"');
     expect(field).toContain('aria-autocomplete="list"');
-    expect(field).toContain('autoComplete="off"'.toLowerCase());
+    expect(field).toContain('autocomplete="off"');
     expect(field).not.toContain('aria-activedescendant');
     expect(html).toMatch(/<ul[^>]*id="customer-listbox"[^>]*role="listbox"/);
   });
@@ -566,13 +644,21 @@ describe('LaundryCustomerPicker', () => {
     expect(html).toContain('<span class="block text-sm text-slate-500">ana.r@example.com</span>');
   });
 
-  it('shows one line for searching, no matches, and a failed search', () => {
+  it('shows one line for searching, no matches, a failed search, and more matches than shown', () => {
     expect(render({ status: 'loading' })).toContain('Searching…');
     expect(render({ status: 'ready' })).toContain('No customers match.');
-    const failed = render({ status: 'error' });
-    expect(failed).toMatch(/role="alert"[^>]*>Unable to search customers\./);
+    expect(render({ status: 'error' })).toMatch(/role="alert"[^>]*>Unable to search customers\./);
     expect(render({ options: [ANA], status: 'ready' })).not.toContain('No customers match.');
-    expect(render({ status: 'loading' })).not.toContain('role="option"');
+    expect(render({ options: [ANA], status: 'ready', truncated: true })).toContain(
+      'More customers match. Type more of the name to narrow the search.',
+    );
+    expect(render({ options: [ANA], status: 'ready' })).not.toContain('More customers match.');
+  });
+
+  it('renders no option unless the search is ready', () => {
+    for (const status of ['idle', 'loading', 'error'] as const) {
+      expect(render({ options: [ANA], status })).not.toContain('role="option"');
+    }
   });
 
   it('wires a validation error to the input', () => {
@@ -585,8 +671,6 @@ describe('LaundryCustomerPicker', () => {
   });
 });
 ```
-
-(`renderToStaticMarkup` prints `autoComplete` as `autocomplete`; the assertion lowercases the literal for that reason.)
 
 - [ ] **Step 2: Run it to verify it fails**
 
@@ -621,6 +705,7 @@ export interface LaundryCustomerPickerProps {
   options: readonly LaundryCustomerOption[];
   query: string;
   status: LaundryCustomerSearchStatus;
+  truncated?: boolean;
 }
 
 const INPUT_CLASSES =
@@ -632,6 +717,15 @@ const INPUT_CLASSES =
 // list is open and which option is active; the caller owns the text, the
 // server search, the options and the selection. The label, input and error
 // follow FormField's markup and classes.
+//
+// `onQueryChange` fires only for a user edit; the caller clears its
+// selection there. On `onSelect` the caller sets the text to the chosen
+// name itself, so a selection is never cleared by its own display text.
+//
+// The active option is a customer id, not a position: when the results
+// change, it stays on the same customer or, if that customer is gone, no
+// option is active. Options render only for a `ready` search, so nothing
+// from an older search can be active or chosen while a newer one loads.
 //
 // Escape closes an open list and stops there, so the surrounding Modal,
 // which listens for Escape on `document`, stays open. With the list closed,
@@ -645,19 +739,20 @@ export function LaundryCustomerPicker({
   options,
   query,
   status,
+  truncated = false,
 }: LaundryCustomerPickerProps) {
   const t = useClensyTranslations('laundry');
   const [open, setOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(-1);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const listboxId = `${id}-listbox`;
   const errorId = `${id}-error`;
   const expanded = open && status !== 'idle';
-  const selectable = status === 'ready' ? options : [];
-  const active = expanded && activeIndex < selectable.length ? activeIndex : -1;
+  const rendered = status === 'ready' ? options : [];
+  const active = expanded ? rendered.findIndex((option) => option.id === activeId) : -1;
 
   function close() {
     setOpen(false);
-    setActiveIndex(-1);
+    setActiveId(null);
   }
 
   function select(option: LaundryCustomerOption) {
@@ -665,24 +760,27 @@ export function LaundryCustomerPicker({
     close();
   }
 
+  function move(step: -1 | 1) {
+    const count = rendered.length;
+    if (count === 0) {
+      setActiveId(null);
+      return;
+    }
+    const next = active === -1 ? (step === 1 ? 0 : count - 1) : (active + step + count) % count;
+    setActiveId(rendered[next].id);
+  }
+
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
-      const count = selectable.length;
-      if (!expanded) {
-        setOpen(true);
-        setActiveIndex(count === 0 ? -1 : event.key === 'ArrowDown' ? 0 : count - 1);
-        return;
-      }
-      if (count === 0) return;
-      if (event.key === 'ArrowDown') setActiveIndex(active + 1 >= count ? 0 : active + 1);
-      else setActiveIndex(active <= 0 ? count - 1 : active - 1);
+      if (!expanded) setOpen(true);
+      move(event.key === 'ArrowDown' ? 1 : -1);
       return;
     }
     if (event.key === 'Enter' && expanded) {
       // Enter belongs to the list while it is open; it never submits the form.
       event.preventDefault();
-      if (active >= 0) select(selectable[active]);
+      if (active >= 0) select(rendered[active]);
       return;
     }
     if (event.key === 'Escape' && expanded) {
@@ -706,14 +804,14 @@ export function LaundryCustomerPicker({
         aria-autocomplete="list"
         aria-controls={listboxId}
         aria-expanded={expanded}
-        aria-activedescendant={active >= 0 ? `${id}-option-${selectable[active].id}` : undefined}
+        aria-activedescendant={active >= 0 ? `${id}-option-${rendered[active].id}` : undefined}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? errorId : undefined}
         value={query}
         onChange={(event) => {
           onQueryChange(event.target.value);
           setOpen(event.target.value.trim() !== '');
-          setActiveIndex(-1);
+          setActiveId(null);
         }}
         onKeyDown={handleKeyDown}
         onBlur={close}
@@ -724,7 +822,7 @@ export function LaundryCustomerPicker({
         className="absolute left-0 right-0 top-full z-10 mt-1 rounded-md border border-slate-200 bg-white py-1 shadow-lg"
       >
         <ul id={listboxId} role="listbox" aria-label={t('create.customer.label')} className="max-h-60 overflow-y-auto">
-          {selectable.map((option, index) => {
+          {rendered.map((option, index) => {
             const secondary = option.phone !== '' ? option.phone : option.email;
             return (
               <li
@@ -752,6 +850,11 @@ export function LaundryCustomerPicker({
         {status === 'ready' && options.length === 0 ? (
           <p role="status" className="px-3 py-2 text-sm text-slate-500">
             {t('create.customer.empty')}
+          </p>
+        ) : null}
+        {status === 'ready' && truncated ? (
+          <p role="status" className="px-3 py-2 text-sm text-slate-500">
+            {t('create.customer.more')}
           </p>
         ) : null}
         {status === 'error' ? (
@@ -786,9 +889,9 @@ export type {
 - [ ] **Step 5: Run the static test**
 
 Run: `pnpm --filter @clensy/web exec vitest run src/laundry/laundry-customer-picker.test.tsx`
-Expected: PASS, 4 tests.
+Expected: PASS, 5 tests.
 
-- [ ] **Step 6: Write the failing keyboard test**
+- [ ] **Step 6: Write the keyboard test**
 
 `apps/web/lib/laundry-customer-picker.interaction.test.tsx`:
 
@@ -803,15 +906,18 @@ import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Drives the real @clensy/web picker in jsdom: keyboard, mouse, blur, and
-// Escape against a `document` listener standing in for Modal's.
+// Drives the real @clensy/web picker in jsdom: keyboard, mouse, blur,
+// result changes, and Escape against a `document` listener standing in for
+// Modal's (the real Modal is covered by the page test). The harness keeps a
+// selected id the way the intake dialog does: set on select, cleared on
+// every `onQueryChange`. Typing uses the native value setter plus an
+// `input` event, the helper the merged list interaction test uses.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const OPTIONS: LaundryCustomerOption[] = [
-  { id: 'c1', email: 'ana@example.com', fullName: 'Ana Reyes', phone: '555-0101' },
-  { id: 'c2', email: 'ana.r@example.com', fullName: 'Ana Reyes', phone: '' },
-  { id: 'c3', email: 'ben@example.com', fullName: 'Ben Cruz', phone: '555-0103' },
-];
+const C1 = { id: 'c1', email: 'ana@example.com', fullName: 'Ana Reyes', phone: '555-0101' };
+const C2 = { id: 'c2', email: 'ana.r@example.com', fullName: 'Ana Reyes', phone: '' };
+const C3 = { id: 'c3', email: 'ben@example.com', fullName: 'Ben Cruz', phone: '555-0103' };
+const OPTIONS: LaundryCustomerOption[] = [C1, C2, C3];
 
 let container: HTMLDivElement;
 let root: Root;
@@ -819,8 +925,9 @@ let selected: string[];
 const submits = vi.fn();
 const documentEscapes = vi.fn();
 
-function Harness({ status }: { status: LaundryCustomerSearchStatus }) {
+function Harness({ options, status }: { options: LaundryCustomerOption[]; status: LaundryCustomerSearchStatus }) {
   const [query, setQuery] = useState('');
+  const [selectedId, setSelectedId] = useState('');
   return (
     <form
       onSubmit={(event) => {
@@ -831,20 +938,38 @@ function Harness({ status }: { status: LaundryCustomerSearchStatus }) {
       <LaundryCustomerPicker
         id="customer"
         query={query}
-        options={OPTIONS}
+        options={options}
         status={query.trim() === '' ? 'idle' : status}
-        onQueryChange={setQuery}
+        onQueryChange={(text) => {
+          setQuery(text);
+          setSelectedId('');
+        }}
         onSelect={(option) => {
           selected.push(option.id);
+          setSelectedId(option.id);
           setQuery(option.fullName);
         }}
       />
+      <output id="selected-id">{selectedId}</output>
     </form>
   );
 }
 
+// Stands in for Modal's `document`-level Escape listener.
+function onDocumentKeyDown(event: KeyboardEvent) {
+  if (event.key === 'Escape') documentEscapes();
+}
+
 function field(): HTMLInputElement {
   return container.querySelector<HTMLInputElement>('#customer')!;
+}
+
+function activeDescendant(): string | null {
+  return field().getAttribute('aria-activedescendant');
+}
+
+function selectedId(): string {
+  return container.querySelector('#selected-id')!.textContent ?? '';
 }
 
 function type(text: string) {
@@ -863,13 +988,9 @@ function press(key: string): boolean {
   return notCancelled;
 }
 
-function render(status: LaundryCustomerSearchStatus = 'ready') {
-  act(() => root.render(<Harness status={status} />));
-}
-
-// Stands in for Modal's `document`-level Escape listener.
-function onDocumentKeyDown(event: KeyboardEvent) {
-  if (event.key === 'Escape') documentEscapes();
+// Renders, or re-renders with new props (state is kept: same component).
+function render(status: LaundryCustomerSearchStatus = 'ready', options: LaundryCustomerOption[] = OPTIONS) {
+  act(() => root.render(<Harness options={options} status={status} />));
 }
 
 beforeAll(() => document.addEventListener('keydown', onDocumentKeyDown));
@@ -903,19 +1024,18 @@ describe('LaundryCustomerPicker interactions', () => {
   it('moves the active option with ArrowDown and ArrowUp, wrapping at both ends', () => {
     render();
     type('a');
-    const active = () => field().getAttribute('aria-activedescendant');
-    expect(active()).toBeNull();
+    expect(activeDescendant()).toBeNull();
     press('ArrowDown');
-    expect(active()).toBe('customer-option-c1');
+    expect(activeDescendant()).toBe('customer-option-c1');
     expect(container.querySelector('#customer-option-c1')!.getAttribute('aria-selected')).toBe('true');
     press('ArrowDown');
-    expect(active()).toBe('customer-option-c2');
+    expect(activeDescendant()).toBe('customer-option-c2');
     press('ArrowDown');
-    expect(active()).toBe('customer-option-c3');
+    expect(activeDescendant()).toBe('customer-option-c3');
     press('ArrowDown');
-    expect(active()).toBe('customer-option-c1');
+    expect(activeDescendant()).toBe('customer-option-c1');
     press('ArrowUp');
-    expect(active()).toBe('customer-option-c3');
+    expect(activeDescendant()).toBe('customer-option-c3');
   });
 
   it('selects the active option with Enter, and Enter does not reach the form', () => {
@@ -925,9 +1045,25 @@ describe('LaundryCustomerPicker interactions', () => {
     press('ArrowDown');
     expect(press('Enter')).toBe(false); // cancelled
     expect(selected).toEqual(['c2']);
+    expect(selectedId()).toBe('c2');
     expect(field().value).toBe('Ana Reyes');
     expect(field().getAttribute('aria-expanded')).toBe('false');
     expect(submits).not.toHaveBeenCalled();
+  });
+
+  it('clears the selected id when the text is edited after choosing', () => {
+    render();
+    type('a');
+    press('ArrowDown');
+    press('Enter');
+    expect(selectedId()).toBe('c1');
+    type('Ana Reyesx');
+    expect(selectedId()).toBe('');
+    press('ArrowDown');
+    press('Enter');
+    expect(selectedId()).toBe('c1');
+    type('');
+    expect(selectedId()).toBe('');
   });
 
   it('closes the list with Escape without letting the dialog see it, then lets the next Escape through', () => {
@@ -955,24 +1091,56 @@ describe('LaundryCustomerPicker interactions', () => {
     expect(field().value).toBe('Ben Cruz');
   });
 
-  it('offers no option while a search is still running', () => {
-    render('loading');
+  it('keeps the active option on the same customer when results change, and drops it when that customer leaves', () => {
+    render();
     type('a');
-    expect(field().getAttribute('aria-expanded')).toBe('true');
-    expect(container.querySelectorAll('[role="option"]')).toHaveLength(0);
-    expect(container.textContent).toContain('Searching…');
     press('ArrowDown');
-    expect(field().getAttribute('aria-activedescendant')).toBeNull();
+    press('ArrowDown');
+    expect(activeDescendant()).toBe('customer-option-c2');
+    render('ready', [C3, C2]); // reordered: c2 is now second, still the same customer
+    expect(activeDescendant()).toBe('customer-option-c2');
+    expect(container.querySelector('#customer-option-c2')!.getAttribute('aria-selected')).toBe('true');
+    render('ready', [C1, C3]); // c2 left the results
+    expect(activeDescendant()).toBeNull();
+    expect(container.querySelector('[aria-selected="true"]')).toBeNull();
     press('Enter');
     expect(selected).toEqual([]);
+  });
+
+  it('offers nothing while a newer search loads, even after an option was active', () => {
+    render();
+    type('a');
+    press('ArrowDown');
+    expect(activeDescendant()).toBe('customer-option-c1');
+    render('loading');
+    expect(field().getAttribute('aria-expanded')).toBe('true');
+    expect(container.querySelectorAll('[role="option"]')).toHaveLength(0);
+    expect(activeDescendant()).toBeNull();
+    expect(container.textContent).toContain('Searching…');
+    press('ArrowDown');
+    expect(activeDescendant()).toBeNull();
+    press('Enter');
+    expect(selected).toEqual([]);
+  });
+
+  it('collapses with nothing active when the text is cleared', () => {
+    render();
+    type('a');
+    press('ArrowDown');
+    type('');
+    expect(field().getAttribute('aria-expanded')).toBe('false');
+    expect(activeDescendant()).toBeNull();
+    expect(container.querySelectorAll('[role="option"]')).toHaveLength(0);
   });
 });
 ```
 
+Every `aria-activedescendant` assertion above also checks, by construction, that the named element exists: `active` is an index into the rendered options, so the id is only ever built from a rendered option.
+
 - [ ] **Step 7: Run it**
 
 Run: `pnpm --filter web exec vitest run lib/laundry-customer-picker.interaction.test.tsx`
-Expected: PASS, 6 tests. (It was red until Steps 3–4 existed: `LaundryCustomerPicker` is not exported from `@clensy/web` on `main`. M6 MUST confirm red by running this step once with the Step 4 export temporarily reverted, and record it.)
+Expected: PASS, 9 tests. (It is red without Steps 3–4: `LaundryCustomerPicker` is not exported from `@clensy/web` on `main`. M6 MUST confirm red by running this step once with the Step 4 export temporarily reverted, and record it.)
 
 - [ ] **Step 8: Lint, typecheck, full package tests**
 
@@ -982,6 +1150,7 @@ Expected: all pass.
 - [ ] **Step 9: Commit**
 
 ```bash
+git status --short   # expect only the four files below
 git add packages/web/src/laundry/laundry-customer-picker.tsx packages/web/src/laundry/laundry-customer-picker.test.tsx packages/web/src/index.ts apps/web/lib/laundry-customer-picker.interaction.test.tsx
 git commit -m "feat(web): searchable laundry customer picker (#160)"
 ```
@@ -993,15 +1162,17 @@ git commit -m "feat(web): searchable laundry customer picker (#160)"
 **Files:**
 - Create: `apps/web/lib/use-laundry-customer-search.ts`
 - Create: `apps/web/lib/use-laundry-customer-search.test.ts`
+- Create: `apps/web/lib/use-laundry-customer-search.hook.test.tsx`
 
 **Interfaces:**
 - Consumes: `escapeLikePattern` (`./laundry-order-list-query`), `useCustomersQuery`, `CustomersQueryVariables` (`@clensy/client`), `LaundryCustomerOption`, `LaundryCustomerSearchStatus` (`@clensy/web`, Task 3).
 - Produces (Task 5):
   - `LAUNDRY_CUSTOMER_SEARCH_LIMIT = 20`, `LAUNDRY_CUSTOMER_SEARCH_DEBOUNCE_MS = 300`
   - `laundryCustomerSearchVariables(text: string): CustomersQueryVariables`
-  - `useLaundryCustomerSearch(query: string): { options: readonly LaundryCustomerOption[]; status: LaundryCustomerSearchStatus }`
+  - `interface LaundryCustomerSearch { options: readonly LaundryCustomerOption[]; status: LaundryCustomerSearchStatus; truncated: boolean }`
+  - `useLaundryCustomerSearch(query: string): LaundryCustomerSearch`
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing variables test**
 
 `apps/web/lib/use-laundry-customer-search.test.ts`:
 
@@ -1035,14 +1206,180 @@ describe('laundryCustomerSearchVariables', () => {
 });
 ```
 
-The hook's statuses are exercised through the page in Task 5 (debounce, Searching…, results, empty, error).
+- [ ] **Step 2: Write the failing hook test**
 
-- [ ] **Step 2: Run it to verify it fails**
+`apps/web/lib/use-laundry-customer-search.hook.test.tsx`:
 
-Run: `pnpm --filter web exec vitest run lib/use-laundry-customer-search.test.ts`
+```tsx
+// @vitest-environment jsdom
+import type { LaundryCustomerOption } from '@clensy/web';
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Drives the real hook with a mocked `useCustomersQuery` that answers per
+// variables, as Apollo's cache does: a pattern with a stored response
+// returns it; any other pattern is still in flight (`loading: true`, no
+// data). So a response for one text can never come back for another.
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+type Response = { error?: Error; nodes?: LaundryCustomerOption[]; totalCount?: number };
+
+const search = vi.hoisted(() => ({
+  calls: [] as { skip?: boolean; variables: { filter?: { fullName?: { iLike?: string } } } }[],
+  responses: new Map<string, Response>(),
+}));
+
+vi.mock('@clensy/client', () => ({
+  useCustomersQuery: (options: (typeof search.calls)[number]) => {
+    search.calls.push(options);
+    if (options.skip) return { data: undefined, error: undefined, loading: false };
+    const response = search.responses.get(options.variables.filter!.fullName!.iLike!);
+    if (!response) return { data: undefined, error: undefined, loading: true };
+    if (response.error) return { data: undefined, error: response.error, loading: false };
+    const nodes = response.nodes ?? [];
+    return {
+      data: { customers: { nodes, totalCount: response.totalCount ?? nodes.length } },
+      error: undefined,
+      loading: false,
+    };
+  },
+}));
+
+const { useLaundryCustomerSearch } = await import('./use-laundry-customer-search');
+type Search = ReturnType<typeof useLaundryCustomerSearch>;
+
+const AN = { id: 'c1', email: 'an@example.com', fullName: 'An Li', phone: '555-0101' };
+const ANA = { id: 'c2', email: 'ana@example.com', fullName: 'Ana Reyes', phone: '555-0102' };
+
+let container: HTMLDivElement;
+let root: Root;
+let latest: Search;
+
+function Probe({ query }: { query: string }) {
+  latest = useLaundryCustomerSearch(query);
+  return null;
+}
+
+function render(query: string) {
+  act(() => root.render(<Probe query={query} />));
+}
+
+function wait(ms: number) {
+  act(() => vi.advanceTimersByTime(ms));
+}
+
+function searchedPatterns(): string[] {
+  return search.calls.filter((call) => !call.skip).map((call) => call.variables.filter!.fullName!.iLike!);
+}
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  search.calls = [];
+  search.responses = new Map([
+    ['%an%', { nodes: [AN, ANA] }],
+    ['%ana%', { nodes: [ANA] }],
+  ]);
+  container = document.createElement('div');
+  root = createRoot(container);
+});
+
+afterEach(() => {
+  act(() => root.unmount());
+  vi.useRealTimers();
+});
+
+describe('useLaundryCustomerSearch', () => {
+  it('is idle and sends no query for an empty or blank text', () => {
+    render('');
+    expect(latest).toEqual({ options: [], status: 'idle', truncated: false });
+    render('   ');
+    wait(300);
+    expect(latest.status).toBe('idle');
+    expect(searchedPatterns()).toEqual([]);
+  });
+
+  it('waits out the debounce even for the first non-empty text', () => {
+    render('an');
+    expect(latest).toEqual({ options: [], status: 'loading', truncated: false });
+    wait(299);
+    expect(searchedPatterns()).toEqual([]);
+    wait(1);
+    expect(searchedPatterns().at(-1)).toBe('%an%');
+    expect(latest).toEqual({ options: [AN, ANA], status: 'ready', truncated: false });
+  });
+
+  it('never offers an older text’s results for a newer text', () => {
+    render('an');
+    wait(300);
+    expect(latest.options).toEqual([AN, ANA]);
+    search.responses.delete('%ana%'); // the "ana" request will be in flight
+    render('ana');
+    expect(latest).toEqual({ options: [], status: 'loading', truncated: false });
+    wait(300);
+    expect(searchedPatterns().at(-1)).toBe('%ana%');
+    expect(latest).toEqual({ options: [], status: 'loading', truncated: false });
+    search.responses.set('%ana%', { nodes: [ANA] });
+    render('ana'); // the response arrives
+    expect(latest).toEqual({ options: [ANA], status: 'ready', truncated: false });
+  });
+
+  it('returns to the searched text’s results at once when the text goes back to it', () => {
+    render('an');
+    wait(300);
+    render('ana');
+    expect(latest.status).toBe('loading');
+    render('an'); // before the "ana" debounce elapses
+    expect(latest).toEqual({ options: [AN, ANA], status: 'ready', truncated: false });
+    wait(300);
+    expect(searchedPatterns()).not.toContain('%ana%');
+  });
+
+  it('goes idle when cleared during a search, and stays idle when the response arrives', () => {
+    search.responses.delete('%ana%');
+    render('ana');
+    wait(300);
+    expect(latest.status).toBe('loading');
+    render('');
+    expect(latest).toEqual({ options: [], status: 'idle', truncated: false });
+    search.responses.set('%ana%', { nodes: [ANA] });
+    render('');
+    expect(latest).toEqual({ options: [], status: 'idle', truncated: false });
+  });
+
+  it('maps a failed search and an empty result', () => {
+    search.responses.set('%zz%', { error: new Error('down') });
+    search.responses.set('%no%', { nodes: [] });
+    render('zz');
+    wait(300);
+    expect(latest).toEqual({ options: [], status: 'error', truncated: false });
+    render('no');
+    wait(300);
+    expect(latest).toEqual({ options: [], status: 'ready', truncated: false });
+  });
+
+  it('flags more matches than the page holds', () => {
+    search.responses.set('%ana%', { nodes: [ANA], totalCount: 21 });
+    render('ana');
+    wait(300);
+    expect(latest).toEqual({ options: [ANA], status: 'ready', truncated: true });
+  });
+
+  it('searches the trimmed text', () => {
+    render('  an ');
+    wait(300);
+    expect(searchedPatterns().at(-1)).toBe('%an%');
+    expect(latest.status).toBe('ready');
+  });
+});
+```
+
+- [ ] **Step 3: Run both to verify they fail**
+
+Run: `pnpm --filter web exec vitest run lib/use-laundry-customer-search.test.ts lib/use-laundry-customer-search.hook.test.tsx`
 Expected: FAIL — cannot resolve `./use-laundry-customer-search`.
 
-- [ ] **Step 3: Implement**
+- [ ] **Step 4: Implement**
 
 `apps/web/lib/use-laundry-customer-search.ts`:
 
@@ -1055,6 +1392,16 @@ import { escapeLikePattern } from './laundry-order-list-query';
 
 export const LAUNDRY_CUSTOMER_SEARCH_LIMIT = 20;
 export const LAUNDRY_CUSTOMER_SEARCH_DEBOUNCE_MS = 300;
+
+export interface LaundryCustomerSearch {
+  options: readonly LaundryCustomerOption[];
+  status: LaundryCustomerSearchStatus;
+  truncated: boolean;
+}
+
+const IDLE: LaundryCustomerSearch = { options: [], status: 'idle', truncated: false };
+const LOADING: LaundryCustomerSearch = { options: [], status: 'loading', truncated: false };
+const FAILED: LaundryCustomerSearch = { options: [], status: 'error', truncated: false };
 
 // The intake modal's customer search (lifecycle spec §8.4.4: any customer
 // the customers query returns, not only the first 100). A contains match on
@@ -1070,16 +1417,16 @@ export function laundryCustomerSearchVariables(text: string): CustomersQueryVari
   };
 }
 
-// The trimmed text is searched once typing pauses. An empty text sends no
-// query. While the searched text lags the input, the status is `loading`
-// and no option is offered, so a result for an older text is never chosen
-// for the newer one.
-export function useLaundryCustomerSearch(query: string): {
-  options: readonly LaundryCustomerOption[];
-  status: LaundryCustomerSearchStatus;
-} {
+// The trimmed text is searched once typing pauses. The searched text starts
+// empty, so even a first non-empty text waits out the debounce, and an
+// empty text sends no query. Options are returned only when the searched
+// text is the input's text and its query has settled: while they differ,
+// or the query is loading, the result is `loading` with no options, so a
+// result for an older text is never offered for a newer one. `truncated`
+// says the server counted more matches than the page holds.
+export function useLaundryCustomerSearch(query: string): LaundryCustomerSearch {
   const text = query.trim();
-  const [searched, setSearched] = useState(text);
+  const [searched, setSearched] = useState('');
 
   useEffect(() => {
     const timer = setTimeout(() => setSearched(text), LAUNDRY_CUSTOMER_SEARCH_DEBOUNCE_MS);
@@ -1092,22 +1439,28 @@ export function useLaundryCustomerSearch(query: string): {
     variables: laundryCustomerSearchVariables(searched),
   });
 
-  if (text === '') return { options: [], status: 'idle' };
-  if (searched !== text || result.loading) return { options: [], status: 'loading' };
-  if (result.error) return { options: [], status: 'error' };
-  return { options: result.data?.customers.nodes ?? [], status: 'ready' };
+  if (text === '') return IDLE;
+  if (searched !== text || result.loading) return LOADING;
+  if (result.error) return FAILED;
+  const nodes = result.data?.customers.nodes ?? [];
+  return {
+    options: nodes,
+    status: 'ready',
+    truncated: (result.data?.customers.totalCount ?? nodes.length) > nodes.length,
+  };
 }
 ```
 
-- [ ] **Step 4: Run the tests**
+- [ ] **Step 5: Run the tests**
 
-Run: `pnpm --filter web exec vitest run lib/use-laundry-customer-search.test.ts && pnpm --filter web lint`
-Expected: PASS, 2 tests; lint clean.
+Run: `pnpm --filter web exec vitest run lib/use-laundry-customer-search.test.ts lib/use-laundry-customer-search.hook.test.tsx && pnpm --filter web lint`
+Expected: PASS, 2 + 8 tests; lint clean.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add apps/web/lib/use-laundry-customer-search.ts apps/web/lib/use-laundry-customer-search.test.ts
+git status --short   # expect only the three files below
+git add apps/web/lib/use-laundry-customer-search.ts apps/web/lib/use-laundry-customer-search.test.ts apps/web/lib/use-laundry-customer-search.hook.test.tsx
 git commit -m "feat(web): server-side customer search for laundry intake (#160)"
 ```
 
@@ -1122,12 +1475,12 @@ git commit -m "feat(web): server-side customer search for laundry intake (#160)"
 - Modify: `apps/web/lib/laundry-list-page.interaction.test.tsx`
 
 **Interfaces:**
-- Consumes: Task 2 `LaundryFulfillmentFieldset` and copy; Task 3 `LaundryCustomerPicker`; Task 4 `useLaundryCustomerSearch`; `useReceiveLaundryOrderMutation`; `FormDialog`, `useToast`, `ToastProvider` (`@clensy/ui`); `clensyResolver`, `normalizeApiValidationErrors`, `Rules` (`@clensy/validation`); `canViewPath` (`apps/web/lib/nav-groups.ts`); the page's existing `hrefFor`, `openWithHref`, `ordersQuery`.
-- Produces: `CreateLaundryOrderDialog({ onClose, onCreated, open, showAddCustomerLink })`. #161 changes only the page's `handleCreated`.
+- Consumes: Task 2 `LaundryFulfillmentFieldset` and copy; Task 3 `LaundryCustomerPicker` and its selection contract; Task 4 `useLaundryCustomerSearch`; `useReceiveLaundryOrderMutation`; `FormDialog`, `useToast`, `ToastProvider` (`@clensy/ui`); `clensyResolver`, `normalizeApiValidationErrors`, `Rules` (`@clensy/validation`); `canViewPath` (`apps/web/lib/nav-groups.ts`); the page's existing `hrefFor`, `openWithHref`, `ordersQuery`.
+- Produces: `CreateLaundryOrderDialog({ onClose, onCreated, open, showAddCustomerLink })`, where `onCreated(orderId)` receives the id the mutation returned. #161 changes only the page's `handleCreated`.
 
 Element ids used by the tests: customer input `#laundry-customer`, error `#laundry-customer-error`, radios `#laundry-fulfillment-PICKUP` / `#laundry-fulfillment-DELIVERY`.
 
-- [ ] **Step 1: Update the page tests' mocks and harness (no behavior asserted yet)**
+- [ ] **Step 1: Update the page tests' mocks and harness (no new behavior asserted yet)**
 
 `apps/web/lib/laundry-list-page.test.tsx`, wrap the render in `ToastProvider` (the page now calls `useToast`, which throws outside a provider; the app provides it in `dashboard-layout.tsx`):
 
@@ -1148,33 +1501,69 @@ Element ids used by the tests: customer input `#laundry-customer`, error `#laund
 
 `apps/web/lib/laundry-list-page.interaction.test.tsx`:
 
-1. Add to the `nav` hoisted object (keep its keys sorted):
+1. Above the `vi.hoisted` block, add the types and fixtures:
+
+```ts
+type Customer = { id: string; email: string; fullName: string; phone: string };
+type CustomerQueryOptions = {
+  skip?: boolean;
+  variables?: { filter?: { fullName?: { iLike?: string } }; paging?: { limit?: number } };
+};
+type CustomerResult = { error?: Error; nodes: Customer[]; totalCount?: number };
+
+const ANA: Customer = { id: 'c1', email: 'ana@example.com', fullName: 'Ana Reyes', phone: '555-0101' };
+const ANA_NO_PHONE: Customer = { id: 'c2', email: 'ana.r@example.com', fullName: 'Ana Reyes', phone: '' };
+```
+
+2. Add to the `nav` hoisted object (keep its keys sorted):
 
 ```ts
   // Every `useCustomersQuery` options object, in render order.
-  customerQueries: [] as { skip?: boolean; variables?: { filter?: unknown; paging?: { limit?: number } } }[],
-  customerSearchError: undefined as Error | undefined,
-  customers: [] as { id: string; email: string; fullName: string; phone: string }[],
+  customerQueries: [] as CustomerQueryOptions[],
+  // Responses by lower-cased `iLike` pattern (the search is case-insensitive).
+  // A pattern with no entry is still in flight, as in Apollo.
+  customerResults: {} as Record<string, CustomerResult>,
   // Every `receiveLaundryOrder` input, in call order.
   receiveCalls: [] as unknown[],
+  // The list's `refetch`; a test may make it hang.
+  refetch: (() => Promise.resolve()) as () => Promise<unknown>,
+  refetchCalls: 0,
   // Settles the pending `receiveLaundryOrder` call with an error.
   rejectReceive: (() => {}) as (error: unknown) => void,
+  // Settles the pending `receiveLaundryOrder` call with no order in the response.
+  resolveReceiveWithoutId: (() => {}) as () => void,
   role: 'TENANT_OWNER',
 ```
 
-2. Replace these three entries of the `@clensy/client` mock:
+3. Replace these entries of the `@clensy/client` mock:
 
 ```diff
 -    useCurrentAdminQuery: () => ({ data: { currentAdmin: { role: 'TENANT_OWNER' } } }),
 -    useCustomersQuery: () => ({ data: { customers: { nodes: [{ id: 'c1', fullName: 'Ana Reyes' }] } } }),
 +    useCurrentAdminQuery: () => ({ data: { currentAdmin: { role: nav.role, scope: 'TENANT' } } }),
-+    useCustomersQuery: (options: (typeof nav.customerQueries)[number]) => {
++    useCustomersQuery: (options: CustomerQueryOptions) => {
 +      nav.customerQueries.push(options);
 +      if (options.skip) return { data: undefined, error: undefined, loading: false };
-+      return nav.customerSearchError
-+        ? { data: undefined, error: nav.customerSearchError, loading: false }
-+        : { data: { customers: { nodes: nav.customers } }, error: undefined, loading: false };
++      const response = nav.customerResults[options.variables!.filter!.fullName!.iLike!.toLowerCase()];
++      if (!response) return { data: undefined, error: undefined, loading: true };
++      if (response.error) return { data: undefined, error: response.error, loading: false };
++      return {
++        data: { customers: { nodes: response.nodes, totalCount: response.totalCount ?? response.nodes.length } },
++        error: undefined,
++        loading: false,
++      };
 +    },
+@@
+       return {
+         data: { laundryOrders: { nodes: [row], totalCount: 1 } },
+         error: undefined,
+         loading: false,
+-        refetch: () => Promise.resolve(),
++        refetch: () => {
++          nav.refetchCalls += 1;
++          return nav.refetch();
++        },
+       };
 @@
 -    useReceiveLaundryOrderMutation: () => [
 -      () =>
@@ -1188,6 +1577,7 @@ Element ids used by the tests: customer input `#laundry-customer`, error `#laund
 +        nav.receiveCalls.push(options.variables.input);
 +        return new Promise((resolve, reject) => {
 +          nav.resolveReceive = (id: string) => resolve({ data: { receiveLaundryOrder: { id } } });
++          nav.resolveReceiveWithoutId = () => resolve({ data: null });
 +          nav.rejectReceive = reject;
 +        });
 +      },
@@ -1195,7 +1585,7 @@ Element ids used by the tests: customer input `#laundry-customer`, error `#laund
 +    ],
 ```
 
-3. Import `ToastProvider` and render inside it in `start`:
+4. Import `ToastProvider` and render inside it in `start`:
 
 ```diff
 +import { ToastProvider } from '@clensy/ui';
@@ -1210,22 +1600,24 @@ Element ids used by the tests: customer input `#laundry-customer`, error `#laund
 +  );
 ```
 
-4. Reset in `beforeEach`:
+5. Reset every added field in `beforeEach`:
 
 ```ts
   nav.customerQueries = [];
-  nav.customerSearchError = undefined;
-  nav.customers = [
-    { id: 'c1', email: 'ana@example.com', fullName: 'Ana Reyes', phone: '555-0101' },
-    { id: 'c2', email: 'ana.r@example.com', fullName: 'Ana Reyes', phone: '' },
-  ];
+  nav.customerResults = {
+    '%ana%': { nodes: [ANA, ANA_NO_PHONE] },
+    '%zz%': { nodes: [] },
+  };
   nav.receiveCalls = [];
+  nav.refetch = () => Promise.resolve();
+  nav.refetchCalls = 0;
   nav.rejectReceive = () => {};
   nav.resolveReceive = () => {};
+  nav.resolveReceiveWithoutId = () => {};
   nav.role = 'TENANT_OWNER';
 ```
 
-5. Add helpers after `statusSelect`:
+6. Add helpers after `statusSelect`:
 
 ```ts
 function dialog(): HTMLElement | null {
@@ -1236,6 +1628,11 @@ function customerField(): HTMLInputElement {
   return document.querySelector<HTMLInputElement>('#laundry-customer')!;
 }
 
+function customerOptions(): HTMLElement[] {
+  return [...document.querySelectorAll<HTMLElement>('#laundry-customer-listbox [role="option"]')];
+}
+
+// The same native-setter helper as `typeSearch`, on the customer field.
 function typeCustomer(text: string) {
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(customerField(), text);
@@ -1257,10 +1654,11 @@ function openCreate() {
 function chooseCustomer(text = 'Ana') {
   typeCustomer(text);
   act(() => vi.advanceTimersByTime(300));
-  act(() => document.querySelector<HTMLElement>('#laundry-customer-listbox [role="option"]')!.click());
+  act(() => customerOptions()[0].click());
 }
 
-// react-hook-form validates asynchronously, so a submit settles in an async act.
+// Dispatches `times` submit events synchronously, in one turn, then lets
+// react-hook-form's asynchronous validation and the handlers settle.
 async function submitCreate(times = 1) {
   await act(async () => {
     for (let index = 0; index < times; index += 1) {
@@ -1270,7 +1668,7 @@ async function submitCreate(times = 1) {
 }
 ```
 
-6. Update the existing create-race test. A customer must now be chosen, and the submit must settle (the mutation is called after async validation) before the URL race is staged:
+7. Update the existing create-race test. A customer must now be chosen, and the submit must settle (the mutation is called after async validation) before the URL race is staged:
 
 ```diff
    it('opens the new order after create with the live list URL, natively, before React re-renders', async () => {
@@ -1287,10 +1685,10 @@ async function submitCreate(times = 1) {
 
 The rest of that test is unchanged.
 
-- [ ] **Step 2: Run the page tests to see the current state**
+- [ ] **Step 2: Run the existing page tests alone**
 
 Run: `pnpm --filter web exec vitest run lib/laundry-list-page.test.tsx lib/laundry-list-page.interaction.test.tsx`
-Expected: FAIL — the create-race test cannot find `#laundry-customer` (the old dialog has a `<select>`). All other existing tests pass.
+Expected: FAIL only in the create-race test, which cannot find `#laundry-customer` (the old dialog has a `<select>`). Every other existing test passes with the new harness. Any other failure means the harness change broke an unrelated assumption; fix the harness before going on.
 
 - [ ] **Step 3: Write the failing intake tests**
 
@@ -1315,28 +1713,54 @@ describe('/app/laundry intake modal', () => {
     }
   });
 
-  it('shows Searching…, then results with phone or email, then No customers match.', () => {
+  it('shows Searching…, then results with phone or email', () => {
     start();
     openCreate();
     typeCustomer('ana');
     expect(dialog()!.textContent).toContain('Searching…');
-    expect(document.querySelectorAll('[role="option"]')).toHaveLength(0);
+    expect(customerOptions()).toHaveLength(0);
     act(() => vi.advanceTimersByTime(300));
-    const options = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
-    expect(options.map((option) => option.textContent)).toEqual(['Ana Reyes555-0101', 'Ana Reyesana.r@example.com']);
-    nav.customers = [];
-    typeCustomer('zz');
+    expect(customerOptions().map((option) => option.textContent)).toEqual([
+      'Ana Reyes555-0101',
+      'Ana Reyesana.r@example.com',
+    ]);
+  });
+
+  it('says No customers match. for a search with no result', () => {
+    start();
+    openCreate();
+    typeCustomer('zz'); // preset empty response
     act(() => vi.advanceTimersByTime(300));
+    expect(customerOptions()).toHaveLength(0);
     expect(dialog()!.textContent).toContain('No customers match.');
   });
 
   it('shows a failed search inline', () => {
-    nav.customerSearchError = new Error('down');
+    nav.customerResults['%ana%'] = { error: new Error('down'), nodes: [] };
     start();
     openCreate();
     typeCustomer('ana');
     act(() => vi.advanceTimersByTime(300));
     expect(dialog()!.querySelector('[role="alert"]')!.textContent).toBe('Unable to search customers.');
+  });
+
+  it('never lets a result for an earlier text be chosen while the next search runs', async () => {
+    start();
+    openCreate();
+    typeCustomer('ana');
+    act(() => vi.advanceTimersByTime(300));
+    expect(customerOptions()).toHaveLength(2);
+    pressInCustomer('ArrowDown');
+    typeCustomer('anaz'); // no response: stays in flight
+    expect(customerOptions()).toHaveLength(0);
+    act(() => vi.advanceTimersByTime(300));
+    expect(customerOptions()).toHaveLength(0);
+    expect(dialog()!.textContent).toContain('Searching…');
+    expect(customerField().getAttribute('aria-activedescendant')).toBeNull();
+    pressInCustomer('Enter');
+    await submitCreate();
+    expect(nav.receiveCalls).toEqual([]);
+    expect(document.querySelector('#laundry-customer-error')!.textContent).toBe('Select a customer.');
   });
 
   it('requires a customer: "Select a customer.", focus on the field, and no mutation', async () => {
@@ -1363,7 +1787,8 @@ describe('/app/laundry intake modal', () => {
     expect(nav.receiveCalls).toEqual([]);
   });
 
-  it('creates with the chosen customer and fulfillment, toasts, and opens the drawer on the new order (pre-cutover)', async () => {
+  it('creates with the chosen customer and fulfillment, toasts, and opens the drawer on the returned id without waiting for the refresh', async () => {
+    nav.refetch = () => new Promise(() => {}); // the list refresh never settles
     start('status=PAID');
     openCreate();
     expect(dialog()!.textContent).toContain('New laundry order');
@@ -1379,10 +1804,12 @@ describe('/app/laundry intake modal', () => {
     expect(url().get('detail')).toBe('new-order');
     expect(url().get('status')).toBe('PAID');
     expect(nav.orderQueryIds.at(-1)).toBe('new-order');
+    expect(nav.refetchCalls).toBe(1);
+    expect(nav.receiveCalls).toHaveLength(1);
     expect(nav.routerCalls).toEqual([]);
   });
 
-  it('sends one mutation for two submits fired before React re-renders', async () => {
+  it('sends one mutation for two submits fired in the same turn', async () => {
     start();
     openCreate();
     chooseCustomer();
@@ -1393,7 +1820,7 @@ describe('/app/laundry intake modal', () => {
     expect(nav.receiveCalls).toHaveLength(1);
   });
 
-  it('stays open on failure with an alert, the fields intact, and submit re-enabled', async () => {
+  it('stays open on failure with an alert, the fields intact, and submit re-enabled for a retry', async () => {
     start();
     openCreate();
     chooseCustomer();
@@ -1407,19 +1834,44 @@ describe('/app/laundry intake modal', () => {
     expect(button('Create order').disabled).toBe(false);
     expect(url().get('detail')).toBeNull();
     await submitCreate();
-    expect(nav.receiveCalls).toHaveLength(2);
+    expect(nav.receiveCalls).toEqual([
+      { customerId: 'c1', fulfillmentType: 'DELIVERY' },
+      { customerId: 'c1', fulfillmentType: 'DELIVERY' },
+    ]);
   });
 
-  it('shows a server field error under the customer field instead of the generic alert', async () => {
+  it('shows a server field error on the customer field, re-enables submit, and clears it when a customer is chosen again', async () => {
     start();
     openCreate();
     chooseCustomer();
     await submitCreate();
+    // The Apollo-shaped error normalize.test.ts pins (captured fixture), with customerId as the field.
     await act(async () =>
-      nav.rejectReceive({ graphQLErrors: [{ extensions: { originalError: { message: ['customerId must be a string'] } } }] }),
+      nav.rejectReceive({
+        graphQLErrors: [{ extensions: { originalError: { message: ['customerId must be a string'] } } }],
+      }),
     );
     expect(document.querySelector('#laundry-customer-error')!.textContent).toBe('customerId must be a string');
     expect(dialog()!.querySelector('[role="alert"]')).toBeNull();
+    expect(button('Create order').disabled).toBe(false);
+    chooseCustomer();
+    expect(document.querySelector('#laundry-customer-error')).toBeNull();
+  });
+
+  it('keeps the dialog open and asks to check the list when the create response names no order', async () => {
+    start();
+    openCreate();
+    chooseCustomer();
+    await submitCreate();
+    await act(async () => nav.resolveReceiveWithoutId());
+    expect(dialog()).not.toBeNull();
+    expect(dialog()!.querySelector('[role="alert"]')!.textContent).toBe(
+      'The order may have been created. Check the laundry list before trying again.',
+    );
+    expect(document.body.textContent).not.toContain('Laundry order created.');
+    expect(url().get('detail')).toBeNull();
+    expect(nav.receiveCalls).toHaveLength(1);
+    expect(button('Create order').disabled).toBe(false);
   });
 
   it('resets customer, fulfillment and errors each time it opens', async () => {
@@ -1467,7 +1919,7 @@ describe('/app/laundry intake modal', () => {
 - [ ] **Step 4: Run them to verify they fail**
 
 Run: `pnpm --filter web exec vitest run lib/laundry-list-page.interaction.test.tsx`
-Expected: FAIL — `#laundry-customer` is not a combobox (the old `<select>`), no toast, no link; the static page test still passes.
+Expected: FAIL. `#laundry-customer` is not a combobox (the old `<select>`), and there is no toast and no link. The static page test still passes.
 
 - [ ] **Step 5: Write the dialog**
 
@@ -1513,9 +1965,9 @@ const API_FIELDS: (keyof CreateLaundryOrderFormValues)[] = ['customerId', 'fulfi
 
 // The laundry intake form (lifecycle spec §8.4.4, #160): a customer found by
 // server-side search and a fulfillment chosen once. The page owns opening,
-// remounting per opening, and what happens after a create. Creating a
-// customer here is out of scope (§8.2, §8.6); the optional link leaves for
-// the customers page instead.
+// remounting per opening (which resets the form, search, alert and guard),
+// and what happens after a create. Creating a customer here is out of
+// scope (§8.2, §8.6); the optional link leaves for the customers page.
 export function CreateLaundryOrderDialog({ onClose, onCreated, open, showAddCustomerLink }: CreateLaundryOrderDialogProps) {
   const t = useClensyTranslations('laundry');
   const [receive, { loading: creating }] = useReceiveLaundryOrderMutation();
@@ -1534,20 +1986,29 @@ export function CreateLaundryOrderDialog({ onClose, onCreated, open, showAddCust
   const [customerQuery, setCustomerQuery] = useState('');
   const [formError, setFormError] = useState<string | undefined>(undefined);
   const search = useLaundryCustomerSearch(customerQuery);
-  // `submitting` disables the buttons only once React re-renders. This guard
-  // also drops a second submit fired before that: one mutation per create.
   const inFlight = useRef(false);
   const submitting = creating || form.formState.isSubmitting;
+  const validateAndCreate = form.handleSubmit(handleValid);
 
-  async function handleValid(values: CreateLaundryOrderFormValues) {
+  // Taken synchronously before validation and released when the attempt
+  // settles. A second submit fired before React re-renders (and disables
+  // the buttons) is dropped, and a failed attempt can be retried.
+  async function handleSubmit() {
     if (inFlight.current) return;
     inFlight.current = true;
+    try {
+      await validateAndCreate();
+    } finally {
+      inFlight.current = false;
+    }
+  }
+
+  async function handleValid(values: CreateLaundryOrderFormValues) {
     setFormError(undefined);
+    let orderId: string | undefined;
     try {
       const result = await receive({ variables: { input: values } });
-      const orderId = result.data?.receiveLaundryOrder.id;
-      if (orderId) onCreated(orderId);
-      else setFormError(t('create.failure'));
+      orderId = result.data?.receiveLaundryOrder.id;
     } catch (error) {
       const fieldErrors = normalizeApiValidationErrors(error, API_FIELDS);
       if (fieldErrors) {
@@ -1557,9 +2018,16 @@ export function CreateLaundryOrderDialog({ onClose, onCreated, open, showAddCust
       } else {
         setFormError(t('create.failure'));
       }
-    } finally {
-      inFlight.current = false;
+      return;
     }
+    if (orderId) {
+      onCreated(orderId);
+      return;
+    }
+    // The request succeeded but did not name the order. It may exist, so
+    // the user is asked to check the list instead of being invited to
+    // create it again.
+    setFormError(t('create.unconfirmed'));
   }
 
   return (
@@ -1567,7 +2035,7 @@ export function CreateLaundryOrderDialog({ onClose, onCreated, open, showAddCust
       open={open}
       onClose={onClose}
       title={t('create.title')}
-      onSubmit={form.handleSubmit(handleValid)}
+      onSubmit={handleSubmit}
       submitLabel={submitting ? t('create.creating') : t('create.submit')}
       submitting={submitting}
     >
@@ -1581,13 +2049,16 @@ export function CreateLaundryOrderDialog({ onClose, onCreated, open, showAddCust
             query={customerQuery}
             options={search.options}
             status={search.status}
+            truncated={search.truncated}
             error={fieldState.error?.message}
-            // Any edit after a selection drops it: the input must name the
-            // customer the order is created for.
+            // A user edit drops any selection: the input must name the
+            // customer the order is created for (picker selection contract).
             onQueryChange={(text) => {
               setCustomerQuery(text);
               if (field.value !== '') field.onChange('');
             }}
+            // The chosen name is shown without going through
+            // `onQueryChange`, so it does not clear the selection.
             onSelect={(option) => {
               setCustomerQuery(option.fullName);
               field.onChange(option.id);
@@ -1620,9 +2091,11 @@ export function CreateLaundryOrderDialog({ onClose, onCreated, open, showAddCust
 }
 ```
 
+A server field error is cleared by `react-hook-form` itself. After a submit, its default `reValidateMode: 'onChange'` re-runs the resolver on every `field.onChange`, and a valid value removes the field's error.
+
 - [ ] **Step 6: Wire the page**
 
-`apps/web/app/app/laundry/page.tsx`:
+`apps/web/app/app/laundry/page.tsx`. `FormDialog` and `LaundryFulfillmentType` are used in this file only by the intake block (checked on `47503f5`), so both imports go.
 
 Imports:
 
@@ -1660,8 +2133,6 @@ Imports:
  import { useDetailDrawer } from '../../../lib/use-detail-drawer';
 ```
 
-(Checked at planning time on `47503f5`: `FormDialog` and `LaundryFulfillmentType` are used in `page.tsx` only by the intake block, so both imports go.)
-
 In `LaundryPageContent`:
 
 ```diff
@@ -1687,7 +2158,7 @@ Replace the form state and `handleCreate`:
 -    useState<LaundryFulfillmentType>('PICKUP');
 -  const [formError, setFormError] = useState<string | undefined>(undefined);
 +  // A new key per opening remounts the dialog, so every opening starts with
-+  // no customer, customer pickup, and no errors (#160).
++  // no customer, customer pickup, no errors and a released submit guard (#160).
 +  const [formKey, setFormKey] = useState(0);
 
    function openCreateForm() {
@@ -1716,16 +2187,17 @@ Replace the form state and `handleCreate`:
 -    }
 -  }
 +  // Until the order page cutover (#161), a new order opens in the drawer,
-+  // so it can still be weighed; #161 sends it to `/app/laundry/[id]`. Only
-+  // the destination URL is built here (live list state, hash, `detail`), so
-+  // this open is a native write like the rest of the list. The order
-+  // exists, so a failed list refresh does not keep it from opening; the
-+  // list shows its own error.
-+  async function handleCreated(orderId: string) {
++  // so it can still be weighed; #161 sends it to `/app/laundry/[id]`. It
++  // opens at once, with the id the mutation returned. The list refresh runs
++  // behind it and is not awaited, so a slow or failed refresh cannot keep
++  // it closed; the list shows its own error. Only the destination URL is
++  // built here (live list state, hash, `detail`), so this open is a native
++  // write like the rest of the list.
++  function handleCreated(orderId: string) {
 +    setFormOpen(false);
 +    toast.success(t('create.success'));
-+    await ordersQuery.refetch().catch(() => undefined);
 +    openWithHref(hrefFor((current) => current, { set: { detail: orderId } }));
++    void ordersQuery.refetch().catch(() => undefined);
 +  }
 ```
 
@@ -1738,15 +2210,21 @@ Replace the whole `<FormDialog …>…</FormDialog>` intake block with:
         key={formKey}
         open={formOpen}
         onClose={() => setFormOpen(false)}
-        onCreated={(orderId) => void handleCreated(orderId)}
+        onCreated={handleCreated}
         showAddCustomerLink={principal ? canViewPath(principal, '/app/customers') : false}
       />
 ```
 
-- [ ] **Step 7: Run the page tests**
+- [ ] **Step 7: Run the focused tests, then the page tests**
 
-Run: `pnpm --filter web exec vitest run lib/laundry-list-page.test.tsx lib/laundry-list-page.interaction.test.tsx`
-Expected: PASS — every existing test (create-race included) and the 12 new intake tests.
+Run, in order:
+
+```bash
+pnpm --filter web exec vitest run lib/laundry-customer-picker.interaction.test.tsx lib/use-laundry-customer-search.test.ts lib/use-laundry-customer-search.hook.test.tsx
+pnpm --filter web exec vitest run lib/laundry-list-page.test.tsx lib/laundry-list-page.interaction.test.tsx
+```
+
+Expected: PASS. Every existing page test (create-race included) and the 15 new intake tests pass.
 
 - [ ] **Step 8: Typecheck, lint, the whole web suite**
 
@@ -1756,7 +2234,9 @@ Expected: all pass. The `use-detail-drawer.guard.test.ts` guard (no `router.refr
 - [ ] **Step 9: Commit**
 
 ```bash
+git status --short   # expect only the four files below; Tasks 1–4 are already committed
 git add apps/web/components/laundry/create-laundry-order-dialog.tsx apps/web/app/app/laundry/page.tsx apps/web/lib/laundry-list-page.test.tsx apps/web/lib/laundry-list-page.interaction.test.tsx
+git diff --cached --stat
 git commit -m "feat(web): redesign the laundry order creation modal (#160)"
 ```
 
@@ -1773,7 +2253,7 @@ Expected: exactly the files in the [File map](#file-map), plus this plan. Nothin
 
 - [ ] **Step 2: Every suite and build**
 
-Run, each to completion:
+Run, each to completion. `web` is `apps/web` and `@clensy/web` is `packages/web` (see the header's "Package names" row).
 
 ```bash
 pnpm --filter @clensy/web test
@@ -1791,12 +2271,12 @@ Expected: all pass. Record each command's result in the M6 Slice Completion Repo
 
 - [ ] **Step 3: Manual browser checks**
 
-Run the app (`pnpm dev`, web on :3001) against the local API and database. Check, and record viewport, role and result in the PR:
+Run the app (`pnpm dev`, web on :3001) against the local API and database. Check each item, and record the viewport, role and result in the PR:
 
-1. Desktop, TENANT_OWNER: open "+ New Laundry Order". Focus is in the Customer field. Type part of a name: "Searching…", then matches with phone or email. ArrowDown/ArrowUp/Enter choose one; Escape closes the list and a second Escape closes the dialog. Fulfillment rows show both descriptions and "This choice is fixed at intake."; the selected row has the dark border; the two rows sit side by side.
-2. Submit with no customer: "Select a customer." under the field, field focused, no request in the network panel.
-3. Create: dialog closes, "Laundry order created." toast, drawer opens on the new order, which can be weighed.
-4. A customer created after the first 100 (by name order) is found by name.
+1. Desktop, TENANT_OWNER: open "+ New Laundry Order". Focus is in the Customer field. Type part of a name: "Searching…", then matches with phone or email. ArrowDown/ArrowUp/Enter choose one; Escape closes the list and a second Escape closes the dialog. Click an option with the mouse: it is chosen. Fulfillment rows show both descriptions and "This choice is fixed at intake."; the selected row has the dark border; the two rows sit side by side.
+2. Submit with no customer: "Select a customer." under the field, field focused, no request in the network panel. Choose, then edit the name: submit is refused again.
+3. Create: dialog closes, "Laundry order created." toast, the drawer opens on the new order, which can be weighed.
+4. A customer created after the first 100 (by name order) is found by name. A common fragment matching more than 20 customers shows "More customers match…".
 5. Below 640 px: the dialog fits without horizontal scroll; the fulfillment rows stack; the result list is usable with the soft keyboard.
 6. SCHEDULER: can create; the dialog has the "Add a customer" link and no customer form.
 7. FINANCE and ANALYST: no "+ New Laundry Order" button.
@@ -1807,6 +2287,7 @@ Push `feat/160-laundry-intake-modal` and open the PR against `main` with `gh pr 
 - "Closes #160."
 - **Cutover:** "Until the end-to-end issue (#161) switches it to `/app/laundry/[id]`, a successful create still opens the existing drawer on the new order, so it can be weighed."
 - No new GraphQL mutation, no API, schema or `@clensy/ui` change, no new dependency.
+- The search guarantee (name search on the server, 20 per search, "More customers match…", no load-more).
 - The manual check table from Step 3.
 
 ---
@@ -1816,9 +2297,10 @@ Push `feat/160-laundry-intake-modal` and open the PR against `main` with `gh pr 
 | Check | Result |
 | --- | --- |
 | Every major task traces to the Accepted spec | Yes; see [Traceability](#traceability). |
-| No task introduces new product semantics | Yes. One UI decision is called out for M5: any edit after a selection clears it (Review Focus 1); the issue states the clearing case and the spec is silent. A failed list refresh after a successful create no longer suppresses opening the new order (Task 5 Step 6), per the issue's "do not leave the drawer closed". |
+| No task introduces new product semantics | Yes. UI decisions called out for M5: any edit after a selection clears it (Selection contract); the "More customers match…" line and the "may have been created" message (new copy for the search guarantee and the missing-id case); the drawer opens before the list refresh. None changes an API contract or a stored value. |
 | Task order executable without inventing work | Yes: 1 is independent; 2 → 3 (copy) → 4 (types) → 5 → 6. |
 | Deferred work explicitly identified | Yes; see [Deferred](#deferred-not-in-this-plan). |
 | Missing design semantics | None found. |
 | Pre-validation claim | None claimed. |
 | Characterization tests labelled | Task 1. |
+| Every M5 review 1 finding answered | Yes; see [Revision 2 (M5 review 1)](#revision-2-m5-review-1). |
