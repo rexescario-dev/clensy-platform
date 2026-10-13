@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted (second draft) |
+| Status | Accepted (second draft); implemented, ready for M7 |
 | M5 decision | **Accepted** — 2026-10-13, at `4ee1ad7` (second draft), by the owner. No amendment; nothing folded into this acceptance. M6 MUST, on the implemented branch: run all 25 paired runs, investigating any failure rather than re-running it away; re-run the guard, ESLint, `tsc` and the full `web` suite; apply Task 2 and verify no unrelated line changed; confirm the diff is exactly the two planned files plus this plan; run the Step 6 and Step 7 scripts; and confirm no temporary repository is left and the tree and index are clean. M7 MUST be a fresh independent review. |
 | M5 (first draft) | Request changes — 2026-10-13, at `aa6cc74`, by the owner. See Revision log. |
 | Date | 2026-10-13 |
@@ -495,3 +495,24 @@ At `aa6cc74`, by the owner. Two P1s (H5's baseline run not reproducible; mutatio
 ### M5 — Accepted (2026-10-13, second draft)
 
 At `4ee1ad7`, by the owner. All four findings addressed. Conditions for M6 are in the header's M5 decision row. No additional M2 spec is needed.
+
+### M6 — Implemented (2026-10-13)
+
+Implemented from the Accepted second draft (`4ee1ad7`, recorded `1e0e5f6`). Task 1's two diffs and the Step 6–7 scripts were extracted from this plan and used exactly as embedded. The committed guard is byte-identical to the pre-validated file.
+
+| Task | Commit | Evidence |
+| --- | --- | --- |
+| 1 Isolate the guard's git calls | `74a3440` | Step 2 (red, after Step 1): `2 failed \| 28 passed (30)`; H2 failed on `A/.git` (`expected false to be true`), H3 on `expected [] to deeply equal [ …(104) ]`. Step 4: `30 passed (30)`; eslint and `tsc` exit 0; no line over 120 characters. |
+| 2 Mark the #173 Known limit resolved | `a9f0dc1` | 1 line changed in the #173 plan (`--numstat` 1/1), the #175 bullet only; the link target exists. |
+
+Final verification, on the committed code (`a9f0dc1`), per the M5 conditions:
+1. **Step 6 script (R1–R3):** exit 0. 2 / 1 / 2 failed, on the tabulated assertions (R1: `[ …(6) ]` vs `[ …(9) ]` and `[]` vs 104; R2: `A/.git`; R3: `A/.git` and `[]` vs 104). File restored to `HEAD`; tree clean.
+2. **Step 7 script (H5):** exit 0. Baseline (`99d20f8`) `0 6`, fixed `0 0`. File restored; sandbox removed.
+3. **Stability, logs kept** in `.git/claude-tmp/stability-175-m6/` (one log per run, plus `summary.txt`): 25 paired runs (guard + `web-shell-regressions`), all exit 0, `226 passed (226)` each. There were no failures to investigate.
+4. **Full suites:** `web` `29 passed` files, `712 passed (712)`; guard-file eslint, `pnpm --filter web lint` and `tsc` exit 0.
+5. **Allowlist:** `git diff --name-only main...HEAD` is exactly the guard test, the #173 plan and this plan.
+6. **Cleanup:** no `drawer-guard-*` directory under `os.tmpdir()`; `git status --porcelain` empty; index empty; the guard file equals `HEAD`'s.
+
+Deviation: none.
+
+Next gate: **M7**, a fresh independent review (`CLAUDE.md`).
