@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted (revision 5); revisions 2–4 implemented |
+| Status | Draft (revision 6); revisions 2–5 implemented; revision 5 returned at M7 |
 | M5 decision (revision 5) | **Accepted** — 2026-10-13, at `13863e2`, by the owner, with two test changes applied in the M5 record commit: a TypeScript-syntax-tree detector (so trailing comments and strings never count), and coverage asserting all nine drawer pages. Keep the no-runtime-change decision. Run H1–H7, then the full `web` suite, lint and `tsc`. No browser run. M7 MUST be a fresh independent review. |
 | M5 decision (revision 4) | **Accepted** — 2026-10-13, at `b014706`, by the owner. No blocking findings. Keep the synthetic `pageshow` test and G5/G6. Record that a real back/forward-cache restore is **not** browser-verified (Playwright's Chromium disables it): the synthetic event proves the handler's logic, not a real restore. Add an end-to-end check if an environment with the cache enabled becomes available. |
 | M5 decision (revision 3) | **Accepted** — 2026-10-13, at `d04212e`, by the owner. No blocking findings. One clarification is an M6 requirement: show that an unrelated traversal cannot clear the guard early and allow a second Back (see Gate outcomes). The browser checks are mandatory against the committed implementation, especially × then the backdrop in one task, and two Escape keydowns. Scope: the hook and its test only. M7 MUST be a fresh independent review. |
@@ -12,7 +12,7 @@
 | M5 decision (revision 1) | Request changes — 2026-10-11, at `b0eec89`. See Gate outcomes. |
 | Date | 2026-10-11 |
 | Tracking issue | [#173](https://github.com/rexescario-dev/clensy-platform/issues/173). Follows #171 (merged in #172 at `8553a04`), whose plan deferred this behaviour (Review Focus 1). |
-| Scope | `apps/web/lib/use-detail-drawer.ts`, `apps/web/lib/use-laundry-order-list-url-state.ts`, and two test files. No page, `@clensy/ui`, `@clensy/web`, API or schema change. |
+| Scope | `apps/web/lib/use-detail-drawer.ts`, `apps/web/lib/use-laundry-order-list-url-state.ts`, and three test files (`use-detail-drawer.test.tsx`, `laundry-list-page.interaction.test.tsx`, and from revision 5 `use-detail-drawer.guard.test.ts`). M8 adds comment-only edits to `app/app/laundry/page.tsx`. No `@clensy/ui`, `@clensy/web`, API or schema change. |
 | Implements (Accepted) | [Dashboard UX Foundation](../specs/2026-08-17-dashboard-ux-foundation-design.md) §4.4, the `?detail=` drawer convention. Its close behaviour is "a **requirement, not a prescribed mechanism** — M4 (Implementation Planning) chooses the safest way to satisfy it", and the same-page flag is "one reasonable implementation — not the only one, and not mandated here". This plan replaces the flag. It changes no spec semantics. For the laundry list it relies on the [#163 plan](2026-10-10-laundry-order-list-plan.md) (native History API URL writes, `openWithHref`/`closeWithHref`). |
 | Authority | Where this plan and an Accepted spec disagree, the spec wins. |
 | Edit anchors | Unified diffs against `main` at `8553a04`. |
@@ -25,6 +25,14 @@
 - **The flag** is removed.
 
 ## Revision log
+
+**Revision 6** (M7 return of revision 5, 2026-10-13):
+- **P1:** the guard scans all of `apps/web` (skipping `node_modules`, `.next` and `.turbo`), plus `packages/web/src` and `packages/ui/src`. It now covers the dashboard shell mounted around every drawer page, and any server-action file.
+- **P3-1:** it also catches `x['refresh']()` and `refresh` destructured from `useRouter()`.
+- **P3-3:** coverage finds hook calls from the syntax tree, across the whole scan.
+- **P3-5:** the test header says "a server action that revalidates, refreshes or redirects".
+- **The hook comment** names the scanned roots, so it no longer overclaims.
+- **P2:** the stale revision 5 Why/Scope text and the header Scope row are corrected.
 
 **Revision 5** (owner request, 2026-10-13: "fix that as well", the deferred marker loss on `router.refresh()` / server actions; the owner chose the guard-test option):
 - **A guard test** fails if a `router.refresh()`, a `'use server'` module or function, `useActionState` or `useFormState` appears where a drawer could be open.
@@ -1042,16 +1050,12 @@ Applied on the branch at `9db8ae0`, then removed before this Draft was committed
 
 Both reach `HistoryUpdater` with `preserveCustomHistoryState: false`. A server-action redirect pushes or replaces with an unmarked entry. In each case × silently falls back to replace, and the #173 duplicate returns. Nothing triggers this today: a scan of the scope below finds only the hook's own comment. The guard keeps it that way until someone handles the marker on purpose.
 
-**Scope scanned** (every non-test `.ts`/`.tsx`, with comments stripped):
-- `apps/web/app/app`: every drawer page, with the drawer defined in the page;
-- `apps/web/lib`: the hooks;
-- `packages/web/src`: the shared domain components those pages render.
-
-**Forbidden:**
-- `.refresh()`, which allows spaces;
-- a `'use server'` directive at the start of a line;
-- `useActionState`;
-- `useFormState`.
+**Scope scanned and rules** (as implemented at `865a5d0`; corrected in revision 6, P2):
+- **Detector:** the TypeScript syntax tree of every non-test `.ts`/`.tsx` file in `apps/web/app/app`, `apps/web/lib` and `packages/web/src`. Revision 6 widens this; see "Revision 6 tasks". Comments and strings never count.
+- **Flagged:**
+  - a call to a `refresh` property with no arguments;
+  - a `'use server'` directive in a file or function body;
+  - any identifier `useActionState` / `useFormState`.
 
 ### Task 5: Guard test (as accepted at M5, with the reviewer's two changes)
 
@@ -1250,6 +1254,221 @@ These are the results for the M5-amended version. The first Draft's regex guard 
 | H1, H2, H3, H5, H7 | 1 failed / 12 passed each |
 | H4, H6 | 13 passed |
 | `web` / lint / `tsc` | 695 passed; exit 0; clean |
+
+## Revision 6 tasks (edit anchor: PR head `75cde5e`, code as of `865a5d0`)
+
+**Why.** M7 (revision 5) P1: `SCANNED` left out `apps/web/components/layout/*`, the dashboard shell that `app/app/layout.tsx` mounts around every drawer page. It also left out server-action files outside the three roots. A `router.refresh()` in the user menu, such as a language or tenant switcher, would drop the marker while a drawer is open, with CI green. The hook comment and the test's name claimed more than that.
+
+**Change.**
+- **Scope:** the scan is all of `apps/web` (skipping `node_modules`, `.next` and `.turbo`), plus `packages/web/src` and `packages/ui/src`. On today's tree that adds no false positives.
+- **Rules:** `x['refresh']()`, and a `refresh` destructured (renamed or not) from `useRouter()`. An aliased `useActionState` was already caught and is now pinned.
+- **Coverage:** every scanned file whose syntax tree calls `useDetailDrawer(...)` must be in `DRAWER_PAGES`. The scan must include `app/app/layout.tsx`, `components/layout/user-menu.tsx`, `middleware.ts` and `packages/ui/src`, and must exclude `node_modules`, `.next` and `.turbo`.
+- **Wording:** the test header says "that revalidates, refreshes or redirects", and the hook comment names the scanned roots.
+
+**Known limits** (M7 P3, kept as notes):
+- **Aliased hook import:** `import { useDetailDrawer as x }` evades the coverage check.
+- **False positives:** any zero-argument `.refresh()` on an unrelated object, and identifiers named `useActionState`/`useFormState`, fail loudly. That is acceptable for a guard.
+- **Server functions from outside the scan:** a server function defined in another package and imported into a drawer page is not seen.
+
+### Task 6: Widen the guard
+
+- [ ] **Step 1:** Apply the guard test diff:
+
+```diff
+diff --git a/apps/web/lib/use-detail-drawer.guard.test.ts b/apps/web/lib/use-detail-drawer.guard.test.ts
+--- a/apps/web/lib/use-detail-drawer.guard.test.ts
++++ b/apps/web/lib/use-detail-drawer.guard.test.ts
+@@ -7,16 +7,19 @@ import { describe, expect, it } from 'vitest';
+ // #173 revision 5: the drawer's close decision reads a marker in
+ // `history.state` (`use-detail-drawer.ts`). Next.js drops custom history state
+ // when it rewrites the current entry for a `router.refresh()` or a server
+-// action, and gives the page no event to restore it from. So × would quietly
++// action that revalidates, refreshes or redirects, and gives the page no
++// event to restore it from. So × would quietly
+ // fall back to replacing the entry, and the duplicate list entry of #173
+ // would return. Nothing uses either today; this test keeps it that way until
+ // someone handles the marker on purpose.
+ const WEB_ROOT = fileURLToPath(new URL('..', import.meta.url));
+ const REPO_ROOT = join(WEB_ROOT, '..', '..');
+ 
+-// The authenticated app (every drawer page and its drawer), the hooks, and
+-// the shared domain components those pages render.
+-const SCANNED = [join(WEB_ROOT, 'app', 'app'), join(WEB_ROOT, 'lib'), join(REPO_ROOT, 'packages', 'web', 'src')];
++// All of the web app (the drawer pages, the dashboard shell mounted around
++// them, the hooks, and any server-action file), and the shared component
++// packages those pages render.
++const SCANNED = [WEB_ROOT, join(REPO_ROOT, 'packages', 'web', 'src'), join(REPO_ROOT, 'packages', 'ui', 'src')];
++const SKIPPED_DIRECTORIES = new Set(['.next', '.turbo', 'node_modules']);
+ 
+ // Every page that opens a drawer through `useDetailDrawer`, with its drawer
+ // defined in the same file.
+@@ -40,7 +43,7 @@ const FORBIDDEN_IDENTIFIERS = new Map([
+ function sourceFiles(dir: string): string[] {
+   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+     const path = join(dir, entry.name);
+-    if (entry.isDirectory()) return entry.name === 'node_modules' ? [] : sourceFiles(path);
++    if (entry.isDirectory()) return SKIPPED_DIRECTORIES.has(entry.name) ? [] : sourceFiles(path);
+     return /\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [path] : [];
+   });
+ }
+@@ -54,18 +57,42 @@ function isUseServerDirective(statements: ts.NodeArray<ts.Statement>): boolean {
+   return false;
+ }
+ 
++function parse(fileName: string, source: string): ts.SourceFile {
++  return ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
++}
++
++// `x.refresh()` or `x['refresh']()`, with no arguments.
++function isRefreshCall(node: ts.Node): boolean {
++  if (!ts.isCallExpression(node) || node.arguments.length > 0) return false;
++  const callee = node.expression;
++  if (ts.isPropertyAccessExpression(callee)) return callee.name.text === 'refresh';
++  return (
++    ts.isElementAccessExpression(callee) &&
++    ts.isStringLiteralLike(callee.argumentExpression) &&
++    callee.argumentExpression.text === 'refresh'
++  );
++}
++
++// `const { refresh } = useRouter()`, renamed or not.
++function isRefreshDestructuredFromRouter(node: ts.Node): boolean {
++  return (
++    ts.isVariableDeclaration(node) &&
++    ts.isObjectBindingPattern(node.name) &&
++    node.initializer !== undefined &&
++    ts.isCallExpression(node.initializer) &&
++    ts.isIdentifier(node.initializer.expression) &&
++    node.initializer.expression.text === 'useRouter' &&
++    node.name.elements.some((element) => (element.propertyName ?? element.name).getText() === 'refresh')
++  );
++}
++
+ // Reads the syntax tree, so comments and strings that merely name these APIs
+ // never count; only code that uses them does.
+ function drawerHistoryHazards(fileName: string, source: string): string[] {
+-  const file = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
++  const file = parse(fileName, source);
+   const found = new Set<string>();
+   const visit = (node: ts.Node) => {
+-    if (
+-      ts.isCallExpression(node) &&
+-      ts.isPropertyAccessExpression(node.expression) &&
+-      node.expression.name.text === 'refresh' &&
+-      node.arguments.length === 0
+-    ) {
++    if (isRefreshCall(node) || isRefreshDestructuredFromRouter(node)) {
+       found.add('`router.refresh()`');
+     }
+     if ((ts.isSourceFile(node) || ts.isBlock(node)) && isUseServerDirective(node.statements)) {
+@@ -84,18 +111,36 @@ describe('drawer history marker guard (#173)', () => {
+   const files = SCANNED.flatMap(sourceFiles);
+   const scanned = files.map((file) => relative(REPO_ROOT, file));
+ 
+-  it('scans every drawer page, the hooks and the shared components', () => {
+-    expect(scanned).toEqual(expect.arrayContaining([...DRAWER_PAGES, 'apps/web/lib/use-detail-drawer.ts']));
++  it('scans every drawer page, the dashboard shell, the hooks and the shared components', () => {
++    expect(scanned).toEqual(
++      expect.arrayContaining([
++        ...DRAWER_PAGES,
++        'apps/web/app/app/layout.tsx',
++        'apps/web/components/layout/user-menu.tsx',
++        'apps/web/lib/use-detail-drawer.ts',
++        'apps/web/middleware.ts',
++      ]),
++    );
+     expect(scanned.some((file) => file.startsWith('packages/web/src/'))).toBe(true);
+-    // A page that starts using the hook must be added to DRAWER_PAGES.
+-    const usingHook = files
+-      .filter((file) => /\buseDetailDrawer\(/.test(readFileSync(file, 'utf8')))
+-      .map((file) => relative(REPO_ROOT, file))
+-      .filter((file) => file.startsWith('apps/web/app/'));
++    expect(scanned.some((file) => file.startsWith('packages/ui/src/'))).toBe(true);
++    expect(scanned.some((file) => /(^|\/)(node_modules|\.next|\.turbo)\//.test(file))).toBe(false);
++    // A file that starts calling the hook must be added to DRAWER_PAGES.
++    const callsHook = (file: string) => {
++      let calls = false;
++      const visit = (node: ts.Node) => {
++        if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'useDetailDrawer') {
++          calls = true;
++        }
++        ts.forEachChild(node, visit);
++      };
++      visit(parse(file, readFileSync(file, 'utf8')));
++      return calls;
++    };
++    const usingHook = files.filter(callsHook).map((file) => relative(REPO_ROOT, file));
+     expect(usingHook.sort()).toEqual([...DRAWER_PAGES].sort());
+   });
+ 
+-  it('finds no router.refresh() or server action where a drawer could be open', () => {
++  it('finds no router.refresh() or server action in the web app or the shared components', () => {
+     const hazards = files.flatMap((file) =>
+       drawerHistoryHazards(file, readFileSync(file, 'utf8')).map((what) => `${relative(REPO_ROOT, file)} uses ${what}`),
+     );
+@@ -110,6 +155,10 @@ describe('drawer history marker guard (#173)', () => {
+   it.each([
+     ['a call', 'router.refresh();', ['`router.refresh()`']],
+     ['a spaced call', 'router.refresh ( );', ['`router.refresh()`']],
++    ['a bracket call', "router['refresh']();", ['`router.refresh()`']],
++    ['a destructured refresh', 'const { refresh } = useRouter();', ['`router.refresh()`']],
++    ['a renamed destructured refresh', 'const { refresh: reload } = useRouter();', ['`router.refresh()`']],
++    ['an aliased import', "import { useActionState as useAction } from 'react';", ['`useActionState`']],
+     ['a module directive', "'use server';\nexport async function save() {}", ["a `'use server'` module or function"]],
+     ['a function directive', "async function save() {\n  'use server';\n}", ["a `'use server'` module or function"]],
+     ['an import', "import { useActionState } from 'react';", ['`useActionState`']],
+```
+
+- [ ] **Step 2:** Apply the hook comment diff (comment only):
+
+```diff
+diff --git a/apps/web/lib/use-detail-drawer.ts b/apps/web/lib/use-detail-drawer.ts
+--- a/apps/web/lib/use-detail-drawer.ts
++++ b/apps/web/lib/use-detail-drawer.ts
+@@ -31,7 +31,8 @@ import { useCallback, useEffect, useRef } from 'react';
+ // returns. A server action that redirects pushes or replaces with an
+ // unmarked entry, to the same effect. No drawer page uses either today;
+ // keep it that way or re-mark the entry after one.
+-// `use-detail-drawer.guard.test.ts` fails if either appears.)
++// `use-detail-drawer.guard.test.ts` fails if either appears anywhere in
++// `apps/web`, `packages/web/src` or `packages/ui/src`.)
+ const DRAWER_ENTRY_KEY = '__clensyDetailDrawer';
+ 
+ // The current entry's drawer marker, as a fresh state object for a native
+```
+
+- [ ] **Step 3:** Run `pnpm --filter web exec vitest run lib/use-detail-drawer.guard.test.ts`. Expected: `Tests 17 passed (17)`. eslint and `tsc` are clean.
+- [ ] **Step 4: Failure evidence**, not committed. Plant each alone and revert. H1–H7 are as in revision 5, now out of 17.
+
+  | Plant | Expected |
+  | --- | --- |
+  | H1–H3, H5, H7 | 1 failed / 16 passed each |
+  | H4, H6 (comments) | 17 passed |
+  | H8: `r.refresh()` in `apps/web/components/layout/user-menu.tsx` (the M7 case) | 1 failed / 16 passed |
+  | H9: a `'use server'` file at `apps/web/app/zz-actions.ts` | 1 failed / 16 passed |
+  | H10: `const { refresh } = useRouter();` in bookings | 1 failed / 16 passed |
+  | H11: `r['refresh']()` in a `packages/ui/src/base` component | 1 failed / 16 passed |
+  | H12: a `useDetailDrawer()` call in a new `apps/web/components/…` file | 1 failed / 16 passed (coverage) |
+
+- [ ] **Step 5:** One commit: `test(web): widen the drawer history guard to the whole web app and shared packages (#173)`.
+
+### Revision 6 final verification
+
+- [ ] **Allowlist:** `git diff --name-only 75cde5e...HEAD -- . ':!docs'` is exactly the guard test and `use-detail-drawer.ts`. The latter is comment-only (scripted check).
+- [ ] **H1–H12** as above.
+- [ ] **Full suites:** `pnpm --filter web test` (699 at pre-validation), `lint`, `tsc --noEmit -p .`. No Next build or browser run is needed, because no runtime code changes.
+
+### Revision 6 pre-validation
+
+Applied on the branch at `75cde5e`, then removed before this Draft was committed.
+
+| Check | Result |
+| --- | --- |
+| Guard test | 17 passed (17) |
+| H1, H2, H3, H5, H7, H8, H9, H10, H11, H12 | 1 failed / 16 passed each |
+| H4, H6 | 17 passed |
+| `web` / lint / `tsc` | 699 passed; exit 0; clean |
+| Vitest's "ESM syntax … `vitest.config.ts`" message | pre-existing; appears without this change too |
 
 ## Final verification
 
