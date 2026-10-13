@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted (second draft); implemented, ready for M7 |
+| Status | Accepted (second draft); implemented; M7 Approved for merge |
 | M5 decision | **Accepted** — 2026-10-13, at `4ee1ad7` (second draft), by the owner. No amendment; nothing folded into this acceptance. M6 MUST, on the implemented branch: run all 25 paired runs, investigating any failure rather than re-running it away; re-run the guard, ESLint, `tsc` and the full `web` suite; apply Task 2 and verify no unrelated line changed; confirm the diff is exactly the two planned files plus this plan; run the Step 6 and Step 7 scripts; and confirm no temporary repository is left and the tree and index are clean. M7 MUST be a fresh independent review. |
 | M5 (first draft) | Request changes — 2026-10-13, at `aa6cc74`, by the owner. See Revision log. |
 | Date | 2026-10-13 |
@@ -516,3 +516,38 @@ Final verification, on the committed code (`a9f0dc1`), per the M5 conditions:
 Deviation: none.
 
 Next gate: **M7**, a fresh independent review (`CLAUDE.md`).
+
+### M7 — Approved for merge (2026-10-13, fresh independent review)
+
+A fresh agent context on Opus 5.5 reviewed `main...b059599` (code `74a3440`, docs `a9f0dc1`). It did not implement the change. It worked read-only, in sandboxes under `mktemp -d` that it removed, and left the real tree and index clean with `HEAD` at `b059599`.
+
+**Decision: Approved for merge. Blocking findings: none.**
+
+**Re-observed** (git 2.40.1, node 20.20.0):
+- **Exact application:**
+  - Step 1 then Step 3, extracted from this plan and applied to `main`'s file, give the intermediate blob `4801fa1`, then `57ab0b93`, which equals `HEAD`'s guard.
+  - Task 2's `-`/`+` lines match, `--numstat` 1/1.
+  - The allowlist is exact.
+- **Checks:** guard 30/30; eslint and `tsc` exit 0; `web` 712/712.
+- **Step 6 script:**
+  - exit 0, with R1 / R2 / R3 failing 2 / 1 / 2;
+  - each on the tabulated assertion, none on a thrown setup error;
+  - file restored, tree clean.
+- **Step 7 script:** exit 0; baseline `0 6`, fixed `0 0`.
+- **Realistic hooks,** in a throwaway clone with its own worktree and pre-commit hook:
+  - **Worktree pre-commit** (absolute `GIT_DIR` and `GIT_INDEX_FILE` exported): the fixed guard passed 30, and the commit held only the intended file. `99d20f8`'s guard passed 28, but the commit picked up 6 stray files, which reproduces #175.
+  - **`commit -a`** (`GIT_INDEX_FILE=…/index.lock`): the fixed guard passed 30, and the commit was clean.
+- **Variables beyond `GIT_DIR`/`GIT_INDEX_FILE`** (listed as inspection-only in Review Focus 4), probed directly:
+  - the probe pointed `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_OBJECT_DIRECTORY` and `GIT_COMMON_DIR` at a sandbox;
+  - plus `GIT_CONFIG_COUNT`/`KEY_0`/`VALUE_0` setting an exclude-everything `core.excludesFile`, `GIT_CONFIG_PARAMETERS='core.bare=true'` and `GIT_PREFIX=zzz/`;
+  - 30 passed, and the sandbox stayed empty.
+- **Code:**
+  - Every `execFileSync` passes `env: gitEnv()`, except the discovery call, which deliberately uses the stricter `GIT_*`-free environment.
+  - `gitEnv()` is computed per call.
+  - `withEnv` deletes variables that were unset, rather than setting them to `"undefined"`.
+  - Nothing else in the file spawns a process.
+
+**Non-blocking (P3):**
+1. **H3 alone would not catch a `sourceFiles` leak of `GIT_INDEX_FILE` only:** `--others` still lists the tracked files. H2 catches it through the force-added files (R1), so the pair covers it. This only matters if someone later trims H2.
+2. **M6 evidence lives outside the tree:** `.git/claude-tmp/stability-175-m6/` and two `/tmp/guard-175-*` directories. This is kept as the plan asks; housekeeping only.
+3. **`GIT_LOCAL_ENV_VARS` follows the installed git's list.** That is the intended design, not a defect.
