@@ -215,3 +215,33 @@ echo "$checks checks, $fails mismatches"
 
 - Other root-anchored rules (`/.idea`) and any review of the rest of `.gitignore`.
 - Changing where coverage is written, or adding coverage scripts to other workspaces.
+
+## Gate outcomes
+
+### M5 — Request changes (2026-10-13, first draft)
+
+At `24858e8`, by the owner. One P1 (V1's check count), later withdrawn by the owner: the count is 28. Two P2s: V3's cleanup was not failure-safe, and `check-ignore.sh` did not reject an invalid mode. The second draft answers each; see the Revision log.
+
+### M5 — Accepted (2026-10-13, second draft)
+
+At `552b519`, by the owner, recorded `52dbf3b`. Before accepting, the owner checked that V3's status assertion cannot pass with unrelated changes. It cannot: Task 1 requires a clean tree and index, and Step 5 compares the whole status with ` M .gitignore`.
+
+### M6 — Implemented (2026-10-13)
+
+Implemented from the Accepted second draft. The `.gitignore` diff, `check-ignore.sh` and the Step 5 block were extracted from this plan and used exactly as embedded.
+
+| Step | Evidence |
+| --- | --- |
+| Preconditions | `git status --porcelain` empty; `apps/api/coverage` absent. |
+| 1 Red | `bogus` → usage line, exit 2. `before` → `28 checks, 0 mismatches`, exit 0. `after` → `28 checks, 27 mismatches`, exit 1. |
+| 2 Edit | `git apply` of the plan's diff. `git diff --stat`: `.gitignore \| 4 ++--`; `git diff -U0`: only lines 36–37. |
+| 3 Green | `after` → `28 checks, 0 mismatches`, exit 0. Every directory path matches `.gitignore:36:coverage/` or `.gitignore:37:.nyc_output/`; both `coverage` files match nothing. |
+| 4 Tracked files | `git ls-files \| grep …` → no output, exit 1. |
+| 5 Real producer | `test:cov` 74 suites, 1029 tests passed. The directory existed; `git status --porcelain --ignored` listed `!! apps/api/coverage/`; status was exactly ` M .gitignore`. `V3 exit=0`; the trap removed the directory (`test ! -e` exit 0). |
+| 6 Guard | `use-detail-drawer.guard.test.ts`: 1 file, 30 passed (30). |
+| 7 Commit | `0ca818f` `chore(repo): ignore coverage output in every workspace (#176)`. |
+| 8 Diff and tree | `git diff --stat main...HEAD`: `.gitignore` and this plan only. `git status --porcelain` empty. |
+
+Deviation: none.
+
+Next gate: **M7**, a **self-review** (`CLAUDE.md`: a settings/configuration-only slice).
