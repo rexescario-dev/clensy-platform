@@ -4,8 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft, revision 2** (M4). Awaiting Plan Review (M5). |
-| M5 history | First pass (2026-10-14, owner): **Returned for Revision**. One P2 finding: the current-section rule could read invoice data that Apollo retains while the invoice query is loading or has failed. Resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). |
+| Status | **Draft, revision 3** (M4). Awaiting Plan Review (M5). |
+| M5 history | First pass (2026-10-14, owner): **Returned for Revision**. One P2 finding: the current-section rule could read invoice data that Apollo retains while the invoice query is loading or has failed. Resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). Second pass (2026-10-14, owner): **Returned for Revision**. The invoice finding confirmed resolved. One new P2 finding: the loading check skipped `LoadingState` when Apollo retains earlier order data while the order query loads. Resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). |
 | Date | 2026-10-14 |
 | Tracking issue | [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) "Dedicated laundry order detail page and overview". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#157](https://github.com/rexescario-dev/clensy-platform/issues/157) (closed: `LaundryOrderProgress`, `formatWeightGrams`, `laundryOrderActions`, the `laundry` copy). The sections are filled later by #155, #158, #162, #166 and #165. The list cutover is [#161](https://github.com/rexescario-dev/clensy-platform/issues/161). |
 | Branch | `feat/156-laundry-order-page`, from `main` at `55a84a7`. One PR for this plan, its M5 record and the implementation. |
@@ -64,7 +64,7 @@ Derived from the Accepted spec, issue #156 and the owner decisions above. Every 
   - **Actions:** "Available to your role:" and a list of the offered lifecycle verbs' labels (`t('actions.<verb>')`), excluding `weigh`, `price` and `generateInvoice`, which belong to other sections; "No further actions for this order." when there are none; nothing while the role loads.
 - **SHALL NOT** render any `button`, form, input or mutation hook on this page. A verb is named as text, never offered as a control (#156 §Role and lifecycle). Copy never says a section is "not on this page yet".
 - **SHALL NOT** present `createdAt` or `updatedAt` as an event history (§8.2). This page shows neither.
-- **Loading:** `LoadingState` under the back link, with no header. **Not found / error:** `ErrorState` "Unable to load laundry order." under the back link.
+- **Loading:** whenever the order query is loading, `LoadingState` under the back link, with no header, summary, nav or sections, **even if Apollo retains an earlier order's data** (decision for M5 review 2: retained order data is hidden while loading). **Not found / error:** `ErrorState` "Unable to load laundry order." under the back link, also when an error arrives with retained order data. The order is rendered only from a finished, successful query.
 - **SHALL NOT** add a nav item. `findActiveHref('/app/laundry/<id>')` already returns `/app/laundry` (segment match), so the sidebar keeps Laundry active, `canViewPath` gates the page like the list, and the document title is the Laundry title.
 - **SHALL** put every new user-facing string in `packages/web/src/i18n/messages/en/laundry.ts` under `order`, and read it with `useClensyTranslations('laundry')`.
 - **SHALL NOT** modify `@clensy/ui`, `apps/api/**`, any migration, `docs/workflows/**`, or any `package.json` or lockfile. `@clensy/web` does not import `@clensy/client`.
@@ -83,6 +83,7 @@ Conditions a person will meet. Each has a test in the owning task.
 7. **Invoice already generated.** A `PRICED` order whose invoice exists marks Actions, not Invoice. → Task 2 table, Task 3 (`shows the invoice and marks Actions once an invoice exists`).
 8. **Section-nav clicks and Back.** The section links are native in-page anchors, so each click adds a history entry, as any in-page link does. Back from the page without such clicks returns to the list. This is a planning choice, flagged for M5: avoiding the extra entries needs a scripted scroll that replaces the URL, which #156 does not ask for.
 9. **Retained invoice data (M5 review 1).** Apollo can keep earlier `data` while a query reloads or after it fails. With retained "no invoice" data and an error, the nav must not mark Invoice, and the Invoice section must show the error, not "No invoice yet." → Task 2 (`resolvedQueryData`), Task 3 (`ignores retained invoice data while the invoice query has failed`, `ignores retained invoice data while the invoice query reloads`).
+10. **Retained order data (M5 review 2).** Apollo can keep an earlier order's data while the order query loads or after it fails. The page shows the loading state, or the error state, and never the retained order's header or sections. → Task 3 (`shows the loading state, not a retained order, while the order query loads`, `shows the error state, not a retained order, when the order query fails`).
 
 ## Planning spikes
 
@@ -128,7 +129,7 @@ Read-only checks run at planning time, for M5. They are not pre-validation of an
 | Lines complete up to 100, warning beyond | #156 §Overview | 1, 3 |
 | Line quantity per unit | §8.4.4 services bullet | 2, 3 |
 | Actions = matrix ∩ fulfillment ∩ role, as text | §8.4.4 actions bullet, §4.4; #156 §Role and lifecycle | 2, 3 |
-| Not-found / error / loading states | #156 §States, §Tests | 3 |
+| Not-found / error / loading states, including retained order data | #156 §States, §Tests; M5 review 2 | 3 |
 | Sidebar still highlights Laundry; no second nav item | #156 AC7 | existing `nav-groups.test.ts` segment-match tests (re-run in 4), 4 (manual) |
 | Redirect helper: `detail` becomes the path id and is removed | §8.4.4 fourth bullet; #156 §Tests | 2 (helper only) |
 | No `DetailDrawer` markup on the page | #156 §Tests | 3 |
@@ -146,6 +147,12 @@ Read-only checks run at planning time, for M5. They are not pre-validation of an
 | Finding | Resolution |
 | --- | --- |
 | **P2: invoice-query errors can leave the current section based on stale data.** `invoiceExists` was derived from `invoiceQuery.data` alone, so data Apollo retains while the query reloads or after it fails could decide the nav while the Invoice section showed an error. | New pure helper `resolvedQueryData` (Task 2) returns a query's data only when it is not loading and has no error. The page derives `invoices` once through it (Task 3, Step 4), and both the current-section input (`invoiceExists`) and the Invoice body (`resolved`) read that one value, so they cannot disagree. A new Global Constraint (Invoice result) states the rule. Regression tests: four `resolvedQueryData` cases in Task 2, including data retained while loading and after an error; and two render tests in Task 3, where the mock retains "no invoice" data while the query has failed, or reloads, and the page must mark Actions, not Invoice, and must not say "No invoice yet." Review Focus 9 records it. The same rule also covers the loading case, where the Invoice body previously would have shown retained data. |
+
+## Revision 3 (M5 review 2)
+
+| Finding | Resolution |
+| --- | --- |
+| **P2: the loading state could be bypassed when Apollo retains order data.** The check was `validId && orderQuery.loading && !orderQuery.data`, so a load with retained data fell through and rendered the earlier order. | Decision: retained order data is **hidden** while loading, as the loading constraint already required. The check is now `validId && orderQuery.loading` (Task 3, Step 4); the error and not-found checks after it are unchanged, so an error with retained data also shows the error state. The Global Constraints Loading bullet now says so explicitly. The render-test mock can retain order data (`orderRetained`), and two regression tests pin it: loading with a retained order shows the back link and `LoadingState` with no heading, customer name, summary, nav or sections; an error with a retained order shows the error state with none of them. Review Focus 10 records it. The invoice finding from review 1 is confirmed resolved and is unchanged. |
 
 ---
 
@@ -692,6 +699,8 @@ const page = vi.hoisted(() => ({
   orderError: undefined as Error | undefined,
   orderLoading: false,
   orderOptions: [] as Array<{ fetchPolicy?: string; skip?: boolean; variables?: unknown }>,
+  // Apollo keeps an earlier order's data while the query reloads or after it fails.
+  orderRetained: false,
   role: 'TENANT_OWNER' as string | undefined,
 }));
 
@@ -721,7 +730,8 @@ vi.mock('@clensy/client', () => ({
     page.orderOptions.push(options);
     if (options.skip) return { data: undefined, error: undefined, loading: false };
     return {
-      data: page.orderLoading || page.orderError ? undefined : { laundryOrder: page.order },
+      data:
+        page.orderRetained || (!page.orderLoading && !page.orderError) ? { laundryOrder: page.order } : undefined,
       error: page.orderError,
       loading: page.orderLoading,
     };
@@ -758,6 +768,7 @@ beforeEach(() => {
   page.orderError = undefined;
   page.orderLoading = false;
   page.orderOptions.length = 0;
+  page.orderRetained = false;
   page.role = 'TENANT_OWNER';
 });
 
@@ -984,6 +995,32 @@ describe('laundry order page', () => {
     expect(html).not.toContain('<h1');
   });
 
+  // M5 review 2: an earlier order retained by Apollo is never shown while
+  // the order query loads.
+  it('shows the loading state, not a retained order, while the order query loads', async () => {
+    page.orderRetained = true;
+    page.orderLoading = true;
+    const html = await renderPage();
+    expect(html).toContain(BACK_LINK);
+    expect(html).toContain('role="status"');
+    expect(html).not.toContain('<h1');
+    expect(html).not.toContain('Ana Reyes');
+    expect(html).not.toContain('<nav');
+    expect(html).not.toContain('<section');
+    expect(html).not.toContain('<dl');
+  });
+
+  it('shows the error state, not a retained order, when the order query fails', async () => {
+    page.orderRetained = true;
+    page.orderError = new Error('boom');
+    const html = await renderPage();
+    expect(html).toContain('Unable to load laundry order.');
+    expect(html).toContain(BACK_LINK);
+    expect(html).not.toContain('<h1');
+    expect(html).not.toContain('Ana Reyes');
+    expect(html).not.toContain('<section');
+  });
+
   it.each([
     ['a missing order', () => { page.order = null; }],
     ['a query error', () => { page.orderError = new Error('boom'); }],
@@ -1084,7 +1121,10 @@ function LaundryOrderWorkspace({ id }: { id: string }) {
     </div>
   );
 
-  if (validId && orderQuery.loading && !orderQuery.data) {
+  // Loading wins over any data Apollo retains from an earlier result, and
+  // an error wins over it below: the order is shown only from a finished,
+  // successful query (M5 review 2).
+  if (validId && orderQuery.loading) {
     return (
       <div className="flex flex-col gap-8">
         {backLink}
@@ -1403,6 +1443,7 @@ Push `feat/156-laundry-order-page` and open the PR against `main` with `gh pr cr
 | Pre-validation claim | None claimed. |
 | Characterization tests labelled | None in this plan: every new test fails before its implementation. |
 | Every M5 review 1 finding answered | Yes; see [Revision 2 (M5 review 1)](#revision-2-m5-review-1). |
+| Every M5 review 2 finding answered | Yes; see [Revision 3 (M5 review 2)](#revision-3-m5-review-2). |
 
 ## Gate outcomes
 
