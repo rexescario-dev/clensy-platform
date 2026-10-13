@@ -1958,3 +1958,33 @@ Revision 6 final verification:
 Deviation: none.
 
 Next gate: **M7**, a fresh independent review (`CLAUDE.md`).
+
+### M7 — Approved for merge (2026-10-13, fresh independent review of revision 6)
+
+A fresh agent context on Opus 5.5 reviewed `75cde5e...5032fb6` (code commit `d66e55e`). It did not implement the change. It was read-only, and it removed its worktrees and left the tree clean.
+
+**Decision: Approved for merge. Blocking findings: none.**
+
+The reviewer independently confirmed:
+- **Gate order:** `4f0e026` → `e7d8474` → `d66e55e` → `5032fb6`. No attribution lines anywhere from `8553a04` to HEAD, or in the PR body.
+- **Exact application:** the plan diffs reproduce `d66e55e` byte for byte, and the allowlist is exact.
+- **The hook change is comment-only.**
+- **Guard:** 17 passed, about 250 ms, 104 files.
+- **H1–H14** as tabulated; H12 fails the coverage test specifically.
+- **Suites:** `web` 699 passed, from a worktree outside `.git/`; lint and `tsc` exit 0.
+- **Revision 5's findings are resolved:** P1 (H8 now fails), P2, P3-1 and P3-5.
+- **The M5-time JavaScript fold** is acceptable: small and mechanical, inside the stated allowance, pre-validated and openly recorded. One caveat: "one-line filter" understates it, because the fold is a regex, a comment and one coverage assertion.
+
+**Non-blocking (P3):**
+1. **Not caught:**
+   - `refresh` passed as a reference (`onClick={router.refresh}`, `startTransition(router.refresh)`);
+   - `const { refresh } = router`.
+
+   The hook comment at `use-detail-drawer.ts:33-35` therefore slightly overclaims.
+2. **Gitignored generated directories are scanned.** `public/`, `dist/`, `build/` and `coverage` under `apps/web` are read, so local output can turn the guard red while CI stays green.
+3. **`.ts` files are parsed as TSX.** An angle-bracket assertion in a `.ts` file would misparse silently. There are zero diagnostics today.
+4. **Stale plan text:** the File Map lacks the guard test; Final verification says "four File Map paths"; the Deferred bullet describes the revision 5 guard.
+5. **`@clensy/client` and `@clensy/validation` are not scanned.** Neither uses any of these APIs today; this falls under the documented limit.
+6. **Next accuracy:** the comments are accurate. Minor: a ragged comment wrap at guard lines 11-12.
+
+**Environment note:** run full suites from a worktree outside `.git/`. Vite's default `fs.deny` blocks `**/.git/**`.
