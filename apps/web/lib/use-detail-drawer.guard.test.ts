@@ -7,16 +7,19 @@ import { describe, expect, it } from 'vitest';
 // #173 revision 5: the drawer's close decision reads a marker in
 // `history.state` (`use-detail-drawer.ts`). Next.js drops custom history state
 // when it rewrites the current entry for a `router.refresh()` or a server
-// action, and gives the page no event to restore it from. So × would quietly
+// action that revalidates, refreshes or redirects, and gives the page no
+// event to restore it from. So × would quietly
 // fall back to replacing the entry, and the duplicate list entry of #173
 // would return. Nothing uses either today; this test keeps it that way until
 // someone handles the marker on purpose.
 const WEB_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const REPO_ROOT = join(WEB_ROOT, '..', '..');
 
-// The authenticated app (every drawer page and its drawer), the hooks, and
-// the shared domain components those pages render.
-const SCANNED = [join(WEB_ROOT, 'app', 'app'), join(WEB_ROOT, 'lib'), join(REPO_ROOT, 'packages', 'web', 'src')];
+// All of the web app (the drawer pages, the dashboard shell mounted around
+// them, the hooks, and any server-action file), and the shared component
+// packages those pages render.
+const SCANNED = [WEB_ROOT, join(REPO_ROOT, 'packages', 'web', 'src'), join(REPO_ROOT, 'packages', 'ui', 'src')];
+const SKIPPED_DIRECTORIES = new Set(['.next', '.turbo', 'node_modules']);
 
 // Every page that opens a drawer through `useDetailDrawer`, with its drawer
 // defined in the same file.
@@ -40,8 +43,9 @@ const FORBIDDEN_IDENTIFIERS = new Map([
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
-    if (entry.isDirectory()) return entry.name === 'node_modules' ? [] : sourceFiles(path);
-    return /\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [path] : [];
+    if (entry.isDirectory()) return SKIPPED_DIRECTORIES.has(entry.name) ? [] : sourceFiles(path);
+    // `apps/web` allows JavaScript (`allowJs`), and Next accepts `.js`/`.jsx` pages.
+    return /\.[cm]?[jt]sx?$/.test(entry.name) && !/\.test\.[cm]?[jt]sx?$/.test(entry.name) ? [path] : [];
   });
 }
 
@@ -54,18 +58,42 @@ function isUseServerDirective(statements: ts.NodeArray<ts.Statement>): boolean {
   return false;
 }
 
+function parse(fileName: string, source: string): ts.SourceFile {
+  return ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+}
+
+// `x.refresh()` or `x['refresh']()`, with no arguments.
+function isRefreshCall(node: ts.Node): boolean {
+  if (!ts.isCallExpression(node) || node.arguments.length > 0) return false;
+  const callee = node.expression;
+  if (ts.isPropertyAccessExpression(callee)) return callee.name.text === 'refresh';
+  return (
+    ts.isElementAccessExpression(callee) &&
+    ts.isStringLiteralLike(callee.argumentExpression) &&
+    callee.argumentExpression.text === 'refresh'
+  );
+}
+
+// `const { refresh } = useRouter()`, renamed or not.
+function isRefreshDestructuredFromRouter(node: ts.Node): boolean {
+  return (
+    ts.isVariableDeclaration(node) &&
+    ts.isObjectBindingPattern(node.name) &&
+    node.initializer !== undefined &&
+    ts.isCallExpression(node.initializer) &&
+    ts.isIdentifier(node.initializer.expression) &&
+    node.initializer.expression.text === 'useRouter' &&
+    node.name.elements.some((element) => (element.propertyName ?? element.name).getText() === 'refresh')
+  );
+}
+
 // Reads the syntax tree, so comments and strings that merely name these APIs
 // never count; only code that uses them does.
 function drawerHistoryHazards(fileName: string, source: string): string[] {
-  const file = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const file = parse(fileName, source);
   const found = new Set<string>();
   const visit = (node: ts.Node) => {
-    if (
-      ts.isCallExpression(node) &&
-      ts.isPropertyAccessExpression(node.expression) &&
-      node.expression.name.text === 'refresh' &&
-      node.arguments.length === 0
-    ) {
+    if (isRefreshCall(node) || isRefreshDestructuredFromRouter(node)) {
       found.add('`router.refresh()`');
     }
     if ((ts.isSourceFile(node) || ts.isBlock(node)) && isUseServerDirective(node.statements)) {
@@ -84,18 +112,37 @@ describe('drawer history marker guard (#173)', () => {
   const files = SCANNED.flatMap(sourceFiles);
   const scanned = files.map((file) => relative(REPO_ROOT, file));
 
-  it('scans every drawer page, the hooks and the shared components', () => {
-    expect(scanned).toEqual(expect.arrayContaining([...DRAWER_PAGES, 'apps/web/lib/use-detail-drawer.ts']));
+  it('scans every drawer page, the dashboard shell, the hooks and the shared components', () => {
+    expect(scanned).toEqual(
+      expect.arrayContaining([
+        ...DRAWER_PAGES,
+        'apps/web/app/app/layout.tsx',
+        'apps/web/components/layout/user-menu.tsx',
+        'apps/web/lib/use-detail-drawer.ts',
+        'apps/web/middleware.ts',
+      ]),
+    );
     expect(scanned.some((file) => file.startsWith('packages/web/src/'))).toBe(true);
-    // A page that starts using the hook must be added to DRAWER_PAGES.
-    const usingHook = files
-      .filter((file) => /\buseDetailDrawer\(/.test(readFileSync(file, 'utf8')))
-      .map((file) => relative(REPO_ROOT, file))
-      .filter((file) => file.startsWith('apps/web/app/'));
+    expect(scanned.some((file) => file.startsWith('packages/ui/src/'))).toBe(true);
+    expect(scanned).toContain('apps/web/eslint.config.mjs');
+    expect(scanned.some((file) => /(^|\/)(node_modules|\.next|\.turbo)\//.test(file))).toBe(false);
+    // A file that starts calling the hook must be added to DRAWER_PAGES.
+    const callsHook = (file: string) => {
+      let calls = false;
+      const visit = (node: ts.Node) => {
+        if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'useDetailDrawer') {
+          calls = true;
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(parse(file, readFileSync(file, 'utf8')));
+      return calls;
+    };
+    const usingHook = files.filter(callsHook).map((file) => relative(REPO_ROOT, file));
     expect(usingHook.sort()).toEqual([...DRAWER_PAGES].sort());
   });
 
-  it('finds no router.refresh() or server action where a drawer could be open', () => {
+  it('finds no router.refresh() or server action in the web app or the shared components', () => {
     const hazards = files.flatMap((file) =>
       drawerHistoryHazards(file, readFileSync(file, 'utf8')).map((what) => `${relative(REPO_ROOT, file)} uses ${what}`),
     );
@@ -110,6 +157,10 @@ describe('drawer history marker guard (#173)', () => {
   it.each([
     ['a call', 'router.refresh();', ['`router.refresh()`']],
     ['a spaced call', 'router.refresh ( );', ['`router.refresh()`']],
+    ['a bracket call', "router['refresh']();", ['`router.refresh()`']],
+    ['a destructured refresh', 'const { refresh } = useRouter();', ['`router.refresh()`']],
+    ['a renamed destructured refresh', 'const { refresh: reload } = useRouter();', ['`router.refresh()`']],
+    ['an aliased import', "import { useActionState as useAction } from 'react';", ['`useActionState`']],
     ['a module directive', "'use server';\nexport async function save() {}", ["a `'use server'` module or function"]],
     ['a function directive', "async function save() {\n  'use server';\n}", ["a `'use server'` module or function"]],
     ['an import', "import { useActionState } from 'react';", ['`useActionState`']],
