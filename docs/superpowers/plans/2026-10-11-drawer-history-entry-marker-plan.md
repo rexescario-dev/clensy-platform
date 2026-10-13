@@ -2685,3 +2685,26 @@ Verification note, an M6 requirement, on the committed code:
 5. a clean tree, an empty index and no temporary repository.
 
 The pre-validation was not re-run by the reviewer.
+
+### M6 — Revision 8 implemented (2026-10-13)
+
+Implemented from the Accepted revision 8 (`8ad0d92`, recorded `ef1f96d`). Task 8's two diffs were extracted from this plan and `git apply`-ed exactly as embedded. The applied code is byte-identical to the pre-validated code.
+
+| Task | Commit | Evidence |
+| --- | --- | --- |
+| 8 Stop writing into the source tree | `8e43b78` | Guard 28 passed (28). eslint, `web` lint (exit 0) and `tsc` clean. No line over 120 characters. The hook change is comment-only (scripted check). |
+
+Revision 8 final verification, on the committed code, per the M5 note:
+1. **Guard, lint and `tsc`:** as above.
+2. **R1–R6:** 1 / 5 / 3 / 1 / 1 / 2 failed out of 28, as tabulated. The representative plants H8, H17, H21 and H22 each gave 1 failed / 27 passed; H15 gave 28 passed (skipped).
+3. **Stability on `8e43b78`, logs kept** in `.git/claude-tmp/stability-r8-m6/`, one log per run plus `summary.txt`:
+   - 25 paired runs (`web-shell-regressions` + guard), all exit 0, `224 passed (224)` each;
+   - 20 full `web` runs, all exit 0, `710 passed (710)` each.
+
+   There were no failures to investigate.
+4. **Allowlist:** exactly the guard test and `use-detail-drawer.ts`.
+5. **Cleanup:** the tree is clean, `git diff --cached` is empty, no `zz*` file remains, and no `drawer-guard-*` temporary repository is left, both after the plants and after the stability runs.
+
+Deviation: none.
+
+Next gate: **M7**, a fresh independent review (`CLAUDE.md`).
