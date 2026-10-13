@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted (second draft); implemented; M7 Approved for merge |
+| Status | Accepted (second draft); implemented; M7 Approved for merge; M8 N/A; M9 complete; M10 validated |
 | M5 decision | **Accepted** — 2026-10-13, at `4ee1ad7` (second draft), by the owner. No amendment; nothing folded into this acceptance. M6 MUST, on the implemented branch: run all 25 paired runs, investigating any failure rather than re-running it away; re-run the guard, ESLint, `tsc` and the full `web` suite; apply Task 2 and verify no unrelated line changed; confirm the diff is exactly the two planned files plus this plan; run the Step 6 and Step 7 scripts; and confirm no temporary repository is left and the tree and index are clean. M7 MUST be a fresh independent review. |
 | M5 (first draft) | Request changes — 2026-10-13, at `aa6cc74`, by the owner. See Revision log. |
 | Date | 2026-10-13 |
@@ -551,3 +551,62 @@ A fresh agent context on Opus 5.5 reviewed `main...b059599` (code `74a3440`, doc
 1. **H3 alone would not catch a `sourceFiles` leak of `GIT_INDEX_FILE` only:** `--others` still lists the tracked files. H2 catches it through the force-added files (R1), so the pair covers it. This only matters if someone later trims H2.
 2. **M6 evidence lives outside the tree:** `.git/claude-tmp/stability-175-m6/` and two `/tmp/guard-175-*` directories. This is kept as the plan asks; housekeeping only.
 3. **`GIT_LOCAL_ENV_VARS` follows the installed git's list.** That is the intended design, not a defect.
+
+### M8 — N/A (2026-10-13)
+
+```text
+Decision: N/A
+Subject: PR #177, branch fix/175-guard-git-env-isolation
+Scope: apps/web/lib/use-detail-drawer.guard.test.ts
+Accepted specification: docs/superpowers/specs/2026-08-17-dashboard-ux-foundation-design.md §4.4 (through the #173 plan)
+Accepted implementation plan: docs/superpowers/plans/2026-10-13-drawer-guard-git-env-isolation-plan.md
+M7 / authorization: Approved for merge (fresh independent review)
+Rationale: M7 raised nothing that is a behaviour-preserving refactor. P3-1 is a note on test coverage (recorded
+in the M7 outcome above), P3-2 is housekeeping and P3-3 is the intended design.
+Verification: N/A, no code changed in M8.
+```
+
+### M9 — Complete (2026-10-13)
+
+```text
+Decision: Complete
+Subject: #175, PR #177
+Documentation scope: this plan (Status, Gate outcomes); the #173 plan's Known limits (Task 2, a9f0dc1);
+PR #177 body
+Content updates:
+- #173 plan, Revision 8 Known limits: the #175 bullet is marked resolved, with a link to this plan (← Task 2).
+- This plan: Status and the M5–M10 records.
+- PR #177 body: M7 outcome and gate status.
+Unchanged, with reason: apps/web/README.md (its guard note says what the guard looks for and where its limits
+are listed; both are still accurate); use-detail-drawer.ts's comment (it points at the #173 plan's Known limits,
+which are current); packages/* READMEs and docs/README.md (no package, API or schema change); the spec.
+Verification: the relative links in the touched files resolve (the #173 plan → this plan; this plan → the spec
+and the #173 plan).
+Gate: Documentation complete. Code unchanged in M9.
+```
+
+### M10 — Accepted, workflow validated (2026-10-13)
+
+```text
+Decision: Accepted
+Subject: #175 delivery slice
+Governing specification: docs/workflows/specs/agent-workflow-design.md
+
+Asset inventory: unchanged.
+
+Blocking findings:
+- None. The slice went M4 → owner M5 (returned once, then Accepted) → M6 → a fresh M7 (CLAUDE.md) → M8 N/A →
+  M9. No M2 spec, by owner decision, as for #173's revisions 5–8. One PR (#177). Providers: gh, for the issue
+  and the PR.
+
+Non-blocking observations:
+1. Verification steps written as scripts made M5 and M7 reproducible: the M5 return was about procedure (baseline
+   runs, safe restoration, working directory), and scripted Steps 6–7 were re-run verbatim by M6 and M7 with the
+   same results.
+2. Splitting a TDD task into red and green diffs, each extracted from the plan and applied with `git apply`,
+   let both M6 and M7 confirm the committed code byte for byte.
+3. A test that passes while the bug happens (main's guard: 28 passed, 6 files leaked) needs evidence outside the
+   test runner; the hook simulation supplied it.
+
+Gate: Workflow validated
+```
