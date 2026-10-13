@@ -30,7 +30,8 @@ import { useCallback, useEffect, useRef } from 'react';
 // and × would fall back to replacing the entry: safe, but the duplicate
 // returns. A server action that redirects pushes or replaces with an
 // unmarked entry, to the same effect. No drawer page uses either today;
-// keep it that way or re-mark the entry after one.)
+// keep it that way or re-mark the entry after one.
+// `use-detail-drawer.guard.test.ts` fails if either appears.)
 const DRAWER_ENTRY_KEY = '__clensyDetailDrawer';
 
 // The current entry's drawer marker, as a fresh state object for a native
