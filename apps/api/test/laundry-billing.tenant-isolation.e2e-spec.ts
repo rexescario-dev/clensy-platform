@@ -460,6 +460,19 @@ describe('Laundry & Billing tenant isolation (e2e)', () => {
       // are not in `found`: the price preview returns a computed estimate
       // for the principal tenant's order (#159, Amendment #164 §8.4.5).
       const valueRoots = ['Query.previewLaundryOrderPrice'];
+      // Each exemption must name a live root field, so a renamed or removed
+      // root cannot leave a stale entry behind.
+      for (const valueRoot of valueRoots) {
+        const [rootName, fieldName] = valueRoot.split('.');
+        const root =
+          rootName === 'Query'
+            ? schema.getQueryType()!
+            : schema.getMutationType()!;
+        expect({ valueRoot, live: fieldName in root.getFields() }).toEqual({
+          valueRoot,
+          live: true,
+        });
+      }
 
       // No generated aggregate/count/CRUD roots for these types either.
       for (const root of [schema.getQueryType()!, schema.getMutationType()!]) {

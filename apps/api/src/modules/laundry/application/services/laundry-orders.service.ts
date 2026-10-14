@@ -36,6 +36,7 @@ import { WeighLaundryOrderCommand } from '../commands/weigh-laundry-order.comman
 import { tenantAuditTags } from '../../../../platform/audit/application/audit-tags';
 
 const S = LaundryOrderStatus;
+const ENTITY_TYPE = 'laundry_order';
 
 // `price`'s input without the actor or the order id: what `quote` prices.
 type QuoteInput = Omit<PriceLaundryOrderCommand, 'actorId' | 'orderId'>;
@@ -46,7 +47,6 @@ interface QuotedLine {
   serviceId: string | null;
   snapshot: LaundryOrderLinePricingSnapshot;
 }
-const ENTITY_TYPE = 'laundry_order';
 
 @Injectable()
 export class LaundryOrdersService {

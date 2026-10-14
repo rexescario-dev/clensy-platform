@@ -661,11 +661,19 @@ Ledger rulings: all six accepted.
 
 **Deferred minors** (P3; none changes behavior; not fixed in this slice):
 1. `quote` reads names through `ServicesService` / `AddOnsService` on a pooled connection, not the transaction's `manager`. The §8.4.2 behavior still holds: the read happens inside the callback, and a missing name throws before any save, so everything rolls back. Rule resolution already uses the same pattern, and the plan prescribes these services.
-2. Nothing asserts that `valueRoots` in `laundry-billing.tenant-isolation` still names a live root. A rename would also fail the inventory guards.
+2. Nothing asserts that `valueRoots` in `laundry-billing.tenant-isolation` still names a live root. A rename would also fail the inventory guards. **Fixed after M7, at the owner's request** (see below).
 3. The File map listed `schema.gql` as "regenerated", but it is gitignored. **Fixed in M9** (File map wording).
-4. Cosmetic: the `QuoteInput` / `QuotedLine` declarations sit between `const S` and `const ENTITY_TYPE` in the service file.
+4. Cosmetic: the `QuoteInput` / `QuotedLine` declarations sit between `const S` and `const ENTITY_TYPE` in the service file. **Fixed after M7, at the owner's request** (see below).
 
 Gate: merge per human/project norms. M8/M9 follow.
+
+**Post-review changes (2026-10-14, owner request).** The owner asked for the deferred minors to be applied in this PR rather than in a new issue. All of them come from #159's own change set.
+- **Minor 4:** `QuoteInput` / `QuotedLine` moved below `const ENTITY_TYPE`. Declaration order only; the laundry unit tests still pass (382).
+- **Minor 2:** `laundry-billing.tenant-isolation` Case 0 now asserts that each `valueRoots` entry is a live `Query` / `Mutation` field. It passes (32). With a temporary, uncommitted stale entry (`Query.renamedLaundryPreview`), it failed on that entry.
+- **Minor 1:** kept as is. Reading names through the transaction's `manager` would mean laundry using catalog's entities (spec §4.1), and the §8.4.2 rollback behavior already holds.
+- **Minor 3:** fixed in M9.
+
+These changes alter no product behavior. The M7 approval was given at `9c27a6e`; these changes come after it.
 
 ### M8 — N/A (2026-10-14)
 
