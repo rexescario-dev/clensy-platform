@@ -2176,6 +2176,45 @@ Blocking findings: none. Non-blocking:
 
 **Docs:** `apps/web/README.md`'s Weighing bullet now mentions the focus return.
 
+#### Second follow-up (post-M7)
+
+The owner then asked to resolve the re-review's two optional observations. The work is in commit `c9a5aa8`.
+
+| Item | Change |
+| --- | --- |
+| A test that focus doesn't move when the editor first appears | New tests for weights `null` and `2500`. With nothing focused, focus stays on `<body>`. With focus outside the editor, it stays there. |
+| After a failed save, focus the bag row with the problem | **Interpretation:** a save is sent only when every row is valid, so a server failure concerns the single total and no row is at fault. Focus still returns to Record weight, and `role="alert"` announces the error. The row with a problem exists only when a submit is **blocked by an invalid row**. In that case focus now moves to the first invalid row's input once its error renders. This uses a `focusRow` state holding a new object per submit, so a repeat submit refocuses the same row. A submit blocked only by a form-level error keeps focus on Record weight, which that error describes. |
+
+**Evidence:**
+- **RED:** "moves focus to the first invalid row when a submit is blocked" failed with "expected button to be input".
+- **Mutation:** setting `wasPending` to `true` at mount made both `<body>` cases fail.
+- **Characterization:** the "elsewhere" cases and the form-level-error case are characterization tests.
+- **Checks:**
+
+  | Command | Result |
+  | --- | --- |
+  | `pnpm --filter web test` | 37 files, 971 passed (+6) |
+  | `pnpm --filter web lint` | clean |
+  | `pnpm --filter web exec tsc --noEmit` | clean |
+  | `pnpm --filter web build` | clean |
+
+- **No real-browser run:** the blocked path disables nothing, so jsdom's `focus()` on an enabled input is representative.
+
+**M7 re-review: Approved for merge.** A second fresh, independent agent (Opus 5.5) reviewed `250c263..c9a5aa8`. It did not implement the change, and **this is not a self-review**.
+- It re-ran the editor test file (38 passed), the web suite (971), `tsc` and lint.
+- It accepted the item-2 interpretation explicitly.
+- It found the following sound:
+  - the effect runs after the error renders;
+  - a stale `focusRow` cannot misfire;
+  - the `!` on `summary.results[index]` is safe;
+  - the ids cannot collide (one editor, monotonic keys);
+  - the change does not interact with the pending→idle effect;
+  - the global constraints still hold.
+
+Blocking findings: none.
+
+Non-blocking: explicit cases for an invalid first row, and for an invalid row together with `totalTooLarge`, would pin the "first invalid" ordering further.
+
 ## Slice Completion Report (final)
 
 | Field | Result |
@@ -2195,7 +2234,7 @@ Blocking findings: none. Non-blocking:
 ### Shipped
 
 - The server rejects a zero weight on the GraphQL input and in the service, before any transaction. There is no migration, and stored zeros are untouched.
-- A multi-row weighing editor on the order page records one total in whole grams, with inline validation and a live total. Focus returns to Record weight after a save settles (owner-directed follow-up).
+- A multi-row weighing editor on the order page records one total in whole grams, with inline validation and a live total. Focus returns to Record weight after a save settles, and moves to the first invalid row when a submit is blocked (owner-directed follow-ups).
 - The editor sends one mutation per submit. Controls stay disabled through the save and the refetch. Success shows a toast and the saved total; failure keeps the rows and shows the server message.
 - Locked copy appears only for priced statuses, and never for `CANCELLED` or `REJECTED`. Every other case is read-only.
 - The READMEs document the editor, the copy and the API change.
