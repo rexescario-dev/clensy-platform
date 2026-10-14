@@ -166,4 +166,74 @@ describe('release-gate outcome classifier (#92)', () => {
     );
     expect(normalizeOutcome(foreign)).toBe(normalizeOutcome(control));
   });
+
+  // #159: the price preview has no id of its own and its only number is
+  // money, so the gate reads it by its lines' target ids, with no count.
+  it("reads previewLaundryOrderPrice by its lines' target ids, with no count", () => {
+    const uuid2 = '7a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c8d';
+    const preview = (value: unknown) =>
+      classifyGraphql(
+        { data: { previewLaundryOrderPrice: value } },
+        'previewLaundryOrderPrice',
+      );
+    const ok = (ids: string[]) => ({ ids, kind: 'OK', totalCount: null });
+
+    expect(preview({ lines: [{ serviceId: uuid, addOnId: null }] })).toEqual(
+      ok([uuid]),
+    );
+    expect(
+      preview({
+        lines: [
+          { serviceId: uuid, addOnId: null },
+          { serviceId: null, addOnId: uuid2 },
+        ],
+      }),
+    ).toEqual(ok([uuid, uuid2]));
+    expect(preview({ lines: [] })).toEqual(ok([]));
+
+    const invalid: unknown[] = [
+      { lines: [{ serviceId: null, addOnId: null }] },
+      { lines: [{ addOnId: null }] },
+      { lines: [{ serviceId: 5, addOnId: null }] },
+      { lines: [{ serviceId: uuid, addOnId: uuid2 }] },
+      { lines: [{ serviceId: uuid, addOnId: null }], totalCount: 1000 },
+      {
+        lines: [{ serviceId: uuid, addOnId: null }],
+        nodes: [{ id: uuid }],
+        totalCount: 1,
+      },
+      { lines: 'x' },
+      { estimatedTotalMinorUnits: 1000 },
+    ];
+    for (const value of invalid) {
+      expect({ value, kind: preview(value).kind }).toEqual({
+        value,
+        kind: 'UNEXPECTED',
+      });
+    }
+  });
+
+  it('keeps the preview rule scoped to previewLaundryOrderPrice', () => {
+    expect(
+      classifyGraphql(
+        { data: { customer: { lines: [{ serviceId: uuid, addOnId: null }] } } },
+        'customer',
+      ).kind,
+    ).toBe('UNEXPECTED');
+    expect(
+      classifyGraphql(
+        { data: { previewLaundryOrderPrice: { id: uuid } } },
+        'previewLaundryOrderPrice',
+      ).kind,
+    ).toBe('UNEXPECTED');
+    expect(
+      classifyGraphql(
+        {
+          data: null,
+          errors: [{ extensions: { code: 'FORBIDDEN' }, message: 'Forbidden' }],
+        },
+        'previewLaundryOrderPrice',
+      ),
+    ).toEqual({ kind: 'FORBIDDEN' });
+  });
 });

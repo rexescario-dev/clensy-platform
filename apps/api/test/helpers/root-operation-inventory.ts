@@ -68,6 +68,7 @@ export const ROOT_OPERATION_CLASSIFICATION: Readonly<
   'Query.jobs': 'TENANT',
   'Query.laundryOrder': 'TENANT',
   'Query.laundryOrders': 'TENANT',
+  'Query.previewLaundryOrderPrice': 'TENANT',
   'Query.property': 'TENANT',
   'Query.service': 'TENANT',
   'Query.services': 'TENANT',

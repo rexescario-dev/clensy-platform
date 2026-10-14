@@ -289,6 +289,10 @@ export const ROLE_MATRIX: Readonly<Record<string, RoleMatrixEntry>> = {
   'Query.jobs': JOB_VIEW,
   'Query.laundryOrder': LAUNDRY_VIEW,
   'Query.laundryOrders': LAUNDRY_VIEW,
+  'Query.previewLaundryOrderPrice': {
+    allowed: [TENANT_OWNER, OPS_MANAGER, SCHEDULER],
+    source: `Laundry Orders & Lifecycle Amendment #164 §8.4.5 "Authorization matches priceLaundryOrder" (M3 Accepted 2026-10-10); ${RFC}`,
+  },
   'Query.property': CUSTOMER_VIEW,
   'Query.service': CATALOG_VIEW,
   'Query.services': CATALOG_VIEW,

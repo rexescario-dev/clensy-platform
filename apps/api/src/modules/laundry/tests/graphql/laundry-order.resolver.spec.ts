@@ -30,6 +30,7 @@ const RBAC: Record<string, Role[]> = {
   markLaundryOrderLost: [O, M],
   markLaundryOrderPaid: [O, M, F, C],
   markLaundryOrderReady: [O, M, S],
+  previewLaundryOrderPrice: [O, M, S],
   priceLaundryOrder: [O, M, S],
   receiveLaundryOrder: [O, M, S, C],
   refundLaundryOrder: [O, M, F],
@@ -71,6 +72,7 @@ describe('LaundryOrderResolver', () => {
         | 'markLost'
         | 'markPaid'
         | 'markReady'
+        | 'previewPrice'
         | 'price'
         | 'receive'
         | 'refund'
@@ -112,6 +114,7 @@ describe('LaundryOrderResolver', () => {
         markLost: jest.fn().mockResolvedValue(order),
         markPaid: jest.fn().mockResolvedValue(order),
         markReady: jest.fn().mockResolvedValue(order),
+        previewPrice: jest.fn(),
         price: jest.fn().mockResolvedValue(order),
         receive: jest.fn().mockResolvedValue(order),
         refund: jest.fn().mockResolvedValue(order),
@@ -236,8 +239,9 @@ describe('LaundryOrderResolver', () => {
     ];
 
     it('covers every @Mutation on LaundryOrderResolver', () => {
+      const queries = new Set(['laundryOrder', 'previewLaundryOrderPrice']);
       const mutationNames = Object.keys(RBAC).filter(
-        (name) => name !== 'laundryOrder',
+        (name) => !queries.has(name),
       );
       expect(MUTATIONS.map(([name]) => name).sort()).toEqual(
         mutationNames.sort(),
@@ -304,6 +308,36 @@ describe('LaundryOrderResolver', () => {
         ),
       ).rejects.toThrow(ForbiddenException);
       expect(service.price).not.toHaveBeenCalled();
+    });
+
+    // Amendment #164 §8.4.5: a read for the OPERATIONAL roles; no actor, the
+    // principal's tenant.
+    it('previewLaundryOrderPrice passes the input and requireTenantId(principal), and returns the preview', async () => {
+      const preview = { estimatedTotalMinorUnits: 1000, lines: [] };
+      service.previewPrice.mockResolvedValue(preview);
+
+      await expect(
+        resolver.previewLaundryOrderPrice(
+          { orderId: 'o-1', baseServiceId: 's-a', addOns: [] },
+          principal,
+        ),
+      ).resolves.toBe(preview);
+      expect(service.previewPrice).toHaveBeenCalledWith({
+        baseServiceId: 's-a',
+        orderId: 'o-1',
+        tenantId: 't-a',
+        addOns: [],
+      });
+    });
+
+    it('previewLaundryOrderPrice with a tenant-less principal is Forbidden before the service is called', async () => {
+      await expect(
+        resolver.previewLaundryOrderPrice(
+          { orderId: 'o-1', baseServiceId: 's-a', addOns: [] },
+          noTenant,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(service.previewPrice).not.toHaveBeenCalled();
     });
   });
 });

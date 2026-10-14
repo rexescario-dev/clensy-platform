@@ -95,6 +95,8 @@ const CUSTOM_OBJECT_FIELDS: Record<string, string> = {
     "CurrentAdminLabelOverridesResolver @ResolveField; its parent is built only from the principal, so it reads the principal's own tenant's labels (#118).",
   'LaundryOrderLine.pricingSnapshot':
     'TypeORM embeddable stored on the line row.',
+  'LaundryPricePreview.lines':
+    'Plain value list returned by previewLaundryOrderPrice, which LaundryOrdersService computes for the principal tenant (#159); no resolver of its own.',
   'LoginResult.admin': "The caller's own principal, returned by login.",
   'Service.activePricing':
     'ServiceResolver @ResolveField via request-scoped ActivePricingLoader keyed by the principal tenant (#84).',
