@@ -361,7 +361,7 @@ describe('Laundry & Billing tenant isolation (e2e)', () => {
       const checked: string[] = [];
       for (const type of Object.values(schema.getTypeMap())) {
         if (
-          !/^(LaundryOrder|Invoice|ReceiveLaundry|WeighLaundry|PriceLaundry|GenerateInvoice)/.test(
+          !/^(LaundryOrder|LaundryPricePreview|Invoice|ReceiveLaundry|WeighLaundry|PriceLaundry|GenerateInvoice)/.test(
             type.name,
           )
         ) {
@@ -398,6 +398,8 @@ describe('Laundry & Billing tenant isolation (e2e)', () => {
           'WeighLaundryOrderInput',
           'PriceLaundryOrderInput',
           'GenerateInvoiceFromOrderInput',
+          'LaundryPricePreview',
+          'LaundryPricePreviewLine',
         ]),
       );
       // The relation filters generated for `customer` / `laundryOrder`.
@@ -454,6 +456,10 @@ describe('Laundry & Billing tenant isolation (e2e)', () => {
       ];
       expect([...found].sort()).toEqual(expected.sort());
       expect(LAUNDRY_MUTATIONS).toHaveLength(15);
+      // Laundry roots that return no laundry/invoice entity type, so they
+      // are not in `found`: the price preview returns a computed estimate
+      // for the principal tenant's order (#159, Amendment #164 §8.4.5).
+      const valueRoots = ['Query.previewLaundryOrderPrice'];
 
       // No generated aggregate/count/CRUD roots for these types either.
       for (const root of [schema.getQueryType()!, schema.getMutationType()!]) {
@@ -461,7 +467,10 @@ describe('Laundry & Billing tenant isolation (e2e)', () => {
           /laundry|invoice/i.test(name),
         );
         expect(
-          names.filter((name) => !expected.includes(`${root.name}.${name}`)),
+          names.filter(
+            (name) =>
+              ![...expected, ...valueRoots].includes(`${root.name}.${name}`),
+          ),
         ).toEqual([]);
       }
     });
