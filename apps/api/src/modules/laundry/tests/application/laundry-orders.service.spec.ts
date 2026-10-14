@@ -832,6 +832,240 @@ describe('LaundryOrdersService', () => {
     });
   });
 
+  // Amendment #164 §8.4.5: the non-writing estimate, through the same quote
+  // path as `price` (vectors from laundry-line-pricing.spec.ts where they fit).
+  describe('previewPrice', () => {
+    const query = (
+      over: Partial<Parameters<LaundryOrdersService['previewPrice']>[0]> = {},
+    ) => ({
+      baseServiceId: 'svc-1',
+      orderId: 'order-1',
+      tenantId: TENANT,
+      addOns: [] as { addOnId: string; quantity?: number }[],
+      ...over,
+    });
+    const rule = (
+      unit: PricingUnit,
+      priceMinorUnits: number,
+      minimumChargeMinorUnits: number | null = null,
+    ) => ({
+      id: `rule-${unit}`,
+      minimumChargeMinorUnits,
+      priceMinorUnits,
+      unit,
+    });
+
+    beforeEach(() => {
+      orderRepository.findOneBy.mockResolvedValue(
+        anOrder({ status: LaundryOrderStatus.WEIGHED, weightGrams: 2500 }),
+      );
+    });
+
+    it('prices PER_KG on the weight, ignores a supplied quantity and applies the floor', async () => {
+      pricingRulesService.resolveEffectivePricing.mockResolvedValue(
+        rule(PricingUnit.PER_KG, 100, 500),
+      );
+
+      await expect(
+        service.previewPrice(query({ baseQuantity: 7 })),
+      ).resolves.toEqual({
+        estimatedTotalMinorUnits: 500,
+        lines: [
+          {
+            addOnId: null,
+            serviceId: 'svc-1',
+            amountMinorUnits: 500,
+            description: 'Wash & Fold',
+            minimumChargeApplied: true,
+            minimumChargeMinorUnits: 500,
+            quantity: 2500,
+            rateMinorUnits: 100,
+            unit: PricingUnit.PER_KG,
+          },
+        ],
+      });
+    });
+
+    it('prices PER_ITEM on baseQuantity, default 1, never on weight', async () => {
+      pricingRulesService.resolveEffectivePricing.mockResolvedValue(
+        rule(PricingUnit.PER_ITEM, 1200),
+      );
+
+      const three = await service.previewPrice(query({ baseQuantity: 3 }));
+      const one = await service.previewPrice(query());
+
+      expect(three.lines[0]).toEqual(
+        expect.objectContaining({ amountMinorUnits: 3600, quantity: 3 }),
+      );
+      expect(one.lines[0]).toEqual(
+        expect.objectContaining({ amountMinorUnits: 1200, quantity: 1 }),
+      );
+    });
+
+    it.each([PricingUnit.FLAT, PricingUnit.PER_SERVICE])(
+      'prices %s at quantity 1 and ignores a supplied quantity',
+      async (unit) => {
+        pricingRulesService.resolveEffectivePricing.mockResolvedValue(
+          rule(unit, 900),
+        );
+
+        const preview = await service.previewPrice(query({ baseQuantity: 4 }));
+
+        expect(preview.lines[0]).toEqual(
+          expect.objectContaining({ amountMinorUnits: 900, quantity: 1 }),
+        );
+        expect(preview.estimatedTotalMinorUnits).toBe(900);
+      },
+    );
+
+    it('prices add-ons by the same rule and a repeated addOnId as its own line', async () => {
+      pricingRulesService.resolveEffectivePricing.mockImplementation(
+        (target: { serviceId?: string }) =>
+          Promise.resolve(
+            target.serviceId
+              ? rule(PricingUnit.FLAT, 1000)
+              : rule(PricingUnit.PER_ITEM, 250),
+          ),
+      );
+
+      const preview = await service.previewPrice(
+        query({
+          addOns: [{ addOnId: 'ao-1', quantity: 2 }, { addOnId: 'ao-1' }],
+        }),
+      );
+
+      expect(
+        preview.lines.map((line) => [
+          line.serviceId ?? line.addOnId,
+          line.description,
+          line.quantity,
+          line.amountMinorUnits,
+        ]),
+      ).toEqual([
+        ['svc-1', 'Wash & Fold', 1, 1000],
+        ['ao-1', 'Ironing (add-on)', 2, 500],
+        ['ao-1', 'Ironing (add-on)', 1, 250],
+      ]);
+      expect(preview.estimatedTotalMinorUnits).toBe(1750);
+    });
+
+    it.each([LaundryOrderStatus.RECEIVED, LaundryOrderStatus.PRICED])(
+      'rejects a %s order',
+      async (status) => {
+        orderRepository.findOneBy.mockResolvedValue(
+          anOrder({ status, weightGrams: 2500 }),
+        );
+
+        await expect(service.previewPrice(query())).rejects.toThrow(
+          new BadRequestException(
+            `Cannot price a laundry order in status ${status}`,
+          ),
+        );
+      },
+    );
+
+    it('rejects a WEIGHED order without a recorded weight', async () => {
+      orderRepository.findOneBy.mockResolvedValue(
+        anOrder({ status: LaundryOrderStatus.WEIGHED, weightGrams: null }),
+      );
+
+      await expect(service.previewPrice(query())).rejects.toThrow(
+        new BadRequestException('Laundry order has no recorded weight'),
+      );
+    });
+
+    it('rejects a target with no effective price', async () => {
+      pricingRulesService.resolveEffectivePricing.mockResolvedValue(null);
+
+      await expect(service.previewPrice(query())).rejects.toThrow(
+        new BadRequestException('No effective price for serviceId svc-1'),
+      );
+    });
+
+    it('reads the order in the query tenant and 404s a missing one', async () => {
+      orderRepository.findOneBy.mockResolvedValue(null);
+
+      await expect(service.previewPrice(query())).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(orderRepository.findOneBy).toHaveBeenCalledWith({
+        id: 'order-1',
+        tenantId: TENANT,
+      });
+    });
+
+    it.each([0, 1.5])('rejects quantity %s', async (baseQuantity) => {
+      await expect(
+        service.previewPrice(query({ baseQuantity })),
+      ).rejects.toThrow(
+        new BadRequestException('quantity must be an integer >= 1'),
+      );
+    });
+
+    it('never writes: no transaction, no manager call, no audit', async () => {
+      pricingRulesService.resolveEffectivePricing.mockResolvedValue(
+        rule(PricingUnit.FLAT, 1000),
+      );
+
+      await service.previewPrice(query({ addOns: [{ addOnId: 'ao-1' }] }));
+
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      for (const mock of Object.values(manager)) {
+        expect(mock).not.toHaveBeenCalled();
+      }
+      expect(auditLogger.log).not.toHaveBeenCalled();
+    });
+
+    it('agrees with price line for line and in total', async () => {
+      pricingRulesService.resolveEffectivePricing.mockImplementation(
+        (target: { serviceId?: string }) =>
+          Promise.resolve(
+            target.serviceId
+              ? rule(PricingUnit.PER_KG, 1500, 500)
+              : rule(PricingUnit.PER_ITEM, 250),
+          ),
+      );
+      const order = anOrder({
+        status: LaundryOrderStatus.WEIGHED,
+        weightGrams: 2350,
+      });
+      orderRepository.findOneBy.mockResolvedValue(order);
+      manager.findOne.mockResolvedValue(order);
+      manager.findOneByOrFail.mockResolvedValue(order);
+      const input = query({ addOns: [{ addOnId: 'ao-1', quantity: 3 }] });
+
+      const preview = await service.previewPrice(input);
+      await service.price({ ...input, actorId: 'a' });
+
+      const saved = (manager.save.mock.calls as unknown[][]).map(
+        ([row]) =>
+          row as {
+            addOnId: string | null;
+            pricingSnapshot: Record<string, unknown>;
+            serviceId: string | null;
+          },
+      );
+      expect(preview.lines).toEqual(
+        saved.map(({ addOnId, pricingSnapshot, serviceId }) => {
+          const line: Record<string, unknown> = {
+            ...pricingSnapshot,
+            addOnId,
+            serviceId,
+          };
+          delete line.pricingRuleId;
+          return line;
+        }),
+      );
+      expect(manager.update).toHaveBeenCalledWith(
+        LaundryOrderEntity,
+        { id: 'order-1', tenantId: TENANT },
+        expect.objectContaining({
+          totalMinorUnits: preview.estimatedTotalMinorUnits,
+        }),
+      );
+    });
+  });
+
   // Competing failures (#159 plan "Error precedence"): each case sets up two
   // or more failures; the first in the table must win, and nothing is
   // written. C1–C6 are characterization tests of `price` as it was before
@@ -842,6 +1076,7 @@ describe('LaundryOrdersService', () => {
       string,
       (input: PriceInput) => Promise<unknown>
     > = {
+      previewPrice: (input) => service.previewPrice(input),
       price: (input) => service.price({ ...input, actorId: 'a' }),
     };
     const RULE = {
@@ -1009,6 +1244,9 @@ describe('LaundryOrdersService', () => {
         expect(manager.save).not.toHaveBeenCalled();
         expect(manager.update).not.toHaveBeenCalled();
         expect(auditLogger.log).not.toHaveBeenCalled();
+        if (entryPoint === 'previewPrice') {
+          expect(dataSource.transaction).not.toHaveBeenCalled();
+        }
         if (c.readsNames === false) {
           expect(servicesService.getServicesByIds).not.toHaveBeenCalled();
           expect(addOnsService.getAddOnsByIds).not.toHaveBeenCalled();

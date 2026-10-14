@@ -25,8 +25,12 @@ import { LaundryOrderEntity } from '../../infrastructure/persistence/laundry-ord
 import { LaundryOrderLineEntity } from '../../infrastructure/persistence/laundry-order-line.entity';
 import { LaundryOrderLinePricingSnapshotEmbeddable } from '../../infrastructure/persistence/laundry-order-line-pricing-snapshot.embeddable';
 import { LaundryOrderTransitionCommand } from '../commands/laundry-order-transition.command';
+import { LaundryPricePreview } from './laundry-price-preview';
 import { OrderForInvoicing } from './order-for-invoicing';
-import { PriceLaundryOrderCommand } from '../commands/price-laundry-order.command';
+import {
+  PreviewLaundryOrderPriceQuery,
+  PriceLaundryOrderCommand,
+} from '../commands/price-laundry-order.command';
 import { ReceiveLaundryOrderCommand } from '../commands/receive-laundry-order.command';
 import { WeighLaundryOrderCommand } from '../commands/weigh-laundry-order.command';
 import { tenantAuditTags } from '../../../../platform/audit/application/audit-tags';
@@ -169,6 +173,40 @@ export class LaundryOrdersService {
 
   markReady(c: LaundryOrderTransitionCommand): Promise<LaundryOrder> {
     return this.transitionVerb(c, S.READY, 'laundry_order.ready');
+  }
+
+  // Non-writing estimate (Amendment #164 §8.4.5): price's preconditions and
+  // quoting path, on a plain tenant-scoped read. No transaction, no lock, no
+  // write, no audit.
+  async previewPrice(
+    query: PreviewLaundryOrderPriceQuery,
+  ): Promise<LaundryPricePreview> {
+    const order = await this.orderRepository.findOneBy({
+      id: query.orderId,
+      tenantId: query.tenantId,
+    });
+    if (!order) {
+      throw new NotFoundException(`Laundry order ${query.orderId} not found`);
+    }
+    const quoted = await this.quote(order, query);
+    return {
+      estimatedTotalMinorUnits: quoted.reduce(
+        (sum, { snapshot }) => sum + snapshot.amountMinorUnits,
+        0,
+      ),
+      // `pricingRuleId` stays server-side: the preview payload does not carry it.
+      lines: quoted.map(({ addOnId, serviceId, snapshot }) => ({
+        addOnId,
+        serviceId,
+        amountMinorUnits: snapshot.amountMinorUnits,
+        description: snapshot.description,
+        minimumChargeApplied: snapshot.minimumChargeApplied,
+        minimumChargeMinorUnits: snapshot.minimumChargeMinorUnits,
+        quantity: snapshot.quantity,
+        rateMinorUnits: snapshot.rateMinorUnits,
+        unit: snapshot.unit,
+      })),
+    };
   }
 
   // The immutable-snapshot operation, exactly once per order (spec §4.5).
