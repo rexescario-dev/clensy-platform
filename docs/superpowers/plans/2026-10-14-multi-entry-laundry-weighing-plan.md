@@ -4,8 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft** (M4, revision 5). Plan Review (M5) in progress, by parts. |
-| M5 history | Part 1 (2026-10-14, owner): provisional. **P1:** the entry contract called every non-digit, non-point character a format error, contradicting the negative-entry message. Resolved in revision 2: Global Constraints now fix the classification order (blank → leading minus → format → notPositive → tooLarge), and Task 2 adds `-1.2345`, `--1` and `1-` as format cases. **Verify (refetch):** Task 4 adds a test that every control stays disabled until the post-save refetch settles. **Verify (oversize):** already covered by Task 2's `tooLarge` cases and Task 4's over-maximum tests. Each row is capped at `MAX_WEIGHT_GRAMS` before it is summed, so the total `formatWeightGrams` receives is always a safe integer. Part 2 (2026-10-14, owner): **P1:** the zero-weight service test asserted only `manager.update`, not the promised "before opening a transaction". Resolved in revision 3: the test also asserts `dataSource.transaction`, `manager.findOne` and `auditLogger.log` were not called, the spec's existing boundary pattern (`receive` / `price` guard tests). The DTO and service messages stay intentionally distinct. Part 3 (2026-10-14, owner): **P1:** the parser comment did not state that a negative with more than three decimals is `format`. Resolved in revision 4: the comment and Global Constraints spell out the precedence (format checks before the negative check). **P2:** `-99999999` must be `notPositive`, not `tooLarge`. The planned code already checks the minus before the oversize check; revision 4 adds `-99999999` as a regression case and says so in Global Constraints. **Suggestion (accepted):** `graphQLErrorMessage` returns `undefined` for a first error that is `null` or not an object, with three new cases. The priced set stays an explicit list. Part 4 (2026-10-14, owner): **P1 (error policy):** resolved in revision 5. The spike shows the effective policy is Apollo 3.14's default `'none'`: there are no `defaultOptions` anywhere, and the `onError` link only observes. So GraphQL errors reject. The contract is documented in Task 4, and the handler also treats a resolved result with errors or without the order as a failure (decision g). **P1 (sync throw from `onRecorded`):** the reviewer withdrew it; no change. **P2 (stale alert):** an edit, add, remove or new submit clears the server error, with four tests. **P2 (resolved-error path):** two tests cover a resolved result with errors and one with no order; the mock's default success now carries the order. **P2 (total error a11y):** the total-level error has id `laundry-weighing-form-error` and describes Record weight, asserted in the over-maximum and no-rows tests; the live region stays on the total only. |
+| Status | **Draft** (M4, revision 6). Plan Review (M5) in progress, by parts. |
+| M5 history | Part 1 (2026-10-14, owner): provisional. **P1:** the entry contract called every non-digit, non-point character a format error, contradicting the negative-entry message. Resolved in revision 2: Global Constraints now fix the classification order (blank → leading minus → format → notPositive → tooLarge), and Task 2 adds `-1.2345`, `--1` and `1-` as format cases. **Verify (refetch):** Task 4 adds a test that every control stays disabled until the post-save refetch settles. **Verify (oversize):** already covered by Task 2's `tooLarge` cases and Task 4's over-maximum tests. Each row is capped at `MAX_WEIGHT_GRAMS` before it is summed, so the total `formatWeightGrams` receives is always a safe integer. Part 2 (2026-10-14, owner): **P1:** the zero-weight service test asserted only `manager.update`, not the promised "before opening a transaction". Resolved in revision 3: the test also asserts `dataSource.transaction`, `manager.findOne` and `auditLogger.log` were not called, the spec's existing boundary pattern (`receive` / `price` guard tests). The DTO and service messages stay intentionally distinct. Part 3 (2026-10-14, owner): **P1:** the parser comment did not state that a negative with more than three decimals is `format`. Resolved in revision 4: the comment and Global Constraints spell out the precedence (format checks before the negative check). **P2:** `-99999999` must be `notPositive`, not `tooLarge`. The planned code already checks the minus before the oversize check; revision 4 adds `-99999999` as a regression case and says so in Global Constraints. **Suggestion (accepted):** `graphQLErrorMessage` returns `undefined` for a first error that is `null` or not an object, with three new cases. The priced set stays an explicit list. Part 4 (2026-10-14, owner): **P1 (error policy):** resolved in revision 5. The spike shows the effective policy is Apollo 3.14's default `'none'`: there are no `defaultOptions` anywhere, and the `onError` link only observes. So GraphQL errors reject. The contract is documented in Task 4, and the handler also treats a resolved result with errors or without the order as a failure (decision g). **P1 (sync throw from `onRecorded`):** the reviewer withdrew it; no change. **P2 (stale alert):** an edit, add, remove or new submit clears the server error, with four tests. **P2 (resolved-error path):** two tests cover a resolved result with errors and one with no order; the mock's default success now carries the order. **P2 (total error a11y):** the total-level error has id `laundry-weighing-form-error` and describes Record weight, asserted in the over-maximum and no-rows tests; the live region stays on the total only. Part 5 (2026-10-14, owner): verdict **not accepted yet**. The summary table repeats the part 1–4 findings; revisions 3–5 had already resolved them before part 5 was sent (transaction boundary: rev 3; negative precedence and `-99999999`: rev 4, already ordered in the code; error policy, stale alert, total-error a11y: rev 5). New in part 5, resolved in revision 6. **Brittle markup:** the Task 5 render test drops the exact Tailwind class and ordered-attribute assertions; the live total is checked by `role="status"` and `aria-live="polite"` on the tag holding `0.00 kg`. **Page-level refetch failure:** a Task 5 characterization test shows the post-save reload failure renders the order error state with no weighing failure and no editor. The stated guarantee is narrowed: the editor guarantees no weighing error, the page shows its existing #156 branch, and Apollo setting `error` is library behavior. **Task 6:** the report must record each command as PASS, FAIL or NOT RUN, state that authorization and status enforcement stay server-side, say whether the API tests ran, and list the release-gate and tenant-isolation suites as excluded, not as covered. |
 | Date | 2026-10-14 |
 | Tracking issue | [#155](https://github.com/rexescario-dev/clensy-platform/issues/155) "Multi-entry laundry weighing". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) (merged in #183: the order page and its Weighing section) and [#157](https://github.com/rexescario-dev/clensy-platform/issues/157) (closed: `formatWeightGrams`, `laundryOrderActions`). The spec gate in #155 is met: [#164](https://github.com/rexescario-dev/clensy-platform/issues/164) §8.4.1 is Accepted (#167), so this slice takes the issue's "if Accepted" branch (issue comment, 2026-10-14). |
 | Branch | `feat/155-multi-entry-laundry-weighing`, from `main` at `c6b6c75`. One PR for this plan, its M5 record and the implementation. |
@@ -70,7 +70,7 @@ Derived from the Accepted spec, issue #155 (with its two comments) and the owner
   - **While in flight:** Add, Remove, every input and Record weight are disabled. A synchronous ref drops repeat submits.
   - **Success:** toast "Weight recorded.", call `onRecorded()` (the order refetch), and leave one row prefilled with the saved total.
   - **Failure:** `<p role="alert">` with `graphQLErrorMessage(error)`, falling back to "Unable to record weight.". The rows are kept.
-  - **Refetch failure:** a refetch that fails after a successful save shows no weighing error. The page's own order-load handling applies.
+  - **Refetch failure:** a refetch that fails after a successful save shows no weighing error, and the controls re-enable (the editor's guarantee, Task 4). What the page then shows is its existing #156 order-error branch: Apollo keeps the old data and sets `error`, and the page renders "Unable to load laundry order." with the back link. Task 5 pins that branch for the post-save case. That Apollo sets `error` on a failed refetch is library behavior, not unit-tested here.
 - **Accessibility:** every input has a visible `<label>`. Errors use `aria-invalid` and `aria-describedby`, through `FormField`. Every Remove button's accessible name includes the row number.
 - **Boundaries:** app code imports UI only from `@clensy/ui` (project memory: never shadcn/ui directly). **SHALL NOT** edit `apps/web/app/app/laundry/page.tsx`, `currentLaundryOrderSection`, `@clensy/ui`, or the operation documents in `packages/client`.
 
@@ -80,7 +80,7 @@ These failure modes follow from the spec or issue, but no line of the issue test
 
 1. **A long digit string must not crash the page.** For example, a pasted `99999999999` must give an inline error, not a `RangeError` thrown by `formatWeightGrams` past `Number.MAX_SAFE_INTEGER`. Pinned in Task 2 (`tooLarge` cases) and Task 4 (the over-maximum total test).
 2. **A comma decimal (`1,5`) or a pasted value with spaces is a visible format error,** never silently read as `15` or `1.5`. Pinned in Task 2.
-3. **The refetch after a save can fail.** It must not show "Unable to record weight." for a weight that was recorded, and it must not leave the controls disabled. Pinned in Task 4.
+3. **The refetch after a save can fail.** It must not show "Unable to record weight." for a weight that was recorded, and it must not leave the controls disabled. Pinned in Task 4 (editor) and Task 5 (page error state).
 4. **A cancelled or rejected order never claims to be priced.** It must show its weight or "Not weighed yet." and no locked copy. Pinned in Task 3 (every status) and Task 5 (rendered).
 5. **A legacy `WEIGHED` order stored with `0` grams** prefills `0.00`. The form must show "Weight must be greater than zero." on submit, not send `0`. Pinned in Task 4.
 
@@ -1334,8 +1334,9 @@ export function LaundryWeighingEditor({ onRecorded, orderId, weightGrams }: Laun
       try {
         await onRecorded();
       } catch {
-        // The weight is recorded. A failed reload is the page's order
-        // error state to show, not a weighing failure.
+        // The weight is recorded; a failed reload is never a weighing
+        // failure. Apollo puts the query in error, and the page shows its
+        // order error state (Task 5 test).
       }
     } finally {
       inFlight.current = false;
@@ -1546,8 +1547,11 @@ Inside `describe('laundry order page', …)`, directly after the `it('shows the 
     expect(weighing).toContain('Remove bag 1');
     expect(weighing).toContain('Add bag');
     expect(weighing).toContain('Combined weight');
-    expect(weighing).toContain('class="rounded-md border border-slate-200 bg-slate-50 p-3"');
-    expect(weighing).toMatch(/role="status"[^>]*aria-live="polite"[^>]*class="text-lg font-semibold text-slate-900"[^>]*>0\.00 kg</);
+    // The live total, by semantics, not by class string or attribute order.
+    const totalTag = /<p\b[^>]*>0\.00 kg<\/p>/.exec(weighing)?.[0];
+    expect(totalTag).toBeDefined();
+    expect(totalTag).toContain('role="status"');
+    expect(totalTag).toContain('aria-live="polite"');
     expect(weighing).toContain('Record weight');
     expect(weighing).not.toContain('Recorded weight');
     expect(weighing).not.toContain('Weight is locked');
@@ -1596,6 +1600,23 @@ Inside `describe('laundry order page', …)`, directly after the `it('shows the 
     expect(weighing).not.toContain('<input');
   });
 
+  // #155 §Submit: after a recorded weight, a failed refetch leaves the
+  // order query in error (Apollo keeps the old data and sets `error`). The
+  // page then shows its order error state: the weight is not reported as
+  // a weighing failure, and no stale editor stays on screen.
+  // Characterization test: this is the #156 error branch, unchanged.
+  it('shows the order error state, not a weighing failure, when the post-save reload fails', async () => {
+    page.order = order({ status: 'WEIGHED', totalMinorUnits: null, weightGrams: 2500 });
+    page.role = 'OPS_MANAGER';
+    page.orderRetained = true;
+    page.orderError = new Error('network');
+    const html = await renderPage();
+    expect(html).toContain('Unable to load laundry order.');
+    expect(html).toContain(BACK_LINK);
+    expect(html).not.toContain('Unable to record weight.');
+    expect(html).not.toContain('<form');
+  });
+
   it.each([
     ['CANCELLED', 2505, '2.505 kg'],
     ['CANCELLED', null, 'Not weighed yet.'],
@@ -1614,7 +1635,7 @@ Inside `describe('laundry order page', …)`, directly after the `it('shows the 
 - [ ] **Step 3: Run to verify they fail**
 
 Run: `pnpm --filter web test -- laundry-order-page.render`
-Expected: FAIL. The new editor and locked tests fail because the section still shows only facts. The non-editor read-only cases and the `CANCELLED` / `REJECTED` cases pass already. They are **characterization tests** of the read-only body that this task keeps. Every pre-existing test still passes.
+Expected: FAIL. The new editor and locked tests fail because the section still shows only facts. The non-editor read-only cases, the `CANCELLED` / `REJECTED` cases and the post-save reload failure case pass already. They are **characterization tests** of the read-only body that this task keeps. Every pre-existing test still passes.
 
 - [ ] **Step 4: Wire the section**
 
@@ -1757,7 +1778,12 @@ pnpm --filter web exec tsc --noEmit
 pnpm --filter web build
 ```
 
-Expected: all pass. `pnpm --filter web build` still lists `/app/laundry/[id]`. Record each command's result in the M6 Slice Completion Report's Validation table. Release-gate and tenant-isolation e2e suites are not re-run: no resolver, role, query or tenant scope changed, and no probe weighs `0` (planning spike).
+Expected: all pass. `pnpm --filter web build` still lists `/app/laundry/[id]`. Record each command's result in the M6 Slice Completion Report's Validation table, one row per command, marked PASS, FAIL or **NOT RUN** with the reason. Never fold an unrun command into another row.
+
+The report MUST also state:
+- **Server-side enforcement:** authorization and status enforcement for `weighLaundryOrder` stay server-side and unchanged (resolver roles, the status check in `LaundryOrdersService.weigh`). The UI gate is presentation only.
+- **API tests:** whether the API unit tests and the two laundry e2e suites actually ran.
+- **Exclusions:** the release-gate and tenant-isolation e2e suites are **not run, by design**. No resolver, role, query or tenant scope changed, and no probe weighs `0` (planning spike). The report must say these suites were excluded, not that other checks covered them.
 
 - [ ] **Step 2: Check it in the browser**
 
