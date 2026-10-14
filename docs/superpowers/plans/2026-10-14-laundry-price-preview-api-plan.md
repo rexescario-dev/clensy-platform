@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft**. Ready for M5 Plan Review. |
+| Status | **Draft (revision 2)**. Ready for M5 Plan Review. |
+| M5 history | First pass (2026-10-14, owner): **Returned for Revision**. P1: the `quote` extraction must keep `price`'s existing error order, and the plan did not show that order or pin it. P2: the `quote` signature disagreed between Architecture and Task 2. P2: no test covered competing failures. Resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). |
 | Date | 2026-10-14 |
 | Tracking issue | [#159](https://github.com/rexescario-dev/clensy-platform/issues/159) "Laundry price-preview and line-label API". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Spec gate [#164](https://github.com/rexescario-dev/clensy-platform/issues/164), Accepted through [#167](https://github.com/rexescario-dev/clensy-platform/pull/167). Unblocks #158 (services and add-ons) and #162 (price preview and confirmation). |
 | Branch | `feat/159-laundry-price-preview-api`, from `main` at `fb0791e`. One PR carries this plan, its M5 record and the implementation. |
@@ -22,7 +23,7 @@
 
 **Architecture:**
 
-- **One quoting path.** A private `LaundryOrdersService.quote(order, input, tenantId)` holds today's `price` loop body: §4.5 step 3 rule resolution (`resolveEffectivePricing`, one `asOf`), step 3a quantity resolution, step 4 `computeLaundryLineAmount`, plus the §8.4.2 description lookup. `price` calls it inside its locked transaction and persists the result. `previewPrice` calls it on a plain tenant-scoped read and returns the result. There is no second formula.
+- **One quoting path.** A private `LaundryOrdersService.quote(order, input)` (tenant scoping comes from `input.tenantId`) holds today's `price` loop body: §4.5 step 3 rule resolution (`resolveEffectivePricing`, one `asOf`), step 3a quantity resolution, step 4 `computeLaundryLineAmount`, plus the §8.4.2 description lookup. `price` calls it inside its locked transaction and persists the result. `previewPrice` calls it on a plain tenant-scoped read and returns the result. There is no second formula.
 - **Names** come from `ServicesService.getServicesByIds` / `AddOnsService.getAddOnsByIds`, the same tenant-scoped catalog reads billing uses. `LaundryModule` already imports `CatalogModule`, which exports both services. No catalog entity is registered in `LaundryModule`.
 - **Persistence:** one additive migration adds `pricingSnapshotDescription text`, backfills it from the catalog at migration time, then sets `not null`.
 - **GraphQL:** `LaundryOrderLinePricingSnapshot.description: String!`; a `previewLaundryOrderPrice` `@Query` on the existing `LaundryOrderResolver` (it already hosts the `laundryOrder` query), `@UseGuards(AuthGuard)` + `@Roles(...OPERATIONAL)`.
@@ -38,7 +39,7 @@ Derived from the Accepted spec only. Every task's requirements implicitly includ
 - **SHALL** compute preview lines and priced lines through the one `quote` helper. **SHALL NOT** duplicate `resolveQuantity`, the `resolveEffectivePricing` call, or `computeLaundryLineAmount` in a second code path (§8.2 last bullet; §8.4.5).
 - **SHALL** keep §4.5 step 3a exactly: `PER_KG` uses `order.weightGrams` and ignores a supplied quantity; `PER_ITEM` uses the supplied quantity or `1`; `FLAT` / `PER_SERVICE` use `1`. A supplied quantity that ends up ignored is **not** an error. Supplied quantities are validated as integers `≥ 1` for both price and preview.
 - **SHALL** build the description as `Service.name` for the base line and `` `${AddOn.name} (add-on)` `` for an add-on line (§8.4.2). When the catalog row is not found in the caller's tenant, **SHALL** throw `BadRequestException` (`Service <id> could not be resolved` / `Add-on <id> could not be resolved`, the invoice guard's wording); in `price` this happens inside the transaction, so nothing is written.
-- **SHALL** keep `price`'s existing error order: status / weight precondition, quantity shape, then per target `No effective price for <column> <id>`, then the name. The cross-tenant release-gate probes rely on the 400s.
+- **SHALL** keep `price`'s existing error order, and give preview the same order (see [Error precedence](#error-precedence)). The cross-tenant release-gate probes rely on the 400s.
 - **Preview SHALL NOT** open a transaction, take a row lock, insert or update any row, change status, set `totalMinorUnits`, write an audit event, generate an invoice or mark anything paid (§8.4.5). It reads the order by `{ id, tenantId }`; a missing or other-tenant order is `NotFoundException` (the `lock` helper's message), like `price`.
 - **Preview SHALL** require `status = WEIGHED` and `weightGrams !== null`, with `price`'s existing messages (`Cannot price a laundry order in status <S>` / `Laundry order has no recorded weight`), as `BadRequestException`.
 - **Preview SHALL** price each `addOns` entry as its own line, so a repeated `addOnId` yields repeated lines, exactly like `price` (§8.4.3). **SHALL NOT** add any new precondition.
@@ -48,6 +49,28 @@ Derived from the Accepted spec only. Every task's requirements implicitly includ
 - **Migration:** additive only; reads `service_entity` / `add_on_entity` but never alters them; backfill joins on `id` **and** `tenantId`; the class carries the §8.4.2 comment that a backfilled value is the catalog name at migration time, not the name at pricing time; `down()` drops the column only.
 - **SHALL NOT** change `getOrderForInvoicing`, `OrderForInvoicing`, or invoice generation. Invoices keep copying their own description at generation (§8.2).
 - **SHALL NOT** touch `weigh`, `WeighLaundryOrderInput`, or any web package.
+
+## Error precedence
+
+**Current order in `price`, at `fb0791e`** (`laundry-orders.service.ts`, by quoted code; line numbers are for orientation only):
+
+| # | Check | Code | Error |
+| --- | --- | --- | --- |
+| 1 | Order exists in the tenant | `const order = await this.lock(` (l. 163) | `NotFoundException` `Laundry order <id> not found` |
+| 2 | Status is `WEIGHED` | `if (order.status !== S.WEIGHED) {` (l. 171) | 400 `Cannot price a laundry order in status <S>` |
+| 3 | Weight recorded | `if (order.weightGrams === null) {` (l. 176) | 400 `Laundry order has no recorded weight` |
+| 4 | Base quantity shape | `this.validateQuantity(command.baseQuantity);` (l. 179) | 400 `quantity must be an integer >= 1` |
+| 5 | Each add-on quantity shape, in input order | `this.validateQuantity(addOn.quantity);` (l. 181) | same |
+| 6 | Each target's effective price: base first, then add-ons in input order; the first missing one throws and no later target is resolved | `for (const target of targets) {` … `resolveEffectivePricing(` (l. 205–221) | 400 `No effective price for <serviceId\|addOnId> <id>` |
+
+Every check runs before any `manager.save` / `manager.update` / audit call, so each failure writes nothing.
+
+**Order after this plan** (both `price` and `previewPrice`):
+
+- Rows 1–6 unchanged. For preview, row 1 is the plain `findOneBy({ id, tenantId })` read with the same message. Rows 2–6 run inside `quote`, in the same order, with the same messages. `quote` moves this code without reordering it.
+- **New row 7:** names. It runs only after **every** target's rule has resolved. The base service name is checked first, then add-on names in input order. Errors are `Service <id> could not be resolved` / `Add-on <id> could not be resolved`. A row-6 failure therefore always wins over a missing name, and no catalog-name read happens when a rule is missing.
+
+[Task 2](#task-2-pricelaundryorder-freezes-the-description-842) pins rows 1–7 for `price` with competing-failure tests, and [Task 3](#task-3-previewprice--the-non-writing-estimate-845) runs the same table against `previewPrice`.
 
 ## Contract inventory
 
@@ -167,19 +190,52 @@ export class AddLaundryLineDescription1790956800000 implements MigrationInterfac
 
 **Files:** domain snapshot, embeddable, GraphQL snapshot type, service, unit spec, the e2e files that build `LaundryOrdersService` or write lines directly.
 
-- [ ] **Step 1: Write failing unit tests** in `laundry-orders.service.spec.ts`:
-  - Add `servicesService = { getServicesByIds: jest.fn() }` and `addOnsService = { getAddOnsByIds: jest.fn() }` mocks and providers (`ServicesService`, `AddOnsService` from `modules/catalog/application/services`). Default them in `describe('price')`'s `beforeEach` to return `[{ id: 'svc-1', name: 'Wash & Fold' }]` and `[]`.
+- [ ] **Step 1: Pin the current error order (characterization, before any service change).** In `laundry-orders.service.spec.ts`:
+  - Add `servicesService = { getServicesByIds: jest.fn() }` and `addOnsService = { getAddOnsByIds: jest.fn() }` mocks and providers (`ServicesService`, `AddOnsService` from `modules/catalog/application/services`). Default them in `describe('price')`'s `beforeEach` to return `[{ id: 'svc-1', name: 'Wash & Fold' }]` and `[]`. Unused providers are harmless before the constructor changes.
+  - Add a top-level `describe('error precedence')` driven by an entry-point table, so Task 3 can add `previewPrice` without copying cases:
+    ```ts
+    // Each case sets up two or more failures; the first in the
+    // "Error precedence" table must win, and nothing is written.
+    const ENTRY_POINTS = {
+      price: (input: PriceInput) => service.price({ ...input, actorId: 'a' }),
+    };
+    ```
+    `PriceInput` is the spec-local `Omit<PriceLaundryOrderCommand, 'actorId'>`. The order comes from `manager.findOne` for `price`; set `orderRepository.findOneBy` to the same value too, so Task 3's preview entry reads it. Cases (`describe.each(Object.entries(ENTRY_POINTS))` × `it.each(cases)`):
+
+    | Case | Setup (all other mocks succeed) | Expected error | Also asserts |
+    | --- | --- | --- | --- |
+    | C1 missing order beats invalid quantity | order not found; `baseQuantity: 0` | `NotFoundException` | `resolveEffectivePricing` not called |
+    | C2 status beats invalid quantity | `PRICED`, weight 2000; `baseQuantity: 0` | `Cannot price a laundry order in status PRICED` | `resolveEffectivePricing` not called |
+    | C3 weight beats invalid quantity | `WEIGHED`, weight `null`; `baseQuantity: 0` | `Laundry order has no recorded weight` | same |
+    | C4 add-on quantity beats a missing price | `WEIGHED`; base rule `null`; `addOns: [{ addOnId: 'ao-1', quantity: 0 }]` | `quantity must be an integer >= 1` | `resolveEffectivePricing` not called |
+    | C5 first missing price wins, later targets not resolved | base rule `null`; add-on `ao-1` rule `null` | `No effective price for serviceId svc-1` | `resolveEffectivePricing` called once |
+    | C6 first missing add-on price wins | base rule ok; `ao-1` and `ao-2` rules `null` | `No effective price for addOnId ao-1` | `resolveEffectivePricing` called twice |
+
+    Every case also asserts `manager.save`, `manager.update` and `auditLogger.log` were not called.
+  - Run: `pnpm --filter api test -- laundry-orders.service`
+    Expected: **PASS** against the unchanged service. These are **characterization tests**: they pin rows 1–6 of [Error precedence](#error-precedence) before `quote` is extracted. If any fails here, stop: the table above is wrong, not the code. Fix the table and this plan before going on.
+  - Commit: `test(api): pin laundry pricing error precedence before extracting quote (#159)`
+
+- [ ] **Step 2: Write failing unit tests** for the description, in the same spec:
+  - Add to the precedence table (the order is `WEIGHED` with weight 2000 unless a case says otherwise):
+
+    | Case | Setup | Expected error | Also asserts |
+    | --- | --- | --- | --- |
+    | C7 missing price beats missing name | base rule ok; `ao-1` rule `null`; `getServicesByIds` → `[]` | `No effective price for addOnId ao-1` | `getServicesByIds` and `getAddOnsByIds` not called |
+    | C8 base name beats add-on name | all rules ok; `getServicesByIds` → `[]`; `getAddOnsByIds` → `[]` | `Service svc-1 could not be resolved` | — |
+    | C9 add-on names in input order | all rules ok; `addOns` `ao-1`, `ao-2`; `getAddOnsByIds` → only `ao-1` | `Add-on ao-2 could not be resolved` | — |
+
+    C7 passes before the change, because there is no lookup; it stays a guard that the new lookup comes after the rules. C8 and C9 fail first.
   - Extend the existing "freezes a PER_KG base line snapshot…" expectation with `description: 'Wash & Fold'`.
   - New: **"freezes the add-on description with the invoice suffix, once per repeated add-on"** — two `addOns` entries with the same `addOnId: 'ao-1'`, `getAddOnsByIds` returns `[{ id: 'ao-1', name: 'Ironing' }]`; assert two saved add-on lines, each `description: 'Ironing (add-on)'`.
   - New: **"looks names up in the command tenant"** — `getServicesByIds` called with `(['svc-1'], 't-a')`, `getAddOnsByIds` with the add-on ids and `'t-a'`.
-  - New: **"rejects when the base service name cannot be read and writes nothing"** — `getServicesByIds` returns `[]`; expect `BadRequestException` `Service svc-1 could not be resolved`; `manager.save`, `manager.update` and `auditLogger.log` not called.
-  - New: **"rejects when an add-on name cannot be read"** — same for `Add-on ao-1 could not be resolved`.
+  - The missing-name rejections (and their "writes nothing" checks) are C8 and C9 above.
 
-- [ ] **Step 2: Run them and see them fail.**
+- [ ] **Step 3: Run them and see them fail.**
   Run: `pnpm --filter api test -- laundry-orders.service`
-  Expected: FAIL — `Nest can't resolve dependencies` is **not** expected (providers are supplied); the description assertions fail (`description` absent) and the missing-name cases resolve instead of rejecting.
+  Expected: FAIL in C8, C9 (they resolve instead of rejecting) and the three description tests (`description` absent). C1–C7 still PASS. No `Nest can't resolve dependencies` error (the providers are supplied).
 
-- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Implement.**
   - Domain `LaundryOrderLinePricingSnapshot`: add, with a comment citing §8.4.2,
     ```ts
     // The catalog name copied once at pricing (Amendment #164 §8.4.2):
@@ -199,17 +255,17 @@ export class AddLaundryLineDescription1790956800000 implements MigrationInterfac
       input: Omit<PriceLaundryOrderCommand, 'actorId' | 'orderId'>,
     ): Promise<QuotedLine[]>
     ```
-    Body, in order: `assertPriceable(order)` (the two existing `BadRequestException`s), `validateQuantity` for the base and every add-on, one `asOf = new Date()`, the existing `targets` array, then per target: `resolveEffectivePricing(…, asOf, input.tenantId)` → the existing "No effective price" 400 → `resolveQuantity` → `computeLaundryLineAmount`. After every rule resolved, fetch names once: `getServicesByIds([input.baseServiceId], input.tenantId)` and `getAddOnsByIds(unique add-on ids, input.tenantId)`; build each line's `description` (missing → the invoice-guard 400). Return `{ serviceId, addOnId, snapshot }[]` in input order, where `snapshot` is the full `LaundryOrderLinePricingSnapshot` including `description` and `pricingRuleId`.
+    Tenant scoping comes from `input.tenantId`; there is no separate `tenantId` parameter. The body moves rows 2–6 of [Error precedence](#error-precedence) out of `price` **without reordering them**, then adds row 7: `assertPriceable(order)` (the status check, then the weight check, with their existing messages), `validateQuantity(input.baseQuantity)`, `validateQuantity` for each add-on in input order, one `asOf = new Date()`, the existing `targets` array, then per target in that order: `resolveEffectivePricing(…, asOf, input.tenantId)` → the existing "No effective price" 400 → `resolveQuantity` → `computeLaundryLineAmount`. Only after the loop finishes, fetch names once: `getServicesByIds([input.baseServiceId], input.tenantId)` and `getAddOnsByIds(unique add-on ids, input.tenantId)`. Then build each line's `description`, base first and add-ons in input order; a missing name throws the invoice-guard 400. Return `{ serviceId, addOnId, snapshot }[]` in input order, where `snapshot` is the full `LaundryOrderLinePricingSnapshot` including `description` and `pricingRuleId`.
     `QuotedLine` is a module-private type in the service file.
   - Update every `new LaundryOrdersService(...)` call to pass `services` and `addOns`: `test/laundry.service.e2e-spec.ts` (`buildLaundryService` already constructs both), `test/billing.service.e2e-spec.ts` (two sites; construct `ServicesService` / `AddOnsService` the way `buildLaundryService` does if not already present).
   - Rows written outside the service gain the column: `test/remove-test-tenants.e2e-spec.ts` and `test/laundry-billing.tenant-isolation.e2e-spec.ts` raw `INSERT INTO "laundry_order_line_entity"` add `"pricingSnapshotDescription"` with `'Wash'`; `test/release-gate/two-tenant-world.ts` line fixture adds `description: 'Gate service'`.
   - `test/laundry.service.e2e-spec.ts`: the golden-path snapshot `toEqual` (around line 240) adds the expected `description` (its fixture's service name). Add one case: **"keeps the frozen description after a catalog rename"** — price an order, rename the service through `ServicesService.updateService`, re-read the line, the description is the pre-rename name.
 
-- [ ] **Step 4: Run and see them pass.**
+- [ ] **Step 5: Run and see them pass.**
   Run: `pnpm --filter api test -- laundry` then `pnpm --filter api test:e2e -- laundry.service billing.service`
   Expected: PASS. The DI spec (`laundry.module.di.spec.ts`) passes unchanged because `FakeCatalogModule` already exports `ServicesService` and `AddOnsService`; if it does not, add the two `useValue: {}` providers there.
 
-- [ ] **Step 5: Commit.** `feat(api): freeze the catalog name on priced laundry lines (#159)`
+- [ ] **Step 6: Commit.** `feat(api): freeze the catalog name on priced laundry lines (#159)`
 
 ### Task 3: `previewPrice` — the non-writing estimate (§8.4.5)
 
@@ -227,6 +283,7 @@ export class AddLaundryLineDescription1790956800000 implements MigrationInterfac
   9. **Rejects a non-integer or < 1 quantity** (`quantity must be an integer >= 1`).
   10. **Never writes:** across a successful preview, `dataSource.transaction`, every `manager` mock, and `auditLogger.log` have zero calls.
   11. **Agrees with price:** with identical mocks and input, the preview's lines equal the `pricingSnapshot` + ids of the lines `price` saves, and `estimatedTotalMinorUnits` equals the `totalMinorUnits` `price` writes. This pins the single-path rule.
+  12. **Same error precedence as price:** add `previewPrice: (input: PriceInput) => service.previewPrice(input)` to Task 2's `ENTRY_POINTS`. All of C1–C9 then run against preview with the same expected errors. For the preview entry, each case also asserts `dataSource.transaction` was not called. Cases 5–9 above stay as the single-failure checks. C1–C9 for preview are new behavior, not characterization, and fail first with `service.previewPrice is not a function`.
 
 - [ ] **Step 2: Run them and see them fail.**
   Run: `pnpm --filter api test -- laundry-orders.service`
@@ -398,8 +455,18 @@ export class AddLaundryLineDescription1790956800000 implements MigrationInterfac
 ## TDD summary
 
 - New failing tests precede each implementation step: migration e2e (Task 1), price description unit tests (Task 2), preview unit tests (Task 3), resolver RBAC/delegation (Task 4), client document tests (Task 6).
-- **Characterization tests** (pin behavior that is already correct and must not change): Task 3 case 11 "agrees with price" pins that the extracted `quote` did not change `price`'s amounts; the existing `price` unit and e2e cases kept green through Task 2 characterize the refactor. Task 5 case 2's "status unchanged" assertion on a `PRICED` order characterizes existing immutability.
+- **Characterization tests** (pin behavior that is already correct and must not change): Task 2 Step 1's precedence cases C1–C6 against `price` are written and run **green before** `quote` is extracted, and are committed on their own, so the refactor is checked against them. C7 also passes before the change and then guards that the new name lookup runs after every rule. Task 3 case 11 "agrees with price" pins that the extracted `quote` did not change `price`'s amounts; the existing `price` unit and e2e cases kept green through Task 2 characterize the refactor. Task 5 case 2's "status unchanged" assertion on a `PRICED` order characterizes existing immutability.
 - Sweep-guard edits in Task 4 are inventory updates the guards demand; they fail first by design (the guards reject an unclassified root field).
+
+## Revision 2 (M5 review 1)
+
+| Finding | Resolution |
+| --- | --- |
+| **P1: the `quote` extraction must keep `price`'s error order, and the plan did not show that order.** | New [Error precedence](#error-precedence) section. It records the current order at `fb0791e` with quoted code anchors (rows 1–6: lock, status, weight, base quantity, add-on quantities, rules in input order with the first missing rule throwing). It also fixes where the new name check goes (row 7: after every rule; base name, then add-ons in input order). The Global Constraint now points to that table. Task 2 Step 4 says `quote` moves rows 2–6 without reordering them, and fetches names only after the rule loop finishes. |
+| **P2: the `quote` signature disagreed between Architecture and Task 2.** | One signature everywhere: `quote(order, input)`, where `input` is `Omit<PriceLaundryOrderCommand, 'actorId' \| 'orderId'>` and carries `tenantId`. Architecture now says so, Task 2 Step 4 states there is no separate `tenantId` parameter, and Task 3 already called `quote(order, query)`. |
+| **P2: no test pinned the order between competing failures.** | Task 2 Step 1 adds an entry-point-driven precedence table. C1–C6 are characterization tests run green against the unchanged service and committed before the refactor: missing order beats invalid quantity; status beats invalid quantity; weight beats invalid quantity; invalid add-on quantity beats a missing price; the first missing price wins and later targets are not resolved. Task 2 Step 2 adds C7 (a missing price beats a missing name; no catalog-name read happens), C8 (base name before add-on name) and C9 (add-on names in input order). Every case asserts nothing is written. Task 3 case 12 runs the same C1–C9 against `previewPrice`, and also asserts no transaction. |
+
+The M7 requirement for a fresh independent reviewer is unchanged.
 
 ## Execution risks (operational only)
 
