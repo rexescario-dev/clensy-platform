@@ -4,8 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft (revision 3)** (M4), 2026-10-15. In Plan Review (M5), reviewed in six parts. |
-| M5 history | Part 1 (2026-10-15, owner): **no P1**; overall acceptance reserved until all six parts are reviewed.<br>• **P2 (planning decision c):** the first `PER_ITEM` choice's two-request transition must be proven by test, with the first response never leaving the UI ready while the second input is current. Resolved in revision 2: Task 4 case 5 asserts each step of the transition.<br>• **Suggestion (owner decision 4):** make the view matrix exhaustive against the real status and role types. Taken in revision 2: the Task 1 table test iterates `LAUNDRY_ORDER_STATUSES` (keys of a `Record<LaundryOrderStatus, …>`) × both fulfillment types × saved lines yes/no × role loading and every `ADMIN_ROLES` entry. This adds `SUPER_ADMIN`, which revision 1's hand-written role list missed. A count check pins 15 statuses and 7 roles.<br>• **Suggestion (planning decision e):** test stale-result rejection, not request cancellation. Taken in revision 2: Task 4 case 14 resolves the superseded request for real and covers an out-of-order success, a late success after a current failure, a superseded failure, and unmount, with `console.error` spied.<br>Part 2 (2026-10-15, owner): **no P1**.<br>• **P2 (Task 1 `matchPreview`):** it checked ids, not that the input was the current one; it could accept a preview for an outdated quantity. Resolved in revision 3 by the reviewer's second option. The `matchPreview` contract is now stated as line correspondence only (no quantity, order id or weight), with a test pinning that. Exact current-input identity is the hook's `[weightGrams, input]` key, proven by the new Task 4 case 19: an outdated base count, add-on count and weight each resolve with matching ids and never become current.<br>• **Suggestion 1 (matrix independence):** taken. Literal-role tests pin the editor to exactly `WEIGHED` × TENANT_OWNER, OPS_MANAGER, SCHEDULER. `laundryServicesView` now also requires `status === 'WEIGHED'`, so the "whatever the verbs claim" test forces a `price` verb on every other status. Revision 2's version of that test only used the helper's own verbs.<br>• **Suggestion 2 (duplicate ids):** taken. `missingPriceTarget` declines (`null`, so the raw message shows) when more than one row holds the named add-on, with a test.<br>• **Suggestion 3 (guards):** taken. `matchPreview` guards `base`, each line and each sent add-on explicitly. Checked: `apps/web` sets `strict` without `noUncheckedIndexedAccess`, and its lint has no type-checked rules, so the guards compile and lint as written. |
+| Status | **Draft (revision 4)** (M4), 2026-10-15. In Plan Review (M5), reviewed in six parts. |
+| M5 history | Part 1 (2026-10-15, owner): **no P1**; overall acceptance reserved until all six parts are reviewed.<br>• **P2 (planning decision c):** the first `PER_ITEM` choice's two-request transition must be proven by test, with the first response never leaving the UI ready while the second input is current. Resolved in revision 2: Task 4 case 5 asserts each step of the transition.<br>• **Suggestion (owner decision 4):** make the view matrix exhaustive against the real status and role types. Taken in revision 2: the Task 1 table test iterates `LAUNDRY_ORDER_STATUSES` (keys of a `Record<LaundryOrderStatus, …>`) × both fulfillment types × saved lines yes/no × role loading and every `ADMIN_ROLES` entry. This adds `SUPER_ADMIN`, which revision 1's hand-written role list missed. A count check pins 15 statuses and 7 roles.<br>• **Suggestion (planning decision e):** test stale-result rejection, not request cancellation. Taken in revision 2: Task 4 case 14 resolves the superseded request for real and covers an out-of-order success, a late success after a current failure, a superseded failure, and unmount, with `console.error` spied.<br>Part 2 (2026-10-15, owner): **no P1**.<br>• **P2 (Task 1 `matchPreview`):** it checked ids, not that the input was the current one; it could accept a preview for an outdated quantity. Resolved in revision 3 by the reviewer's second option. The `matchPreview` contract is now stated as line correspondence only (no quantity, order id or weight), with a test pinning that. Exact current-input identity is the hook's `[weightGrams, input]` key, proven by the new Task 4 case 19: an outdated base count, add-on count and weight each resolve with matching ids and never become current.<br>• **Suggestion 1 (matrix independence):** taken. Literal-role tests pin the editor to exactly `WEIGHED` × TENANT_OWNER, OPS_MANAGER, SCHEDULER. `laundryServicesView` now also requires `status === 'WEIGHED'`, so the "whatever the verbs claim" test forces a `price` verb on every other status. Revision 2's version of that test only used the helper's own verbs.<br>• **Suggestion 2 (duplicate ids):** taken. `missingPriceTarget` declines (`null`, so the raw message shows) when more than one row holds the named add-on, with a test.<br>• **Suggestion 3 (guards):** taken. `matchPreview` guards `base`, each line and each sent add-on explicitly. Checked: `apps/web` sets `strict` without `noUncheckedIndexedAccess`, and its lint has no type-checked rules, so the guards compile and lint as written.<br>Part 3 (2026-10-15, owner): **no P1**.<br>• **P2 (Task 2, customer picker focus/blur):** closed by evidence plus one test.<br>  – `LaundryCustomerPickerProps` is unchanged and does not declare `openOnFocus`, `onFocus` or `onBlur`, so the wrapper can't pass them and the defaults reproduce the old behavior exactly.<br>  – The unedited customer-picker interaction suite (12 cases) and static suite (5 cases) already cover blur, Enter, Escape, click and popup mousedown. Their coverage is listed in Task 2.<br>  – New Task 2 interaction case 6 pins the one uncovered rule: focus alone does not open the customer picker.<br>• **P2 (Task 3, stale catalog results):** Task 3 case 5 now runs the actual race with the per-variables mock (an in-flight `%wa%` settling or lingering while `wash` is current, in both orders). New case 7, in its own file, runs the same race on real Apollo (`MockedProvider`, delayed responses). If case 7 fails, the plan adds a `result.variables` identity guard before Task 3 is committed.<br>• **Suggestion 1 (truncated):** taken. Truncation is the `truncated` prop, not a status, and `ready` + `true`/`false`/unset and `loading`/`error` + `true` are each asserted.<br>• **Suggestion 2 (regression net):** taken. Step 7 re-runs the two exact Step 1 commands, compares counts, and records an empty diff for both test files.<br>• **Suggestion 3 (trimming):** taken. A helper test documents that `laundryCatalogSearchVariables` does not trim; the hook does. |
 | Date | 2026-10-15 |
 | Tracking issue | [#158](https://github.com/rexescario-dev/clensy-platform/issues/158) "Laundry services and add-ons selection". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) (merged in #183: the order page) and [#159](https://github.com/rexescario-dev/clensy-platform/issues/159) (closed, merged in #184: `previewLaundryOrderPrice` and the frozen line `description`). Followed by [#162](https://github.com/rexescario-dev/clensy-platform/issues/162) (price preview card and Confirm), which reads the state this slice lifts. |
 | Branch | `feat/158-laundry-services-selection`, from `main` at `18ceeb8`. One PR for this plan, its M5 record and the implementation. |
@@ -155,6 +155,7 @@ These are not in the issue, the spec, or the owner decisions above. Each is the 
 | `apps/web/lib/use-laundry-catalog-search.ts` | new | 3 |
 | `apps/web/lib/use-laundry-catalog-search.test.ts` | new (variables) | 3 |
 | `apps/web/lib/use-laundry-catalog-search.hook.test.tsx` | new (jsdom) | 3 |
+| `apps/web/lib/use-laundry-catalog-search.apollo.test.tsx` | new (jsdom, real Apollo `MockedProvider`) | 3 |
 | `apps/web/lib/use-laundry-service-selection.ts` | new | 4 |
 | `apps/web/lib/use-laundry-service-selection.hook.test.tsx` | new (jsdom) | 4 |
 | `packages/web/src/i18n/messages/en/laundry.ts` | `order.services.*`, `order.overview.*` copy | 5 |
@@ -688,7 +689,9 @@ Implements owner decisions 3 and 5; issue Fields ("same combobox behavior as the
   **Static markup** (`packages/web/src/laundry/laundry-search-combobox.test.tsx`, `renderToStaticMarkup`, options `{ id, name }`, `renderOption` returns the name in a `<span>`):
   1. The `label` copy labels a combobox with `aria-controls="<id>-listbox"`, `aria-expanded="false"`, `aria-autocomplete="list"`, `autoComplete="off"`, and no `aria-activedescendant`. The listbox's `aria-label` is the same label.
   2. A `ready` status renders one `role="option"` per option with id `<id>-option-<option id>`, and the caller's rendering inside it.
-  3. `loading` renders the `searching` copy. `ready` with no options renders `empty`. `error` renders `error` in `role="alert"`. `truncated` renders `more`. `idle` renders none of them.
+  3. `loading` renders the `searching` copy. `ready` with no options renders `empty`. `error` renders `error` in `role="alert"`. `idle` renders none of them.
+     - Truncation is the separate `truncated` prop, not a status (M5 part 3 suggestion 1). `ready` with options and `truncated={true}` renders `more`. `ready` with `truncated={false}` does not, and neither does `truncated` unset.
+     - `loading` or `error` with `truncated={true}` does not render `more`, because the picker shows it only for `ready`.
   4. No option renders unless the status is `ready`.
   5. `error` prop: `aria-invalid="true"` and `aria-describedby="<id>-error"`, with the message in `<p id="<id>-error">`.
   6. `disabled` sets the input's `disabled` attribute. Without it, there is no `disabled` attribute.
@@ -699,6 +702,25 @@ Implements owner decisions 3 and 5; issue Fields ("same combobox behavior as the
   3. ArrowDown/ArrowUp wrap through the options and set `aria-activedescendant`. Enter selects the active option, calls `onSelect` with it, and closes the list. Escape closes an open list and calls `stopImmediatePropagation`.
   4. Blur closes the list and calls `onBlur`.
   5. Clicking an option selects it. A `mousedown` on the popup does not blur the input.
+  6. **Customer picker default (M5 part 3 P2).** Focusing `LaundryCustomerPicker` (rendered through `@clensy/web`, with an empty and with a non-empty query) leaves `aria-expanded="false"`. Only typing opens it. This is the one customer behavior the existing suite does not pin, because it never focuses without typing.
+
+  **Why the customer picker cannot change (M5 part 3 P2, closed by evidence):**
+  - **The new props can't reach it.** `LaundryCustomerPickerProps` is unchanged and does not declare `openOnFocus`, `onFocus`, `onBlur`, `disabled`, `copy` or `renderOption`. So the wrapper's `{...props}` cannot pass them, and the type checker rejects any caller that tries. `openOnFocus` is `undefined`, so focus opens nothing and `onChange` keeps the old `value.trim() !== ''` rule. `onBlur` is `undefined`, so blur runs exactly the old `close()`.
+  - **The existing suite already covers the rest.** `apps/web/lib/laundry-customer-picker.interaction.test.tsx` (unedited, 12 cases) covers:
+    - typing opens, and a real focus move (blur) closes;
+    - ArrowDown/ArrowUp wrap;
+    - Enter selects and never reaches the form;
+    - editing clears the selection;
+    - Escape is kept from the dialog, then the next Escape passes through;
+    - Escape is kept from a same-node listener;
+    - a click selects and keeps focus;
+    - a popup mousedown is cancelled;
+    - the active option stays on the same customer, and is dropped when that customer leaves;
+    - nothing is offered while a newer search loads;
+    - a departed active customer does not come back;
+    - clearing collapses.
+  - **Markup is pinned too.** `packages/web/src/laundry/laundry-customer-picker.test.tsx` (unedited, 5 cases) pins the markup, ids, ARIA, status lines and error wiring.
+  - Case 6 above adds the focus-without-typing rule.
 
 - [ ] **Step 3: Run, expect failure.** Both new files fail to resolve `laundry-search-combobox` / the `LaundrySearchCombobox` export. Record the output.
 
@@ -792,7 +814,8 @@ export type {
 ```
 
 - [ ] **Step 7: Run, expect pass.**
-  - `pnpm --filter @clensy/web test`, `lint` and `build`, then `pnpm --filter web exec vitest run lib/laundry-customer-picker.interaction.test.tsx lib/laundry-search-combobox.interaction.test.tsx lib/laundry-list-page.interaction.test.tsx`. Expected: PASS, with the regression-net counts equal to Step 1's.
+  - **Regression net, the same two commands as Step 1:** `pnpm --filter @clensy/web exec vitest run src/laundry/laundry-customer-picker.test.tsx` and `pnpm --filter web exec vitest run lib/laundry-customer-picker.interaction.test.tsx`. Expected: PASS, with the same file and test counts as Step 1 (M5 part 3 suggestion 2). Record both counts side by side, and record `git diff --stat main -- packages/web/src/laundry/laundry-customer-picker.test.tsx apps/web/lib/laundry-customer-picker.interaction.test.tsx` as empty.
+  - Then `pnpm --filter @clensy/web test`, `lint` and `build`, and `pnpm --filter web exec vitest run lib/laundry-search-combobox.interaction.test.tsx lib/laundry-list-page.interaction.test.tsx`. Expected: PASS.
   - `pnpm --filter web lint` and `pnpm --filter web exec tsc --noEmit`. Expected: clean.
 
 - [ ] **Step 8: Commit.** `refactor(web): extract the laundry search combobox from the customer picker (#158)`.
@@ -803,13 +826,14 @@ export type {
 
 Implements owner decision 3; issue Data.
 
-**Files:** create `apps/web/lib/use-laundry-catalog-search.ts`, `apps/web/lib/use-laundry-catalog-search.test.ts`, `apps/web/lib/use-laundry-catalog-search.hook.test.tsx`.
+**Files:** create `apps/web/lib/use-laundry-catalog-search.ts`, `apps/web/lib/use-laundry-catalog-search.test.ts`, `apps/web/lib/use-laundry-catalog-search.hook.test.tsx`, `apps/web/lib/use-laundry-catalog-search.apollo.test.tsx`.
 
 - [ ] **Step 1: Write the failing tests.**
 
   **Variables** (`use-laundry-catalog-search.test.ts`, node):
   1. `laundryCatalogSearchVariables('')` equals `{ filter: { active: { is: true } }, paging: { limit: 20 }, sorting: [{ direction: 'ASC', field: 'name' }, { direction: 'ASC', field: 'id' }] }`, with no `name` key.
   2. `laundryCatalogSearchVariables('wa_sh%')` adds `name: { iLike: '%wa\\_sh\\%%' }`, the `escapeLikePattern` result wrapped in `%`.
+  3. **The helper does not trim** (M5 part 3 suggestion 3): `laundryCatalogSearchVariables(' wa ')` gives `iLike: '% wa %'`. Trimming belongs to the hook (`useSearchedText`). The hook test's "the trimmed text is what is searched" case covers that side.
 
   **Hook** (`use-laundry-catalog-search.hook.test.tsx`, jsdom, fake timers):
   - Mock `@clensy/client`'s `useServicesQuery` and `useAddOnsQuery` with the per-variables response map of `use-laundry-customer-search.hook.test.tsx`. Key the map by `filter.name?.iLike ?? ''`.
@@ -821,8 +845,18 @@ Implements owner decision 3; issue Data.
   2. **Browse on focus:** going active with `''` sends exactly one request, with no `name` filter and `active: { is: true }`, after a 0 ms timer. While pending the result is `loading`. With a response, it is `ready` with options mapped to `{ id, name }`.
   3. **Typed search:** typing `wa` sends nothing before 300 ms and one `%wa%` request at 300 ms.
   4. **No duplicate when focus and typing overlap:** going active with `''` then typing `w` within the 0 ms tick sends only the `%w%` request. Going active, letting the browse request go, then typing sends exactly one more request per settled text.
-  5. **Stale results:** never offers an older text's results for a newer text, even if the older response lingers with `loading: true`.
+  5. **Stale results, the actual race (M5 part 3 P2).** With the per-variables mock:
+     - type `wa`; at 300 ms the `%wa%` request is in flight (no response stored);
+     - type `wash`; then store the `%wa%` response, both settled and `lingering` (`loading: true`);
+     - at every render until the `%wash%` response is stored, the result is `loading` with no options, and no `wa` option ever appears;
+     - store `%wash%`, and only its options appear.
+     The same holds in reverse order, with `%wash%` settling before a late `%wa%`.
   6. **Distinct states:** error → `error`; empty nodes → `ready` with no options; more matches than the page holds → `truncated: true`. The trimmed text is what is searched.
+  7. **The same race on real Apollo (M5 part 3 P2).** In its own file, `apps/web/lib/use-laundry-catalog-search.apollo.test.tsx` (jsdom, fake timers; separate because the hook test above mocks `@clensy/client` for the whole file), mount the hook under `MockedProvider` from `@apollo/client/testing` (part of the installed `@apollo/client` 3.14, so no new dependency). It uses the real generated `ServicesDocument`, `fetchPolicy: 'network-only'`, and mocks with `delay`: `%wa%` answers after 500 ms and `%wash%` after 100 ms.
+     - Type `wa`, wait 300 ms so `%wa%` is sent, type `wash`, then advance through both delays.
+     - At every render, the hook never returns a `wa` option while the text is `wash`. It ends `ready` with only the `wash` options.
+     - This records Apollo's own guarantee as a permanent test rather than a citation. #160's M5 spike traced it as `%ana% loading=true data=none prev=an`: new variables are never paired with old data, and old data appears only in `previousData`, which this hook never reads.
+     - **If this test fails,** the hook gains an identity guard before Task 3 is committed: it accepts `data` only when `result.variables` deep-equals `laundryCatalogSearchVariables(searched)`. The failing run is recorded as a deviation.
 
 - [ ] **Step 2: Run, expect failure.** The module does not exist. Record the output.
 
@@ -923,7 +957,7 @@ export function useLaundryAddOnSearch(query: string, active: boolean): LaundryCa
 
 If `satisfies` does not narrow `direction`/`field` to their literal unions under this TypeScript version, add `as const` to each sorting entry instead.
 
-- [ ] **Step 4: Run, expect pass.** `pnpm --filter web exec vitest run lib/use-laundry-catalog-search.test.ts lib/use-laundry-catalog-search.hook.test.tsx`, then lint and `tsc --noEmit`. Expected: PASS / clean.
+- [ ] **Step 4: Run, expect pass.** `pnpm --filter web exec vitest run lib/use-laundry-catalog-search.test.ts lib/use-laundry-catalog-search.hook.test.tsx lib/use-laundry-catalog-search.apollo.test.tsx`, then lint and `tsc --noEmit`. Expected: PASS / clean. The real-Apollo case 7 is the first use of `@apollo/client/testing` in `apps/web/lib`. If `MockedProvider`'s `delay` does not advance under fake timers, use real timers in that file only, with `await` on short real delays, and record the change.
 
 - [ ] **Step 5: Commit.** `feat(web): search active laundry services and add-ons (#158)`.
 
