@@ -121,12 +121,10 @@ export const laundry = {
       total: 'Invoice total',
     },
     lines: {
-      addOn: 'Add-on',
       amount: 'Amount',
       items: 'Items',
       minimumCharge: 'Minimum charge applied',
       more: 'More lines are not loaded.',
-      service: 'Base service',
       unit: 'Unit',
       weight: 'Weight',
     },
@@ -170,8 +168,6 @@ export const laundry = {
       none: 'No services selected yet.',
       note: 'This is a preview. The price is final only after you confirm it.',
       previewFailure: 'Couldn’t preview the price.',
-      // Kept until Task 6 stops using it in the order page (Ruling 1).
-      priced: 'Services are priced. The lines are listed under Overview.',
       rate: {
         flat: '{price} flat',
         perItem: '{price} per item',
