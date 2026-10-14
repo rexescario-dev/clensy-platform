@@ -9,7 +9,10 @@ import { AppModule } from '../src/app/app.module';
 import { AuditEventEntity } from '../src/platform/audit/infrastructure/persistence/audit-event.entity';
 import { AdminUserEntity } from '../src/modules/admins/infrastructure/persistence/admin-user.entity';
 import { applyPlatformPipes } from '../src/platform/graphql/apply-platform-pipes';
+import { Role } from '../src/platform/auth/domain/role';
+import { BOOTSTRAP_TENANT_ID } from '../src/platform/database/bootstrap-tenant';
 import { seedOwner } from './helpers/seed-owner';
+import { seedTenantAdmin } from './helpers/seed-tenant-admin';
 
 // Black-box proof of the resolver -> AuthGuard -> LaundryOrdersService ->
 // transaction/policy -> Postgres wiring over real HTTP, and that the
@@ -85,11 +88,12 @@ describe('Laundry (e2e)', () => {
       )
     ).body.data.createCustomer.id;
 
+    const serviceName = `Wash&Fold ${tag}-${Date.now()}`;
     const serviceId = (
       await gql(
         cookie,
         `mutation($i: CreateServiceInput!){ createService(input:$i){ id } }`,
-        { i: { durationMinutes: 1, name: `Wash&Fold ${tag}-${Date.now()}` } },
+        { i: { durationMinutes: 1, name: serviceName } },
       )
     ).body.data.createService.id;
 
@@ -139,7 +143,7 @@ describe('Laundry (e2e)', () => {
       cookie,
       `query($id: ID!){ laundryOrder(id:$id){
          id status customer { id fullName }
-         lines { nodes { serviceId pricingSnapshot { unit quantity amountMinorUnits minimumChargeApplied pricingRuleId } } pageInfo { hasNextPage } }
+         lines { nodes { serviceId pricingSnapshot { unit quantity amountMinorUnits minimumChargeApplied pricingRuleId description } } pageInfo { hasNextPage } }
        } }`,
       { id: orderId },
     );
@@ -151,6 +155,8 @@ describe('Laundry (e2e)', () => {
       pricingSnapshot: {
         pricingRuleId: expect.any(String),
         amountMinorUnits: 1000,
+        // Frozen at pricing (Amendment #164 §8.4.2).
+        description: serviceName,
         minimumChargeApplied: true,
         quantity: 400,
         unit: 'PER_KG',
@@ -223,5 +229,202 @@ describe('Laundry (e2e)', () => {
       query: `query { laundryOrders(paging:{limit:1}){ totalCount } }`,
     });
     expect(res.body.errors).toBeDefined();
+  });
+
+  // Amendment #164 §8.4.5 over real HTTP: the preview is a read for the
+  // OPERATIONAL roles and writes nothing.
+  describe('previewLaundryOrderPrice', () => {
+    const PREVIEW = `query($i: PriceLaundryOrderInput!){ previewLaundryOrderPrice(input:$i){
+      estimatedTotalMinorUnits
+      lines { serviceId addOnId description unit quantity rateMinorUnits amountMinorUnits minimumChargeMinorUnits minimumChargeApplied }
+    } }`;
+
+    async function login(email: string, password: string): Promise<string> {
+      return extractCookie(
+        await request(app.getHttpServer())
+          .post('/graphql')
+          .send({ query: LOGIN, variables: { i: { email, password } } }),
+      );
+    }
+
+    // An owner session, a customer, and a service priced PER_KG at 2000 with
+    // a 1000 floor, all in the bootstrap tenant.
+    async function setup(): Promise<{
+      cookie: string;
+      customerId: string;
+      serviceId: string;
+      serviceName: string;
+    }> {
+      const owner = await seedOwner(adminUserRepository);
+      const cookie = await login(owner.email, owner.password);
+      const tag = `${owner.id.slice(0, 8)}-${Date.now()}`;
+      const customerId = (
+        await gql(
+          cookie,
+          `mutation($i: CreateCustomerInput!){ createCustomer(input:$i){ id } }`,
+          {
+            i: {
+              email: `lp-${tag}@example.com`,
+              fullName: 'Preview Pat',
+              phone: '555-2',
+            },
+          },
+        )
+      ).body.data.createCustomer.id;
+      const serviceName = `Preview Wash ${tag}`;
+      const serviceId = (
+        await gql(
+          cookie,
+          `mutation($i: CreateServiceInput!){ createService(input:$i){ id } }`,
+          { i: { durationMinutes: 1, name: serviceName } },
+        )
+      ).body.data.createService.id;
+      await gql(
+        cookie,
+        `mutation($i: CreatePricingRuleInput!){ createPricingRule(input:$i){ id } }`,
+        {
+          i: {
+            serviceId,
+            minimumChargeMinorUnits: 1000,
+            priceMinorUnits: 2000,
+            unit: 'PER_KG',
+          },
+        },
+      );
+      return { customerId, serviceId, cookie, serviceName };
+    }
+
+    async function receive(cookie: string, customerId: string) {
+      return (
+        await gql(
+          cookie,
+          `mutation($i: ReceiveLaundryOrderInput!){ receiveLaundryOrder(input:$i){ id } }`,
+          { i: { customerId, fulfillmentType: 'PICKUP' } },
+        )
+      ).body.data.receiveLaundryOrder.id as string;
+    }
+
+    async function weigh(cookie: string, orderId: string) {
+      await gql(
+        cookie,
+        `mutation($i: WeighLaundryOrderInput!){ weighLaundryOrder(input:$i){ id } }`,
+        { i: { orderId, weightGrams: 400 } },
+      );
+    }
+
+    async function readOrder(cookie: string, orderId: string) {
+      return (
+        await gql(
+          cookie,
+          `query($id: ID!){ laundryOrder(id:$id){ status totalMinorUnits lines { nodes { id } } } }`,
+          { id: orderId },
+        )
+      ).body.data.laundryOrder;
+    }
+
+    it('previews a WEIGHED order without writing anything', async () => {
+      const { cookie, customerId, serviceId, serviceName } = await setup();
+      const orderId = await receive(cookie, customerId);
+      await weigh(cookie, orderId);
+
+      // baseQuantity is ignored for a PER_KG service (spec §4.5 step 3a).
+      const res = await gql(cookie, PREVIEW, {
+        i: { baseServiceId: serviceId, orderId, addOns: [], baseQuantity: 5 },
+      });
+
+      expect(res.body.errors).toBeUndefined();
+      // 400 g * 2000 / 1000 = 800 -> floored to the 1000 minimum charge.
+      expect(res.body.data.previewLaundryOrderPrice).toEqual({
+        estimatedTotalMinorUnits: 1000,
+        lines: [
+          {
+            addOnId: null,
+            serviceId,
+            amountMinorUnits: 1000,
+            description: serviceName,
+            minimumChargeApplied: true,
+            minimumChargeMinorUnits: 1000,
+            quantity: 400,
+            rateMinorUnits: 2000,
+            unit: 'PER_KG',
+          },
+        ],
+      });
+      expect(await readOrder(cookie, orderId)).toEqual({
+        lines: { nodes: [] },
+        status: 'WEIGHED',
+        totalMinorUnits: null,
+      });
+      const events = await auditEventRepository.find({
+        where: { entityId: orderId, entityType: 'laundry_order' },
+      });
+      expect(events.map((e) => e.action).sort()).toEqual([
+        'laundry_order.received',
+        'laundry_order.weighed',
+      ]);
+    });
+
+    it('rejects a preview outside WEIGHED and changes nothing', async () => {
+      const { cookie, customerId, serviceId } = await setup();
+      const orderId = await receive(cookie, customerId);
+      const input = { addOns: [], baseServiceId: serviceId, orderId };
+
+      const received = await gql(cookie, PREVIEW, { i: input });
+      expect(received.body.errors[0].message).toBe(
+        'Cannot price a laundry order in status RECEIVED',
+      );
+      expect((await readOrder(cookie, orderId)).status).toBe('RECEIVED');
+
+      await weigh(cookie, orderId);
+      await gql(
+        cookie,
+        `mutation($i: PriceLaundryOrderInput!){ priceLaundryOrder(input:$i){ id } }`,
+        { i: input },
+      );
+      const priced = await gql(cookie, PREVIEW, { i: input });
+      expect(priced.body.errors[0].message).toBe(
+        'Cannot price a laundry order in status PRICED',
+      );
+      const after = await readOrder(cookie, orderId);
+      expect(after.status).toBe('PRICED');
+      expect(after.totalMinorUnits).toBe(1000);
+      expect(after.lines.nodes).toHaveLength(1);
+    });
+
+    it('forbids CUSTOMER_SUPPORT and allows SCHEDULER', async () => {
+      const { cookie, customerId, serviceId } = await setup();
+      const orderId = await receive(cookie, customerId);
+      await weigh(cookie, orderId);
+      const dataSource = adminUserRepository.manager.connection;
+      const support = await seedTenantAdmin(
+        dataSource,
+        Role.CUSTOMER_SUPPORT,
+        BOOTSTRAP_TENANT_ID,
+      );
+      const scheduler = await seedTenantAdmin(
+        dataSource,
+        Role.SCHEDULER,
+        BOOTSTRAP_TENANT_ID,
+      );
+      const input = { addOns: [], baseServiceId: serviceId, orderId };
+
+      const forbidden = await gql(
+        await login(support.email, support.password),
+        PREVIEW,
+        { i: input },
+      );
+      const allowed = await gql(
+        await login(scheduler.email, scheduler.password),
+        PREVIEW,
+        { i: input },
+      );
+
+      expect(forbidden.body.errors[0].extensions.code).toBe('FORBIDDEN');
+      expect(forbidden.body.data).toBeNull();
+      expect(allowed.body.errors).toBeUndefined();
+      expect(
+        allowed.body.data.previewLaundryOrderPrice.estimatedTotalMinorUnits,
+      ).toBe(1000);
+    });
   });
 });
