@@ -4,8 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft (revision 4)**. Ready for M5 Plan Review. |
-| M5 history | First pass (2026-10-14, owner): **Returned for Revision**. P1: the `quote` extraction must keep `price`'s existing error order, and the plan did not show that order or pin it. P2: the `quote` signature disagreed between Architecture and Task 2. P2: no test covered competing failures. Resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). Second pass (2026-10-14, owner): **Returned for Revision**. All three findings confirmed resolved. One P2: Task 2 said both that `price` keeps its preconditions and that `quote` takes them, so a precondition could run twice or the wording could be broken. Resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). Third pass (2026-10-14, owner): **Returned for Revision**. The revision-2 finding confirmed resolved. One P2: the release-gate probe aliased the money amount `estimatedTotalMinorUnits` as `totalCount`. Resolved in [Revision 4 (M5 review 3)](#revision-4-m5-review-3). |
+| Status | **Draft (revision 5)**. Ready for M5 Plan Review. |
+| M5 history | First pass (2026-10-14, owner): **Returned for Revision**. P1: the `quote` extraction must keep `price`'s existing error order, and the plan did not show that order or pin it. P2: the `quote` signature disagreed between Architecture and Task 2. P2: no test covered competing failures. Resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). Second pass (2026-10-14, owner): **Returned for Revision**. All three findings confirmed resolved. One P2: Task 2 said both that `price` keeps its preconditions and that `quote` takes them, so a precondition could run twice or the wording could be broken. Resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). Third pass (2026-10-14, owner): **Returned for Revision**. The revision-2 finding confirmed resolved. One P2: the release-gate probe aliased the money amount `estimatedTotalMinorUnits` as `totalCount`. Resolved in [Revision 4 (M5 review 3)](#revision-4-m5-review-3). Fourth pass (2026-10-14, owner): **Returned for Revision**. The money-as-count finding confirmed resolved. One P2: the `items` alias was a gate-only adapter, not the real `lines` payload, and its classifier rule was not tied to the preview. Resolved in [Revision 5 (M5 review 4)](#revision-5-m5-review-4). |
 | Date | 2026-10-14 |
 | Tracking issue | [#159](https://github.com/rexescario-dev/clensy-platform/issues/159) "Laundry price-preview and line-label API". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Spec gate [#164](https://github.com/rexescario-dev/clensy-platform/issues/164), Accepted through [#167](https://github.com/rexescario-dev/clensy-platform/pull/167). Unblocks #158 (services and add-ons) and #162 (price preview and confirmation). |
 | Branch | `feat/159-laundry-price-preview-api`, from `main` at `fb0791e`. One PR carries this plan, its M5 record and the implementation. |
@@ -122,7 +122,7 @@ Deferred, explicitly: positive weight (#155); any web UI (#158, #162); rejecting
 | `apps/api/test/release-gate/two-tenant-world.ts` | modify (line fixture adds `description`) |
 | `apps/api/test/helpers/root-operation-inventory.ts`, `test/root-operation-authorization.e2e-spec.ts` | modify (classify the new query; count 62 → 63) |
 | `apps/api/test/release-gate/role-matrix.ts`, `test/release-gate/probes/laundry.ts`, `test/two-tenant-release-gate.e2e-spec.ts` | modify (matrix row, probe; count 64 → 65) |
-| `apps/api/test/release-gate/outcome.ts`, `test/release-gate/outcome.e2e-spec.ts` | modify (the `{ items: [{ id }] }` list payload, test first) |
+| `apps/api/test/release-gate/outcome.ts`, `test/release-gate/outcome.e2e-spec.ts` | modify (a `previewLaundryOrderPrice`-scoped rule reading `lines[].serviceId \| addOnId`, test first) |
 | `apps/api/test/tenant-read-authorizers.e2e-spec.ts` | modify (`LaundryPricePreview.lines` custom object field) |
 | `apps/api/src/schema.gql` | regenerated |
 | `packages/client/src/operations/laundry.graphql`, `src/generated/graphql.ts`, `src/laundry-operations.test.ts` | modify / regenerate |
@@ -371,41 +371,53 @@ export class AddLaundryLineDescription1790956800000 implements MigrationInterfac
     - `test/root-operation-authorization.e2e-spec.ts`: `toHaveLength(62)` → `63`.
     - `test/release-gate/role-matrix.ts`: `'Query.previewLaundryOrderPrice': { allowed: [TENANT_OWNER, OPS_MANAGER, SCHEDULER], source: 'Laundry Orders & Lifecycle Amendment #164 §8.4.5 "Authorization matches priceLaundryOrder" (M3 Accepted 2026-10-10); ' + RFC }`.
     - `test/two-tenant-release-gate.e2e-spec.ts`: `toHaveLength(64)` → `65`.
-    - **Release-gate classifier: an explicit list payload (test first).** The gate's `okFrom` (`test/release-gate/outcome.ts`) recognizes `{ id }`, an array of `{ id }`, and a `{ nodes, totalCount }` connection. A preview fits none of these, and its only number is money, so it MUST NOT be aliased to `totalCount`. Add one shape: an object whose `items` is an array of `{ id }` is `OK` with those ids and `totalCount: null`. It is a list with no count.
-      1. First, in `test/release-gate/outcome.e2e-spec.ts`, add `it('extracts ids from an items list payload, which has no count')`:
-         - `{ data: { previewLaundryOrderPrice: { items: [{ id: uuid }] } } }` → `{ ids: [uuid], kind: 'OK', totalCount: null }`;
-         - `{ items: [] }` → `{ ids: [], kind: 'OK', totalCount: null }`;
-         - `{ items: [{ id: 5 }] }` → `UNEXPECTED`;
-         - `{ items: [{ id: uuid }], nodes: [{ id: uuid }], totalCount: 1 }` → `UNEXPECTED` (ambiguous shape);
-         - `{ items: [{ id: uuid }], totalCount: 1 }` → `UNEXPECTED` (an items list carries no count).
+    - **Release-gate classifier: read the real preview payload, for this one field (test first).** The gate's `okFrom` (`test/release-gate/outcome.ts`) is generic. It recognizes `{ id }`, an array of `{ id }`, and a `{ nodes, totalCount }` connection. The preview has none of these. It has no id of its own, and its only number is money, which MUST NOT be read as a count. Rather than alias the response into a generic shape, `classifyGraphql` gets one **field-scoped** rule for the actual `LaundryPricePreview` contract. The generic rules are unchanged, and no other field can reach the new one.
+      - Contract the rule checks: the value is an object whose `lines` is an array, with no `nodes`, `totalCount` or `id` key. Each line has **exactly one** of `serviceId` / `addOnId` as a string, and the other is `null` (the API's "exactly one set" rule, owner decision 1). The line's id is that target id. The result is `{ ids, kind: 'OK', totalCount: null }`, so it has no count. Anything else is `UNEXPECTED`.
+      1. First, in `test/release-gate/outcome.e2e-spec.ts`, add `it('reads previewLaundryOrderPrice by its lines\' target ids, with no count')`. Use `classifyGraphql({ data: { previewLaundryOrderPrice: value } }, 'previewLaundryOrderPrice')` with:
+
+         | Value | Expected |
+         | --- | --- |
+         | `{ lines: [{ serviceId: uuid, addOnId: null }] }` | `{ ids: [uuid], kind: 'OK', totalCount: null }` |
+         | `{ lines: [{ serviceId: uuid, addOnId: null }, { serviceId: null, addOnId: uuid2 }] }` | `{ ids: [uuid, uuid2], kind: 'OK', totalCount: null }` (input order) |
+         | `{ lines: [] }` | `{ ids: [], kind: 'OK', totalCount: null }` |
+         | `{ lines: [{ serviceId: null, addOnId: null }] }` | `UNEXPECTED` (no target) |
+         | `{ lines: [{ addOnId: null }] }` | `UNEXPECTED` (missing `serviceId`) |
+         | `{ lines: [{ serviceId: 5, addOnId: null }] }` | `UNEXPECTED` (not a string) |
+         | `{ lines: [{ serviceId: uuid, addOnId: uuid2 }] }` | `UNEXPECTED` (two targets) |
+         | `{ lines: [{ serviceId: uuid, addOnId: null }], totalCount: 1000 }` | `UNEXPECTED` (money cannot pose as a count) |
+         | `{ lines: [{ serviceId: uuid, addOnId: null }], nodes: [{ id: uuid }], totalCount: 1 }` | `UNEXPECTED` (mixed with a connection) |
+         | `{ lines: 'x' }` and `{ estimatedTotalMinorUnits: 1000 }` | `UNEXPECTED` |
+
+         And a second `it('keeps the preview rule scoped to previewLaundryOrderPrice')`:
+         - `classifyGraphql({ data: { customer: { lines: [{ serviceId: uuid, addOnId: null }] } } }, 'customer')` is `UNEXPECTED`, because the generic rules see an object without `id`;
+         - `classifyGraphql({ data: { previewLaundryOrderPrice: { id: uuid } } }, 'previewLaundryOrderPrice')` is `UNEXPECTED`, because the preview field never falls back to the generic `{ id }` rule;
+         - a 403-coded error under `previewLaundryOrderPrice` still classifies as `FORBIDDEN` (errors are classified before the payload rule).
 
          Run: `pnpm --filter api test:e2e -- release-gate/outcome`
-         Expected: FAIL on the first two (`object without id`); the three `UNEXPECTED` cases already pass.
-      2. Then in `okFrom`'s object branch, before the `nodes` check:
+         Expected: FAIL on the three `OK` rows and on the `{ id: uuid }` preview case. Those go through the generic rules today: an object without `id` is `UNEXPECTED`, and `{ id }` is `OK`. The other rows already pass.
+      2. Then, in `outcome.ts`:
          ```ts
-         // A list inside an object, with no count (#159: the price preview's
-         // lines, selected as `items: lines { id: serviceId }`). Never mixed
-         // with a connection or a count, so a money field cannot pose as one.
-         const { items } = value as { items?: unknown };
-         if (items !== undefined) {
-           const ids = Array.isArray(items) ? idsOf(items) : null;
-           return ids && nodes === undefined && totalCount === undefined
-             ? { ids, kind: 'OK', totalCount: null }
-             : unexpected('items list without ids, or mixed with a connection', body);
-         }
+         // Fields whose payload is the laundry price preview (#159). It has no
+         // id of its own and its only number is money, so it is read by its
+         // lines' target ids (exactly one of serviceId / addOnId per line) and
+         // never as a connection or a count. Scoped by field: no other result
+         // reaches this rule, and this field never reaches the generic ones.
+         const PRICE_PREVIEW_FIELDS = new Set(['previewLaundryOrderPrice']);
+
+         function okFromPricePreview(value: unknown, body: unknown): Outcome
          ```
-         (Destructure `items` together with `nodes` and `totalCount`; the exact layout is the implementer's choice under the file's lint rules.) The existing cases in `it('extracts ids from an object, a connection and an array; null is NULL')` stay unchanged and green.
+         The function implements the contract above. In `classifyGraphql`, replace the last line's `okFrom(data[field], body)` with `PRICE_PREVIEW_FIELDS.has(field) ? okFromPricePreview(data[field], body) : okFrom(data[field], body)`. The `null` → `NULL` branch and all error handling are unchanged. `okFrom`, `classifyRest` and the existing tests are not edited.
          Run: `pnpm --filter api test:e2e -- release-gate/outcome`
-         Expected: PASS.
-    - `test/release-gate/probes/laundry.ts`: a probe for `Query.previewLaundryOrderPrice`, with a comment explaining the alias. Each `id` is a quoted line's target `serviceId`; nothing is aliased to `totalCount`.
+         Expected: PASS, including every existing case.
+    - `test/release-gate/probes/laundry.ts`: a probe for `Query.previewLaundryOrderPrice` that selects the real response fields, with no aliases:
       ```graphql
       query Gate($input: PriceLaundryOrderInput!) {
         previewLaundryOrderPrice(input: $input) {
-          items: lines { id: serviceId }
+          lines { serviceId addOnId }
         }
       }
       ```
-      `prepare`: a `WEIGHED` order (`fixtures.laundryOrder(tenant, WEIGHED)`, weight 2000). `sameTenant`: `{ addOns: [], baseServiceId: own.serviceId, orderId: prepared.orderId }` (no add-on, so every `serviceId` is non-null). `ok: { kind: 'listIncludes', id: ({ own }) => own.serviceId }`: the same-tenant call succeeds **and** quotes the caller's own service. `crossTenant`, the same three variants as `priceLaundryOrder`, each with its declared missing form:
+      `prepare`: a `WEIGHED` order (`fixtures.laundryOrder(tenant, WEIGHED)`, weight 2000). `sameTenant`: `{ addOns: [{ addOnId: own.addOnId }], baseServiceId: own.serviceId, orderId: prepared.orderId }`. This is the same input `priceLaundryOrder`'s probe sends, so the classifier sees one service line and one add-on line. `ok: { kind: 'listIncludes', id: ({ own }) => own.serviceId }`: the same-tenant call succeeds **and** quotes the caller's own service. `crossTenant`, the same three variants as `priceLaundryOrder`, each with its declared missing form:
       - foreign `orderId` → `{ kind: 'error', status: 404 }`;
       - foreign `baseServiceId` (own order) → `{ kind: 'error', status: 400 }` (`No effective price for serviceId <uuid>`);
       - foreign `addOnId` (own order, `baseServiceId: own.serviceId`) → `{ kind: 'error', status: 400 }` (`No effective price for addOnId <uuid>`).
@@ -531,6 +543,12 @@ The M7 requirement for a fresh independent reviewer is unchanged.
 | Finding | Resolution |
 | --- | --- |
 | **P2: the release-gate probe aliased `estimatedTotalMinorUnits` (money) as `totalCount` (a count).** | Decision: an explicit classifier shape, not an alias. Task 4 adds one rule to `release-gate/outcome.ts`: `{ items: [{ id }] }` is `OK` with those ids and `totalCount: null`. It is rejected as `UNEXPECTED` when an id is missing or not a string, or when mixed with `nodes` or `totalCount`, so a number can never pose as a count. It is test first in `outcome.e2e-spec.ts`: five cases, two failing first. The probe now selects only `items: lines { id: serviceId }`. Same-tenant success is `listIncludes own.serviceId`. The three cross-tenant variants keep their declared 404 / 400 / 400 missing forms. The gate's Phase 5 checks those against a never-existed control, Phase 6 checks that nothing was written, and Phase 4 checks the role split and same-tenant success. The earlier "alias by default, gate change only if rejected" fallback text is removed. |
+
+## Revision 5 (M5 review 4)
+
+| Finding | Resolution |
+| --- | --- |
+| **P2: the probe's `items` alias did not match the declared `LaundryPricePreview` shape, and the classifier rule was not tied to the preview.** | Decision: the reviewer's preferred option. The classifier reads the **actual** payload, `{ lines: [{ serviceId, addOnId }] }`, and only for the `previewLaundryOrderPrice` field (`PRICE_PREVIEW_FIELDS`). Each line's id is its one target id, mirroring the API's "exactly one of `serviceId` / `addOnId`" contract, and the result has no count. The revision-4 `items` rule is removed; `okFrom` and its tests are untouched. The probe selects `lines { serviceId addOnId }` with no aliases, and sends a service plus an add-on, so both target kinds are classified. Tests, written first: three `OK` rows (service only, service then add-on in order, empty); four invalid-target rows (none, missing, non-string, two); two ambiguity rows (`totalCount: 1000`, mixed with `nodes`/`totalCount`); two malformed rows. A scoping test shows the same `lines` body under another field stays `UNEXPECTED`, the preview field never falls back to `{ id }`, and errors under the preview field still classify by status. Same-tenant success (`listIncludes own.serviceId`) and the three cross-tenant missing forms are unchanged. |
 
 ## Execution risks (operational only)
 
