@@ -105,6 +105,8 @@ function buildInvoicesService(
     new LaundryOrderStatusTransitionPolicy(),
     customers,
     pricing,
+    services,
+    addOns,
     auditLogger,
   );
   return new InvoicesService(
@@ -171,6 +173,8 @@ describe('InvoicesService (real Postgres) — concurrent generation', () => {
       new LaundryOrderStatusTransitionPolicy(),
       customers,
       pricing,
+      services,
+      new AddOnsService(ds, ds.getRepository(AddOnEntity), audit),
       audit,
     );
 

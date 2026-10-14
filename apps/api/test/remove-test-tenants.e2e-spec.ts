@@ -103,7 +103,7 @@ describe('removeTestTenants — laundry & billing rows (#87)', () => {
       [null, addOn],
     ]) {
       await dataSource.query(
-        `INSERT INTO "laundry_order_line_entity" ("tenantId", "laundryOrderId", "serviceId", "addOnId", "pricingSnapshotRateMinorUnits", "pricingSnapshotUnit", "pricingSnapshotQuantity", "pricingSnapshotAmountMinorUnits", "pricingSnapshotMinimumChargeApplied") VALUES ($1, $2, $3, $4, 1000, 'FLAT', 1, 1000, false)`,
+        `INSERT INTO "laundry_order_line_entity" ("tenantId", "laundryOrderId", "serviceId", "addOnId", "pricingSnapshotRateMinorUnits", "pricingSnapshotUnit", "pricingSnapshotQuantity", "pricingSnapshotAmountMinorUnits", "pricingSnapshotMinimumChargeApplied", "pricingSnapshotDescription") VALUES ($1, $2, $3, $4, 1000, 'FLAT', 1, 1000, false, 'Wash')`,
         [tenantId, order, serviceId, addOnId],
       );
     }

@@ -96,6 +96,7 @@ describe('LaundryOrdersService', () => {
     const NAMES: Record<string, string> = {
       'ao-1': 'Ironing',
       'ao-2': 'Starch',
+      'ao-a': 'Fabric Softener',
       'svc-1': 'Wash & Fold',
     };
     servicesService = {
@@ -344,6 +345,7 @@ describe('LaundryOrdersService', () => {
           pricingSnapshot: expect.objectContaining({
             pricingRuleId: 'rule-1',
             amountMinorUnits: 3000,
+            description: 'Wash & Fold',
             minimumChargeApplied: false,
             minimumChargeMinorUnits: null,
             quantity: 2000,
@@ -411,6 +413,53 @@ describe('LaundryOrdersService', () => {
       for (const row of savedRows) {
         expect(row).toHaveProperty('tenantId', TENANT);
       }
+    });
+
+    it('freezes the add-on description with the invoice suffix, once per repeated add-on', async () => {
+      pricingRulesService.resolveEffectivePricing.mockResolvedValue({
+        id: 'rule-1',
+        minimumChargeMinorUnits: null,
+        priceMinorUnits: 500,
+        unit: PricingUnit.FLAT,
+      });
+
+      await service.price(
+        cmd({ addOns: [{ addOnId: 'ao-1' }, { addOnId: 'ao-1' }] }),
+      );
+
+      const savedRows = (manager.save.mock.calls as unknown[][]).map(
+        (c) => c[0],
+      ) as Array<{
+        addOnId: string | null;
+        pricingSnapshot: { description: string };
+      }>;
+      expect(
+        savedRows.map((row) => [row.addOnId, row.pricingSnapshot.description]),
+      ).toEqual([
+        [null, 'Wash & Fold'],
+        ['ao-1', 'Ironing (add-on)'],
+        ['ao-1', 'Ironing (add-on)'],
+      ]);
+    });
+
+    it('looks names up in the command tenant', async () => {
+      pricingRulesService.resolveEffectivePricing.mockResolvedValue({
+        id: 'rule-1',
+        minimumChargeMinorUnits: null,
+        priceMinorUnits: 500,
+        unit: PricingUnit.FLAT,
+      });
+
+      await service.price(cmd({ addOns: [{ addOnId: 'ao-1' }] }));
+
+      expect(servicesService.getServicesByIds).toHaveBeenCalledWith(
+        ['svc-1'],
+        't-a',
+      );
+      expect(addOnsService.getAddOnsByIds).toHaveBeenCalledWith(
+        ['ao-1'],
+        't-a',
+      );
     });
 
     it('rejects when a target has no effective price and persists nothing', async () => {
@@ -807,6 +856,10 @@ describe('LaundryOrdersService', () => {
       baseQuantity?: number;
       // Catalog ids whose effective price is missing.
       missingRules?: string[];
+      // Catalog ids whose name cannot be read in the tenant.
+      missingNames?: string[];
+      // `false`: no catalog-name read may happen (a price error won first).
+      readsNames?: boolean;
       order?: LaundryOrderEntity | null;
       error: { message: string; type: new (...args: never[]) => Error };
       resolveCalls: number;
@@ -885,6 +938,35 @@ describe('LaundryOrdersService', () => {
           resolveCalls: 2,
         },
       ],
+      [
+        'C7 missing price beats missing name',
+        {
+          addOns: [{ addOnId: 'ao-1' }],
+          error: badRequest('No effective price for addOnId ao-1'),
+          missingNames: ['svc-1'],
+          missingRules: ['ao-1'],
+          readsNames: false,
+          resolveCalls: 2,
+        },
+      ],
+      [
+        'C8 base name beats add-on name',
+        {
+          addOns: [{ addOnId: 'ao-1' }],
+          error: badRequest('Service svc-1 could not be resolved'),
+          missingNames: ['svc-1', 'ao-1'],
+          resolveCalls: 2,
+        },
+      ],
+      [
+        'C9 add-on names in input order',
+        {
+          addOns: [{ addOnId: 'ao-1' }, { addOnId: 'ao-2' }],
+          error: badRequest('Add-on ao-2 could not be resolved'),
+          missingNames: ['ao-2'],
+          resolveCalls: 3,
+        },
+      ],
     ];
 
     describe.each(Object.keys(ENTRY_POINTS))('%s', (entryPoint) => {
@@ -893,6 +975,15 @@ describe('LaundryOrdersService', () => {
         manager.findOne.mockResolvedValue(order);
         orderRepository.findOneBy.mockResolvedValue(order);
         const missing = new Set(c.missingRules ?? []);
+        const unnamed = new Set(c.missingNames ?? []);
+        const named = (ids: string[]) =>
+          Promise.resolve(
+            ids
+              .filter((id) => !unnamed.has(id))
+              .map((id) => ({ id, name: `Name ${id}` })),
+          );
+        servicesService.getServicesByIds.mockImplementation(named);
+        addOnsService.getAddOnsByIds.mockImplementation(named);
         pricingRulesService.resolveEffectivePricing.mockImplementation(
           (target: { addOnId?: string; serviceId?: string }) =>
             Promise.resolve(
@@ -918,6 +1009,10 @@ describe('LaundryOrdersService', () => {
         expect(manager.save).not.toHaveBeenCalled();
         expect(manager.update).not.toHaveBeenCalled();
         expect(auditLogger.log).not.toHaveBeenCalled();
+        if (c.readsNames === false) {
+          expect(servicesService.getServicesByIds).not.toHaveBeenCalled();
+          expect(addOnsService.getAddOnsByIds).not.toHaveBeenCalled();
+        }
       });
     });
   });
