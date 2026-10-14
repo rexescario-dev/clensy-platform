@@ -5,8 +5,11 @@ import { DataSource } from 'typeorm';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { PricingUnit } from '../../../catalog/domain/pricing-unit';
+import { AddOnsService } from '../../../catalog/application/services/add-ons.service';
 import { PricingRulesService } from '../../../catalog/application/services/pricing-rules.service';
+import { ServicesService } from '../../../catalog/application/services/services.service';
 import { CustomersService } from '../../../customers/application/services/customers.service';
+import { PriceLaundryOrderCommand } from '../../application/commands/price-laundry-order.command';
 import { LaundryOrdersService } from '../../application/services/laundry-orders.service';
 import { LaundryFulfillmentType } from '../../domain/laundry-fulfillment-type';
 import { LaundryOrderStatus } from '../../domain/laundry-order-status';
@@ -47,6 +50,8 @@ describe('LaundryOrdersService', () => {
   let lineRepository: { find: jest.Mock };
   let customersService: { getCustomer: jest.Mock };
   let pricingRulesService: { resolveEffectivePricing: jest.Mock };
+  let servicesService: { getServicesByIds: jest.Mock };
+  let addOnsService: { getAddOnsByIds: jest.Mock };
   let auditLogger: { log: jest.Mock };
 
   const anOrder = (
@@ -86,6 +91,31 @@ describe('LaundryOrdersService', () => {
       getCustomer: jest.fn().mockResolvedValue({ id: 'cust-1' }),
     };
     pricingRulesService = { resolveEffectivePricing: jest.fn() };
+    // The catalog names `price` freezes (Amendment #164 §8.4.2): every id
+    // asked for resolves unless a test overrides the mock.
+    const NAMES: Record<string, string> = {
+      'ao-1': 'Ironing',
+      'ao-2': 'Starch',
+      'svc-1': 'Wash & Fold',
+    };
+    servicesService = {
+      getServicesByIds: jest.fn((ids: string[]) =>
+        Promise.resolve(
+          ids
+            .filter((id) => id in NAMES)
+            .map((id) => ({ id, name: NAMES[id] })),
+        ),
+      ),
+    };
+    addOnsService = {
+      getAddOnsByIds: jest.fn((ids: string[]) =>
+        Promise.resolve(
+          ids
+            .filter((id) => id in NAMES)
+            .map((id) => ({ id, name: NAMES[id] })),
+        ),
+      ),
+    };
     auditLogger = { log: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -103,6 +133,8 @@ describe('LaundryOrdersService', () => {
         },
         { provide: CustomersService, useValue: customersService },
         { provide: PricingRulesService, useValue: pricingRulesService },
+        { provide: ServicesService, useValue: servicesService },
+        { provide: AddOnsService, useValue: addOnsService },
         { provide: AUDIT_LOGGER, useValue: auditLogger },
       ],
     }).compile();
@@ -747,6 +779,145 @@ describe('LaundryOrdersService', () => {
       expect(lineRepository.find).toHaveBeenCalledWith({
         order: { createdAt: 'ASC' },
         where: { laundryOrderId: 'order-1', tenantId: TENANT },
+      });
+    });
+  });
+
+  // Competing failures (#159 plan "Error precedence"): each case sets up two
+  // or more failures; the first in the table must win, and nothing is
+  // written. C1–C6 are characterization tests of `price` as it was before
+  // `quote` was extracted.
+  describe('error precedence', () => {
+    type PriceInput = Omit<PriceLaundryOrderCommand, 'actorId'>;
+    const ENTRY_POINTS: Record<
+      string,
+      (input: PriceInput) => Promise<unknown>
+    > = {
+      price: (input) => service.price({ ...input, actorId: 'a' }),
+    };
+    const RULE = {
+      id: 'rule-1',
+      minimumChargeMinorUnits: null,
+      priceMinorUnits: 1000,
+      unit: PricingUnit.FLAT,
+    };
+
+    interface PrecedenceCase {
+      addOns?: PriceInput['addOns'];
+      baseQuantity?: number;
+      // Catalog ids whose effective price is missing.
+      missingRules?: string[];
+      order?: LaundryOrderEntity | null;
+      error: { message: string; type: new (...args: never[]) => Error };
+      resolveCalls: number;
+    }
+
+    const weighed = anOrder({
+      status: LaundryOrderStatus.WEIGHED,
+      weightGrams: 2000,
+    });
+    const badRequest = (message: string) => ({
+      message,
+      type: BadRequestException,
+    });
+
+    const CASES: Array<[string, PrecedenceCase]> = [
+      [
+        'C1 missing order beats invalid quantity',
+        {
+          baseQuantity: 0,
+          error: {
+            message: 'Laundry order order-1 not found',
+            type: NotFoundException,
+          },
+          order: null,
+          resolveCalls: 0,
+        },
+      ],
+      [
+        'C2 status beats invalid quantity',
+        {
+          baseQuantity: 0,
+          error: badRequest('Cannot price a laundry order in status PRICED'),
+          order: anOrder({
+            status: LaundryOrderStatus.PRICED,
+            weightGrams: 2000,
+          }),
+          resolveCalls: 0,
+        },
+      ],
+      [
+        'C3 weight beats invalid quantity',
+        {
+          baseQuantity: 0,
+          error: badRequest('Laundry order has no recorded weight'),
+          order: anOrder({
+            status: LaundryOrderStatus.WEIGHED,
+            weightGrams: null,
+          }),
+          resolveCalls: 0,
+        },
+      ],
+      [
+        'C4 add-on quantity beats a missing price',
+        {
+          addOns: [{ addOnId: 'ao-1', quantity: 0 }],
+          error: badRequest('quantity must be an integer >= 1'),
+          missingRules: ['svc-1'],
+          resolveCalls: 0,
+        },
+      ],
+      [
+        'C5 first missing price wins, later targets not resolved',
+        {
+          addOns: [{ addOnId: 'ao-1' }],
+          error: badRequest('No effective price for serviceId svc-1'),
+          missingRules: ['svc-1', 'ao-1'],
+          resolveCalls: 1,
+        },
+      ],
+      [
+        'C6 first missing add-on price wins',
+        {
+          addOns: [{ addOnId: 'ao-1' }, { addOnId: 'ao-2' }],
+          error: badRequest('No effective price for addOnId ao-1'),
+          missingRules: ['ao-1', 'ao-2'],
+          resolveCalls: 2,
+        },
+      ],
+    ];
+
+    describe.each(Object.keys(ENTRY_POINTS))('%s', (entryPoint) => {
+      it.each(CASES)('%s', async (_name, c) => {
+        const order = c.order === undefined ? weighed : c.order;
+        manager.findOne.mockResolvedValue(order);
+        orderRepository.findOneBy.mockResolvedValue(order);
+        const missing = new Set(c.missingRules ?? []);
+        pricingRulesService.resolveEffectivePricing.mockImplementation(
+          (target: { addOnId?: string; serviceId?: string }) =>
+            Promise.resolve(
+              missing.has(target.serviceId ?? (target.addOnId as string))
+                ? null
+                : RULE,
+            ),
+        );
+
+        const error: unknown = await ENTRY_POINTS[entryPoint]({
+          baseServiceId: 'svc-1',
+          orderId: 'order-1',
+          tenantId: TENANT,
+          addOns: c.addOns ?? [],
+          baseQuantity: c.baseQuantity,
+        }).catch((e: unknown) => e);
+
+        expect(error).toBeInstanceOf(c.error.type);
+        expect((error as Error).message).toBe(c.error.message);
+        expect(
+          pricingRulesService.resolveEffectivePricing,
+        ).toHaveBeenCalledTimes(c.resolveCalls);
+        expect(manager.save).not.toHaveBeenCalled();
+        expect(manager.update).not.toHaveBeenCalled();
+        expect(auditLogger.log).not.toHaveBeenCalled();
       });
     });
   });
