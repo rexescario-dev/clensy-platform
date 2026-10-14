@@ -4,8 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft** (M4, revision 2). Plan Review (M5) in progress, by parts. |
-| M5 history | Part 1 (2026-10-14, owner): provisional. **P1:** the entry contract called every non-digit, non-point character a format error, contradicting the negative-entry message. Resolved in revision 2: Global Constraints now fix the classification order (blank → leading minus → format → notPositive → tooLarge), and Task 2 adds `-1.2345`, `--1` and `1-` as format cases. **Verify (refetch):** Task 4 adds a test that every control stays disabled until the post-save refetch settles. **Verify (oversize):** already covered by Task 2's `tooLarge` cases and Task 4's over-maximum tests. Each row is capped at `MAX_WEIGHT_GRAMS` before it is summed, so the total `formatWeightGrams` receives is always a safe integer. |
+| Status | **Draft** (M4, revision 3). Plan Review (M5) in progress, by parts. |
+| M5 history | Part 1 (2026-10-14, owner): provisional. **P1:** the entry contract called every non-digit, non-point character a format error, contradicting the negative-entry message. Resolved in revision 2: Global Constraints now fix the classification order (blank → leading minus → format → notPositive → tooLarge), and Task 2 adds `-1.2345`, `--1` and `1-` as format cases. **Verify (refetch):** Task 4 adds a test that every control stays disabled until the post-save refetch settles. **Verify (oversize):** already covered by Task 2's `tooLarge` cases and Task 4's over-maximum tests. Each row is capped at `MAX_WEIGHT_GRAMS` before it is summed, so the total `formatWeightGrams` receives is always a safe integer. Part 2 (2026-10-14, owner): **P1:** the zero-weight service test asserted only `manager.update`, not the promised "before opening a transaction". Resolved in revision 3: the test also asserts `dataSource.transaction`, `manager.findOne` and `auditLogger.log` were not called, the spec's existing boundary pattern (`receive` / `price` guard tests). The DTO and service messages stay intentionally distinct. |
 | Date | 2026-10-14 |
 | Tracking issue | [#155](https://github.com/rexescario-dev/clensy-platform/issues/155) "Multi-entry laundry weighing". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) (merged in #183: the order page and its Weighing section) and [#157](https://github.com/rexescario-dev/clensy-platform/issues/157) (closed: `formatWeightGrams`, `laundryOrderActions`). The spec gate in #155 is met: [#164](https://github.com/rexescario-dev/clensy-platform/issues/164) §8.4.1 is Accepted (#167), so this slice takes the issue's "if Accepted" branch (issue comment, 2026-10-14). |
 | Branch | `feat/155-multi-entry-laundry-weighing`, from `main` at `c6b6c75`. One PR for this plan, its M5 record and the implementation. |
@@ -149,7 +149,13 @@ In `laundry-orders.service.spec.ts`, inside `describe('weigh', …)`, directly a
       await expect(service.weigh(cmd({ weightGrams: 0 }))).rejects.toThrow(
         new BadRequestException('weightGrams must be a positive integer'),
       );
+      // Rejected before the transaction opens: no transaction, no locked
+      // read, no write, no audit (the spec's `dataSource.transaction`
+      // boundary assertion, as in the receive and price guard tests).
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(manager.findOne).not.toHaveBeenCalled();
       expect(manager.update).not.toHaveBeenCalled();
+      expect(auditLogger.log).not.toHaveBeenCalled();
     });
 ```
 
