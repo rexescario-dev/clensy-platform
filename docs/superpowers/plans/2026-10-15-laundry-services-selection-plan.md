@@ -4,8 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft (revision 4)** (M4), 2026-10-15. In Plan Review (M5), reviewed in six parts. |
-| M5 history | Part 1 (2026-10-15, owner): **no P1**; overall acceptance reserved until all six parts are reviewed.<br>• **P2 (planning decision c):** the first `PER_ITEM` choice's two-request transition must be proven by test, with the first response never leaving the UI ready while the second input is current. Resolved in revision 2: Task 4 case 5 asserts each step of the transition.<br>• **Suggestion (owner decision 4):** make the view matrix exhaustive against the real status and role types. Taken in revision 2: the Task 1 table test iterates `LAUNDRY_ORDER_STATUSES` (keys of a `Record<LaundryOrderStatus, …>`) × both fulfillment types × saved lines yes/no × role loading and every `ADMIN_ROLES` entry. This adds `SUPER_ADMIN`, which revision 1's hand-written role list missed. A count check pins 15 statuses and 7 roles.<br>• **Suggestion (planning decision e):** test stale-result rejection, not request cancellation. Taken in revision 2: Task 4 case 14 resolves the superseded request for real and covers an out-of-order success, a late success after a current failure, a superseded failure, and unmount, with `console.error` spied.<br>Part 2 (2026-10-15, owner): **no P1**.<br>• **P2 (Task 1 `matchPreview`):** it checked ids, not that the input was the current one; it could accept a preview for an outdated quantity. Resolved in revision 3 by the reviewer's second option. The `matchPreview` contract is now stated as line correspondence only (no quantity, order id or weight), with a test pinning that. Exact current-input identity is the hook's `[weightGrams, input]` key, proven by the new Task 4 case 19: an outdated base count, add-on count and weight each resolve with matching ids and never become current.<br>• **Suggestion 1 (matrix independence):** taken. Literal-role tests pin the editor to exactly `WEIGHED` × TENANT_OWNER, OPS_MANAGER, SCHEDULER. `laundryServicesView` now also requires `status === 'WEIGHED'`, so the "whatever the verbs claim" test forces a `price` verb on every other status. Revision 2's version of that test only used the helper's own verbs.<br>• **Suggestion 2 (duplicate ids):** taken. `missingPriceTarget` declines (`null`, so the raw message shows) when more than one row holds the named add-on, with a test.<br>• **Suggestion 3 (guards):** taken. `matchPreview` guards `base`, each line and each sent add-on explicitly. Checked: `apps/web` sets `strict` without `noUncheckedIndexedAccess`, and its lint has no type-checked rules, so the guards compile and lint as written.<br>Part 3 (2026-10-15, owner): **no P1**.<br>• **P2 (Task 2, customer picker focus/blur):** closed by evidence plus one test.<br>  – `LaundryCustomerPickerProps` is unchanged and does not declare `openOnFocus`, `onFocus` or `onBlur`, so the wrapper can't pass them and the defaults reproduce the old behavior exactly.<br>  – The unedited customer-picker interaction suite (12 cases) and static suite (5 cases) already cover blur, Enter, Escape, click and popup mousedown. Their coverage is listed in Task 2.<br>  – New Task 2 interaction case 6 pins the one uncovered rule: focus alone does not open the customer picker.<br>• **P2 (Task 3, stale catalog results):** Task 3 case 5 now runs the actual race with the per-variables mock (an in-flight `%wa%` settling or lingering while `wash` is current, in both orders). New case 7, in its own file, runs the same race on real Apollo (`MockedProvider`, delayed responses). If case 7 fails, the plan adds a `result.variables` identity guard before Task 3 is committed.<br>• **Suggestion 1 (truncated):** taken. Truncation is the `truncated` prop, not a status, and `ready` + `true`/`false`/unset and `loading`/`error` + `true` are each asserted.<br>• **Suggestion 2 (regression net):** taken. Step 7 re-runs the two exact Step 1 commands, compares counts, and records an empty diff for both test files.<br>• **Suggestion 3 (trimming):** taken. A helper test documents that `laundryCatalogSearchVariables` does not trim; the hook does. |
+| Status | **Draft (revision 5)** (M4), 2026-10-15. In Plan Review (M5), reviewed in six parts. |
+| M5 history | Part 1 (2026-10-15, owner): **no P1**; overall acceptance reserved until all six parts are reviewed.<br>• **P2 (planning decision c):** the first `PER_ITEM` choice's two-request transition must be proven by test, with the first response never leaving the UI ready while the second input is current. Resolved in revision 2: Task 4 case 5 asserts each step of the transition.<br>• **Suggestion (owner decision 4):** make the view matrix exhaustive against the real status and role types. Taken in revision 2: the Task 1 table test iterates `LAUNDRY_ORDER_STATUSES` (keys of a `Record<LaundryOrderStatus, …>`) × both fulfillment types × saved lines yes/no × role loading and every `ADMIN_ROLES` entry. This adds `SUPER_ADMIN`, which revision 1's hand-written role list missed. A count check pins 15 statuses and 7 roles.<br>• **Suggestion (planning decision e):** test stale-result rejection, not request cancellation. Taken in revision 2: Task 4 case 14 resolves the superseded request for real and covers an out-of-order success, a late success after a current failure, a superseded failure, and unmount, with `console.error` spied.<br>Part 2 (2026-10-15, owner): **no P1**.<br>• **P2 (Task 1 `matchPreview`):** it checked ids, not that the input was the current one; it could accept a preview for an outdated quantity. Resolved in revision 3 by the reviewer's second option. The `matchPreview` contract is now stated as line correspondence only (no quantity, order id or weight), with a test pinning that. Exact current-input identity is the hook's `[weightGrams, input]` key, proven by the new Task 4 case 19: an outdated base count, add-on count and weight each resolve with matching ids and never become current.<br>• **Suggestion 1 (matrix independence):** taken. Literal-role tests pin the editor to exactly `WEIGHED` × TENANT_OWNER, OPS_MANAGER, SCHEDULER. `laundryServicesView` now also requires `status === 'WEIGHED'`, so the "whatever the verbs claim" test forces a `price` verb on every other status. Revision 2's version of that test only used the helper's own verbs.<br>• **Suggestion 2 (duplicate ids):** taken. `missingPriceTarget` declines (`null`, so the raw message shows) when more than one row holds the named add-on, with a test.<br>• **Suggestion 3 (guards):** taken. `matchPreview` guards `base`, each line and each sent add-on explicitly. Checked: `apps/web` sets `strict` without `noUncheckedIndexedAccess`, and its lint has no type-checked rules, so the guards compile and lint as written.<br>Part 3 (2026-10-15, owner): **no P1**.<br>• **P2 (Task 2, customer picker focus/blur):** closed by evidence plus one test.<br>  – `LaundryCustomerPickerProps` is unchanged and does not declare `openOnFocus`, `onFocus` or `onBlur`, so the wrapper can't pass them and the defaults reproduce the old behavior exactly.<br>  – The unedited customer-picker interaction suite (12 cases) and static suite (5 cases) already cover blur, Enter, Escape, click and popup mousedown. Their coverage is listed in Task 2.<br>  – New Task 2 interaction case 6 pins the one uncovered rule: focus alone does not open the customer picker.<br>• **P2 (Task 3, stale catalog results):** Task 3 case 5 now runs the actual race with the per-variables mock (an in-flight `%wa%` settling or lingering while `wash` is current, in both orders). New case 7, in its own file, runs the same race on real Apollo (`MockedProvider`, delayed responses). If case 7 fails, the plan adds a `result.variables` identity guard before Task 3 is committed.<br>• **Suggestion 1 (truncated):** taken. Truncation is the `truncated` prop, not a status, and `ready` + `true`/`false`/unset and `loading`/`error` + `true` are each asserted.<br>• **Suggestion 2 (regression net):** taken. Step 7 re-runs the two exact Step 1 commands, compares counts, and records an empty diff for both test files.<br>• **Suggestion 3 (trimming):** taken. A helper test documents that `laundryCatalogSearchVariables` does not trim; the hook does.<br>Part 4 (2026-10-15, owner): **P1**, resolved in revision 5.<br>• **P1 (Task 4 Step 3):** units were remembered from any successful payload before `matchPreview` could reject it, so a rejected preview could change later quantities and #162's input. Fixed:<br>  – Task 1 splits the input-only check out as `previewCorresponds(input, preview)`, which `matchPreview` now calls first.<br>  – `runPreview` turns a payload that does not correspond into a failure outcome, so it never reaches `units` or `settled`.<br>  – Case 15 asserts that `units` is unchanged after a mismatched response.<br>• **P2 (stale protection relied on cleanup):** a response now applies, to `units` or `settled`, only if all three hold: the effect is still live, no newer request has been sent (`generation`), and the latest committed key (`latestKey`, set in an effect) is still the request's key. Case 19 asserts that an outdated response leaves `units` unchanged.<br>• **Suggestion 1:** taken (case 15).<br>• **Suggestion 2:** taken. Case 18's `afterEach` checks every recorded `client.query` call, including rejected ones, for document identity, operation name and type, and `network-only`.<br>• **Suggestion 3:** taken. `ready` still requires a matched current preview, and case 19 asserts that a successful response alone never makes it true. |
 | Date | 2026-10-15 |
 | Tracking issue | [#158](https://github.com/rexescario-dev/clensy-platform/issues/158) "Laundry services and add-ons selection". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) (merged in #183: the order page) and [#159](https://github.com/rexescario-dev/clensy-platform/issues/159) (closed, merged in #184: `previewLaundryOrderPrice` and the frozen line `description`). Followed by [#162](https://github.com/rexescario-dev/clensy-platform/issues/162) (price preview card and Confirm), which reads the state this slice lifts. |
 | Branch | `feat/158-laundry-services-selection`, from `main` at `18ceeb8`. One PR for this plan, its M5 record and the implementation. |
@@ -195,6 +195,7 @@ import {
   matchPreview,
   missingPriceTarget,
   parseItemCount,
+  previewCorresponds,
   previewInputFromSelection,
   type LaundryAddOnRow,
   type LaundryServiceSelection,
@@ -399,7 +400,17 @@ describe('matchPreview', () => {
     ['an add-on line that names a service', [base, line({ serviceId: IRON.id }), soft]],
     ['a base line for another service', [line({ serviceId: IRON.id }), iron, soft]],
   ])('rejects the whole preview for %s', (_name, lines) => {
+    expect(previewCorresponds(input, { estimatedTotalMinorUnits: 0, lines })).toBe(false);
     expect(matchPreview(input, current, { estimatedTotalMinorUnits: 0, lines })).toBeNull();
+  });
+
+  it('corresponds for the matching lines, using the input alone', () => {
+    expect(previewCorresponds(input, { estimatedTotalMinorUnits: 0, lines: [base, iron, soft] })).toBe(true);
+  });
+
+  it('rejects in matchPreview when the chosen rows no longer carry the input ids', () => {
+    const moved = selection({ addOns: [row(4, SOFT), row(9, IRON)] });
+    expect(matchPreview(input, moved, { estimatedTotalMinorUnits: 0, lines: [base, iron, soft] })).toBeNull();
   });
 
   // M5 part 2 P2: the contract is line correspondence only. Quantities,
@@ -612,22 +623,34 @@ export interface LaundryMatchedPreview {
 // request input and order weight are exactly the current ones.
 // `useLaundryServiceSelection` does this with its `[weightGrams, input]`
 // key (Task 4 cases 13, 14 and 19).
+//
+// `previewCorresponds` needs only the submitted input, so the hook checks
+// it when the response arrives, before the response can change any state
+// (M5 part 4 P1). `matchPreview` re-checks it, then keys the lines by row.
+export function previewCorresponds(input: PriceLaundryOrderInput, preview: LaundryPreview): boolean {
+  if (preview.lines.length !== 1 + input.addOns.length) return false;
+  const [base, ...rest] = preview.lines;
+  if (!base || base.serviceId !== String(input.baseServiceId) || base.addOnId !== null) return false;
+  return input.addOns.every((sent, index) => {
+    const line = rest[index];
+    return line !== undefined && line.serviceId === null && line.addOnId === String(sent.addOnId);
+  });
+}
+
 export function matchPreview(
   input: PriceLaundryOrderInput,
   selection: LaundryServiceSelection,
   preview: LaundryPreview,
 ): LaundryMatchedPreview | null {
+  if (!previewCorresponds(input, preview)) return null;
   const chosen = selection.addOns.filter((row) => row.choice !== null);
-  if (preview.lines.length !== 1 + input.addOns.length || chosen.length !== input.addOns.length) return null;
+  if (chosen.length !== input.addOns.length) return null;
   const [base, ...rest] = preview.lines;
-  if (!base || base.serviceId !== String(input.baseServiceId) || base.addOnId !== null) return null;
+  if (!base) return null;
   const addOns = new Map<number, LaundryPreviewLine>();
   for (const [index, row] of chosen.entries()) {
     const line = rest[index];
-    const sent = input.addOns[index];
-    if (!line || !sent) return null;
-    const id = String(sent.addOnId);
-    if (line.serviceId !== null || line.addOnId !== id || row.choice?.id !== id) return null;
+    if (!line || row.choice?.id !== line.addOnId) return null;
     addOns.set(row.key, line);
   }
   return { addOns, base, estimatedTotalMinorUnits: preview.estimatedTotalMinorUnits, lines: preview.lines };
@@ -1008,18 +1031,27 @@ Implements owner decisions 2, 5, 6; planning decisions c, e, f; issue Data, Vali
       - **A superseded failure never shows:** A in flight; the input changes to B; A rejects with a missing-price message. No `previewError` appears for B.
       - **Unmount:** a response that resolves after unmount sets no state. No React act or update warning is logged; `console.error` is spied and must not be called.
       - **Returning input:** A, then B, then A again re-requests A (planning decision f).
-  15. **Mismatched lines:** a response whose lines do not match (an add-on out of order) gives `preview: null`, `previewError: { message: undefined, target: null }`, and `ready: false`.
+  15. **Mismatched lines (M5 part 4 P1 and suggestion 1).** A response whose lines do not correspond to the submitted input has an add-on out of order. Both add-ons are new to `units`, and the response gives them units that would change the next input (Ironing as `PER_ITEM`). It gives:
+      - `preview: null`, `previewError: { message: undefined, target: null }`, and `ready: false`;
+      - `units` deep-equal to its value before the response, so no line of a rejected response is remembered;
+      - no follow-up request, because the next input is unchanged (no `quantity` was added).
+      The same holds for a response with an extra line and for a base line naming another service.
   16. **Missing price (owner decision 2):**
       - A rejection whose `graphQLErrors[0].extensions.originalError.message` is `No effective price for addOnId <row id>` gives `previewError.target` `{ kind: 'addOn', key }`.
       - The same for `serviceId <base id>` gives `{ kind: 'service' }`.
       - An unknown message gives `target: null` with the raw message.
       - A network error with no GraphQL errors gives `message: undefined`.
   17. **Resolved errors (planning decision e):** a resolved result with `errors`, or without `previewLaundryOrderPrice`, is a failure.
-  18. **Never prices:** across every case above, `usePriceLaundryOrderMutation` is never called, and `preview.query` is never called with any document other than `PreviewLaundryOrderPriceDocument`.
+  18. **Never prices (M5 part 4 suggestion 2).** Across every case above, `usePriceLaundryOrderMutation` is never called. Every recorded `preview.query` invocation, **including those whose promise rejects or resolves with errors**, is checked in an `afterEach`:
+      - `options.query` is `PreviewLaundryOrderPriceDocument` (identity);
+      - its operation name, read from the document's definitions, is `PreviewLaundryOrderPrice`, with operation type `query`;
+      - `options.fetchPolicy` is `'network-only'`.
   19. **Exact current input (M5 part 2 P2).** `matchPreview` checks line correspondence only, so this case proves currency. Each outdated request resolves with lines whose ids match the current selection, so only the hook's key, not `matchPreview`, can reject it:
       - **Outdated base count:** with `PER_ITEM` remembered, the count-3 request is in flight; the count changes to 4. The count-3 response resolves with matching ids. `preview` stays `null`, `ready` false, `previewLoading` true. Only the count-4 response makes `ready` true, with `priceInput.baseQuantity === 4`.
       - **Outdated add-on count:** the same, for an add-on row's `quantity`.
       - **Outdated weight:** the request for weight 2505 is in flight; a re-render passes 3000 with the same selection. The 2505 response resolves. `preview` stays `null` until the 3000 request's response.
+      - **No side effect from an outdated response (M5 part 4 P2):** in each case above, the outdated response carries a unit that differs from the current one (for example `FLAT` where the current reply says `PER_ITEM`). After it resolves, `units` is unchanged, and no extra request follows.
+      - **Ready only from a validated current preview (M5 part 4 suggestion 3):** a successful GraphQL response alone never makes `ready` true. In this case and in case 15, `ready` stays false until a corresponding, current response arrives with every row chosen and every count valid.
 
 - [ ] **Step 2: Run, expect failure.** The module does not exist. Record the output.
 
@@ -1042,6 +1074,7 @@ import {
   laundryUnitKey,
   matchPreview,
   missingPriceTarget,
+  previewCorresponds,
   previewInputFromSelection,
   type LaundryAddOnRow,
   type LaundryCatalogChoice,
@@ -1104,7 +1137,9 @@ export interface UseLaundryServiceSelectionOptions {
 type ApolloQueryClient = Pick<ReturnType<typeof useApolloClient>, 'query'>;
 
 // A resolved result with errors or without the payload is a failure too
-// (planning decision e; #155 decision g).
+// (planning decision e; #155 decision g). So is a payload whose lines do
+// not correspond to the submitted input: it is rejected here, before it can
+// reach `units` or `settled` (M5 part 4 P1).
 async function runPreview(client: ApolloQueryClient, input: PriceLaundryOrderInput): Promise<PreviewOutcome> {
   try {
     const result = await client.query<PreviewLaundryOrderPriceQuery, PreviewLaundryOrderPriceQueryVariables>({
@@ -1116,6 +1151,7 @@ async function runPreview(client: ApolloQueryClient, input: PriceLaundryOrderInp
     if ((result.errors?.length ?? 0) > 0 || !payload) {
       return { message: graphQLErrorMessage({ graphQLErrors: result.errors }), ok: false };
     }
+    if (!previewCorresponds(input, payload)) return { message: undefined, ok: false };
     return { data: payload, ok: true };
   } catch (error) {
     return { message: graphQLErrorMessage(error), ok: false };
@@ -1142,7 +1178,10 @@ export function useLaundryServiceSelection({
 }: UseLaundryServiceSelectionOptions): LaundryServiceSelectionState {
   const client = useApolloClient();
   const nextKey = useRef(0);
+  // The newest request sent, and the key of the latest committed render.
+  // Both are written only in effects and callbacks, never during render.
   const generation = useRef(0);
+  const latestKey = useRef<string | null>(null);
   const [selection, setSelection] = useState<LaundryServiceSelection>(EMPTY_LAUNDRY_SERVICE_SELECTION);
   const [units, setUnits] = useState<LaundryRememberedUnits>({});
   // The request sent for a key, and the outcome that came back for it.
@@ -1157,6 +1196,10 @@ export function useLaundryServiceSelection({
   const key = input === null ? null : JSON.stringify([weightGrams, input]);
 
   useEffect(() => {
+    latestKey.current = key;
+  }, [key]);
+
+  useEffect(() => {
     if (key === null) return;
     const [, keyInput] = JSON.parse(key) as [number, PriceLaundryOrderInput];
     let live = true;
@@ -1165,8 +1208,11 @@ export function useLaundryServiceSelection({
       const sent = { generation: generation.current, key };
       setRequested(sent);
       void runPreview(client, keyInput).then((outcome) => {
-        // Dropped once the key changed or the page unmounted.
-        if (!live) return;
+        // Every side effect of a response, `units` included, needs all three
+        // (M5 part 4 P2): this effect is still live (the key has not changed
+        // and the page is mounted), no newer request has been sent, and the
+        // latest committed key is still this request's key.
+        if (!live || generation.current !== sent.generation || latestKey.current !== sent.key) return;
         if (outcome.ok) setUnits((current) => rememberUnits(current, outcome.data.lines));
         setSettled({ ...sent, outcome });
       });
@@ -1189,6 +1235,8 @@ export function useLaundryServiceSelection({
       target: outcome.message === undefined ? null : missingPriceTarget(outcome.message, selection),
     };
   } else if (outcome?.ok && !preview) {
+    // The lines corresponded to the input (checked on arrival) but not to
+    // the current rows; shown as a general failure.
     previewError = { message: undefined, target: null };
   }
   const previewLoading = key !== null && outcome === null;
