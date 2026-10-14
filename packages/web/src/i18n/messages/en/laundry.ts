@@ -132,6 +132,10 @@ export const laundry = {
     },
     overview: {
       noLines: 'No lines yet. Lines are added when the order is priced.',
+      priced: '{n} services priced.',
+      pricedOne: '1 service priced.',
+      pricedPartial: 'Services are priced.',
+      seeServices: 'See Services',
     },
     price: {
       notPriced: 'Not priced yet.',
@@ -147,8 +151,39 @@ export const laundry = {
     },
     sectionsLabel: 'Order sections',
     services: {
+      addAddOn: 'Add add-on',
+      addOn: 'Add-on {n}',
+      base: 'Base service',
+      beforeWeigh: 'Weigh the order before choosing services.',
+      byWeight: 'Priced by weight',
+      count: 'Number of items',
+      duplicate: 'This add-on is already on the order.',
+      error: {
+        base: 'Choose a base service.',
+        count: 'Enter a whole number of items, at least 1.',
+        emptyRow: 'Choose an add-on or remove this row.',
+      },
+      flat: 'Flat price',
+      locked: 'Services are locked because this order has been priced.',
+      noPrice: '{name} has no current price.',
+      noPriceRow: 'No current price.',
       none: 'No services selected yet.',
+      note: 'This is a preview. The price is final only after you confirm it.',
+      previewFailure: 'Couldn’t preview the price.',
+      // Kept until Task 6 stops using it in the order page (Ruling 1).
       priced: 'Services are priced. The lines are listed under Overview.',
+      rate: {
+        flat: '{price} flat',
+        perItem: '{price} per item',
+        perKg: '{price} per kg',
+      },
+      removeAddOn: 'Remove add-on {n}',
+      search: {
+        addOn: { empty: 'No active add-ons match.', error: 'Couldn’t load add-ons.' },
+        more: 'Showing the first 20. Type to narrow.',
+        searching: 'Searching…',
+        service: { empty: 'No active services match.', error: 'Couldn’t load services.' },
+      },
     },
     summary: {
       customer: 'Customer',
