@@ -4,8 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft** (M4, revision 3). Plan Review (M5) in progress, by parts. |
-| M5 history | Part 1 (2026-10-14, owner): provisional. **P1:** the entry contract called every non-digit, non-point character a format error, contradicting the negative-entry message. Resolved in revision 2: Global Constraints now fix the classification order (blank → leading minus → format → notPositive → tooLarge), and Task 2 adds `-1.2345`, `--1` and `1-` as format cases. **Verify (refetch):** Task 4 adds a test that every control stays disabled until the post-save refetch settles. **Verify (oversize):** already covered by Task 2's `tooLarge` cases and Task 4's over-maximum tests. Each row is capped at `MAX_WEIGHT_GRAMS` before it is summed, so the total `formatWeightGrams` receives is always a safe integer. Part 2 (2026-10-14, owner): **P1:** the zero-weight service test asserted only `manager.update`, not the promised "before opening a transaction". Resolved in revision 3: the test also asserts `dataSource.transaction`, `manager.findOne` and `auditLogger.log` were not called, the spec's existing boundary pattern (`receive` / `price` guard tests). The DTO and service messages stay intentionally distinct. |
+| Status | **Draft** (M4, revision 4). Plan Review (M5) in progress, by parts. |
+| M5 history | Part 1 (2026-10-14, owner): provisional. **P1:** the entry contract called every non-digit, non-point character a format error, contradicting the negative-entry message. Resolved in revision 2: Global Constraints now fix the classification order (blank → leading minus → format → notPositive → tooLarge), and Task 2 adds `-1.2345`, `--1` and `1-` as format cases. **Verify (refetch):** Task 4 adds a test that every control stays disabled until the post-save refetch settles. **Verify (oversize):** already covered by Task 2's `tooLarge` cases and Task 4's over-maximum tests. Each row is capped at `MAX_WEIGHT_GRAMS` before it is summed, so the total `formatWeightGrams` receives is always a safe integer. Part 2 (2026-10-14, owner): **P1:** the zero-weight service test asserted only `manager.update`, not the promised "before opening a transaction". Resolved in revision 3: the test also asserts `dataSource.transaction`, `manager.findOne` and `auditLogger.log` were not called, the spec's existing boundary pattern (`receive` / `price` guard tests). The DTO and service messages stay intentionally distinct. Part 3 (2026-10-14, owner): **P1:** the parser comment did not state that a negative with more than three decimals is `format`. Resolved in revision 4: the comment and Global Constraints spell out the precedence (format checks before the negative check). **P2:** `-99999999` must be `notPositive`, not `tooLarge`. The planned code already checks the minus before the oversize check; revision 4 adds `-99999999` as a regression case and says so in Global Constraints. **Suggestion (accepted):** `graphQLErrorMessage` returns `undefined` for a first error that is `null` or not an object, with three new cases. The priced set stays an explicit list. |
 | Date | 2026-10-14 |
 | Tracking issue | [#155](https://github.com/rexescario-dev/clensy-platform/issues/155) "Multi-entry laundry weighing". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) (merged in #183: the order page and its Weighing section) and [#157](https://github.com/rexescario-dev/clensy-platform/issues/157) (closed: `formatWeightGrams`, `laundryOrderActions`). The spec gate in #155 is met: [#164](https://github.com/rexescario-dev/clensy-platform/issues/164) §8.4.1 is Accepted (#167), so this slice takes the issue's "if Accepted" branch (issue comment, 2026-10-14). |
 | Branch | `feat/155-multi-entry-laundry-weighing`, from `main` at `c6b6c75`. One PR for this plan, its M5 record and the implementation. |
@@ -49,10 +49,10 @@ Derived from the Accepted spec, issue #155 (with its two comments) and the owner
   1. **`blank`:** empty or whitespace-only.
   2. **Leading minus:** one leading `-` is removed and remembered. Only this position is special; a `-` anywhere else is just a forbidden character.
   3. **`format`:** the rest contains anything other than `0-9` and `.` (so `+`, `e`, `,`, whitespace and a second `-` all land here), has more than one `.`, has no digits, or has more than 3 decimals. A malformed negative such as `-abc` or `-1.2345` is therefore `format`.
-  4. **`notPositive`:** the input had the leading minus (`-1`, `-0.5`, `-0`), or its value is zero (`0`, `0.000`).
-  5. **`tooLarge`:** above `MAX_WEIGHT_GRAMS`.
+  4. **`notPositive`:** the input had the leading minus (`-1`, `-0.5`, `-0`, and also `-99999999`, which is never `tooLarge`), or its value is zero (`0`, `0.000`).
+  5. **`tooLarge`:** a positive value above `MAX_WEIGHT_GRAMS`.
 
-  Task 2 pins each step, including `-1`, `-0.5`, `-0`, `0`, `-abc` and `-1.2345`.
+  Task 2 pins each step, including `-1`, `-0.5`, `-0`, `0`, `-abc`, `-1.2345` and `-99999999`.
 - **Validation copy (inline under the input):** blank "Enter a weight." · not a decimal kilogram "Enter a weight in kilograms, up to 3 decimal places." · zero or negative "Weight must be greater than zero." · above the `Int` maximum "Enter a smaller weight." (planning decision b). **Form:** no rows "Add at least one weight." · total above the `Int` maximum "The combined weight is too large to record."
 - **Live total:** "Combined weight" in `rounded-md border border-slate-200 bg-slate-50 p-3`. The value, `formatWeightGrams(total)`, is in `text-lg font-semibold text-slate-900`, in a `role="status"` `aria-live="polite"` element. The total covers the valid rows only. It updates as the user types, and invalid rows still block submit.
 - **Layout:**
@@ -385,7 +385,8 @@ describe('parseWeightEntry', () => {
     },
   );
 
-  it.each(['0', '0.000', '00', '-1', '-0.5', '-0'])('%j is not greater than zero', (text) => {
+  // A negative is `notPositive` even when it is also too large.
+  it.each(['0', '0.000', '00', '-1', '-0.5', '-0', '-99999999'])('%j is not greater than zero', (text) => {
     expect(parseWeightEntry(text)).toEqual({ error: 'notPositive', ok: false });
   });
 
@@ -478,9 +479,12 @@ export type WeightEntryResult = { grams: number; ok: true } | { error: WeightEnt
 // kilogram string with at most three decimal places, so it is an exact
 // whole number of grams. Split on the decimal point and add integers;
 // never multiply a float (1.005 * 1000 is not 1005). Only ASCII digits and
-// one point are accepted: no sign, exponent, comma or whitespace. A
-// leading minus on an otherwise valid number is "not greater than zero",
-// as is zero (lifecycle spec §8.4.1).
+// one point are accepted: no sign, exponent, comma or whitespace.
+// Precedence (Global Constraints): blank; then one leading minus is set
+// aside; then the format checks run on the rest, so a malformed negative
+// (`-abc`, `-1.2345`) is `format`; then a negative that is otherwise a
+// valid decimal (`-1`, `-0.5`, `-99999999`) is `notPositive`, as is zero
+// (lifecycle spec §8.4.1); only then is a positive value `tooLarge`.
 export function parseWeightEntry(text: string): WeightEntryResult {
   if (text.trim() === '') return { error: 'blank', ok: false };
   const negative = text.startsWith('-');
@@ -680,6 +684,9 @@ describe('graphQLErrorMessage', () => {
     ['a network error', new Error('Failed to fetch')],
     ['an empty error list', { graphQLErrors: [] }],
     ['an empty message', { graphQLErrors: [{ message: '' }] }],
+    ['a null first error', { graphQLErrors: [null] }],
+    ['a string first error', { graphQLErrors: ['boom'] }],
+    ['an extensions-less, message-less error', { graphQLErrors: [{}] }],
     ['null', null],
     ['a string', 'boom'],
   ])('has no server message for %s', (_label, error) => {
@@ -753,7 +760,9 @@ interface ServerGraphQLError {
 export function graphQLErrorMessage(error: unknown): string | undefined {
   const errors = (error as { graphQLErrors?: unknown } | null | undefined)?.graphQLErrors;
   if (!Array.isArray(errors) || errors.length === 0) return undefined;
-  const first = errors[0] as ServerGraphQLError;
+  const candidate: unknown = errors[0];
+  if (typeof candidate !== 'object' || candidate === null) return undefined;
+  const first = candidate as ServerGraphQLError;
   const original = first.extensions?.originalError?.message;
   if (typeof original === 'string' && original !== '') return original;
   if (Array.isArray(original) && typeof original[0] === 'string' && original[0] !== '') return original[0];
