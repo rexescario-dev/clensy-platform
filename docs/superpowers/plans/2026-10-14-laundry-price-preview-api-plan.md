@@ -4,8 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft (revision 3)**. Ready for M5 Plan Review. |
-| M5 history | First pass (2026-10-14, owner): **Returned for Revision**. P1: the `quote` extraction must keep `price`'s existing error order, and the plan did not show that order or pin it. P2: the `quote` signature disagreed between Architecture and Task 2. P2: no test covered competing failures. Resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). Second pass (2026-10-14, owner): **Returned for Revision**. All three findings confirmed resolved. One P2: Task 2 said both that `price` keeps its preconditions and that `quote` takes them, so a precondition could run twice or the wording could be broken. Resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). |
+| Status | **Draft (revision 4)**. Ready for M5 Plan Review. |
+| M5 history | First pass (2026-10-14, owner): **Returned for Revision**. P1: the `quote` extraction must keep `price`'s existing error order, and the plan did not show that order or pin it. P2: the `quote` signature disagreed between Architecture and Task 2. P2: no test covered competing failures. Resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). Second pass (2026-10-14, owner): **Returned for Revision**. All three findings confirmed resolved. One P2: Task 2 said both that `price` keeps its preconditions and that `quote` takes them, so a precondition could run twice or the wording could be broken. Resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). Third pass (2026-10-14, owner): **Returned for Revision**. The revision-2 finding confirmed resolved. One P2: the release-gate probe aliased the money amount `estimatedTotalMinorUnits` as `totalCount`. Resolved in [Revision 4 (M5 review 3)](#revision-4-m5-review-3). |
 | Date | 2026-10-14 |
 | Tracking issue | [#159](https://github.com/rexescario-dev/clensy-platform/issues/159) "Laundry price-preview and line-label API". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Spec gate [#164](https://github.com/rexescario-dev/clensy-platform/issues/164), Accepted through [#167](https://github.com/rexescario-dev/clensy-platform/pull/167). Unblocks #158 (services and add-ons) and #162 (price preview and confirmation). |
 | Branch | `feat/159-laundry-price-preview-api`, from `main` at `fb0791e`. One PR carries this plan, its M5 record and the implementation. |
@@ -122,6 +122,7 @@ Deferred, explicitly: positive weight (#155); any web UI (#158, #162); rejecting
 | `apps/api/test/release-gate/two-tenant-world.ts` | modify (line fixture adds `description`) |
 | `apps/api/test/helpers/root-operation-inventory.ts`, `test/root-operation-authorization.e2e-spec.ts` | modify (classify the new query; count 62 → 63) |
 | `apps/api/test/release-gate/role-matrix.ts`, `test/release-gate/probes/laundry.ts`, `test/two-tenant-release-gate.e2e-spec.ts` | modify (matrix row, probe; count 64 → 65) |
+| `apps/api/test/release-gate/outcome.ts`, `test/release-gate/outcome.e2e-spec.ts` | modify (the `{ items: [{ id }] }` list payload, test first) |
 | `apps/api/test/tenant-read-authorizers.e2e-spec.ts` | modify (`LaundryPricePreview.lines` custom object field) |
 | `apps/api/src/schema.gql` | regenerated |
 | `packages/client/src/operations/laundry.graphql`, `src/generated/graphql.ts`, `src/laundry-operations.test.ts` | modify / regenerate |
@@ -370,23 +371,63 @@ export class AddLaundryLineDescription1790956800000 implements MigrationInterfac
     - `test/root-operation-authorization.e2e-spec.ts`: `toHaveLength(62)` → `63`.
     - `test/release-gate/role-matrix.ts`: `'Query.previewLaundryOrderPrice': { allowed: [TENANT_OWNER, OPS_MANAGER, SCHEDULER], source: 'Laundry Orders & Lifecycle Amendment #164 §8.4.5 "Authorization matches priceLaundryOrder" (M3 Accepted 2026-10-10); ' + RFC }`.
     - `test/two-tenant-release-gate.e2e-spec.ts`: `toHaveLength(64)` → `65`.
-    - `test/release-gate/probes/laundry.ts`: a probe for `Query.previewLaundryOrderPrice`. `prepare`: a `WEIGHED` order (`fixtures.laundryOrder(tenant, WEIGHED)`). The gate's outcome classifier reads `id`s, and a preview has none, so the probe document aliases the payload into the connection shape the classifier already understands, with a comment saying so:
+    - **Release-gate classifier: an explicit list payload (test first).** The gate's `okFrom` (`test/release-gate/outcome.ts`) recognizes `{ id }`, an array of `{ id }`, and a `{ nodes, totalCount }` connection. A preview fits none of these, and its only number is money, so it MUST NOT be aliased to `totalCount`. Add one shape: an object whose `items` is an array of `{ id }` is `OK` with those ids and `totalCount: null`. It is a list with no count.
+      1. First, in `test/release-gate/outcome.e2e-spec.ts`, add `it('extracts ids from an items list payload, which has no count')`:
+         - `{ data: { previewLaundryOrderPrice: { items: [{ id: uuid }] } } }` → `{ ids: [uuid], kind: 'OK', totalCount: null }`;
+         - `{ items: [] }` → `{ ids: [], kind: 'OK', totalCount: null }`;
+         - `{ items: [{ id: 5 }] }` → `UNEXPECTED`;
+         - `{ items: [{ id: uuid }], nodes: [{ id: uuid }], totalCount: 1 }` → `UNEXPECTED` (ambiguous shape);
+         - `{ items: [{ id: uuid }], totalCount: 1 }` → `UNEXPECTED` (an items list carries no count).
+
+         Run: `pnpm --filter api test:e2e -- release-gate/outcome`
+         Expected: FAIL on the first two (`object without id`); the three `UNEXPECTED` cases already pass.
+      2. Then in `okFrom`'s object branch, before the `nodes` check:
+         ```ts
+         // A list inside an object, with no count (#159: the price preview's
+         // lines, selected as `items: lines { id: serviceId }`). Never mixed
+         // with a connection or a count, so a money field cannot pose as one.
+         const { items } = value as { items?: unknown };
+         if (items !== undefined) {
+           const ids = Array.isArray(items) ? idsOf(items) : null;
+           return ids && nodes === undefined && totalCount === undefined
+             ? { ids, kind: 'OK', totalCount: null }
+             : unexpected('items list without ids, or mixed with a connection', body);
+         }
+         ```
+         (Destructure `items` together with `nodes` and `totalCount`; the exact layout is the implementer's choice under the file's lint rules.) The existing cases in `it('extracts ids from an object, a connection and an array; null is NULL')` stay unchanged and green.
+         Run: `pnpm --filter api test:e2e -- release-gate/outcome`
+         Expected: PASS.
+    - `test/release-gate/probes/laundry.ts`: a probe for `Query.previewLaundryOrderPrice`, with a comment explaining the alias. Each `id` is a quoted line's target `serviceId`; nothing is aliased to `totalCount`.
       ```graphql
       query Gate($input: PriceLaundryOrderInput!) {
         previewLaundryOrderPrice(input: $input) {
-          nodes: lines { id: serviceId }
-          totalCount: estimatedTotalMinorUnits
+          items: lines { id: serviceId }
         }
       }
       ```
-      `sameTenant`: `{ addOns: [], baseServiceId: own.serviceId, orderId: prepared.orderId }`; `ok: { kind: 'listIncludes', id: ({ own }) => own.serviceId }`. `crossTenant`: the same three variants as `priceLaundryOrder` (foreign order → 404; foreign `baseServiceId` → 400; foreign `addOnId` → 400; the add-on variant keeps `baseServiceId: own.serviceId`).
-      If the reviewer rejects aliasing at M5, the alternative is a new `OkExpectation` kind in `release-gate/probe.ts` / `engine.ts`; that is a larger gate change and is **not** planned by default.
+      `prepare`: a `WEIGHED` order (`fixtures.laundryOrder(tenant, WEIGHED)`, weight 2000). `sameTenant`: `{ addOns: [], baseServiceId: own.serviceId, orderId: prepared.orderId }` (no add-on, so every `serviceId` is non-null). `ok: { kind: 'listIncludes', id: ({ own }) => own.serviceId }`: the same-tenant call succeeds **and** quotes the caller's own service. `crossTenant`, the same three variants as `priceLaundryOrder`, each with its declared missing form:
+      - foreign `orderId` → `{ kind: 'error', status: 404 }`;
+      - foreign `baseServiceId` (own order) → `{ kind: 'error', status: 400 }` (`No effective price for serviceId <uuid>`);
+      - foreign `addOnId` (own order, `baseServiceId: own.serviceId`) → `{ kind: 'error', status: 400 }` (`No effective price for addOnId <uuid>`).
+
+      The gate's existing phases assert these:
+      - Phase 3: the query rejects a missing session.
+      - Phase 4: across the seven roles on the caller's own data, TENANT_OWNER / OPS_MANAGER / SCHEDULER satisfy `ok` (the same-tenant preview succeeds and includes `own.serviceId`), and the other four get `FORBIDDEN`.
+      - Phase 5: for every allowed role, each cross-tenant variant answers with its declared missing form, compared with a never-existed-id control after UUID normalization.
+      - Phase 6: Phase 5 changed no row and wrote no audit row.
+      - Phase 7: the same in the other direction.
+
+      No probe-specific assertion code is needed beyond this declaration. Task 4 Step 4 runs the gate.
     - `test/tenant-read-authorizers.e2e-spec.ts` `CUSTOM_OBJECT_FIELDS`: `'LaundryPricePreview.lines': 'Plain value list returned by previewLaundryOrderPrice, which LaundryOrdersService computes for the principal tenant (#159); no resolver of its own.'`
 
 - [ ] **Step 4: Run and see them pass.**
-  Run: `pnpm --filter api test -- laundry-order.resolver` then `pnpm --filter api test:e2e -- root-operation-authorization tenant-read-authorizers relation-field-authorization`
+  Run: `pnpm --filter api test -- laundry-order.resolver` then `pnpm --filter api test:e2e -- root-operation-authorization tenant-read-authorizers relation-field-authorization release-gate/outcome release-gate/engine`
   then `pnpm --filter api test:e2e:release-gate`
-  Expected: PASS. The release gate's Phase 4 runs the new probe for all seven roles: allowed for TENANT_OWNER / OPS_MANAGER / SCHEDULER, forbidden for the rest.
+  Expected: PASS. In the gate run:
+  - Phases 1a/1b/2 find the new key in the classification, the role matrix and the probes, with matching `@Roles`.
+  - Phase 4 passes the same-tenant `listIncludes` for TENANT_OWNER / OPS_MANAGER / SCHEDULER and gets `FORBIDDEN` for the other four roles.
+  - Phase 5 gets the three cross-tenant missing forms (404, 400, 400), each matching its never-existed control.
+  - Phase 6 finds no write.
 
 - [ ] **Step 5: Commit.** `feat(api): expose previewLaundryOrderPrice to operational roles (#159)`
 
@@ -485,6 +526,12 @@ The M7 requirement for a fresh independent reviewer is unchanged.
 | --- | --- |
 | **P2: Task 2 contradicted itself on who owns the pricing preconditions.** It said `price` "keeps its … precondition … exactly as today" and also that `quote` takes the status and weight checks, so the implementer could duplicate them or break the wording. | Decision: `quote` owns every pricing precondition, each run exactly once, in Error-precedence order (status, weight, quantity shape, rule resolution, names). `price` keeps only the transaction, the lock, persistence, the transition assertion and the audit. `previewPrice` keeps only its read. Architecture now says so and adds a responsibility/owner table. Task 2 Step 4 now says to **delete** the moved checks from `price`, and gives `price`'s callback after the change: lock → `quote` → save lines → `assertTransition` → update → audit → re-read. The existing `price` tests and C1–C7 stay the evidence that the move changed no behavior. |
 
+## Revision 4 (M5 review 3)
+
+| Finding | Resolution |
+| --- | --- |
+| **P2: the release-gate probe aliased `estimatedTotalMinorUnits` (money) as `totalCount` (a count).** | Decision: an explicit classifier shape, not an alias. Task 4 adds one rule to `release-gate/outcome.ts`: `{ items: [{ id }] }` is `OK` with those ids and `totalCount: null`. It is rejected as `UNEXPECTED` when an id is missing or not a string, or when mixed with `nodes` or `totalCount`, so a number can never pose as a count. It is test first in `outcome.e2e-spec.ts`: five cases, two failing first. The probe now selects only `items: lines { id: serviceId }`. Same-tenant success is `listIncludes own.serviceId`. The three cross-tenant variants keep their declared 404 / 400 / 400 missing forms. The gate's Phase 5 checks those against a never-existed control, Phase 6 checks that nothing was written, and Phase 4 checks the role split and same-tenant success. The earlier "alias by default, gate change only if rejected" fallback text is removed. |
+
 ## Execution risks (operational only)
 
 - **Intermediate red e2e** between Tasks 1 and 2 (see note above). Do not push between them.
@@ -504,6 +551,6 @@ Read-only, at `fb0791e`:
 - `new LaundryOrdersService(` appears in `laundry.service.e2e-spec.ts` (1) and `billing.service.e2e-spec.ts` (2).
 - Root-field counts: `root-operation-authorization` expects 62; the release gate's role matrix expects 64.
 - `tenant-read-authorizers` sweeps every `@ObjectType`'s object-typed fields; `LaundryPricePreview.lines` needs a `CUSTOM_OBJECT_FIELDS` entry.
-- The release-gate outcome classifier (`release-gate/outcome.ts`) recognizes a single `{ id }`, an array of `{ id }`, or a `{ nodes, totalCount }` connection.
+- The release-gate outcome classifier (`release-gate/outcome.ts`) recognizes a single `{ id }`, an array of `{ id }`, or a `{ nodes, totalCount }` connection. A connection must carry a numeric `totalCount`. Anything else is `UNEXPECTED`. `engine.ts`'s `listIncludes` reads only `ids`.
 - `apps/web/lib/laundry-order-page.render.test.tsx` declares its own `Line` type, not the generated fragment type; the added fragment field does not affect it.
 - `packages/client/codegen.ts` reads `apps/api/src/schema.gql`.
