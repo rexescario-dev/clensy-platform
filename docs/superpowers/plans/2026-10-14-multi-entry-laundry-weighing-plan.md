@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 8)**. M6 complete ([Execution record](#execution-record)); M7 pending. |
+| Status | **Accepted (revision 8)**. M6 complete ([Execution record](#execution-record)); M7 Approved for merge (independent review); M8 N/A; M9 complete. |
 | M5 decision | **Accepted** — 2026-10-14, revision 8 (`003f6ce`), by the owner, after the Part 4 re-check and a final Part 5 pass. Every finding raised in parts 1–5 is resolved: the Task 1 transaction boundary (rev 3), Task 2–3 negative precedence and the error-shape guard (rev 4, 7), the Task 4 error policy, stale alert, total-error a11y (rev 5) and typed weigh mock (rev 8), and the Task 5–6 markup, reload-failure and reporting changes (rev 6). Part 5 found no blocking issue in Tasks 5–6, traceability, deferrals or risks. No planning decision (a)–(g) was returned, so all stand as written. The acceptance covers the plan, not the implementation. The reviewer relied on the supplied pre-validation evidence and did not rerun the commands. Task 1, Task 5, Task 6, each expected-failure step and the browser checklist stay unverified until M6 runs them and records the results. |
 | M5 history | Part 1 (2026-10-14, owner): provisional. **P1:** the entry contract called every non-digit, non-point character a format error, contradicting the negative-entry message. Resolved in revision 2: Global Constraints now fix the classification order (blank → leading minus → format → notPositive → tooLarge), and Task 2 adds `-1.2345`, `--1` and `1-` as format cases. **Verify (refetch):** Task 4 adds a test that every control stays disabled until the post-save refetch settles. **Verify (oversize):** already covered by Task 2's `tooLarge` cases and Task 4's over-maximum tests. Each row is capped at `MAX_WEIGHT_GRAMS` before it is summed, so the total `formatWeightGrams` receives is always a safe integer. Part 2 (2026-10-14, owner): **P1:** the zero-weight service test asserted only `manager.update`, not the promised "before opening a transaction". Resolved in revision 3: the test also asserts `dataSource.transaction`, `manager.findOne` and `auditLogger.log` were not called, the spec's existing boundary pattern (`receive` / `price` guard tests). The DTO and service messages stay intentionally distinct. Part 3 (2026-10-14, owner): **P1:** the parser comment did not state that a negative with more than three decimals is `format`. Resolved in revision 4: the comment and Global Constraints spell out the precedence (format checks before the negative check). **P2:** `-99999999` must be `notPositive`, not `tooLarge`. The planned code already checks the minus before the oversize check; revision 4 adds `-99999999` as a regression case and says so in Global Constraints. **Suggestion (accepted):** `graphQLErrorMessage` returns `undefined` for a first error that is `null` or not an object, with three new cases. The priced set stays an explicit list. Part 4 (2026-10-14, owner): **P1 (error policy):** resolved in revision 5. The spike shows the effective policy is Apollo 3.14's default `'none'`: there are no `defaultOptions` anywhere, and the `onError` link only observes. So GraphQL errors reject. The contract is documented in Task 4, and the handler also treats a resolved result with errors or without the order as a failure (decision g). **P1 (sync throw from `onRecorded`):** the reviewer withdrew it; no change. **P2 (stale alert):** an edit, add, remove or new submit clears the server error, with four tests. **P2 (resolved-error path):** two tests cover a resolved result with errors and one with no order; the mock's default success now carries the order. **P2 (total error a11y):** the total-level error has id `laundry-weighing-form-error` and describes Record weight, asserted in the over-maximum and no-rows tests; the live region stays on the total only. Part 5 (2026-10-14, owner): verdict **not accepted yet**. The summary table repeats the part 1–4 findings; revisions 3–5 had already resolved them before part 5 was sent (transaction boundary: rev 3; negative precedence and `-99999999`: rev 4, already ordered in the code; error policy, stale alert, total-error a11y: rev 5). New in part 5, resolved in revision 6. **Brittle markup:** the Task 5 render test drops the exact Tailwind class and ordered-attribute assertions; the live total is checked by `role="status"` and `aria-live="polite"` on the tag holding `0.00 kg`. **Page-level refetch failure:** a Task 5 characterization test shows the post-save reload failure renders the order error state with no weighing failure and no editor. The stated guarantee is narrowed: the editor guarantees no weighing error, the page shows its existing #156 branch, and Apollo setting `error` is library behavior. **Task 6:** the report must record each command as PASS, FAIL or NOT RUN, state that authorization and status enforcement stay server-side, say whether the API tests ran, and list the release-gate and tenant-isolation suites as excluded, not as covered. Part 3 re-check (2026-10-14, owner): Task 1 confirmed resolved; Task 3 has no blocking finding. The reviewer asked for proof that `-99999999` is `notPositive` in the committed code, not only in a comment. Revision 7 ran Task 2's planned code and tests verbatim (see Pre-validation): the `if (negative)` check precedes the size check, and the `-99999999` case passes. The same run's lint found that the `WeightEntryResult` union order violated `sort-type-constituents`; it is reordered in revision 7, with no behavior change. Part 4 re-check (2026-10-14, owner): **P1:** the weigh mock's `resolve(result?: unknown)` was too permissive. Resolved in revision 8: the test types the mock result as Apollo 3.14's `FetchResult<WeighLaundryOrderMutation>` and its variables as the generated `WeighLaundryOrderMutationVariables`. The success default is a full `LaundryOrderDetail`-shaped `RECORDED` fixture, and the resolved-errors and missing-order fixtures must satisfy the same type. `tsc --noEmit` proves they do (see Pre-validation). Behavior unchanged. Part 4 follow-up (2026-10-14, owner): the typing finding is resolved, on the supplied evidence. Part 5 final pass (2026-10-14, owner): no blocking issue; M5 acceptance recommended for revision 8. See M5 decision. |
 | Date | 2026-10-14 |
@@ -1962,3 +1962,119 @@ The console showed only the existing favicon 404.
 ### Next Gate
 
 **M7 — Code Review**
+
+### M7 — Approved for merge (2026-10-14, fresh independent review)
+
+`CLAUDE.md` requires a fresh agent on the most capable model for application code, so this review was done by one (Opus 5.5) that did not implement the change. It was read-only. It was given the Accepted spec, this plan and the branch diff (`c6b6c75..ff06c61`, code only). **This is not a self-review.** Its record, condensed:
+
+```text
+Decision: Approved for merge
+Subject: branch feat/155-multi-entry-laundry-weighing (from main c6b6c75); code commits
+  0463178, 1acecb7, f89b01d, 71ac3bc, 65bde38; plan/record commits 8848ec9…4fd6732, ff06c61
+Accepted specification: docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md
+  (Amendment #164 §8.4.1, §8.4.4; §8.2, §4.3, §4.4, §4.5, §4.7)
+Accepted implementation plan: this plan, revision 8 (M5 accept recorded at 4fd6732)
+M6 gate: 4fd6732 at 22:44:33 precedes the first code commit 0463178 at 22:47:23.
+
+Plan tasks reviewed:
+- Task 1: ✓ @Min(1); the service guard sits before dataSource.transaction; CHECK and migrations untouched;
+  the zero test asserts no transaction/findOne/update/audit; DTO spec; GraphQL e2e leaves RECEIVED/null.
+- Task 2: ✓ both files byte-identical to the plan (checked with diff).
+- Task 3: ✓ graphql-error-message files byte-identical; the laundry-order-page append matches;
+  currentLaundryOrderSection unchanged.
+- Task 4: ✓ editor and interaction test byte-identical; copy block matches.
+- Task 5: ✓ import, header comment, section replacement, WeighingBody and render-test edits match.
+- Task 6: ✓ all ten commands recorded PASS; enforcement, API-test and exclusion statements present;
+  five browser items pass (item 4 priced via the same mutation from the CLI, disclosed; accepted).
+
+Verification evidence:
+- M6 record (TDD red runs, Task 6 table, browser check).
+- Reviewer re-ran read-only: npx vitest run on the 5 slice test files → 5 files, 210 tests passed;
+  pnpm --filter api test -- laundry-orders.service laundry-order.inputs → 2 suites, 77 passed.
+
+Review summary: a faithful, near-verbatim realization of revision 8, with no deviations.
+- §8.4.1 holds on both layers (the DTO and a pre-transaction service guard; NaN is rejected by
+  Number.isInteger); stored zeros and the CHECK are untouched.
+- §8.4.4 holds: integer grams by string split, at most 3 decimals, one mutation, no bag data (§8.2).
+- The priced set was checked against the §4.3 matrix: all 11 statuses are reachable only via
+  WEIGHED→PRICED; CANCELLED/REJECTED are excluded and pinned by tests.
+- Examined: the in-flight ref is set before any await; pending covers the mutation and the refetch;
+  a refetch rejection is swallowed; finally always clears; a resolved error or missing order is a
+  failure. Parsing order, the 7-digit whole cap and safe totals were traced by hand.
+- Hidden scope: none. The list page, currentLaundryOrderSection, @clensy/ui, client operation
+  documents, schema and migrations are untouched; no dependency changed.
+
+Blocking findings: None (no merge blockers)
+
+Non-blocking observations:
+- Focus is not restored to Record weight after a submit settles (an a11y follow-up; the plan did
+  not require focus handling).
+- graphQLErrorMessage shows only the first ValidationPipe constraint; for this input there is at most one.
+- The editor's interaction test lives in apps/web/lib/, per the plan's file map and harness precedent.
+- Cosmetic: reset weigh.resolve/reject in beforeEach; add boundary assertions to the older
+  negative/non-integer service tests.
+
+Deferred-minor triage: all eight M6 task-review minors may stay deferred (each traced or covered).
+
+Gate: Merge per human/project norms. M8/M9 may follow.
+```
+
+### M8 — N/A (2026-10-14)
+
+```text
+Decision: N/A
+Subject: branch feat/155-multi-entry-laundry-weighing, head ff06c61
+Accepted specification: docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md (Amendment #164 §8.4.1, §8.4.4)
+Accepted implementation plan: this plan (revision 8)
+M7: Approved for merge.
+Candidates considered, and why none is an M8 refactor:
+- Focus restore after submit, and showing more than one validation message, each change behavior.
+  They are follow-up candidates, not refactors.
+- Test hygiene (resetting the weigh helpers; boundary assertions on the older service tests) is
+  cosmetic. M7 found no stale-helper dependence, and the shared guard is already pinned.
+- Moving the editor's interaction test beside the component would break the apps/web/lib test-harness
+  convention the plan follows.
+- The code is byte-identical to the Accepted plan; no duplication or complexity is worth the churn.
+No code changed in M8.
+```
+
+### M9 — Complete (2026-10-14)
+
+```text
+Decision: Complete
+Subject: #155 Multi-entry laundry weighing
+Accepted specification: docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md (with Amendment #164)
+Accepted implementation plan: this plan (revision 8)
+M7: Approved for merge. M8: N/A.
+Documentation scope:
+- apps/web/README.md
+- packages/web/README.md
+- docs/README.md
+- this plan (Status row, the M7–M10 records)
+Updated artifacts:
+- apps/web/README.md ← M6 Tasks 2–5: the order page is no longer described as wholly read-only.
+  A new Weighing bullet covers the three views (editor, locked, read-only), the explicit priced set
+  excluding CANCELLED/REJECTED, integer-gram parsing, the Int cap, one mutation, controls disabled
+  through the refetch, the failure text and the re-weigh prefill.
+  #155 is removed from the "replace those bodies" list.
+- packages/web/README.md ← M6 Task 4: the laundry intro names #155's editor and plan; the copy
+  bullet describes the new `order.weighing` keys.
+- docs/README.md ← M6 Task 1: a new "Positive laundry weight (#155)" section, after #159 in
+  chronological order. It covers the @Min(1) input, the pre-transaction service check and message,
+  that roles/status/input are unchanged, no migration (CHECK stays >= 0, stored zeros untouched),
+  and that the release-gate and tenant-isolation suites were not changed.
+Editorial changes: none beyond the above.
+Unchanged, with reason:
+- README.md (root) describes ck_laundry_order_weight_non_negative as >= 0, which stays true.
+- The lifecycle spec: #155 implements Amendment #164 §8.4.1/§8.4.4 without amending it
+  (the #156/#157/#160 precedent).
+- No changelog or roadmap file exists in the repository.
+Verification:
+- Links: every relative link and in-page anchor in the three READMEs and this plan resolves
+  (scripted scan, 75 checked, 0 broken).
+- Heading hierarchy: the new docs/README.md `##` follows #159; the apps/web bullet sits inside the
+  existing order-page `##`; the packages/web changes sit inside the existing laundry `##`.
+- Status consistency: plan Accepted (revision 8); M6 complete; M7 Approved; M8 N/A; M9 complete.
+- Terminology follows the spec and plan: weighing editor, locked, read-only, priced set, re-weigh.
+Gate: Documentation complete. Code, behavior and contracts are unchanged by this stage.
+```
