@@ -4,8 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft** (M4, revision 4). Plan Review (M5) in progress, by parts. |
-| M5 history | Part 1 (2026-10-14, owner): provisional. **P1:** the entry contract called every non-digit, non-point character a format error, contradicting the negative-entry message. Resolved in revision 2: Global Constraints now fix the classification order (blank → leading minus → format → notPositive → tooLarge), and Task 2 adds `-1.2345`, `--1` and `1-` as format cases. **Verify (refetch):** Task 4 adds a test that every control stays disabled until the post-save refetch settles. **Verify (oversize):** already covered by Task 2's `tooLarge` cases and Task 4's over-maximum tests. Each row is capped at `MAX_WEIGHT_GRAMS` before it is summed, so the total `formatWeightGrams` receives is always a safe integer. Part 2 (2026-10-14, owner): **P1:** the zero-weight service test asserted only `manager.update`, not the promised "before opening a transaction". Resolved in revision 3: the test also asserts `dataSource.transaction`, `manager.findOne` and `auditLogger.log` were not called, the spec's existing boundary pattern (`receive` / `price` guard tests). The DTO and service messages stay intentionally distinct. Part 3 (2026-10-14, owner): **P1:** the parser comment did not state that a negative with more than three decimals is `format`. Resolved in revision 4: the comment and Global Constraints spell out the precedence (format checks before the negative check). **P2:** `-99999999` must be `notPositive`, not `tooLarge`. The planned code already checks the minus before the oversize check; revision 4 adds `-99999999` as a regression case and says so in Global Constraints. **Suggestion (accepted):** `graphQLErrorMessage` returns `undefined` for a first error that is `null` or not an object, with three new cases. The priced set stays an explicit list. |
+| Status | **Draft** (M4, revision 5). Plan Review (M5) in progress, by parts. |
+| M5 history | Part 1 (2026-10-14, owner): provisional. **P1:** the entry contract called every non-digit, non-point character a format error, contradicting the negative-entry message. Resolved in revision 2: Global Constraints now fix the classification order (blank → leading minus → format → notPositive → tooLarge), and Task 2 adds `-1.2345`, `--1` and `1-` as format cases. **Verify (refetch):** Task 4 adds a test that every control stays disabled until the post-save refetch settles. **Verify (oversize):** already covered by Task 2's `tooLarge` cases and Task 4's over-maximum tests. Each row is capped at `MAX_WEIGHT_GRAMS` before it is summed, so the total `formatWeightGrams` receives is always a safe integer. Part 2 (2026-10-14, owner): **P1:** the zero-weight service test asserted only `manager.update`, not the promised "before opening a transaction". Resolved in revision 3: the test also asserts `dataSource.transaction`, `manager.findOne` and `auditLogger.log` were not called, the spec's existing boundary pattern (`receive` / `price` guard tests). The DTO and service messages stay intentionally distinct. Part 3 (2026-10-14, owner): **P1:** the parser comment did not state that a negative with more than three decimals is `format`. Resolved in revision 4: the comment and Global Constraints spell out the precedence (format checks before the negative check). **P2:** `-99999999` must be `notPositive`, not `tooLarge`. The planned code already checks the minus before the oversize check; revision 4 adds `-99999999` as a regression case and says so in Global Constraints. **Suggestion (accepted):** `graphQLErrorMessage` returns `undefined` for a first error that is `null` or not an object, with three new cases. The priced set stays an explicit list. Part 4 (2026-10-14, owner): **P1 (error policy):** resolved in revision 5. The spike shows the effective policy is Apollo 3.14's default `'none'`: there are no `defaultOptions` anywhere, and the `onError` link only observes. So GraphQL errors reject. The contract is documented in Task 4, and the handler also treats a resolved result with errors or without the order as a failure (decision g). **P1 (sync throw from `onRecorded`):** the reviewer withdrew it; no change. **P2 (stale alert):** an edit, add, remove or new submit clears the server error, with four tests. **P2 (resolved-error path):** two tests cover a resolved result with errors and one with no order; the mock's default success now carries the order. **P2 (total error a11y):** the total-level error has id `laundry-weighing-form-error` and describes Record weight, asserted in the over-maximum and no-rows tests; the live region stays on the total only. |
 | Date | 2026-10-14 |
 | Tracking issue | [#155](https://github.com/rexescario-dev/clensy-platform/issues/155) "Multi-entry laundry weighing". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) (merged in #183: the order page and its Weighing section) and [#157](https://github.com/rexescario-dev/clensy-platform/issues/157) (closed: `formatWeightGrams`, `laundryOrderActions`). The spec gate in #155 is met: [#164](https://github.com/rexescario-dev/clensy-platform/issues/164) §8.4.1 is Accepted (#167), so this slice takes the issue's "if Accepted" branch (issue comment, 2026-10-14). |
 | Branch | `feat/155-multi-entry-laundry-weighing`, from `main` at `c6b6c75`. One PR for this plan, its M5 record and the implementation. |
@@ -14,7 +14,7 @@
 | Relies on (Accepted, merged) | [Laundry Order Page plan](2026-10-14-laundry-order-page-plan.md) (#156): the route, `OrderSection`, `Fact`, the page render-test harness, `currentLaundryOrderSection` (unchanged: Weighing is current only for `RECEIVED`). [Laundry UI Foundation plan](2026-10-10-laundry-ui-foundation-plan.md) (#157): `formatWeightGrams`, `laundryOrderActions` (its `weigh` verb is `RECEIVED`/`WEIGHED` ∩ OPERATIONAL), `LAUNDRY_ORDER_STATUSES`. [Laundry Intake Modal plan](2026-10-13-laundry-intake-modal-plan.md) (#160): the synchronous in-flight guard idiom, the `role="alert"` form error, the jsdom interaction-test harness. `@clensy/ui` `FormField` (label, `aria-invalid`, `aria-describedby`), `Button`, `useToast`. |
 | Authority | Where this plan and the Accepted spec disagree, the **spec wins** and this plan must be revised. Issue #155 refines §8.4.4 with layout, copy, validation and test requirements. File names, helper names, copy keys, element ids and task order are planning decisions, not product semantics. |
 | Owner decisions (M4, 2026-10-14) | **(1) Locked copy only once priced.** "Weight is locked because this order has been priced." shows, to every role, only for a status that implies pricing: `PRICED`, `AWAITING_PAYMENT`, `PAID`, `PROCESSING`, `READY`, `AWAITING_PICKUP`, `AWAITING_DELIVERY`, `COMPLETED`, `LOST`, `DAMAGED`, `REFUNDED`. `CANCELLED` and `REJECTED` never show it: they show the recorded weight, or "Not weighed yet.", and no form. `RECEIVED` / `WEIGHED` show the form only when `laundryOrderActions(...)` offers `weigh`, otherwise the read-only weight. **(2) Keep** the database CHECK at `>= 0`, no migration, and a fresh independent M7 reviewer (API code changes). |
-| Planning decisions for M5 to confirm | Not in the issue or spec. Each is the smallest choice that keeps the stated contract; M5 may return any of them. **(a)** `CANCELLED` is outside the priced set even when the order was cancelled after pricing (§4.3 allows `PRICED → CANCELLED`): the status alone cannot tell, and owner decision 1 forbids the locked copy for `CANCELLED`. Such an order shows its recorded weight. **(b)** A row above the GraphQL `Int` maximum (2,147,483,647 g) shows "Enter a smaller weight.", and a combined total above it shows "The combined weight is too large to record." Without this, a long digit string either crashes the shared formatter (`RangeError` past `Number.MAX_SAFE_INTEGER`) or sends a value the `Int!` input cannot carry. **(c)** A row's inline error appears once the row has been left (blur) or after a submit attempt, not on load, so the prefilled empty row is not red on arrival. **(d)** Whitespace is not trimmed: `" 1.25"` is the format error, as the issue's "any character that is not a digit or a single decimal point" says. `"1."` (1000 g) and `".5"` (500 g) are accepted, because splitting on `.` yields a valid whole and fraction. **(e)** Controls stay disabled until the post-save refetch settles as well as the mutation, so a second weigh cannot start before the page shows the saved weight. **(f)** Plain React state, not `react-hook-form`: the rows are a dynamic list validated by one pure function. |
+| Planning decisions for M5 to confirm | Not in the issue or spec. Each is the smallest choice that keeps the stated contract; M5 may return any of them. **(a)** `CANCELLED` is outside the priced set even when the order was cancelled after pricing (§4.3 allows `PRICED → CANCELLED`): the status alone cannot tell, and owner decision 1 forbids the locked copy for `CANCELLED`. Such an order shows its recorded weight. **(b)** A row above the GraphQL `Int` maximum (2,147,483,647 g) shows "Enter a smaller weight.", and a combined total above it shows "The combined weight is too large to record." Without this, a long digit string either crashes the shared formatter (`RangeError` past `Number.MAX_SAFE_INTEGER`) or sends a value the `Int!` input cannot carry. **(c)** A row's inline error appears once the row has been left (blur) or after a submit attempt, not on load, so the prefilled empty row is not red on arrival. **(d)** Whitespace is not trimmed: `" 1.25"` is the format error, as the issue's "any character that is not a digit or a single decimal point" says. `"1."` (1000 g) and `".5"` (500 g) are accepted, because splitting on `.` yields a valid whole and fraction. **(e)** Controls stay disabled until the post-save refetch settles as well as the mutation, so a second weigh cannot start before the page shows the saved weight. **(f)** Plain React state, not `react-hook-form`: the rows are a dynamic list validated by one pure function. **(g)** A resolved weigh result with GraphQL errors or without the order is a failure (defense in depth over the `'none'` policy). An edit, add, remove or new submit clears an earlier server error. The total-level error has a fixed id that describes Record weight. |
 | Edit anchors | New files are given in full. Edits to existing files are given against `main` at `c6b6c75`. Apply each by the quoted code, not by line number. |
 | Package names | `pnpm --filter api` is `apps/api`. `pnpm --filter web` is `apps/web`. `pnpm --filter @clensy/web` is `packages/web`. |
 | Pre-validation | **None claimed.** Read-only spikes ran at planning time and are recorded under [Planning spikes](#planning-spikes). No task's `Expected:` commands were run. |
@@ -93,6 +93,7 @@ Read-only. Nothing below was committed.
 - **Baselines at `c6b6c75`:** `pnpm --filter web test` → 34 files, 831 tests passed. `pnpm --filter api test -- laundry-orders.service` → 72 tests passed.
 - **No test relies on a zero weigh.** `grep` over `apps/api/src` and `apps/api/test` finds no `weighLaundryOrder` / `svc.laundry.weigh` call with `weightGrams: 0`. The `0`-gram rows in the migration e2e specs are raw SQL inserts and bypass the service, so they are unaffected.
 - **DTO error shape:** `packages/validation/src/normalize.ts` documents Nest's `ValidationPipe` failure as `extensions.originalError.message: string[]`, from a captured response. The intake interaction tests use that shape. A service `BadRequestException('…')` carries the string in both `message` and `extensions.originalError.message`. `graphQLErrorMessage` reads either.
+- **Mutation error policy:** `packages/client/src/apollo-client.ts` sets no `defaultOptions`, the generated hooks spread `defaultOptions = {}`, and `sessionErrorLink` (`onError`) only observes. Apollo Client is 3.14.1, whose default mutation `errorPolicy` is `'none'`: GraphQL errors reject `mutate`. Task 4 still checks a resolved result (planning decision g).
 - **`useToast` throws outside `ToastProvider`.** The page render test therefore wraps the page in `ToastProvider`, as the list interaction test does.
 - **Copy has no interpolation.** `useClensyTranslations` returns raw strings. The `{n}` placeholder is filled with `.replace('{n}', …)`, the `disableConfirmDescription` precedent. The row number is digits only, so no `$` pattern applies.
 - **`@clensy/web` resolves from source** (`main: src/index.ts`, Next `transpilePackages`), so no package build is needed for apps/web to see new copy.
@@ -860,7 +861,7 @@ const ORDER_ID = '3f2a9c1e-0b7d-4e55-9a10-6c2b8d4e7f01';
 const weigh = vi.hoisted(() => ({
   calls: [] as unknown[],
   reject: (() => {}) as (error: unknown) => void,
-  resolve: (() => {}) as () => void,
+  resolve: (() => {}) as (result?: unknown) => void,
 }));
 
 vi.mock('@clensy/client', () => ({
@@ -868,7 +869,10 @@ vi.mock('@clensy/client', () => ({
     (options: { variables: unknown }) => {
       weigh.calls.push(options.variables);
       return new Promise((resolve, reject) => {
-        weigh.resolve = () => resolve({ data: {} });
+        // A successful result carries the order (schema: non-null); a test
+        // may resolve with GraphQL errors instead, as `errorPolicy: 'all'`
+        // would deliver them.
+        weigh.resolve = (result = { data: { weighLaundryOrder: { id: ORDER_ID } } }) => resolve(result);
         weigh.reject = reject;
       });
     },
@@ -1027,7 +1031,8 @@ describe('laundry weighing editor', () => {
     click('Remove bag 1');
     expect(inputs()).toEqual([]);
     expect(total()).toBe('0.00 kg');
-    expect(container.textContent).toContain('Add at least one weight.');
+    expect(container.querySelector('#laundry-weighing-form-error')?.textContent).toBe('Add at least one weight.');
+    expect(button('Record weight').getAttribute('aria-describedby')).toBe('laundry-weighing-form-error');
     click('Record weight');
     expect(weigh.calls).toEqual([]);
   });
@@ -1038,7 +1043,12 @@ describe('laundry weighing editor', () => {
     click('Add bag');
     type(1, '2000000');
     expect(total()).toBe('4000000.00 kg');
-    expect(container.textContent).toContain('The combined weight is too large to record.');
+    // Both rows are valid, so the total-level error is what explains the
+    // block: Record weight is described by it.
+    expect(inputs().every((input) => input.getAttribute('aria-invalid') === null)).toBe(true);
+    const describedBy = button('Record weight').getAttribute('aria-describedby');
+    expect(describedBy).toBe('laundry-weighing-form-error');
+    expect(container.querySelector(`#${describedBy!}`)?.textContent).toBe('The combined weight is too large to record.');
     click('Record weight');
     expect(weigh.calls).toEqual([]);
   });
@@ -1101,6 +1111,54 @@ describe('laundry weighing editor', () => {
     click('Record weight');
     await act(async () => weigh.reject(new Error('Failed to fetch')));
     expect(alertText()).toBe('Unable to record weight.');
+  });
+
+  // Defense in depth: the app's effective policy is Apollo's default
+  // `errorPolicy: 'none'`, which rejects (planning spike). A resolved result
+  // that still carries errors, or no order, is never a success.
+  it('treats a resolved result with GraphQL errors as a failure', async () => {
+    await enterThreeBags();
+    click('Record weight');
+    await act(async () =>
+      weigh.resolve({
+        data: null,
+        errors: [
+          {
+            extensions: { originalError: { message: 'Cannot weigh a laundry order in status PRICED' } },
+            message: 'Cannot weigh a laundry order in status PRICED',
+          },
+        ],
+      }),
+    );
+    expect(alertText()).toBe('Cannot weigh a laundry order in status PRICED');
+    expect(container.textContent).not.toContain('Weight recorded.');
+    expect(onRecorded).not.toHaveBeenCalled();
+    expect(inputs().map((input) => input.value)).toEqual(['1.25', '0.80', '0.45']);
+    expect(inputs().every((input) => !input.disabled)).toBe(true);
+  });
+
+  it('treats a resolved result without the order as a failure', async () => {
+    await enterThreeBags();
+    click('Record weight');
+    await act(async () => weigh.resolve({ data: null }));
+    expect(alertText()).toBe('Unable to record weight.');
+    expect(container.textContent).not.toContain('Weight recorded.');
+    expect(onRecorded).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['editing a row', () => type(0, '1.3')],
+    ['removing a row', () => click('Remove bag 3')],
+    ['adding a row', () => click('Add bag')],
+    // The rows are unchanged, so only the submit itself can clear it.
+    ['a new submit', () => click('Record weight')],
+  ])('clears a stale server error on %s', async (_label, action) => {
+    await enterThreeBags();
+    click('Record weight');
+    await act(async () => weigh.reject(new Error('Failed to fetch')));
+    expect(alertText()).toBe('Unable to record weight.');
+    action();
+    expect(alertText()).toBeNull();
   });
 
   it('keeps every control disabled until the post-save refetch settles', async () => {
@@ -1187,6 +1245,11 @@ interface Entry {
   touched: boolean;
 }
 
+// The total-level error ("Add at least one weight.", "The combined weight
+// is too large to record.") describes Record weight, the control it blocks.
+// The page has one editor, so a fixed id is unique.
+const FORM_ERROR_ID = 'laundry-weighing-form-error';
+
 function entry(key: number, text: string): Entry {
   return { key, text, touched: false };
 }
@@ -1217,16 +1280,20 @@ export function LaundryWeighingEditor({ onRecorded, orderId, weightGrams }: Laun
     return key;
   }
 
+  // Any edit makes an earlier server error stale, so it is cleared.
   function addEntry() {
     const key = takeKey();
+    setFailure(undefined);
     setEntries((current) => [...current, entry(key, '')]);
   }
 
   function removeEntry(key: number) {
+    setFailure(undefined);
     setEntries((current) => current.filter((row) => row.key !== key));
   }
 
   function changeEntry(key: number, text: string) {
+    setFailure(undefined);
     setEntries((current) => current.map((row) => (row.key === key ? { ...row, text } : row)));
   }
 
@@ -1238,16 +1305,27 @@ export function LaundryWeighingEditor({ onRecorded, orderId, weightGrams }: Laun
     event.preventDefault();
     if (inFlight.current) return;
     setAttempted(true);
+    setFailure(undefined);
     if (!summary.submittable) return;
     inFlight.current = true;
     setPending(true);
-    setFailure(undefined);
     const total = summary.totalGrams;
     try {
+      // The client sets no `errorPolicy`, so Apollo's default `'none'`
+      // rejects on GraphQL errors (planning spike). A resolved result with
+      // errors or without the order is still treated as a failure, so a
+      // future policy change can never report a rejected weight as saved.
+      let failed: string | undefined;
       try {
-        await weigh({ variables: { input: { orderId, weightGrams: total } } });
+        const result = await weigh({ variables: { input: { orderId, weightGrams: total } } });
+        if ((result.errors?.length ?? 0) > 0 || !result.data?.weighLaundryOrder) {
+          failed = graphQLErrorMessage({ graphQLErrors: result.errors }) ?? t('order.weighing.failure');
+        }
       } catch (error) {
-        setFailure(graphQLErrorMessage(error) ?? t('order.weighing.failure'));
+        failed = graphQLErrorMessage(error) ?? t('order.weighing.failure');
+      }
+      if (failed !== undefined) {
+        setFailure(failed);
         return;
       }
       toast.success(t('order.weighing.success'));
@@ -1304,13 +1382,22 @@ export function LaundryWeighingEditor({ onRecorded, orderId, weightGrams }: Laun
           {formatWeightGrams(summary.totalGrams)}
         </p>
       </div>
-      {summary.formError ? <p className="text-red-600">{t(`order.weighing.error.${summary.formError}`)}</p> : null}
+      {summary.formError ? (
+        <p id={FORM_ERROR_ID} className="text-red-600">
+          {t(`order.weighing.error.${summary.formError}`)}
+        </p>
+      ) : null}
       {failure ? (
         <p role="alert" className="text-red-600">
           {failure}
         </p>
       ) : null}
-      <Button type="submit" disabled={pending} className="w-full sm:w-auto sm:self-start">
+      <Button
+        type="submit"
+        disabled={pending}
+        aria-describedby={summary.formError ? FORM_ERROR_ID : undefined}
+        className="w-full sm:w-auto sm:self-start"
+      >
         {t('order.weighing.record')}
       </Button>
     </form>
@@ -1320,6 +1407,8 @@ export function LaundryWeighingEditor({ onRecorded, orderId, weightGrams }: Laun
 
 Notes for the implementer:
 - **The total is a live region.** Its text changes only when the parsed total changes, so `aria-live="polite"` announces totals, not keystrokes (#155 §Accessibility).
+- **Error contract:** `useWeighLaundryOrderMutation` passes no options, the generated `defaultOptions` is `{}`, and `apolloClient` sets no `defaultOptions`. Apollo 3.14's mutation `errorPolicy` is therefore `'none'`, and `mutate` rejects with an `ApolloError` carrying `graphQLErrors`. `sessionErrorLink` is an `onError` observer and does not swallow errors. The result check is defense in depth only.
+- **The form error is not a second live region.** It is described from Record weight; the only `role="alert"` is the server failure.
 - **`formatWeightGrams(summary.totalGrams)` cannot throw.** Each valid row is at most `MAX_WEIGHT_GRAMS`, so the sum stays a safe integer for any realistic number of rows.
 
 - [ ] **Step 5: Run to verify it passes**
