@@ -17,12 +17,22 @@ type Call = { skip?: boolean; variables: { filter: { active?: unknown; name?: { 
 const search = vi.hoisted(() => ({
   calls: [] as unknown[],
   responses: new Map<string, unknown>(),
+  // Worst case Apollo could produce: while a call is skipped, hand back the
+  // last settled nodes as settled data; while its own request is unsettled,
+  // hand them back still `loading: true` (an unsettled request reporting
+  // `loading: false` is indistinguishable from a real answer).
+  stale: null as { nodes: { id: string; name: string }[] } | null,
 }));
+
+function staleData(field: 'addOns' | 'services', loading = false) {
+  return { data: { [field]: { nodes: search.stale!.nodes, totalCount: search.stale!.nodes.length } }, error: undefined, loading };
+}
 
 function answer(field: 'addOns' | 'services', options: Call) {
   search.calls.push(options);
-  if (options.skip) return { data: undefined, error: undefined, loading: false };
+  if (options.skip) return search.stale ? staleData(field) : { data: undefined, error: undefined, loading: false };
   const response = search.responses.get(options.variables.filter.name?.iLike ?? '') as Response | undefined;
+  if (!response && search.stale) return staleData(field, true);
   if (!response) return { data: undefined, error: undefined, loading: true };
   if (response.error) return { data: undefined, error: response.error, loading: false };
   const nodes = (response.nodes ?? []).map((node) => ({ ...node, extra: 'x' }));
@@ -77,6 +87,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   search.calls = [];
   search.responses = new Map();
+  search.stale = null;
   renders = [];
   container = document.createElement('div');
   root = createRoot(container);
@@ -146,37 +157,55 @@ describe.each<Kind>(['services', 'addOns'])('catalog search hook (%s)', (kind) =
     expect(patterns()).toEqual(['', '%w%', '%wo%']);
   });
 
-  it.each([
-    ['wa then wash settles first', ['%wash%', '%wa%']],
-    ['wash settles after late wa', ['%wa%', '%wash%']],
-  ])('never offers a stale result in the race: %s', (_name, order) => {
-    render(kind, 'wa');
-    wait(300);
-    expect(patterns().at(-1)).toBe('%wa%');
-    render(kind, 'wash');
-    for (const pattern of order) {
-      search.responses.set(pattern, {
-        lingering: true,
-        nodes: pattern === '%wa%' ? [WA] : [WASH],
-      });
-      render(kind, 'wash');
-    }
-    // Neither text's response is settled yet: both linger, loading.
-    wait(300);
-    expect(patterns().at(-1)).toBe('%wash%');
-    // The latest request is still unsettled: loading, no options, ever.
-    for (const state of renders) {
-      if (state.status !== 'ready') expect(state.options).toEqual([]);
-      expect(state.options).not.toContainEqual(WA);
-    }
-    expect(latest).toEqual({ options: [], status: 'loading', truncated: false });
-    search.responses.set('%wa%', { nodes: [WA] });
-    render(kind, 'wash');
-    expect(latest).toEqual({ options: [], status: 'loading', truncated: false });
+  // From the moment the text becomes `wash` until `%wash%` settles, every
+  // render must be `loading` with no options, even though the mock presents the
+  // `%wa%` nodes as settled data (skipped or unsettled call).
+  function expectLoadingSince(start: number) {
+    expect(renders.length).toBeGreaterThan(start);
+    for (const state of renders.slice(start)) expect(state).toEqual({ options: [], status: 'loading', truncated: false });
+  }
+
+  function finishWash() {
     search.responses.set('%wash%', { nodes: [WASH] });
     render(kind, 'wash');
     expect(latest).toEqual({ options: [WASH], status: 'ready', truncated: false });
-    expect(renders.some((state) => state.options.some((option) => option.id === WA.id))).toBe(false);
+  }
+
+  it('shows loading with no options when %wa% settled, then the text changes to wash', () => {
+    render(kind, 'wa');
+    wait(300);
+    search.responses.set('%wa%', { nodes: [WA] });
+    render(kind, 'wa');
+    expect(latest).toEqual({ options: [WA], status: 'ready', truncated: false });
+    search.stale = { nodes: [WA] };
+    const start = renders.length;
+    render(kind, 'wash');
+    wait(299);
+    wait(1);
+    expect(patterns().at(-1)).toBe('%wash%');
+    render(kind, 'wash');
+    expectLoadingSince(start);
+    finishWash();
+    expect(renders.slice(start, -1).some((state) => state.options.length > 0)).toBe(false);
+  });
+
+  it('shows loading with no options when the text changes to wash, then %wa% settles late', () => {
+    render(kind, 'wa');
+    wait(300);
+    expect(patterns().at(-1)).toBe('%wa%');
+    expect(latest.status).toBe('loading');
+    const start = renders.length;
+    render(kind, 'wash');
+    search.responses.set('%wa%', { lingering: true, nodes: [WA] });
+    search.stale = { nodes: [WA] };
+    render(kind, 'wash'); // %wa% settles late, while wash is the text
+    search.responses.set('%wa%', { nodes: [WA] });
+    render(kind, 'wash');
+    wait(300);
+    expect(patterns().at(-1)).toBe('%wash%');
+    render(kind, 'wash');
+    expectLoadingSince(start);
+    finishWash();
   });
 
   it('maps an error, an empty result and a truncated page, searching the trimmed text', () => {
