@@ -3,7 +3,7 @@
 import { useWeighLaundryOrderMutation } from '@clensy/client';
 import { Button, FormField, useToast } from '@clensy/ui';
 import { formatWeightGrams, useClensyTranslations } from '@clensy/web';
-import { useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { graphQLErrorMessage } from '../../lib/graphql-error-message';
 import { kilogramsInputFromGrams, summarizeWeightEntries } from '../../lib/laundry-weight-entries';
 
@@ -50,7 +50,23 @@ export function LaundryWeighingEditor({ onRecorded, orderId, weightGrams }: Laun
   // Taken synchronously, so a second submit that lands before React
   // re-renders (and disables the button) is dropped.
   const inFlight = useRef(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const recordRef = useRef<HTMLButtonElement>(null);
+  const wasPending = useRef(false);
   const summary = summarizeWeightEntries(entries.map((row) => row.text));
+
+  // Every control is disabled while a save and its refetch run, so a
+  // browser drops focus to <body>. Once they settle, focus goes back to
+  // Record weight, unless the user has since moved it outside the form.
+  useEffect(() => {
+    if (wasPending.current && !pending) {
+      const active = document.activeElement;
+      if (!active || active === document.body || formRef.current?.contains(active)) {
+        recordRef.current?.focus();
+      }
+    }
+    wasPending.current = pending;
+  }, [pending]);
 
   function takeKey(): number {
     const key = nextKey.current;
@@ -123,7 +139,7 @@ export function LaundryWeighingEditor({ onRecorded, orderId, weightGrams }: Laun
   }
 
   return (
-    <form noValidate onSubmit={(event) => void handleSubmit(event)} className="flex flex-col gap-3">
+    <form ref={formRef} noValidate onSubmit={(event) => void handleSubmit(event)} className="flex flex-col gap-3">
       <p className="text-slate-600">{t('order.weighing.description')}</p>
       {entries.map((row, index) => {
         const n = String(index + 1);
@@ -172,6 +188,7 @@ export function LaundryWeighingEditor({ onRecorded, orderId, weightGrams }: Laun
         </p>
       ) : null}
       <Button
+        ref={recordRef}
         type="submit"
         disabled={pending}
         aria-describedby={summary.formError ? FORM_ERROR_ID : undefined}

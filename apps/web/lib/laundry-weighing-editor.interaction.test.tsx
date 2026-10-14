@@ -114,6 +114,25 @@ function alertText(): string | null {
   return container.querySelector('[role="alert"]')?.textContent ?? null;
 }
 
+// Submits from Record weight the way a keyboard user does. A browser
+// moves focus to <body> when the focused button becomes disabled. jsdom
+// does neither that nor `blur()` on a disabled button, so focus is parked
+// on a throwaway input that is then removed, which jsdom does reset.
+function submitFromRecordWeight() {
+  act(() => {
+    button('Record weight').focus();
+    button('Record weight').click();
+  });
+  expect(button('Record weight').disabled).toBe(true);
+  act(() => {
+    const parking = document.createElement('input');
+    document.body.append(parking);
+    parking.focus();
+    parking.remove();
+  });
+  expect(document.activeElement).toBe(document.body);
+}
+
 async function enterThreeBags() {
   await mount(null);
   type(0, '1.25');
@@ -125,6 +144,13 @@ async function enterThreeBags() {
 
 beforeEach(() => {
   weigh.calls.length = 0;
+  // A test that settles a weigh it never started fails here, instead of
+  // settling an earlier test's promise.
+  const notInFlight = () => {
+    throw new Error('No weighLaundryOrder call is in flight.');
+  };
+  weigh.resolve = notInFlight;
+  weigh.reject = notInFlight;
   onRecorded = vi.fn<() => Promise<unknown>>(() => Promise.resolve());
   container = document.createElement('div');
   document.body.append(container);
@@ -367,6 +393,35 @@ describe('laundry weighing editor', () => {
     expect(container.textContent).toContain('Weight recorded.');
     expect(alertText()).toBeNull();
     expect(inputs().every((input) => !input.disabled)).toBe(true);
+  });
+
+  it('returns focus to Record weight once a save and its refetch settle', async () => {
+    await enterThreeBags();
+    submitFromRecordWeight();
+    await act(async () => weigh.resolve());
+    expect(document.activeElement).toBe(button('Record weight'));
+  });
+
+  it('returns focus to Record weight after a failed save', async () => {
+    await enterThreeBags();
+    submitFromRecordWeight();
+    await act(async () => weigh.reject(new Error('Failed to fetch')));
+    expect(alertText()).toBe('Unable to record weight.');
+    expect(document.activeElement).toBe(button('Record weight'));
+  });
+
+  it('leaves focus where the user moved it during the save', async () => {
+    const elsewhere = document.createElement('button');
+    document.body.append(elsewhere);
+    try {
+      await enterThreeBags();
+      submitFromRecordWeight();
+      act(() => elsewhere.focus());
+      await act(async () => weigh.resolve());
+      expect(document.activeElement).toBe(elsewhere);
+    } finally {
+      elsewhere.remove();
+    }
   });
 
   it.each([
