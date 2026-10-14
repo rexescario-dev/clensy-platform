@@ -4,8 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft (revision 2)** (M4), 2026-10-15. In Plan Review (M5), reviewed in six parts. |
-| M5 history | Part 1 (2026-10-15, owner): **no P1**; overall acceptance reserved until all six parts are reviewed.<br>• **P2 (planning decision c):** the first `PER_ITEM` choice's two-request transition must be proven by test, with the first response never leaving the UI ready while the second input is current. Resolved in revision 2: Task 4 case 5 asserts each step of the transition.<br>• **Suggestion (owner decision 4):** make the view matrix exhaustive against the real status and role types. Taken in revision 2: the Task 1 table test iterates `LAUNDRY_ORDER_STATUSES` (keys of a `Record<LaundryOrderStatus, …>`) × both fulfillment types × saved lines yes/no × role loading and every `ADMIN_ROLES` entry. This adds `SUPER_ADMIN`, which revision 1's hand-written role list missed. A count check pins 15 statuses and 7 roles.<br>• **Suggestion (planning decision e):** test stale-result rejection, not request cancellation. Taken in revision 2: Task 4 case 14 resolves the superseded request for real and covers an out-of-order success, a late success after a current failure, a superseded failure, and unmount, with `console.error` spied. |
+| Status | **Draft (revision 3)** (M4), 2026-10-15. In Plan Review (M5), reviewed in six parts. |
+| M5 history | Part 1 (2026-10-15, owner): **no P1**; overall acceptance reserved until all six parts are reviewed.<br>• **P2 (planning decision c):** the first `PER_ITEM` choice's two-request transition must be proven by test, with the first response never leaving the UI ready while the second input is current. Resolved in revision 2: Task 4 case 5 asserts each step of the transition.<br>• **Suggestion (owner decision 4):** make the view matrix exhaustive against the real status and role types. Taken in revision 2: the Task 1 table test iterates `LAUNDRY_ORDER_STATUSES` (keys of a `Record<LaundryOrderStatus, …>`) × both fulfillment types × saved lines yes/no × role loading and every `ADMIN_ROLES` entry. This adds `SUPER_ADMIN`, which revision 1's hand-written role list missed. A count check pins 15 statuses and 7 roles.<br>• **Suggestion (planning decision e):** test stale-result rejection, not request cancellation. Taken in revision 2: Task 4 case 14 resolves the superseded request for real and covers an out-of-order success, a late success after a current failure, a superseded failure, and unmount, with `console.error` spied.<br>Part 2 (2026-10-15, owner): **no P1**.<br>• **P2 (Task 1 `matchPreview`):** it checked ids, not that the input was the current one; it could accept a preview for an outdated quantity. Resolved in revision 3 by the reviewer's second option. The `matchPreview` contract is now stated as line correspondence only (no quantity, order id or weight), with a test pinning that. Exact current-input identity is the hook's `[weightGrams, input]` key, proven by the new Task 4 case 19: an outdated base count, add-on count and weight each resolve with matching ids and never become current.<br>• **Suggestion 1 (matrix independence):** taken. Literal-role tests pin the editor to exactly `WEIGHED` × TENANT_OWNER, OPS_MANAGER, SCHEDULER. `laundryServicesView` now also requires `status === 'WEIGHED'`, so the "whatever the verbs claim" test forces a `price` verb on every other status. Revision 2's version of that test only used the helper's own verbs.<br>• **Suggestion 2 (duplicate ids):** taken. `missingPriceTarget` declines (`null`, so the raw message shows) when more than one row holds the named add-on, with a test.<br>• **Suggestion 3 (guards):** taken. `matchPreview` guards `base`, each line and each sent add-on explicitly. Checked: `apps/web` sets `strict` without `noUncheckedIndexedAccess`, and its lint has no type-checked rules, so the guards compile and lint as written. |
 | Date | 2026-10-15 |
 | Tracking issue | [#158](https://github.com/rexescario-dev/clensy-platform/issues/158) "Laundry services and add-ons selection". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) (merged in #183: the order page) and [#159](https://github.com/rexescario-dev/clensy-platform/issues/159) (closed, merged in #184: `previewLaundryOrderPrice` and the frozen line `description`). Followed by [#162](https://github.com/rexescario-dev/clensy-platform/issues/162) (price preview card and Confirm), which reads the state this slice lifts. |
 | Branch | `feat/158-laundry-services-selection`, from `main` at `18ceeb8`. One PR for this plan, its M5 record and the implementation. |
@@ -271,9 +271,35 @@ describe('laundryServicesView', () => {
     }
   }
 
+  // M5 part 2 suggestion 1: pinned by literal roles and statuses, not by the
+  // `expected` helper, so a change to `laundryOrderActions` or to the view
+  // cannot widen or narrow who edits without failing here.
+  it.each(['TENANT_OWNER', 'OPS_MANAGER', 'SCHEDULER'] as const)('shows the editor to %s on a WEIGHED order', (role) => {
+    for (const fulfillment of ['PICKUP', 'DELIVERY'] as const) {
+      const verbs = laundryOrderActions('WEIGHED', fulfillment, role);
+      expect(laundryServicesView({ hasLines: false, roleResolved: true, status: 'WEIGHED', verbs })).toBe('editor');
+    }
+  });
+
+  it('shows the editor for exactly WEIGHED × TENANT_OWNER, OPS_MANAGER, SCHEDULER and nothing else', () => {
+    const editors = new Set<string>();
+    for (const status of LAUNDRY_ORDER_STATUSES) {
+      for (const role of ADMIN_ROLES) {
+        for (const fulfillment of ['PICKUP', 'DELIVERY'] as const) {
+          const verbs = laundryOrderActions(status, fulfillment, role);
+          for (const hasLines of [false, true]) {
+            if (laundryServicesView({ hasLines, roleResolved: true, status, verbs }) === 'editor') editors.add(`${status}:${role}`);
+          }
+        }
+      }
+    }
+    expect([...editors].sort()).toEqual(['WEIGHED:OPS_MANAGER', 'WEIGHED:SCHEDULER', 'WEIGHED:TENANT_OWNER']);
+  });
+
   it('never shows the editor outside WEIGHED, whatever the verbs claim', () => {
     for (const status of LAUNDRY_ORDER_STATUSES.filter((s) => s !== 'WEIGHED')) {
-      expect(laundryServicesView({ hasLines: false, roleResolved: true, status, verbs: laundryOrderActions(status, 'DELIVERY', 'TENANT_OWNER') })).not.toBe('editor');
+      // A forced `price` verb: the view checks the status itself, not only the verbs.
+      expect(laundryServicesView({ hasLines: false, roleResolved: true, status, verbs: ['price'] })).not.toBe('editor');
     }
   });
 
@@ -374,6 +400,16 @@ describe('matchPreview', () => {
   ])('rejects the whole preview for %s', (_name, lines) => {
     expect(matchPreview(input, current, { estimatedTotalMinorUnits: 0, lines })).toBeNull();
   });
+
+  // M5 part 2 P2: the contract is line correspondence only. Quantities,
+  // order id and weight are the caller's to check (Task 4's exact
+  // `[weightGrams, input]` key; cases 13, 14 and 19), so a line whose
+  // quantity differs from the input still corresponds.
+  it('compares no quantity: whether the input is current is the caller\'s contract', () => {
+    const counted = { ...input, addOns: [{ addOnId: IRON.id, quantity: 4 }, { addOnId: SOFT.id }], baseQuantity: 2 };
+    const lines = [line({ quantity: 9, serviceId: WASH.id }), line({ addOnId: IRON.id, quantity: 7 }), soft];
+    expect(matchPreview(counted, current, { estimatedTotalMinorUnits: 0, lines })).not.toBeNull();
+  });
 });
 
 describe('missingPriceTarget', () => {
@@ -385,6 +421,11 @@ describe('missingPriceTarget', () => {
 
   it('names the add-on row for its exact addOnId message', () => {
     expect(missingPriceTarget(`No effective price for addOnId ${IRON.id}`, current)).toEqual({ key: 3, kind: 'addOn' });
+  });
+
+  it('declines when two selected rows hold the named add-on, rather than marking the first', () => {
+    const repeated = selection({ addOns: [row(3, IRON), row(8, IRON)] });
+    expect(missingPriceTarget(`No effective price for addOnId ${IRON.id}`, repeated)).toBeNull();
   });
 
   it.each([
@@ -442,7 +483,9 @@ export interface LaundryServicesViewInput {
 }
 
 export function laundryServicesView({ hasLines, roleResolved, status, verbs }: LaundryServicesViewInput): LaundryServicesView {
-  if (verbs.includes('price')) return 'editor';
+  // The status is checked as well as the verb (M5 part 2): the editor can
+  // never appear outside WEIGHED, even if the client verb table changes.
+  if (status === 'WEIGHED' && verbs.includes('price')) return 'editor';
   if (status === 'WEIGHED' && !roleResolved) return 'hidden';
   if (status === 'RECEIVED') return 'beforeWeigh';
   if (LAUNDRY_PRICED_STATUSES.has(status)) return 'locked';
@@ -556,23 +599,33 @@ export interface LaundryMatchedPreview {
   lines: readonly LaundryPreviewLine[];
 }
 
-// The server returns the base line, then one line per `addOns` entry in
-// input order (spec §8.4.5; the shared quote path). Each is matched by
-// position and by kind and id; any mismatch rejects the whole preview
+// Line correspondence only (M5 part 2): the server returns the base line,
+// then one line per `addOns` entry in input order (spec §8.4.5; the shared
+// quote path). Each line is matched by position and by kind and id to
+// `input`, and each chosen row (in row order) must carry that same id, so
+// the result can be keyed by row. Any mismatch rejects the whole preview
 // (owner decision 6).
+//
+// It does NOT decide that `input` is the current input: it compares no
+// quantity, order id or weight. The caller must pass only a preview whose
+// request input and order weight are exactly the current ones.
+// `useLaundryServiceSelection` does this with its `[weightGrams, input]`
+// key (Task 4 cases 13, 14 and 19).
 export function matchPreview(
   input: PriceLaundryOrderInput,
   selection: LaundryServiceSelection,
   preview: LaundryPreview,
 ): LaundryMatchedPreview | null {
   const chosen = selection.addOns.filter((row) => row.choice !== null);
-  const [base, ...rest] = preview.lines;
   if (preview.lines.length !== 1 + input.addOns.length || chosen.length !== input.addOns.length) return null;
-  if (base.serviceId !== String(input.baseServiceId) || base.addOnId !== null) return null;
+  const [base, ...rest] = preview.lines;
+  if (!base || base.serviceId !== String(input.baseServiceId) || base.addOnId !== null) return null;
   const addOns = new Map<number, LaundryPreviewLine>();
   for (const [index, row] of chosen.entries()) {
     const line = rest[index];
-    const id = String(input.addOns[index].addOnId);
+    const sent = input.addOns[index];
+    if (!line || !sent) return null;
+    const id = String(sent.addOnId);
     if (line.serviceId !== null || line.addOnId !== id || row.choice?.id !== id) return null;
     addOns.set(row.key, line);
   }
@@ -587,14 +640,18 @@ export type LaundryMissingPriceTarget = { key: number; kind: 'addOn' } | { kind:
 // the caller shows the raw text (owner decision 2). Never a guess.
 const MISSING_PRICE = /^No effective price for (serviceId|addOnId) (\S+)$/;
 
+// More than one row holding the id cannot happen through the editor
+// (duplicates are blocked), but the server allows repeats (§8.4.3) and this
+// module is pure. With no unique row, it declines rather than marking the
+// first one (M5 part 2 suggestion 2).
 export function missingPriceTarget(message: string, selection: LaundryServiceSelection): LaundryMissingPriceTarget | null {
   const match = MISSING_PRICE.exec(message);
   if (!match) return null;
   const [, column, id] = match;
   if (!isUuid(id)) return null;
   if (column === 'serviceId') return selection.base?.id === id ? { kind: 'service' } : null;
-  const row = selection.addOns.find((candidate) => candidate.choice?.id === id);
-  return row ? { key: row.key, kind: 'addOn' } : null;
+  const rows = selection.addOns.filter((candidate) => candidate.choice?.id === id);
+  return rows.length === 1 ? { key: rows[0].key, kind: 'addOn' } : null;
 }
 
 export type LaundryRateKey = 'flat' | 'perItem' | 'perKg';
@@ -608,7 +665,7 @@ export function laundryRateKey(unit: PricingUnit): LaundryRateKey {
 }
 ```
 
-If the type checker or lint flags `base` as possibly `undefined` after the destructure (with `noUncheckedIndexedAccess`), the length check above already guarantees it. In that case add `if (!base) return null;` immediately after the length check rather than a non-null assertion. Do the same for `rest[index]` and `input.addOns[index]`.
+`matchPreview` guards `base`, `line` and `sent` explicitly as runtime checks (M5 part 2 suggestion 3), with no non-null assertion. Checked at planning: `apps/web/tsconfig.json` sets `strict` but not `noUncheckedIndexedAccess`, and the web ESLint preset (`tooling/eslint.contextforge.mjs`) has no type-checked rules such as `no-unnecessary-condition`. So the guards compile and lint as written. They must not be removed as redundant.
 
 - [ ] **Step 4: Run, expect pass.** `pnpm --filter web exec vitest run lib/laundry-service-selection.test.ts`. Expected: PASS. Then `pnpm --filter web lint` and `pnpm --filter web exec tsc --noEmit`. Expected: clean.
 
@@ -925,6 +982,10 @@ Implements owner decisions 2, 5, 6; planning decisions c, e, f; issue Data, Vali
       - A network error with no GraphQL errors gives `message: undefined`.
   17. **Resolved errors (planning decision e):** a resolved result with `errors`, or without `previewLaundryOrderPrice`, is a failure.
   18. **Never prices:** across every case above, `usePriceLaundryOrderMutation` is never called, and `preview.query` is never called with any document other than `PreviewLaundryOrderPriceDocument`.
+  19. **Exact current input (M5 part 2 P2).** `matchPreview` checks line correspondence only, so this case proves currency. Each outdated request resolves with lines whose ids match the current selection, so only the hook's key, not `matchPreview`, can reject it:
+      - **Outdated base count:** with `PER_ITEM` remembered, the count-3 request is in flight; the count changes to 4. The count-3 response resolves with matching ids. `preview` stays `null`, `ready` false, `previewLoading` true. Only the count-4 response makes `ready` true, with `priceInput.baseQuantity === 4`.
+      - **Outdated add-on count:** the same, for an add-on row's `quantity`.
+      - **Outdated weight:** the request for weight 2505 is in flight; a re-render passes 3000 with the same selection. The 2505 response resolves. `preview` stays `null` until the 3000 request's response.
 
 - [ ] **Step 2: Run, expect failure.** The module does not exist. Record the output.
 
