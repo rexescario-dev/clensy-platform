@@ -23,6 +23,15 @@ const preview = vi.hoisted(() => {
   return { calls, client: { query }, query };
 });
 const priceMutation = vi.hoisted(() => vi.fn());
+// Counts `laundryUnitKey` calls (the real function still runs). The hook calls
+// it only to remember units from a response; after unmount no render happens,
+// so a call then can only come from the response handler.
+const unitKeySpy = vi.hoisted(() => vi.fn());
+vi.mock('./laundry-service-selection', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./laundry-service-selection')>();
+  unitKeySpy.mockImplementation(original.laundryUnitKey);
+  return { ...original, laundryUnitKey: unitKeySpy };
+});
 
 vi.mock('@apollo/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@apollo/client')>()),
@@ -160,6 +169,7 @@ beforeEach(() => {
       }),
   );
   priceMutation.mockReset();
+  unitKeySpy.mockClear();
   props = DEFAULT_PROPS;
   container = document.createElement('div');
   root = createRoot(container);
@@ -327,8 +337,11 @@ describe('useLaundryServiceSelection', () => {
     expect(latest.preview).not.toBeNull();
     expect(latest.ready).toBe(false);
 
+    // Both rows exist first; the later row is chosen first, so row order,
+    // not choice order, must decide the sent order.
+    const row2 = addRow();
+    edit(() => latest.chooseAddOn(row2, ADD_ON_2));
     edit(() => latest.chooseAddOn(first, ADD_ON_1));
-    const row2 = addRow(ADD_ON_2);
     wait(300);
     expect(input(1).addOns).toEqual([{ addOnId: A1 }, { addOnId: A2 }]);
     await resolveCall(1, payload([baseLine(), addOnLine(A1), addOnLine(A2)]));
@@ -446,13 +459,16 @@ describe('useLaundryServiceSelection', () => {
       expect(latest.previewError).toBeNull();
     });
 
-    it('a response after unmount sets no state and logs nothing', async () => {
+    it('a response after unmount sets no state and remembers no units', async () => {
       const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
       render();
       chooseBase();
       wait(300);
       unmount();
-      await resolveCall(0, payload([baseLine()]));
+      const callsBefore = unitKeySpy.mock.calls.length;
+      // A PER_KG line that `rememberUnits` would remember if the handler ran.
+      await resolveCall(0, payload([baseLine('PER_KG')]));
+      expect(unitKeySpy.mock.calls.length).toBe(callsBefore);
       expect(errors).not.toHaveBeenCalled();
       errors.mockRestore();
     });
@@ -492,6 +508,18 @@ describe('useLaundryServiceSelection', () => {
       expect(latest.units).toEqual({});
       wait(1000);
       expect(sent()).toBe(1);
+
+      // Ready only from a corresponding, current response: re-weigh to ask
+      // for the current input again (planning decision f).
+      render({ weightGrams: 3000 });
+      expect(latest.ready).toBe(false);
+      wait(300);
+      expect(sent()).toBe(2);
+      expect(latest.ready).toBe(false);
+      expect(latest.previewLoading).toBe(true);
+      await resolveCall(1, payload([baseLine(), addOnLine(A1), addOnLine(A2)]));
+      expect(latest.ready).toBe(true);
+      expect(latest.preview?.addOns.size).toBe(2);
     });
   });
 
