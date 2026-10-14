@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft** (M4), 2026-10-15. Awaiting Plan Review (M5). |
+| Status | **Draft (revision 2)** (M4), 2026-10-15. In Plan Review (M5), reviewed in six parts. |
+| M5 history | Part 1 (2026-10-15, owner): **no P1**; overall acceptance reserved until all six parts are reviewed.<br>• **P2 (planning decision c):** the first `PER_ITEM` choice's two-request transition must be proven by test, with the first response never leaving the UI ready while the second input is current. Resolved in revision 2: Task 4 case 5 asserts each step of the transition.<br>• **Suggestion (owner decision 4):** make the view matrix exhaustive against the real status and role types. Taken in revision 2: the Task 1 table test iterates `LAUNDRY_ORDER_STATUSES` (keys of a `Record<LaundryOrderStatus, …>`) × both fulfillment types × saved lines yes/no × role loading and every `ADMIN_ROLES` entry. This adds `SUPER_ADMIN`, which revision 1's hand-written role list missed. A count check pins 15 statuses and 7 roles.<br>• **Suggestion (planning decision e):** test stale-result rejection, not request cancellation. Taken in revision 2: Task 4 case 14 resolves the superseded request for real and covers an out-of-order success, a late success after a current failure, a superseded failure, and unmount, with `console.error` spied. |
 | Date | 2026-10-15 |
 | Tracking issue | [#158](https://github.com/rexescario-dev/clensy-platform/issues/158) "Laundry services and add-ons selection". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) (merged in #183: the order page) and [#159](https://github.com/rexescario-dev/clensy-platform/issues/159) (closed, merged in #184: `previewLaundryOrderPrice` and the frozen line `description`). Followed by [#162](https://github.com/rexescario-dev/clensy-platform/issues/162) (price preview card and Confirm), which reads the state this slice lifts. |
 | Branch | `feat/158-laundry-services-selection`, from `main` at `18ceeb8`. One PR for this plan, its M5 record and the implementation. |
@@ -177,7 +178,13 @@ Implements owner decisions 2, 4, 6; planning decisions a, c; §8.4.4 Services bu
 
 ```ts
 import type { PreviewLaundryOrderPriceQuery } from '@clensy/client';
-import { LAUNDRY_ORDER_STATUSES, laundryOrderActions, type LaundryOrderStatus } from '@clensy/web';
+import {
+  ADMIN_ROLES,
+  LAUNDRY_ORDER_STATUSES,
+  laundryOrderActions,
+  type AdminRole,
+  type LaundryOrderStatus,
+} from '@clensy/web';
 import { describe, expect, it } from 'vitest';
 import {
   EMPTY_LAUNDRY_SERVICE_SELECTION,
@@ -223,35 +230,43 @@ function line(overrides: Partial<Line>): Line {
   };
 }
 
-const OPERATIONAL = ['TENANT_OWNER', 'OPS_MANAGER', 'SCHEDULER'] as const;
-const OTHER = ['CUSTOMER_SUPPORT', 'FINANCE', 'ANALYST'] as const;
+// The roles that may price (spec §4.4). Every other `ADMIN_ROLES` entry,
+// including the platform SUPER_ADMIN, is ineligible.
+const OPERATIONAL: ReadonlySet<AdminRole> = new Set<AdminRole>(['TENANT_OWNER', 'OPS_MANAGER', 'SCHEDULER']);
 
 describe('laundryServicesView', () => {
-  // Owner decision 4: every status × role loading / eligible / ineligible × saved lines.
-  function expected(status: LaundryOrderStatus, role: 'loading' | 'operational' | 'other', hasLines: boolean) {
-    if (status === 'WEIGHED') return role === 'operational' ? 'editor' : role === 'loading' ? 'hidden' : 'none';
+  // Owner decision 4 (M5 part 1 suggestion: exhaustive against the real
+  // types). `LAUNDRY_ORDER_STATUSES` is the keys of a
+  // `Record<LaundryOrderStatus, …>`, and `ADMIN_ROLES` is every
+  // `AdminRole`, so a new status or role joins this matrix without an edit
+  // here. Every status × both fulfillment types × role loading and each
+  // role × saved lines yes/no.
+  function expected(status: LaundryOrderStatus, role: AdminRole | undefined, hasLines: boolean) {
+    if (status === 'WEIGHED') {
+      if (role === undefined) return 'hidden';
+      return OPERATIONAL.has(role) ? 'editor' : 'none';
+    }
     if (status === 'RECEIVED') return 'beforeWeigh';
     if (LAUNDRY_PRICED_STATUSES.has(status)) return 'locked';
     return hasLines ? 'lines' : 'none';
   }
 
+  it('covers all 15 statuses and all 7 roles', () => {
+    expect(LAUNDRY_ORDER_STATUSES).toHaveLength(15);
+    expect(ADMIN_ROLES).toHaveLength(7);
+  });
+
   for (const status of LAUNDRY_ORDER_STATUSES) {
-    for (const hasLines of [false, true]) {
-      it(`${status}, lines ${String(hasLines)}: role loading`, () => {
-        const verbs = laundryOrderActions(status, 'PICKUP', undefined);
-        expect(laundryServicesView({ hasLines, roleResolved: false, status, verbs })).toBe(expected(status, 'loading', hasLines));
-      });
-      for (const role of OPERATIONAL) {
-        it(`${status}, lines ${String(hasLines)}: ${role}`, () => {
-          const verbs = laundryOrderActions(status, 'PICKUP', role);
-          expect(laundryServicesView({ hasLines, roleResolved: true, status, verbs })).toBe(expected(status, 'operational', hasLines));
-        });
-      }
-      for (const role of OTHER) {
-        it(`${status}, lines ${String(hasLines)}: ${role}`, () => {
-          const verbs = laundryOrderActions(status, 'PICKUP', role);
-          expect(laundryServicesView({ hasLines, roleResolved: true, status, verbs })).toBe(expected(status, 'other', hasLines));
-        });
+    for (const fulfillment of ['PICKUP', 'DELIVERY'] as const) {
+      for (const hasLines of [false, true]) {
+        for (const role of [undefined, ...ADMIN_ROLES]) {
+          it(`${status}, ${fulfillment}, lines ${String(hasLines)}: ${role ?? 'role loading'}`, () => {
+            const verbs = laundryOrderActions(status, fulfillment, role);
+            expect(laundryServicesView({ hasLines, roleResolved: role !== undefined, status, verbs })).toBe(
+              expected(status, role, hasLines),
+            );
+          });
+        }
       }
     }
   }
@@ -875,7 +890,13 @@ Implements owner decisions 2, 5, 6; planning decisions c, e, f; issue Data, Vali
   2. **No base service:** no request, and `ready` is false.
   3. **Debounce:** choosing a base sends nothing at 299 ms and one request at 300 ms, with input `{ orderId, baseServiceId, addOns: [] }` and no `baseQuantity`. `previewLoading` is true from the choice until the response.
   4. **PER_KG:** with a `PER_KG` response, `preview.base.unit === 'PER_KG'` and `ready` is true. `priceInput` equals the request's input.
-  5. **PER_ITEM learned (planning decision c):** a `PER_ITEM` response remembers `service:<id>`. The next input carries `baseQuantity: 1` and sends one more request. Changing the count to `3` sends `baseQuantity: 3` after 300 ms.
+  5. **PER_ITEM learned (planning decision c; M5 part 1 P2).** The two-request transition, asserted step by step:
+     1. Choosing the base sends request 1 with **no** `baseQuantity`.
+     2. Request 1 resolves `PER_ITEM`. In the same `act`, `units['service:<id>']` becomes `PER_ITEM`, and the current input now carries `baseQuantity: 1`.
+     3. Right after that, before request 2: `preview`, `priceInput` and `previewError` are `null`, `ready` is **false**, and `previewLoading` is **true**. The first response is never current, because its input lacks the count the current input carries.
+     4. At 300 ms, exactly one request 2 is sent, with `baseQuantity: 1`. Until it resolves, the step 3 assertions still hold.
+     5. Request 2 resolves. Now `ready` is true, and `priceInput.baseQuantity === 1`.
+     6. Changing the count to `3` makes `ready` false at once, and sends `baseQuantity: 3` after 300 ms.
   6. **Invalid count (owner decision 6):** after `PER_ITEM` is learned, setting the count to `0` sends nothing.
      - `preview` and `priceInput` become `null`, and `ready` is false.
      - The remembered unit still says `PER_ITEM`, so the count input stays available (`units['service:<id>'] === 'PER_ITEM'`).
@@ -890,10 +911,12 @@ Implements owner decisions 2, 5, 6; planning decisions c, e, f; issue Data, Vali
   11. **Duplicates (§8.4.3):** choosing an add-on already on another row does not apply it. The row's `choice` stays `null`, its `query` keeps the typed text, and `duplicate` is true. The next text edit clears `duplicate`.
   12. **Edit drops a choice:** editing a row's or the base's search text drops its choice.
   13. **Re-weigh (owner decision 6):** re-rendering with a new `weightGrams` and the same selection makes the old preview not current (`previewLoading` true, `preview` null) and sends a new request after 300 ms.
-  14. **Stale responses:**
-      - A response for an input that has since changed is ignored, even if it arrives after the newer request was sent.
-      - A response that arrives after unmount sets no state (no act warning).
-      - Input A, then B, then A again re-requests A (planning decision f).
+  14. **Stale responses (M5 part 1 suggestion).** The guarantee is that a stale result is rejected, not that the request is cancelled. Requests are never aborted, so each case resolves the older request's promise for real:
+      - **Out of order:** request A is in flight; the input changes to B and request B is sent. B resolves first, then A. The preview stays B's, `priceInput` stays B's input, and A's lines do not reach `units`.
+      - **A late success never replaces a current failure:** A in flight, then B fails, then A resolves successfully. `previewError` stays B's and `preview` stays `null`.
+      - **A superseded failure never shows:** A in flight; the input changes to B; A rejects with a missing-price message. No `previewError` appears for B.
+      - **Unmount:** a response that resolves after unmount sets no state. No React act or update warning is logged; `console.error` is spied and must not be called.
+      - **Returning input:** A, then B, then A again re-requests A (planning decision f).
   15. **Mismatched lines:** a response whose lines do not match (an add-on out of order) gives `preview: null`, `previewError: { message: undefined, target: null }`, and `ready: false`.
   16. **Missing price (owner decision 2):**
       - A rejection whose `graphQLErrors[0].extensions.originalError.message` is `No effective price for addOnId <row id>` gives `previewError.target` `{ kind: 'addOn', key }`.
