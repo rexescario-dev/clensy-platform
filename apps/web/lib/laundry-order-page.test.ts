@@ -1,14 +1,16 @@
-import { laundryOrderActions, type AdminRole, type LaundryOrderStatus } from '@clensy/web';
+import { LAUNDRY_ORDER_STATUSES, laundryOrderActions, type AdminRole, type LaundryOrderStatus } from '@clensy/web';
 import { describe, expect, it } from 'vitest';
 import { isUuid } from './laundry-order-list-query';
 import {
   LAUNDRY_ORDER_SECTIONS,
+  LAUNDRY_PRICED_STATUSES,
   currentLaundryOrderSection,
   laundryDetailRedirectHref,
   laundryLifecycleVerbs,
   laundryLineQuantity,
   laundryOrderHref,
   laundryOrderSectionId,
+  laundryWeighingView,
   resolvedInvoiceNodes,
   resolvedQueryData,
 } from './laundry-order-page';
@@ -171,5 +173,48 @@ describe('laundryLineQuantity', () => {
 
   it.each(['FLAT', 'PER_SERVICE'] as const)('shows no quantity for %s', (unit) => {
     expect(laundryLineQuantity(unit, 1)).toBeNull();
+  });
+});
+
+// Owner decision 1 (#155 M4): the locked copy is only for an order that
+// was priced; CANCELLED and REJECTED never inherit it.
+describe('LAUNDRY_PRICED_STATUSES', () => {
+  it('is every status except the two before pricing and the two pre-payment exits', () => {
+    const notPriced: LaundryOrderStatus[] = ['CANCELLED', 'RECEIVED', 'REJECTED', 'WEIGHED'];
+    expect([...LAUNDRY_PRICED_STATUSES].sort()).toEqual(
+      LAUNDRY_ORDER_STATUSES.filter((status) => !notPriced.includes(status)).sort(),
+    );
+    expect(LAUNDRY_PRICED_STATUSES.size).toBe(11);
+  });
+});
+
+describe('laundryWeighingView', () => {
+  const view = (status: LaundryOrderStatus, role: AdminRole | undefined) =>
+    laundryWeighingView(status, laundryOrderActions(status, 'PICKUP', role));
+
+  it.each(['TENANT_OWNER', 'OPS_MANAGER', 'SCHEDULER'] as const)('offers the editor to %s on RECEIVED and WEIGHED', (role) => {
+    expect(view('RECEIVED', role)).toBe('editor');
+    expect(view('WEIGHED', role)).toBe('editor');
+  });
+
+  it.each(['CUSTOMER_SUPPORT', 'FINANCE', 'ANALYST'] as const)('shows %s the read-only weight on RECEIVED and WEIGHED', (role) => {
+    expect(view('RECEIVED', role)).toBe('readOnly');
+    expect(view('WEIGHED', role)).toBe('readOnly');
+  });
+
+  it('shows the read-only weight while the role loads', () => {
+    expect(view('RECEIVED', undefined)).toBe('readOnly');
+    expect(view('WEIGHED', undefined)).toBe('readOnly');
+  });
+
+  it.each([...LAUNDRY_PRICED_STATUSES])('locks %s for every role, including a loading one', (status) => {
+    for (const role of ['TENANT_OWNER', 'SCHEDULER', 'CUSTOMER_SUPPORT', 'ANALYST', undefined] as const) {
+      expect(view(status, role)).toBe('locked');
+    }
+  });
+
+  it.each(['CANCELLED', 'REJECTED'] as const)('never locks %s', (status) => {
+    expect(view(status, 'TENANT_OWNER')).toBe('readOnly');
+    expect(view(status, 'ANALYST')).toBe('readOnly');
   });
 });

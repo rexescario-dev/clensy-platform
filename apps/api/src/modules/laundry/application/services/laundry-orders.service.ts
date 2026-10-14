@@ -326,10 +326,10 @@ export class LaundryOrdersService {
   }
 
   async weigh(command: WeighLaundryOrderCommand): Promise<LaundryOrder> {
-    if (!Number.isInteger(command.weightGrams) || command.weightGrams < 0) {
-      throw new BadRequestException(
-        'weightGrams must be a non-negative integer',
-      );
+    // Amendment #164 §8.4.1: a weighed order has a positive weight. The
+    // DTO enforces the same minimum; this guards direct service callers.
+    if (!Number.isInteger(command.weightGrams) || command.weightGrams < 1) {
+      throw new BadRequestException('weightGrams must be a positive integer');
     }
 
     return this.dataSource.transaction((manager) =>

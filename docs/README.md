@@ -134,3 +134,9 @@ Renaming the service or add-on later does not change it. If a name can't be read
 - A repeated add-on is quoted as its own line, exactly as pricing treats it.
 
 **Guards.** The query is classified in the root-operation inventory, the release-gate role matrix and probes, the tenant-read authorizer sweep, and the laundry/billing schema guard. The release-gate outcome classifier has one rule limited to `previewLaundryOrderPrice`. That rule reads each line's single `serviceId`/`addOnId` target and never treats the money total as a count.
+
+## Positive laundry weight (#155)
+
+Amendment #164 to the [laundry lifecycle spec](superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md) (§8.4.1).
+
+`weighLaundryOrder` now rejects a zero weight. `WeighLaundryOrderInput.weightGrams` is `@IsInt() @Min(1)`, and `LaundryOrdersService.weigh` throws `BadRequestException('weightGrams must be a positive integer')` for a non-integer or a value below 1, before it opens a transaction. Roles, the `RECEIVED`/`WEIGHED` status rule and the mutation input are unchanged. There is no migration: `ck_laundry_order_weight_non_negative` stays `>= 0`, and orders already stored with `0` grams are not rewritten. The release-gate and tenant-isolation suites were not changed; no probe weighs `0`.

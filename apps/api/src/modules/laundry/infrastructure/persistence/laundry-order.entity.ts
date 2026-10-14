@@ -29,8 +29,9 @@ import { LaundryOrderLineEntity } from './laundry-order-line.entity';
 // `status` only ever changes through a transition validated by
 // `LaundryOrderStatusTransitionPolicy` (spec §4.3). `weightGrams` is
 // backed by a hand-added `CHECK ("weightGrams" IS NULL OR "weightGrams"
-// >= 0)` in the migration (spec §4.8) — defense-in-depth for the
-// application-level non-negative-integer rule.
+// >= 0)` in the migration (spec §4.8). The application rule is stricter,
+// at least 1 gram (Amendment #164 §8.4.1); the CHECK stays `>= 0` because
+// stored 0-gram orders are not rewritten.
 //
 // Tenant ownership (#87): `tenantId` + `fk_laundry_order_tenant` are
 // expressed here. `customer` keeps the relation for Relatable but sets

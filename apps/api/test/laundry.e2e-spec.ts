@@ -120,6 +120,27 @@ describe('Laundry (e2e)', () => {
     const orderId = received.body.data.receiveLaundryOrder.id;
     expect(received.body.data.receiveLaundryOrder.status).toBe('RECEIVED');
 
+    // Amendment #164 §8.4.1: a zero weight is rejected over GraphQL by the
+    // input's minimum, and the order stays RECEIVED and unweighed.
+    const zero = await gql(
+      cookie,
+      `mutation($i: WeighLaundryOrderInput!){ weighLaundryOrder(input:$i){ status } }`,
+      { i: { orderId, weightGrams: 0 } },
+    );
+    expect(zero.body.errors).toBeDefined();
+    expect(JSON.stringify(zero.body.errors)).toContain(
+      'weightGrams must not be less than 1',
+    );
+    const afterZero = await gql(
+      cookie,
+      `query($id: ID!){ laundryOrder(id:$id){ status weightGrams } }`,
+      { id: orderId },
+    );
+    expect(afterZero.body.data.laundryOrder).toEqual({
+      status: 'RECEIVED',
+      weightGrams: null,
+    });
+
     await gql(
       cookie,
       `mutation($i: WeighLaundryOrderInput!){ weighLaundryOrder(input:$i){ status weightGrams } }`,

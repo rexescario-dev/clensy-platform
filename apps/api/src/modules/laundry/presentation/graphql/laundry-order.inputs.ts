@@ -33,9 +33,11 @@ export class WeighLaundryOrderInput {
   @IsString()
   orderId!: string;
 
+  // At least one gram (Amendment #164 §8.4.1). Stored 0-gram orders are
+  // not rewritten; the rule applies to new weigh calls.
   @Field(() => Int)
   @IsInt()
-  @Min(0)
+  @Min(1)
   weightGrams!: number;
 }
 
