@@ -6,6 +6,10 @@ import { LAUNDRY_ORDER_PAGE_SIZE, type LaundryOrderListState } from './use-laund
 // and rejects anything else with "invalid input syntax for type uuid".
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+export function isUuid(text: string): boolean {
+  return UUID.test(text);
+}
+
 // Postgres `ILIKE` treats `%` and `_` as wildcards and `\` as the default
 // escape, so a customer named "50% Off" is matched literally.
 export function escapeLikePattern(text: string): string {
@@ -21,7 +25,7 @@ export function laundryOrderListFilter(state: LaundryOrderListState): LaundryOrd
   const filter: LaundryOrderFilter = {};
   if (state.search !== '') {
     const byName: LaundryOrderFilter = { customer: { fullName: { iLike: `%${escapeLikePattern(state.search)}%` } } };
-    if (UUID.test(state.search)) {
+    if (isUuid(state.search)) {
       filter.or = [byName, { id: { eq: state.search.toLowerCase() } }];
     } else {
       Object.assign(filter, byName);
