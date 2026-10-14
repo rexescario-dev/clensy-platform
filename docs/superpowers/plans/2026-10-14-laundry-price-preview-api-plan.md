@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 5)**. M6 complete; ready for M7 (independent review). |
+| Status | **Accepted (revision 5)**. M6 complete; M7 Approved for merge (independent review); M8 N/A; M9 complete; M10 validated. |
 | M5 decision | **Accepted** — 2026-10-14, revision 5 (`df8a2e4`), by the owner, on the fifth pass. No blocking findings. Confirmed: the release-gate checker reads the real `previewLaundryOrderPrice` payload (`lines { serviceId addOnId }`, no aliases, no count), scoped to that field only, with tests for valid, invalid-target, ambiguous, malformed and scoping cases. The probe covers a service and an add-on and keeps the 404 / 400 / 400 cross-tenant forms. This accepts the plan only: no planned test, lint, type-check or build has run, and it is not implementation approval. M7 MUST be a fresh independent review (`CLAUDE.md`: application code, schema, migration). |
 | M5 history | First pass (2026-10-14, owner): **Returned for Revision**. P1: the `quote` extraction must keep `price`'s existing error order, and the plan did not show that order or pin it. P2: the `quote` signature disagreed between Architecture and Task 2. P2: no test covered competing failures. Resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). Second pass (2026-10-14, owner): **Returned for Revision**. All three findings confirmed resolved. One P2: Task 2 said both that `price` keeps its preconditions and that `quote` takes them, so a precondition could run twice or the wording could be broken. Resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). Third pass (2026-10-14, owner): **Returned for Revision**. The revision-2 finding confirmed resolved. One P2: the release-gate probe aliased the money amount `estimatedTotalMinorUnits` as `totalCount`. Resolved in [Revision 4 (M5 review 3)](#revision-4-m5-review-3). Fourth pass (2026-10-14, owner): **Returned for Revision**. The money-as-count finding confirmed resolved. One P2: the `items` alias was a gate-only adapter, not the real `lines` payload, and its classifier rule was not tied to the preview. Resolved in [Revision 5 (M5 review 4)](#revision-5-m5-review-4). Fifth pass (2026-10-14, owner): **Accepted**. |
 | Date | 2026-10-14 |
@@ -125,7 +125,7 @@ Deferred, explicitly: positive weight (#155); any web UI (#158, #162); rejecting
 | `apps/api/test/release-gate/role-matrix.ts`, `test/release-gate/probes/laundry.ts`, `test/two-tenant-release-gate.e2e-spec.ts` | modify (matrix row, probe; count 64 → 65) |
 | `apps/api/test/release-gate/outcome.ts`, `test/release-gate/outcome.e2e-spec.ts` | modify (a `previewLaundryOrderPrice`-scoped rule reading `lines[].serviceId \| addOnId`, test first) |
 | `apps/api/test/tenant-read-authorizers.e2e-spec.ts` | modify (`LaundryPricePreview.lines` custom object field) |
-| `apps/api/src/schema.gql` | regenerated |
+| `apps/api/src/schema.gql` | regenerated locally on app boot; gitignored (`.gitignore:21`), so not committed (M6 deviation 4) |
 | `packages/client/src/operations/laundry.graphql`, `src/generated/graphql.ts`, `src/laundry-operations.test.ts` | modify / regenerate |
 
 ## Tasks
@@ -619,3 +619,105 @@ The release-gate probe was shown to be live the same way: with its `ok` id set t
 Scope check: `git diff --stat main` lists the File map, this plan, and `test/laundry-billing.tenant-isolation.e2e-spec.ts` (deviation 5; that file was already in the map for its raw insert). `apps/api/src/schema.gql` is absent because it is gitignored (deviation 4).
 
 M7 next: a fresh, independent reviewer on the most capable model, given this plan, the Accepted spec and the branch diff (`CLAUDE.md`).
+
+### M7 — Approved for merge (2026-10-14, fresh independent review)
+
+Per `CLAUDE.md` (application code, schema and a migration), the review was done by a fresh agent on the most capable model that did not implement the change. It was read-only and was given the Accepted spec, this plan, the branch diff and the implementer's ledger. **This is not a self-review.** Its record, condensed:
+
+```text
+Decision: Approved for merge
+Subject: PR #184, branch feat/159-laundry-price-preview-api, head 9c27a6e (e8c4b56..9c27a6e)
+Accepted specification: docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md (Amendment #164 §8.2, §8.3, §8.4.2, §8.4.3, §8.4.5)
+Accepted implementation plan: this plan (M5 Accepted rev 5 at 0ef2173; first code commit e8c4b56 after it)
+
+Plan tasks reviewed:
+- Task 1 migration + backfill: ✓
+- Task 2 price freezes description (C1–C6 committed alone first): ✓
+- Task 3 preview service (cases 1–12): ✓
+- Task 4 GraphQL + sweep guards (field-scoped classifier, test first): ✓
+- Task 5 GraphQL e2e: ✓
+- Task 6 client (schema.gql gitignored, deviation 4): ✓
+- Task 7 full verification: ✓
+
+Verification evidence:
+- Ran: pnpm --filter api test -- laundry → 6 suites, 382 tests passed
+- Ran: pnpm --filter @clensy/client test → 13 tests passed
+- CI on PR #184 head 9c27a6e (run 38509032884): API e2e, Lint, Release gate, Test passed
+- Read: the M6 validation table, the characterization mutation evidence, and the probe-liveness evidence
+
+Spec conformance: §8.4.2 description rule, set in the transaction with rollback on a missing name, not null, exposed; preview uses the
+current name. §8.4.3 repeated add-ons stay separate lines in both paths. §8.4.5 Query, same input/rules/amount function,
+pure read, OPERATIONAL roles, no pricingRuleId, no catalog type change. §8.2 one pricing formula; invoices and §8.4.1 untouched.
+
+Migration: SET NOT NULL cannot fail on existing data. The composite FKs (validated in AddLaundryBillingTenant),
+ck_laundry_order_line_target and NOT NULL catalog names guarantee one non-null match per line.
+
+Guard edits: all are classifications; none loosens a guard (laundry-billing Case 0 is tightened). The classifier rule
+is reached only for previewLaundryOrderPrice, after the error and null branches, and rejects every malformed shape.
+
+Findings: P1 none. P2 none. P3 (optional) — see "Deferred minors" below.
+Ledger rulings: all six accepted.
+```
+
+**Deferred minors** (P3; none changes behavior; not fixed in this slice):
+1. `quote` reads names through `ServicesService` / `AddOnsService` on a pooled connection, not the transaction's `manager`. The §8.4.2 behavior still holds: the read happens inside the callback, and a missing name throws before any save, so everything rolls back. Rule resolution already uses the same pattern, and the plan prescribes these services.
+2. Nothing asserts that `valueRoots` in `laundry-billing.tenant-isolation` still names a live root. A rename would also fail the inventory guards.
+3. The File map listed `schema.gql` as "regenerated", but it is gitignored. **Fixed in M9** (File map wording).
+4. Cosmetic: the `QuoteInput` / `QuotedLine` declarations sit between `const S` and `const ENTITY_TYPE` in the service file.
+
+Gate: merge per human/project norms. M8/M9 follow.
+
+### M8 — N/A (2026-10-14)
+
+M7: Approved for merge. Candidates considered, and why none is an M8 refactor:
+- **Deferred minor 4 (declaration placement):** cosmetic only, with no maintainability gain worth a separate change.
+- **Deferred minor 1 (names through `manager`):** reading catalog names through the transaction's `manager` would need laundry to use catalog's entities, which spec §4.1 forbids. It would also change how the read happens. Not a refactor.
+- **Deferred minor 2 (live-root assertion):** adds a new test assertion, so it is not behavior-preserving restructuring.
+
+No code changed in M8.
+
+### M9 — Complete (2026-10-14)
+
+M7: Approved for merge. M8: N/A. Documentation updated to match what shipped:
+- `docs/README.md`: new section "Laundry price preview & frozen line description (#159)", covering the saved name, the migration-time backfill, the preview's roles, rules and no-write guarantee, and the guard classifications.
+- `README.md` ("Database migrations"): one paragraph on `1790956800000-AddLaundryLineDescription.ts`: the backfill rule and its migration-time semantics, why `NOT NULL` cannot fail, `down()`, and how `generate` sees the column.
+- This plan: the Status row, the File map wording for `schema.gql` (deferred minor 3), and the M7–M10 records.
+- The spec needs no change. Amendment #164 already specifies what shipped; the field names chosen at M4 are recorded here as owner decision 1.
+- Status consistency: plan Accepted (revision 5); M6 complete; M7 Approved; M8 N/A; M9 complete; M10 below.
+
+### M10 — Accepted, workflow validated (2026-10-14)
+
+```text
+Decision: Accepted
+Subject: workflow prompt library (docs/workflows/, generic 1.4.1 / claude 0.2.0), run on #159 from M4 to M9
+Governing specification: docs/workflows/specs/agent-workflow-design.md
+
+Asset inventory:
+- M1 conventions/prompt-library.md; M2 specification.md; M3 design-review.md; M4 implementation-planning.md;
+  M5 plan-review.md; M6 implementation-execution.md; M7 code-review.md; M8 refactoring.md;
+  M9 documentation-execution.md; M10 workflow-validation.md; reporting-conventions.md (Slice Completion Report)
+- No orphan assets under docs/workflows/prompts/ (nine prompts, one per M2–M10).
+
+Run trace (#159):
+- M2/M3: not re-run. #159 implements the already-Accepted Amendment #164 (M3 2026-10-10, #167).
+  The issue's gate ("do not implement until §8.4.2 is decided") was checked first.
+- M4: one Draft plan. Two owner decisions were asked, not invented (preview field names; client scope).
+- M5: five passes, four returns, each finding resolved in a recorded revision; Accept at 0ef2173.
+- M6 began after Accept (first code commit e8c4b56). TDD and characterization evidence were recorded;
+  seven deviations were declared; the Slice Completion Report was emitted (Ready for M7).
+- M7: a fresh independent reviewer, per CLAUDE.md; the record cites it and is not labelled a self-review.
+- M8 N/A with candidates considered; M9 docs updated; M10 recorded here, before closeout.
+
+Blocking findings:
+- None.
+
+Non-blocking observations:
+- The Context Forge dispatch named "Brainstorm (project default)". The repository workflow's stage selection put
+  this issue at M4, because its spec was already Accepted. The workflow skill's selection rules resolved this
+  without inventing instructions.
+- A sweep guard (laundry-billing Case 0) was missed in planning and caught by M6's full e2e run. The workflow
+  worked as intended: the deviation was declared and confirmed by M7. Planning could inventory name-based
+  guards with `grep -rn "laundry|invoice" apps/api/test` in future slices; that is project practice, not a
+  prompt defect.
+```
+
