@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 8)**. M6 complete ([Execution record](#execution-record)); M7 Approved for merge (independent review); M8 N/A; M9 complete; M10 validated. PR [#185](https://github.com/rexescario-dev/clensy-platform/pull/185). |
+| Status | **Accepted (revision 8)**. M6 complete ([Execution record](#execution-record)); M7 Approved for merge (independent review); M8 N/A; M9 complete; M10 validated; owner-directed follow-ups re-reviewed and approved ([Follow-ups](#owner-directed-follow-ups-post-m7)). PR [#185](https://github.com/rexescario-dev/clensy-platform/pull/185). |
 | M5 decision | **Accepted** — 2026-10-14, revision 8 (`003f6ce`), by the owner, after the Part 4 re-check and a final Part 5 pass. Every finding raised in parts 1–5 is resolved: the Task 1 transaction boundary (rev 3), Task 2–3 negative precedence and the error-shape guard (rev 4, 7), the Task 4 error policy, stale alert, total-error a11y (rev 5) and typed weigh mock (rev 8), and the Task 5–6 markup, reload-failure and reporting changes (rev 6). Part 5 found no blocking issue in Tasks 5–6, traceability, deferrals or risks. No planning decision (a)–(g) was returned, so all stand as written. The acceptance covers the plan, not the implementation. The reviewer relied on the supplied pre-validation evidence and did not rerun the commands. Task 1, Task 5, Task 6, each expected-failure step and the browser checklist stay unverified until M6 runs them and records the results. |
 | M5 history | Part 1 (2026-10-14, owner): provisional. **P1:** the entry contract called every non-digit, non-point character a format error, contradicting the negative-entry message. Resolved in revision 2: Global Constraints now fix the classification order (blank → leading minus → format → notPositive → tooLarge), and Task 2 adds `-1.2345`, `--1` and `1-` as format cases. **Verify (refetch):** Task 4 adds a test that every control stays disabled until the post-save refetch settles. **Verify (oversize):** already covered by Task 2's `tooLarge` cases and Task 4's over-maximum tests. Each row is capped at `MAX_WEIGHT_GRAMS` before it is summed, so the total `formatWeightGrams` receives is always a safe integer. Part 2 (2026-10-14, owner): **P1:** the zero-weight service test asserted only `manager.update`, not the promised "before opening a transaction". Resolved in revision 3: the test also asserts `dataSource.transaction`, `manager.findOne` and `auditLogger.log` were not called, the spec's existing boundary pattern (`receive` / `price` guard tests). The DTO and service messages stay intentionally distinct. Part 3 (2026-10-14, owner): **P1:** the parser comment did not state that a negative with more than three decimals is `format`. Resolved in revision 4: the comment and Global Constraints spell out the precedence (format checks before the negative check). **P2:** `-99999999` must be `notPositive`, not `tooLarge`. The planned code already checks the minus before the oversize check; revision 4 adds `-99999999` as a regression case and says so in Global Constraints. **Suggestion (accepted):** `graphQLErrorMessage` returns `undefined` for a first error that is `null` or not an object, with three new cases. The priced set stays an explicit list. Part 4 (2026-10-14, owner): **P1 (error policy):** resolved in revision 5. The spike shows the effective policy is Apollo 3.14's default `'none'`: there are no `defaultOptions` anywhere, and the `onError` link only observes. So GraphQL errors reject. The contract is documented in Task 4, and the handler also treats a resolved result with errors or without the order as a failure (decision g). **P1 (sync throw from `onRecorded`):** the reviewer withdrew it; no change. **P2 (stale alert):** an edit, add, remove or new submit clears the server error, with four tests. **P2 (resolved-error path):** two tests cover a resolved result with errors and one with no order; the mock's default success now carries the order. **P2 (total error a11y):** the total-level error has id `laundry-weighing-form-error` and describes Record weight, asserted in the over-maximum and no-rows tests; the live region stays on the total only. Part 5 (2026-10-14, owner): verdict **not accepted yet**. The summary table repeats the part 1–4 findings; revisions 3–5 had already resolved them before part 5 was sent (transaction boundary: rev 3; negative precedence and `-99999999`: rev 4, already ordered in the code; error policy, stale alert, total-error a11y: rev 5). New in part 5, resolved in revision 6. **Brittle markup:** the Task 5 render test drops the exact Tailwind class and ordered-attribute assertions; the live total is checked by `role="status"` and `aria-live="polite"` on the tag holding `0.00 kg`. **Page-level refetch failure:** a Task 5 characterization test shows the post-save reload failure renders the order error state with no weighing failure and no editor. The stated guarantee is narrowed: the editor guarantees no weighing error, the page shows its existing #156 branch, and Apollo setting `error` is library behavior. **Task 6:** the report must record each command as PASS, FAIL or NOT RUN, state that authorization and status enforcement stay server-side, say whether the API tests ran, and list the release-gate and tenant-isolation suites as excluded, not as covered. Part 3 re-check (2026-10-14, owner): Task 1 confirmed resolved; Task 3 has no blocking finding. The reviewer asked for proof that `-99999999` is `notPositive` in the committed code, not only in a comment. Revision 7 ran Task 2's planned code and tests verbatim (see Pre-validation): the `if (negative)` check precedes the size check, and the `-99999999` case passes. The same run's lint found that the `WeightEntryResult` union order violated `sort-type-constituents`; it is reordered in revision 7, with no behavior change. Part 4 re-check (2026-10-14, owner): **P1:** the weigh mock's `resolve(result?: unknown)` was too permissive. Resolved in revision 8: the test types the mock result as Apollo 3.14's `FetchResult<WeighLaundryOrderMutation>` and its variables as the generated `WeighLaundryOrderMutationVariables`. The success default is a full `LaundryOrderDetail`-shaped `RECORDED` fixture, and the resolved-errors and missing-order fixtures must satisfy the same type. `tsc --noEmit` proves they do (see Pre-validation). Behavior unchanged. Part 4 follow-up (2026-10-14, owner): the typing finding is resolved, on the supplied evidence. Part 5 final pass (2026-10-14, owner): no blocking issue; M5 acceptance recommended for revision 8. See M5 decision. |
 | Date | 2026-10-14 |
@@ -2126,6 +2126,56 @@ Governing specification: docs/workflows/specs/agent-workflow-design.md
 
 Gate: **Workflow validated.**
 
+### Owner-directed follow-ups (post-M7)
+
+On 2026-10-14 the owner asked to "fix the follow-ups within the PR". These are the three non-blocking M7 observations that change code or tests. The other two need no code change: the first-message-only error text and the test-file location. The work was done in this session from `9e32311`, with TDD:
+
+| Follow-up | Commit | Change |
+| --- | --- | --- |
+| Focus is not restored after a submit | `3384c52` | `LaundryWeighingEditor` refs the form and Record weight. An effect runs only on the `pending` true→false transition, after the save and its refetch settle, and focuses Record weight when focus is nowhere, on `body`, or still inside the form. Focus the user moved elsewhere is left alone. |
+| Weigh test helpers are not reset | `3384c52` | `beforeEach` sets `weigh.resolve`/`reject` to a function that throws "No weighLaundryOrder call is in flight." |
+| Older service tests are weaker than the zero test | `66bb124` | The negative, zero and non-integer cases are now one `it.each`. Each asserts the exact message and that no transaction, `findOne`, update or audit runs. |
+
+**Evidence:**
+- **RED, the focus tests.** The two focus-return tests failed with "expected body to be button". jsdom neither moves focus off a newly disabled button nor blurs a disabled one, so the tests stand in for the browser fixup: they park focus on a throwaway input, then remove it. The "leaves focus where the user moved it" test passed before the fix, as characterization. Changing the effect's condition to `if (true)` made it fail.
+- **Mutation, the service tests.** Temporarily changing the service message failed all three `it.each` cases. Before this change, the negative and non-integer cases asserted only the exception type.
+- **The suite runs:**
+
+  | Command | Result |
+  | --- | --- |
+  | `pnpm --filter api test` | 1071 passed |
+  | `pnpm --filter api lint` | clean |
+  | `pnpm --filter web test` | 37 files, 965 passed (+3) |
+  | `pnpm --filter web lint` | clean |
+  | `pnpm --filter web exec tsc --noEmit` | clean |
+  | `pnpm --filter web build` | clean |
+
+  The first `tsc` run failed on the helper-reset typing. It was fixed before the commit.
+- **The browser run.** This branch ran on 3020/3021, as in the browser check above, with a throwaway `qa155-owner2-…` TENANT_OWNER that was disabled afterwards. The steps:
+  1. Type `1.5`.
+  2. Focus Record weight.
+  3. Press Enter.
+
+  The log read `disabled:Record weight` and then `enabled:body`, so Chromium dropped focus. After the save and refetch settled, `document.activeElement` was Record weight again. The second `RECEIVED` order is now `WEIGHED` at 1500 g in the local dev data.
+
+**M7 re-review: Approved for merge.** A fresh, independent agent on the most capable model (Opus 5.5) did this review, as `CLAUDE.md` requires for an application-code change. It did not write the change. It reviewed the delta `9e32311..3384c52` and re-ran the editor interaction test (32 passed), the service spec (73 passed) and `tsc` (clean). **This is not a self-review.**
+
+Condensed findings:
+- The effect never fires on mount, and is a no-op under StrictMode's double-run.
+- Focus lands in the same commit that re-enables the button.
+- An unmount during the refetch focuses nothing.
+- `ref` reaches the native `<button>` through `@clensy/ui`'s `Button`.
+- The `beforeEach` reset is loud.
+- The `it.each` keeps and strengthens the three earlier tests.
+- No scope beyond the follow-ups.
+
+Blocking findings: none. Non-blocking:
+- A "no focus change on mount" test would be optional hardening.
+- On a failed save, focus could move to a problem row in a future a11y pass.
+- The jsdom parking workaround can go if a real-browser component test runner is adopted.
+
+**Docs:** `apps/web/README.md`'s Weighing bullet now mentions the focus return.
+
 ## Slice Completion Report (final)
 
 | Field | Result |
@@ -2145,7 +2195,7 @@ Gate: **Workflow validated.**
 ### Shipped
 
 - The server rejects a zero weight on the GraphQL input and in the service, before any transaction. There is no migration, and stored zeros are untouched.
-- A multi-row weighing editor on the order page records one total in whole grams, with inline validation and a live total.
+- A multi-row weighing editor on the order page records one total in whole grams, with inline validation and a live total. Focus returns to Record weight after a save settles (owner-directed follow-up).
 - The editor sends one mutation per submit. Controls stay disabled through the save and the refetch. Success shows a toast and the saved total; failure keeps the rows and shows the server message.
 - Locked copy appears only for priced statuses, and never for `CANCELLED` or `REJECTED`. Every other case is read-only.
 - The READMEs document the editor, the copy and the API change.
