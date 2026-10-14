@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft** (M4). Awaiting Plan Review (M5). |
+| Status | **Draft** (M4, revision 2). Plan Review (M5) in progress, by parts. |
+| M5 history | Part 1 (2026-10-14, owner): provisional. **P1:** the entry contract called every non-digit, non-point character a format error, contradicting the negative-entry message. Resolved in revision 2: Global Constraints now fix the classification order (blank → leading minus → format → notPositive → tooLarge), and Task 2 adds `-1.2345`, `--1` and `1-` as format cases. **Verify (refetch):** Task 4 adds a test that every control stays disabled until the post-save refetch settles. **Verify (oversize):** already covered by Task 2's `tooLarge` cases and Task 4's over-maximum tests. Each row is capped at `MAX_WEIGHT_GRAMS` before it is summed, so the total `formatWeightGrams` receives is always a safe integer. |
 | Date | 2026-10-14 |
 | Tracking issue | [#155](https://github.com/rexescario-dev/clensy-platform/issues/155) "Multi-entry laundry weighing". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) (merged in #183: the order page and its Weighing section) and [#157](https://github.com/rexescario-dev/clensy-platform/issues/157) (closed: `formatWeightGrams`, `laundryOrderActions`). The spec gate in #155 is met: [#164](https://github.com/rexescario-dev/clensy-platform/issues/164) §8.4.1 is Accepted (#167), so this slice takes the issue's "if Accepted" branch (issue comment, 2026-10-14). |
 | Branch | `feat/155-multi-entry-laundry-weighing`, from `main` at `c6b6c75`. One PR for this plan, its M5 record and the implementation. |
@@ -44,7 +45,14 @@ Derived from the Accepted spec, issue #155 (with its two comments) and the owner
 - **Server minimum (§8.4.1):** `WeighLaundryOrderInput.weightGrams` **SHALL** be `@IsInt() @Min(1)`. `LaundryOrdersService.weigh` **SHALL** throw `BadRequestException('weightGrams must be a positive integer')` for a non-integer or a value `< 1`, before opening a transaction. **SHALL NOT** add a migration or change `ck_laundry_order_weight_non_negative`. **SHALL NOT** rewrite stored `0` rows.
 - **No per-bag data (§8.2, §8.6):** the mutation input stays `{ orderId, weightGrams }`. No bag rows are persisted, sent or stored in the URL.
 - **One mutation:** `weighLaundryOrder({ orderId, weightGrams })` with the integer sum of the rows, at most once per submit. No float multiplication anywhere in the conversion (`Math.round(Number(kg) * 1000)` is forbidden).
-- **Entry contract:** each entry is a decimal kilogram string with at most 3 decimal places. It is parsed by splitting on `.` into whole grams. `+`, `e`, blank, more than one `.`, and any character other than `0-9` and `.` are rejected. More than 3 decimals is an error, never a silent round. Zero and negative entries are rejected.
+- **Entry contract:** each entry is a decimal kilogram string with at most 3 decimal places. It is parsed by splitting on `.` into whole grams. More than 3 decimals is an error, never a silent round. The classification order is fixed, and the first rule that matches wins:
+  1. **`blank`:** empty or whitespace-only.
+  2. **Leading minus:** one leading `-` is removed and remembered. Only this position is special; a `-` anywhere else is just a forbidden character.
+  3. **`format`:** the rest contains anything other than `0-9` and `.` (so `+`, `e`, `,`, whitespace and a second `-` all land here), has more than one `.`, has no digits, or has more than 3 decimals. A malformed negative such as `-abc` or `-1.2345` is therefore `format`.
+  4. **`notPositive`:** the input had the leading minus (`-1`, `-0.5`, `-0`), or its value is zero (`0`, `0.000`).
+  5. **`tooLarge`:** above `MAX_WEIGHT_GRAMS`.
+
+  Task 2 pins each step, including `-1`, `-0.5`, `-0`, `0`, `-abc` and `-1.2345`.
 - **Validation copy (inline under the input):** blank "Enter a weight." · not a decimal kilogram "Enter a weight in kilograms, up to 3 decimal places." · zero or negative "Weight must be greater than zero." · above the `Int` maximum "Enter a smaller weight." (planning decision b). **Form:** no rows "Add at least one weight." · total above the `Int` maximum "The combined weight is too large to record."
 - **Live total:** "Combined weight" in `rounded-md border border-slate-200 bg-slate-50 p-3`. The value, `formatWeightGrams(total)`, is in `text-lg font-semibold text-slate-900`, in a `role="status"` `aria-live="polite"` element. The total covers the valid rows only. It updates as the user types, and invalid rows still block submit.
 - **Layout:**
@@ -364,7 +372,7 @@ describe('parseWeightEntry', () => {
     expect(parseWeightEntry(text)).toEqual({ error: 'blank', ok: false });
   });
 
-  it.each(['abc', '1.2.3', '1.2345', '+1', '1e3', '1,5', ' 1.25', '1.25 ', '.', '-', '-abc', '0x10', '1_000'])(
+  it.each(['abc', '1.2.3', '1.2345', '+1', '1e3', '1,5', ' 1.25', '1.25 ', '.', '-', '-abc', '-1.2345', '--1', '1-', '0x10', '1_000'])(
     '%j is not a decimal kilogram',
     (text) => {
       expect(parseWeightEntry(text)).toEqual({ error: 'format', ok: false });
@@ -1078,6 +1086,25 @@ describe('laundry weighing editor', () => {
     click('Record weight');
     await act(async () => weigh.reject(new Error('Failed to fetch')));
     expect(alertText()).toBe('Unable to record weight.');
+  });
+
+  it('keeps every control disabled until the post-save refetch settles', async () => {
+    let finishRefetch: () => void = () => {};
+    onRecorded = vi.fn<() => Promise<unknown>>(
+      () =>
+        new Promise<void>((resolve) => {
+          finishRefetch = resolve;
+        }),
+    );
+    await enterThreeBags();
+    click('Record weight');
+    await act(async () => weigh.resolve());
+    expect(onRecorded).toHaveBeenCalledTimes(1);
+    expect(inputs().every((input) => input.disabled)).toBe(true);
+    expect([...container.querySelectorAll('button')].every((b) => b.disabled)).toBe(true);
+    await act(async () => finishRefetch());
+    expect(inputs().every((input) => !input.disabled)).toBe(true);
+    expect([...container.querySelectorAll('button')].every((b) => !b.disabled)).toBe(true);
   });
 
   it('shows no weighing error and re-enables the form when the refetch after a save fails', async () => {
