@@ -14,6 +14,7 @@ import {
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type { ReactNode } from 'react';
+import { LaundryWeighingEditor } from '../../../../components/laundry/laundry-weighing-editor';
 import { formatMinorUnits } from '../../../../lib/format-price';
 import { isUuid } from '../../../../lib/laundry-order-list-query';
 import {
@@ -22,6 +23,7 @@ import {
   laundryLifecycleVerbs,
   laundryLineQuantity,
   laundryOrderSectionId,
+  laundryWeighingView,
   resolvedInvoiceNodes,
   type LaundryOrderSection,
 } from '../../../../lib/laundry-order-page';
@@ -30,10 +32,10 @@ type LaundryOrderDetail = NonNullable<LaundryOrderQuery['laundryOrder']>;
 type Invoice = InvoiceForOrderQuery['invoices']['nodes'][number];
 type Translate = (key: string) => string;
 
-// The order workspace (lifecycle spec §8.4.4, #156). Read-only for now:
-// Weighing (#155), Services (#158), Price (#162), Invoice (#166) and
-// Actions (#165) replace their section's facts with controls. The list
-// still opens the drawer until the cutover (#161).
+// The order workspace (lifecycle spec §8.4.4, #156). Weighing records a
+// weight (#155). Services (#158), Price (#162), Invoice (#166) and
+// Actions (#165) still show facts until their issues add controls. The
+// list still opens the drawer until the cutover (#161).
 export default function LaundryOrderPage() {
   const { id } = useParams<{ id: string }>();
   // A new key per order, so moving between orders starts fresh.
@@ -145,11 +147,7 @@ function LaundryOrderWorkspace({ id }: { id: string }) {
       </OrderSection>
 
       <OrderSection section="weighing" t={t}>
-        {order.weightGrams === null ? (
-          <p>{t('order.weighing.notWeighed')}</p>
-        ) : (
-          <Fact term={t('order.weighing.recorded')}>{formatWeightGrams(order.weightGrams)}</Fact>
-        )}
+        <WeighingBody order={order} verbs={verbs} onRecorded={() => orderQuery.refetch()} t={t} />
       </OrderSection>
 
       <OrderSection section="services" t={t}>
@@ -246,6 +244,43 @@ function OverviewBody({ order, t }: { order: LaundryOrderDetail; t: Translate })
         </ul>
       )}
       {pageInfo.hasNextPage === true ? <p className="text-slate-600">{t('order.lines.more')}</p> : null}
+    </div>
+  );
+}
+
+// #155, owner decision 1 (M4): the editor for an actor who may weigh; the
+// locked sentence, with the weight, for a priced order; otherwise the
+// recorded weight or "Not weighed yet.". The recorded line is the server
+// value, so it changes only after a save's refetch.
+function WeighingBody({
+  onRecorded,
+  order,
+  t,
+  verbs,
+}: {
+  onRecorded: () => Promise<unknown>;
+  order: LaundryOrderDetail;
+  t: Translate;
+  verbs: readonly LaundryOrderVerb[];
+}) {
+  const view = laundryWeighingView(order.status, verbs);
+  const recorded =
+    order.weightGrams === null ? null : (
+      <Fact term={t('order.weighing.recorded')}>{formatWeightGrams(order.weightGrams)}</Fact>
+    );
+  if (view === 'readOnly') return recorded ?? <p>{t('order.weighing.notWeighed')}</p>;
+  if (view === 'locked') {
+    return (
+      <div className="flex flex-col gap-3">
+        <p>{t('order.weighing.locked')}</p>
+        {recorded}
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-3">
+      {recorded}
+      <LaundryWeighingEditor onRecorded={onRecorded} orderId={order.id} weightGrams={order.weightGrams} />
     </div>
   );
 }

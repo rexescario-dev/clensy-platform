@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ToastProvider } from '@clensy/ui';
 
 // The `/app/laundry/[id]` order page (#156), rendered statically.
 const ID = '3f2a9c1e-0b7d-4e55-9a10-6c2b8d4e7f01';
@@ -99,19 +100,27 @@ vi.mock('@clensy/client', () => ({
   },
   useLaundryOrderQuery: (options: { fetchPolicy?: string; skip?: boolean; variables?: unknown }) => {
     page.orderOptions.push(options);
-    if (options.skip) return { data: undefined, error: undefined, loading: false };
+    if (options.skip) return { data: undefined, error: undefined, loading: false, refetch: () => Promise.resolve() };
     return {
       data:
         page.orderRetained || (!page.orderLoading && !page.orderError) ? { laundryOrder: page.order } : undefined,
       error: page.orderError,
       loading: page.orderLoading,
+      refetch: () => Promise.resolve(),
     };
   },
+  // The weighing editor's mutation; never called by a static render.
+  useWeighLaundryOrderMutation: () => [() => Promise.resolve({ data: {} }), { loading: false }],
 }));
 
+// The app layout provides `ToastProvider`; the weighing editor needs it.
 async function renderPage(): Promise<string> {
   const { default: LaundryOrderPage } = await import('../app/app/laundry/[id]/page');
-  return renderToStaticMarkup(<LaundryOrderPage />);
+  return renderToStaticMarkup(
+    <ToastProvider>
+      <LaundryOrderPage />
+    </ToastProvider>,
+  );
 }
 
 function count(html: string, needle: string): number {
@@ -201,7 +210,9 @@ describe('laundry order page', () => {
     expect(html).not.toContain('₱0.00');
     expect(section(html, 'overview')).toContain('No lines yet. Lines are added when the order is priced.');
     expect(section(html, 'overview')).not.toContain('<li');
-    expect(section(html, 'weighing')).toContain('Not weighed yet.');
+    // TENANT_OWNER may weigh, so the editor replaces "Not weighed yet." (#155);
+    // an unweighed order has no recorded line.
+    expect(section(html, 'weighing')).not.toContain('Recorded weight');
     expect(section(html, 'services')).toContain('No services selected yet.');
     expect(section(html, 'price')).toContain('Not priced yet.');
   });
@@ -239,6 +250,103 @@ describe('laundry order page', () => {
     expect(section(html, 'services')).toContain('Services are priced. The lines are listed under Overview.');
     expect(section(html, 'price')).toContain('Order total');
     expect(section(html, 'price')).toContain('₱450.00');
+  });
+
+  // #155: controls appear only inside Weighing; every other section stays read-only.
+  it('offers the weighing editor to an operational role on a received order, and controls only there', async () => {
+    page.order = order({ status: 'RECEIVED', totalMinorUnits: null, weightGrams: null });
+    page.role = 'OPS_MANAGER';
+    const html = await renderPage();
+    const weighing = section(html, 'weighing');
+    expect(weighing).toContain('<form');
+    expect(weighing).toContain('Add each bag, basket, or batch. The order weight is the total.');
+    expect(weighing).toContain('>Bag 1</label>');
+    expect(weighing).toMatch(/inputmode="decimal"/i);
+    expect(weighing).toContain('Remove bag 1');
+    expect(weighing).toContain('Add bag');
+    expect(weighing).toContain('Combined weight');
+    // The live total, by semantics, not by class string or attribute order.
+    const totalTag = /<p\b[^>]*>0\.00 kg<\/p>/.exec(weighing)?.[0];
+    expect(totalTag).toBeDefined();
+    expect(totalTag).toContain('role="status"');
+    expect(totalTag).toContain('aria-live="polite"');
+    expect(weighing).toContain('Record weight');
+    expect(weighing).not.toContain('Recorded weight');
+    expect(weighing).not.toContain('Weight is locked');
+    const outside = html.replace(weighing, '');
+    expect(outside).not.toContain('<button');
+    expect(outside).not.toContain('<form');
+    expect(outside).not.toContain('<input');
+  });
+
+  it('shows the recorded weight above an editor prefilled with it for a re-weigh', async () => {
+    page.order = order({ status: 'WEIGHED', totalMinorUnits: null, weightGrams: 2500 });
+    page.role = 'SCHEDULER';
+    const html = await renderPage();
+    const weighing = section(html, 'weighing');
+    expect(weighing.indexOf('Recorded weight')).toBeGreaterThan(-1);
+    expect(weighing.indexOf('Recorded weight')).toBeLessThan(weighing.indexOf('<form'));
+    expect(weighing).toContain('2.50 kg');
+    expect(weighing).toContain('value="2.50"');
+  });
+
+  it.each([
+    ['CUSTOMER_SUPPORT', 'RECEIVED', null, 'Not weighed yet.'],
+    ['ANALYST', 'WEIGHED', 2505, '2.505 kg'],
+    [undefined, 'RECEIVED', null, 'Not weighed yet.'],
+    [undefined, 'WEIGHED', 2505, '2.505 kg'],
+  ])('gives %s no editor on %s', async (role, status, weightGrams, shown) => {
+    page.order = order({ status, totalMinorUnits: null, weightGrams });
+    page.role = role;
+    const weighing = section(await renderPage(), 'weighing');
+    expect(weighing).toContain(shown);
+    expect(weighing).not.toContain('<form');
+    expect(weighing).not.toContain('<input');
+    expect(weighing).not.toContain('Record weight');
+    expect(weighing).not.toContain('Add bag');
+    expect(weighing).not.toContain('Weight is locked');
+  });
+
+  it.each(['TENANT_OWNER', 'ANALYST'])('locks the weight of a priced order for %s', async (role) => {
+    page.order = order({ status: 'PRICED' });
+    page.role = role;
+    const weighing = section(await renderPage(), 'weighing');
+    expect(weighing).toContain('Weight is locked because this order has been priced.');
+    expect(weighing).toContain('Recorded weight');
+    expect(weighing).toContain('2.505 kg');
+    expect(weighing).not.toContain('<form');
+    expect(weighing).not.toContain('<input');
+  });
+
+  // #155 §Submit: after a recorded weight, a failed refetch leaves the
+  // order query in error (Apollo keeps the old data and sets `error`). The
+  // page then shows its order error state: the weight is not reported as
+  // a weighing failure, and no stale editor stays on screen.
+  // Characterization test: this is the #156 error branch, unchanged.
+  it('shows the order error state, not a weighing failure, when the post-save reload fails', async () => {
+    page.order = order({ status: 'WEIGHED', totalMinorUnits: null, weightGrams: 2500 });
+    page.role = 'OPS_MANAGER';
+    page.orderRetained = true;
+    page.orderError = new Error('network');
+    const html = await renderPage();
+    expect(html).toContain('Unable to load laundry order.');
+    expect(html).toContain(BACK_LINK);
+    expect(html).not.toContain('Unable to record weight.');
+    expect(html).not.toContain('<form');
+  });
+
+  it.each([
+    ['CANCELLED', 2505, '2.505 kg'],
+    ['CANCELLED', null, 'Not weighed yet.'],
+    ['REJECTED', 2505, '2.505 kg'],
+    ['REJECTED', null, 'Not weighed yet.'],
+  ])('never calls a %s order priced (weight %s)', async (status, weightGrams, shown) => {
+    page.order = order({ status, totalMinorUnits: null, weightGrams });
+    page.role = 'TENANT_OWNER';
+    const weighing = section(await renderPage(), 'weighing');
+    expect(weighing).toContain(shown);
+    expect(weighing).not.toContain('Weight is locked');
+    expect(weighing).not.toContain('<form');
   });
 
   it('warns when more lines exist than were loaded', async () => {
