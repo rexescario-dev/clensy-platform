@@ -4,8 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft (revision 2)**. Ready for M5 Plan Review. |
-| M5 history | First pass (2026-10-14, owner): **Returned for Revision**. P1: the `quote` extraction must keep `price`'s existing error order, and the plan did not show that order or pin it. P2: the `quote` signature disagreed between Architecture and Task 2. P2: no test covered competing failures. Resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). |
+| Status | **Draft (revision 3)**. Ready for M5 Plan Review. |
+| M5 history | First pass (2026-10-14, owner): **Returned for Revision**. P1: the `quote` extraction must keep `price`'s existing error order, and the plan did not show that order or pin it. P2: the `quote` signature disagreed between Architecture and Task 2. P2: no test covered competing failures. Resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). Second pass (2026-10-14, owner): **Returned for Revision**. All three findings confirmed resolved. One P2: Task 2 said both that `price` keeps its preconditions and that `quote` takes them, so a precondition could run twice or the wording could be broken. Resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). |
 | Date | 2026-10-14 |
 | Tracking issue | [#159](https://github.com/rexescario-dev/clensy-platform/issues/159) "Laundry price-preview and line-label API". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Spec gate [#164](https://github.com/rexescario-dev/clensy-platform/issues/164), Accepted through [#167](https://github.com/rexescario-dev/clensy-platform/pull/167). Unblocks #158 (services and add-ons) and #162 (price preview and confirmation). |
 | Branch | `feat/159-laundry-price-preview-api`, from `main` at `fb0791e`. One PR carries this plan, its M5 record and the implementation. |
@@ -23,7 +23,18 @@
 
 **Architecture:**
 
-- **One quoting path.** A private `LaundryOrdersService.quote(order, input)` (tenant scoping comes from `input.tenantId`) holds today's `price` loop body: §4.5 step 3 rule resolution (`resolveEffectivePricing`, one `asOf`), step 3a quantity resolution, step 4 `computeLaundryLineAmount`, plus the §8.4.2 description lookup. `price` calls it inside its locked transaction and persists the result. `previewPrice` calls it on a plain tenant-scoped read and returns the result. There is no second formula.
+- **One quoting path.** A private `LaundryOrdersService.quote(order, input)` (tenant scoping comes from `input.tenantId`) owns every pricing precondition and the quote itself, each run exactly once, in the [Error precedence](#error-precedence) order: the status and recorded-weight checks, quantity shape, §4.5 step 3 rule resolution (`resolveEffectivePricing`, one `asOf`), step 3a quantity resolution, step 4 `computeLaundryLineAmount`, then the §8.4.2 description lookup. These checks move **out of** `price`; neither caller repeats them. `price` keeps only the transaction, the order lock, line persistence, the total and status update, the transition assertion and the audit. `previewPrice` keeps only its plain tenant-scoped read. There is no second formula.
+
+  | Responsibility | Owner |
+  | --- | --- |
+  | Transaction, `pessimistic_write` lock, `NotFoundException` (row 1) | `price` (`this.lock`) |
+  | Tenant-scoped read, `NotFoundException` (row 1) | `previewPrice` (`orderRepository.findOneBy`) |
+  | Status and weight checks (rows 2–3) | `quote` (`assertPriceable`), only |
+  | Quantity shape (rows 4–5) | `quote`, only |
+  | Rule resolution, quantity resolution, amounts (row 6) | `quote`, only |
+  | Names (row 7) | `quote`, only |
+  | Save lines, set `totalMinorUnits`, `assertTransition(WEIGHED → PRICED)`, status update, audit | `price`, only |
+  | Sum for `estimatedTotalMinorUnits`, map to preview lines | `previewPrice`, only |
 - **Names** come from `ServicesService.getServicesByIds` / `AddOnsService.getAddOnsByIds`, the same tenant-scoped catalog reads billing uses. `LaundryModule` already imports `CatalogModule`, which exports both services. No catalog entity is registered in `LaundryModule`.
 - **Persistence:** one additive migration adds `pricingSnapshotDescription text`, backfills it from the catalog at migration time, then sets `not null`.
 - **GraphQL:** `LaundryOrderLinePricingSnapshot.description: String!`; a `previewLaundryOrderPrice` `@Query` on the existing `LaundryOrderResolver` (it already hosts the `laundryOrder` query), `@UseGuards(AuthGuard)` + `@Roles(...OPERATIONAL)`.
@@ -245,7 +256,7 @@ export class AddLaundryLineDescription1790956800000 implements MigrationInterfac
     ```
   - Embeddable: `@Column({ type: 'text', name: 'pricingSnapshotDescription' }) description!: string;` and one header-comment line naming the column.
   - GraphQL `LaundryOrderLinePricingSnapshotType`: `@Field() description!: string;`
-  - Service: inject `ServicesService` and `AddOnsService` (constructor order: after `pricingRulesService`, before the audit logger). Extract the per-target loop of `price` into the private helper below and add the name lookup. `price` keeps its lock, precondition, save, update, transition assertion and audit exactly as today; it now builds lines from `quote(...)`.
+  - Service: inject `ServicesService` and `AddOnsService` (constructor order: after `pricingRulesService`, before the audit logger). Move the status check, the weight check, both `validateQuantity` passes and the per-target loop out of `price` into the private helper below, and add the name lookup there. **Delete** those checks from `price`: after this step, `price`'s callback is `this.lock(...)` → `const quoted = await this.quote(order, command)` → build and save the line entities from `quoted` → `assertTransition(order.status, S.PRICED)` → the status/total update → audit → re-read. Its transaction, lock, persistence, transition assertion and audit are unchanged. No precondition runs twice (see the ownership table under Architecture). The existing `price` tests and C1–C7 must stay green, and they show the move changed no behavior.
 
     ```ts
     // One quoting path for price and preview (spec §4.5 steps 1–4 and 3a;
@@ -467,6 +478,12 @@ export class AddLaundryLineDescription1790956800000 implements MigrationInterfac
 | **P2: no test pinned the order between competing failures.** | Task 2 Step 1 adds an entry-point-driven precedence table. C1–C6 are characterization tests run green against the unchanged service and committed before the refactor: missing order beats invalid quantity; status beats invalid quantity; weight beats invalid quantity; invalid add-on quantity beats a missing price; the first missing price wins and later targets are not resolved. Task 2 Step 2 adds C7 (a missing price beats a missing name; no catalog-name read happens), C8 (base name before add-on name) and C9 (add-on names in input order). Every case asserts nothing is written. Task 3 case 12 runs the same C1–C9 against `previewPrice`, and also asserts no transaction. |
 
 The M7 requirement for a fresh independent reviewer is unchanged.
+
+## Revision 3 (M5 review 2)
+
+| Finding | Resolution |
+| --- | --- |
+| **P2: Task 2 contradicted itself on who owns the pricing preconditions.** It said `price` "keeps its … precondition … exactly as today" and also that `quote` takes the status and weight checks, so the implementer could duplicate them or break the wording. | Decision: `quote` owns every pricing precondition, each run exactly once, in Error-precedence order (status, weight, quantity shape, rule resolution, names). `price` keeps only the transaction, the lock, persistence, the transition assertion and the audit. `previewPrice` keeps only its read. Architecture now says so and adds a responsibility/owner table. Task 2 Step 4 now says to **delete** the moved checks from `price`, and gives `price`'s callback after the change: lock → `quote` → save lines → `assertTransition` → update → audit → re-read. The existing `price` tests and C1–C7 stay the evidence that the move changed no behavior. |
 
 ## Execution risks (operational only)
 
