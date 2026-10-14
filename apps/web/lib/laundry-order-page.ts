@@ -89,6 +89,41 @@ export function currentLaundryOrderSection({
   return null;
 }
 
+// Statuses only a priced order can have: each lies downstream of
+// WEIGHED → PRICED in the lifecycle matrix (spec §4.3), and the weight is
+// then immutable (§4.5). CANCELLED is left out because RECEIVED and
+// WEIGHED orders can be cancelled too, so the status alone does not prove
+// pricing; REJECTED is only reachable before pricing (owner decision 1,
+// #155 M4).
+export const LAUNDRY_PRICED_STATUSES: ReadonlySet<LaundryOrderStatus> = new Set<LaundryOrderStatus>([
+  'AWAITING_DELIVERY',
+  'AWAITING_PAYMENT',
+  'AWAITING_PICKUP',
+  'COMPLETED',
+  'DAMAGED',
+  'LOST',
+  'PAID',
+  'PRICED',
+  'PROCESSING',
+  'READY',
+  'REFUNDED',
+]);
+
+export type LaundryWeighingView = 'editor' | 'locked' | 'readOnly';
+
+// What the Weighing section shows (#155): the editor when the actor may
+// weigh (`laundryOrderActions` already intersects RECEIVED/WEIGHED with
+// the operational roles, spec §4.4); the locked sentence for a priced
+// order; otherwise the recorded weight or "Not weighed yet.".
+export function laundryWeighingView(
+  status: LaundryOrderStatus,
+  verbs: readonly LaundryOrderVerb[],
+): LaundryWeighingView {
+  if (verbs.includes('weigh')) return 'editor';
+  if (LAUNDRY_PRICED_STATUSES.has(status)) return 'locked';
+  return 'readOnly';
+}
+
 export type LaundryLineQuantity = { kind: 'items' | 'weight'; value: string } | null;
 
 // Lifecycle spec §8.4.4: a PER_KG line shows weight, a PER_ITEM line an
