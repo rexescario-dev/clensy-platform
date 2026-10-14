@@ -424,6 +424,57 @@ describe('laundry weighing editor', () => {
     }
   });
 
+  it.each([null, 2500])('leaves focus on <body> when the editor first appears (weight %s)', async (grams) => {
+    expect(document.activeElement).toBe(document.body);
+    await mount(grams);
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it.each([null, 2500])('leaves focus elsewhere when the editor first appears (weight %s)', async (grams) => {
+    const elsewhere = document.createElement('button');
+    document.body.append(elsewhere);
+    try {
+      act(() => elsewhere.focus());
+      await mount(grams);
+      expect(document.activeElement).toBe(elsewhere);
+    } finally {
+      elsewhere.remove();
+    }
+  });
+
+  it('moves focus to the first invalid row when a submit is blocked', async () => {
+    await mount(null);
+    type(0, '1.25');
+    click('Add bag');
+    type(1, 'abc');
+    click('Add bag');
+    type(2, '0');
+    act(() => {
+      button('Record weight').focus();
+      button('Record weight').click();
+    });
+    expect(weigh.calls).toEqual([]);
+    expect(document.activeElement).toBe(inputs()[1]);
+    expect(inputs()[1]!.getAttribute('aria-invalid')).toBe('true');
+    // Submitting again from the same row focuses it again.
+    act(() => {
+      button('Record weight').focus();
+      button('Record weight').click();
+    });
+    expect(document.activeElement).toBe(inputs()[1]);
+  });
+
+  it('keeps focus on Record weight when only the form-level error blocks a submit', async () => {
+    await mount(null);
+    click('Remove bag 1');
+    act(() => {
+      button('Record weight').focus();
+      button('Record weight').click();
+    });
+    expect(weigh.calls).toEqual([]);
+    expect(document.activeElement).toBe(button('Record weight'));
+  });
+
   it.each([
     [1250, '1.25'],
     [1005, '1.005'],

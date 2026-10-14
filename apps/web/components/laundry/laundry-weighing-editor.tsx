@@ -28,6 +28,10 @@ interface Entry {
 // The page has one editor, so a fixed id is unique.
 const FORM_ERROR_ID = 'laundry-weighing-form-error';
 
+function entryInputId(key: number): string {
+  return `laundry-weight-entry-${String(key)}`;
+}
+
 function entry(key: number, text: string): Entry {
   return { key, text, touched: false };
 }
@@ -53,6 +57,9 @@ export function LaundryWeighingEditor({ onRecorded, orderId, weightGrams }: Laun
   const formRef = useRef<HTMLFormElement>(null);
   const recordRef = useRef<HTMLButtonElement>(null);
   const wasPending = useRef(false);
+  // The row to focus after a blocked submit has rendered its error. A new
+  // object per submit, so a repeat submit on the same row focuses it again.
+  const [focusRow, setFocusRow] = useState<{ key: number } | null>(null);
   const summary = summarizeWeightEntries(entries.map((row) => row.text));
 
   // Every control is disabled while a save and its refetch run, so a
@@ -67,6 +74,14 @@ export function LaundryWeighingEditor({ onRecorded, orderId, weightGrams }: Laun
     }
     wasPending.current = pending;
   }, [pending]);
+
+  // A submit blocked by an invalid row moves focus to the first such row,
+  // once its error is rendered, so the input is announced with it. A
+  // form-level error ("Add at least one weight.") keeps focus on Record
+  // weight, which it describes.
+  useEffect(() => {
+    if (focusRow) document.getElementById(entryInputId(focusRow.key))?.focus();
+  }, [focusRow]);
 
   function takeKey(): number {
     const key = nextKey.current;
@@ -100,7 +115,11 @@ export function LaundryWeighingEditor({ onRecorded, orderId, weightGrams }: Laun
     if (inFlight.current) return;
     setAttempted(true);
     setFailure(undefined);
-    if (!summary.submittable) return;
+    if (!summary.submittable) {
+      const invalid = entries.find((_row, index) => !summary.results[index]!.ok);
+      if (invalid) setFocusRow({ key: invalid.key });
+      return;
+    }
     inFlight.current = true;
     setPending(true);
     const total = summary.totalGrams;
@@ -151,7 +170,7 @@ export function LaundryWeighingEditor({ onRecorded, orderId, weightGrams }: Laun
             <div className="flex-1">
               <FormField
                 label={t('order.weighing.bag').replace('{n}', n)}
-                name={`laundry-weight-entry-${String(row.key)}`}
+                name={entryInputId(row.key)}
                 type="text"
                 inputMode="decimal"
                 autoComplete="off"
