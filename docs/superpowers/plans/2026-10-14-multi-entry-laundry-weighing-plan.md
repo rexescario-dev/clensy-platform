@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 8)**. M6 complete ([Execution record](#execution-record)); M7 Approved for merge (independent review); M8 N/A; M9 complete. |
+| Status | **Accepted (revision 8)**. M6 complete ([Execution record](#execution-record)); M7 Approved for merge (independent review); M8 N/A; M9 complete; M10 validated. PR [#185](https://github.com/rexescario-dev/clensy-platform/pull/185). |
 | M5 decision | **Accepted** — 2026-10-14, revision 8 (`003f6ce`), by the owner, after the Part 4 re-check and a final Part 5 pass. Every finding raised in parts 1–5 is resolved: the Task 1 transaction boundary (rev 3), Task 2–3 negative precedence and the error-shape guard (rev 4, 7), the Task 4 error policy, stale alert, total-error a11y (rev 5) and typed weigh mock (rev 8), and the Task 5–6 markup, reload-failure and reporting changes (rev 6). Part 5 found no blocking issue in Tasks 5–6, traceability, deferrals or risks. No planning decision (a)–(g) was returned, so all stand as written. The acceptance covers the plan, not the implementation. The reviewer relied on the supplied pre-validation evidence and did not rerun the commands. Task 1, Task 5, Task 6, each expected-failure step and the browser checklist stay unverified until M6 runs them and records the results. |
 | M5 history | Part 1 (2026-10-14, owner): provisional. **P1:** the entry contract called every non-digit, non-point character a format error, contradicting the negative-entry message. Resolved in revision 2: Global Constraints now fix the classification order (blank → leading minus → format → notPositive → tooLarge), and Task 2 adds `-1.2345`, `--1` and `1-` as format cases. **Verify (refetch):** Task 4 adds a test that every control stays disabled until the post-save refetch settles. **Verify (oversize):** already covered by Task 2's `tooLarge` cases and Task 4's over-maximum tests. Each row is capped at `MAX_WEIGHT_GRAMS` before it is summed, so the total `formatWeightGrams` receives is always a safe integer. Part 2 (2026-10-14, owner): **P1:** the zero-weight service test asserted only `manager.update`, not the promised "before opening a transaction". Resolved in revision 3: the test also asserts `dataSource.transaction`, `manager.findOne` and `auditLogger.log` were not called, the spec's existing boundary pattern (`receive` / `price` guard tests). The DTO and service messages stay intentionally distinct. Part 3 (2026-10-14, owner): **P1:** the parser comment did not state that a negative with more than three decimals is `format`. Resolved in revision 4: the comment and Global Constraints spell out the precedence (format checks before the negative check). **P2:** `-99999999` must be `notPositive`, not `tooLarge`. The planned code already checks the minus before the oversize check; revision 4 adds `-99999999` as a regression case and says so in Global Constraints. **Suggestion (accepted):** `graphQLErrorMessage` returns `undefined` for a first error that is `null` or not an object, with three new cases. The priced set stays an explicit list. Part 4 (2026-10-14, owner): **P1 (error policy):** resolved in revision 5. The spike shows the effective policy is Apollo 3.14's default `'none'`: there are no `defaultOptions` anywhere, and the `onError` link only observes. So GraphQL errors reject. The contract is documented in Task 4, and the handler also treats a resolved result with errors or without the order as a failure (decision g). **P1 (sync throw from `onRecorded`):** the reviewer withdrew it; no change. **P2 (stale alert):** an edit, add, remove or new submit clears the server error, with four tests. **P2 (resolved-error path):** two tests cover a resolved result with errors and one with no order; the mock's default success now carries the order. **P2 (total error a11y):** the total-level error has id `laundry-weighing-form-error` and describes Record weight, asserted in the over-maximum and no-rows tests; the live region stays on the total only. Part 5 (2026-10-14, owner): verdict **not accepted yet**. The summary table repeats the part 1–4 findings; revisions 3–5 had already resolved them before part 5 was sent (transaction boundary: rev 3; negative precedence and `-99999999`: rev 4, already ordered in the code; error policy, stale alert, total-error a11y: rev 5). New in part 5, resolved in revision 6. **Brittle markup:** the Task 5 render test drops the exact Tailwind class and ordered-attribute assertions; the live total is checked by `role="status"` and `aria-live="polite"` on the tag holding `0.00 kg`. **Page-level refetch failure:** a Task 5 characterization test shows the post-save reload failure renders the order error state with no weighing failure and no editor. The stated guarantee is narrowed: the editor guarantees no weighing error, the page shows its existing #156 branch, and Apollo setting `error` is library behavior. **Task 6:** the report must record each command as PASS, FAIL or NOT RUN, state that authorization and status enforcement stay server-side, say whether the API tests ran, and list the release-gate and tenant-isolation suites as excluded, not as covered. Part 3 re-check (2026-10-14, owner): Task 1 confirmed resolved; Task 3 has no blocking finding. The reviewer asked for proof that `-99999999` is `notPositive` in the committed code, not only in a comment. Revision 7 ran Task 2's planned code and tests verbatim (see Pre-validation): the `if (negative)` check precedes the size check, and the `-99999999` case passes. The same run's lint found that the `WeightEntryResult` union order violated `sort-type-constituents`; it is reordered in revision 7, with no behavior change. Part 4 re-check (2026-10-14, owner): **P1:** the weigh mock's `resolve(result?: unknown)` was too permissive. Resolved in revision 8: the test types the mock result as Apollo 3.14's `FetchResult<WeighLaundryOrderMutation>` and its variables as the generated `WeighLaundryOrderMutationVariables`. The success default is a full `LaundryOrderDetail`-shaped `RECORDED` fixture, and the resolved-errors and missing-order fixtures must satisfy the same type. `tsc --noEmit` proves they do (see Pre-validation). Behavior unchanged. Part 4 follow-up (2026-10-14, owner): the typing finding is resolved, on the supplied evidence. Part 5 final pass (2026-10-14, owner): no blocking issue; M5 acceptance recommended for revision 8. See M5 decision. |
 | Date | 2026-10-14 |
@@ -1938,7 +1938,7 @@ The console showed only the existing favicon 404.
 | M8 | Pending |
 | M9 | Pending |
 | Branch | `feat/155-multi-entry-laundry-weighing` |
-| PR | Not opened yet (opened after M7) |
+| PR | https://github.com/rexescario-dev/clensy-platform/pull/185 (opened after M7–M9) |
 | Status | **Ready for M7** |
 
 ### Shipped
@@ -2078,3 +2078,88 @@ Verification:
 - Terminology follows the spec and plan: weighing editor, locked, read-only, priced set, re-weigh.
 Gate: Documentation complete. Code, behavior and contracts are unchanged by this stage.
 ```
+
+**PR CI.** [Run 38587103196](https://github.com/rexescario-dev/clensy-platform/actions/runs/38587103196) on PR #185 passed all four jobs: Lint, Test, Release gate and API e2e. The release-gate and tenant-isolation suites were left out of the local Task 6 run by design. They ran in CI as part of the standard pipeline, and they passed.
+
+### M10 — Accepted, workflow validated (2026-10-14)
+
+```text
+Decision: Accepted
+Subject: workflow prompt library
+Governing specification: docs/workflows/specs/agent-workflow-design.md
+```
+
+**Subject.** The installed workflow prompt library (`docs/workflows/`) was run on #155 from M4 to M9.
+- There was no M2 or M3, because #155 implements Amendment #164 §8.4.1 and §8.4.4, which were already Accepted (#167).
+- The Context Forge dispatch asked for "Brainstorm (project default)", but the workflow's selection rule governed: an Accepted spec exists, so the work starts at M4. This is the #156 precedent.
+- Two decisions were put to the owner at M4 and recorded in the plan header: when the locked copy shows, and the CHECK and reviewer choice.
+
+**Asset inventory.** Unchanged. There are no orphan assets, and `docs/workflows/` was not edited.
+
+**Checks:**
+- **§2.5 gate:** the M5 accept of revision 8 (recorded in `4fd6732`, 22:44:33) precedes the first M6 commit, `0463178` (22:47:23).
+- **M5 Return path:** M5 ran in five parts, then re-checked parts 3 and 4.
+  - Every finding was named and resolved by a numbered plan revision (2–8), each logged in the M5 history row.
+  - No Accepted text was rewritten silently.
+  - Revisions 7 and 8 added executed pre-validation where the reviewer asked for proof rather than prose.
+- **Authority model:**
+  - The spec governed semantics: the server minimum of 1, integer-gram summing, and re-weigh only in `RECEIVED` and `WEIGHED`.
+  - The owner decisions sit within §4.5 and §8.4.1.
+  - The plan governed sequencing: Tasks 1–6 ran in order, one commit per code task, with code transcribed verbatim. M7 confirmed this byte for byte.
+- **M7 independence:** `CLAUDE.md`'s rule was honored. The reviewer was a fresh agent on the most capable model, worked read-only, and was given the spec, the plan and the diff.
+- **Providers:** GitHub was used for issues #155, #154 and #164, the branch, and PR #185, all through `gh`. The GitHub MCP server failed to connect, and nothing fell back to it.
+- **Reporting:** Slice Completion Reports were emitted at M6 and in the closing report below. The M7–M10 records are here.
+- **§2.8:** one PR (#185) carries the plan, its M5 record, the implementation and the docs.
+- **Attribution:** no commit on the branch carries a `Co-Authored-By` trailer or a "Generated with" line, and the PR body has none. This is the owner's global rule.
+
+**Blocking findings:** none.
+
+**Non-blocking observations:**
+1. **Executed pre-validation shortened M5.** Applying Tasks 2–4 verbatim at revision 8 and running tests, lint and `tsc` turned two reviewer requests for proof into evidence. It also caught a lint rule (`record-key-order`) and a script slip before M6. In M6, Tasks 2–4 then needed no adaptation.
+2. **Subagent-driven M6 with per-task reviewers found no defects, only minors.** Most of the value came from the plan's verbatim code. Per-task review cost about 5 dispatches. A single native pass plus the mandatory M7 would likely have reached the same result for a plan this complete.
+3. **Local environment.**
+   - The local database had no usable owner login, so the documented `db:seed` was needed.
+   - Port 3010 was held by a process this session did not start.
+   - Running on 3020 and 3021 worked and left everything else untouched.
+   - Recording "which ports and which accounts" in the M6 record keeps the next slice from rediscovering this.
+4. **Local exclusion and CI coverage are different claims.** The plan required the local report to list release-gate and tenant-isolation as excluded. CI then ran them. Both facts are recorded separately, so neither is overstated.
+
+Gate: **Workflow validated.**
+
+## Slice Completion Report (final)
+
+| Field | Result |
+| --- | --- |
+| Slice | #155 Multi-entry laundry weighing |
+| Tracking | https://github.com/rexescario-dev/clensy-platform/issues/155 |
+| M4 | Plan **Accepted** |
+| M5 | Review **Accepted** |
+| M6 | **Complete** |
+| M7 | **Approved** |
+| M8 | N/A |
+| M9 | **Complete** |
+| Branch | `feat/155-multi-entry-laundry-weighing` |
+| PR | https://github.com/rexescario-dev/clensy-platform/pull/185 |
+| Status | **Ready for merge** |
+
+### Shipped
+
+- The server rejects a zero weight on the GraphQL input and in the service, before any transaction. There is no migration, and stored zeros are untouched.
+- A multi-row weighing editor on the order page records one total in whole grams, with inline validation and a live total.
+- The editor sends one mutation per submit. Controls stay disabled through the save and the refetch. Success shows a toast and the saved total; failure keeps the rows and shows the server message.
+- Locked copy appears only for priced statuses, and never for `CANCELLED` or `REJECTED`. Every other case is read-only.
+- The READMEs document the editor, the copy and the API change.
+
+### Validation
+
+| Check | Result |
+| --- | --- |
+| Tests | **Passed** |
+| Typecheck | **Passed** |
+| Lint | **Passed** |
+| Build | **Passed** |
+| Package validation | N/A |
+
+### Next Gate
+
+None. The slice is complete pending merge under the owner's norms.
