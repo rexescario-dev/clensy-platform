@@ -295,6 +295,7 @@ export class Fixtures {
           pricingSnapshot: {
             pricingRuleId: world.pricingRuleId,
             amountMinorUnits: 2000,
+            description: 'Gate service',
             minimumChargeApplied: false,
             minimumChargeMinorUnits: null,
             quantity: 2,

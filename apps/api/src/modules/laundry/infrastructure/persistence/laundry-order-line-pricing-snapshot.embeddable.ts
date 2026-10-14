@@ -22,6 +22,9 @@ import { LaundryOrderLinePricingSnapshot } from '../../domain/laundry-order-line
 // `pricingSnapshotPricingRuleId` is a plain `uuid` column with NO foreign
 // key — a soft traceability pointer; the snapshot, not the rule, is
 // authoritative for what was charged (spec §4.2, §4.8).
+//
+// `pricingSnapshotDescription` is the frozen catalog name (Amendment #164
+// §8.4.2), added and backfilled by `AddLaundryLineDescription`.
 export class LaundryOrderLinePricingSnapshotEmbeddable implements LaundryOrderLinePricingSnapshot {
   @Column({ type: 'integer', name: 'pricingSnapshotRateMinorUnits' })
   rateMinorUnits!: number;
@@ -56,4 +59,7 @@ export class LaundryOrderLinePricingSnapshotEmbeddable implements LaundryOrderLi
     nullable: true,
   })
   pricingRuleId!: string | null;
+
+  @Column({ type: 'text', name: 'pricingSnapshotDescription' })
+  description!: string;
 }

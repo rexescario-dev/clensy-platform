@@ -17,6 +17,7 @@ import {
 } from './laundry-order.inputs';
 import { toLaundryOrderType } from './mappers';
 import { LaundryOrderType, VIEW_ROLES } from './laundry-order.type';
+import { LaundryPricePreviewType } from './laundry-price-preview.type';
 
 // Per-verb RBAC — spec §4.4 table (Accepted as proposed).
 const OPERATIONAL = [Role.TENANT_OWNER, Role.OPS_MANAGER, Role.SCHEDULER];
@@ -135,6 +136,21 @@ export class LaundryOrderResolver {
     @CurrentUser() user: AuthenticatedPrincipal,
   ): Promise<LaundryOrderType> {
     return this.run(input, user, (c) => this.service.markReady(c));
+  }
+
+  // A read, not a mutation (Amendment #164 §8.4.5): writes nothing. Same
+  // roles as `priceLaundryOrder`.
+  @Query(() => LaundryPricePreviewType)
+  @UseGuards(AuthGuard)
+  @Roles(...OPERATIONAL)
+  async previewLaundryOrderPrice(
+    @Args('input') input: PriceLaundryOrderInput,
+    @CurrentUser() user: AuthenticatedPrincipal,
+  ): Promise<LaundryPricePreviewType> {
+    return this.service.previewPrice({
+      ...input,
+      tenantId: requireTenantId(user),
+    });
   }
 
   @Mutation(() => LaundryOrderType)

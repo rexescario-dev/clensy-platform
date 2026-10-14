@@ -17,3 +17,10 @@ export interface PriceLaundryOrderCommand {
   // lookups; the new lines take the locked order row's tenant.
   tenantId: string;
 }
+
+// The preview takes price's input without an actor: it writes nothing and
+// audits nothing (Amendment #164 §8.4.5).
+export type PreviewLaundryOrderPriceQuery = Omit<
+  PriceLaundryOrderCommand,
+  'actorId'
+>;

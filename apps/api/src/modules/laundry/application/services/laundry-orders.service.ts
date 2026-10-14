@@ -9,27 +9,44 @@ import { DataSource, EntityManager, Repository } from 'typeorm';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import type { AuditLogger } from '../../../../platform/audit/application/audit-logger.port';
 import { runAuditInTransaction } from '../../../../platform/audit/infrastructure/audit-logger.service';
+import { AddOnsService } from '../../../catalog/application/services/add-ons.service';
 import { PricingRulesService } from '../../../catalog/application/services/pricing-rules.service';
+import { ServicesService } from '../../../catalog/application/services/services.service';
 import { PricingUnit } from '../../../catalog/domain/pricing-unit';
 import { CustomersService } from '../../../customers/application/services/customers.service';
 import { LaundryFulfillmentType } from '../../domain/laundry-fulfillment-type';
 import { LaundryLinePricingInput } from '../../domain/laundry-line-pricing';
 import { computeLaundryLineAmount } from '../../domain/laundry-line-pricing';
 import { LaundryOrder } from '../../domain/laundry-order';
+import { LaundryOrderLinePricingSnapshot } from '../../domain/laundry-order-line-pricing-snapshot';
 import { LaundryOrderStatus } from '../../domain/laundry-order-status';
 import { LaundryOrderStatusTransitionPolicy } from '../../domain/laundry-order-status-transition-policy';
 import { LaundryOrderEntity } from '../../infrastructure/persistence/laundry-order.entity';
 import { LaundryOrderLineEntity } from '../../infrastructure/persistence/laundry-order-line.entity';
 import { LaundryOrderLinePricingSnapshotEmbeddable } from '../../infrastructure/persistence/laundry-order-line-pricing-snapshot.embeddable';
 import { LaundryOrderTransitionCommand } from '../commands/laundry-order-transition.command';
+import { LaundryPricePreview } from './laundry-price-preview';
 import { OrderForInvoicing } from './order-for-invoicing';
-import { PriceLaundryOrderCommand } from '../commands/price-laundry-order.command';
+import {
+  PreviewLaundryOrderPriceQuery,
+  PriceLaundryOrderCommand,
+} from '../commands/price-laundry-order.command';
 import { ReceiveLaundryOrderCommand } from '../commands/receive-laundry-order.command';
 import { WeighLaundryOrderCommand } from '../commands/weigh-laundry-order.command';
 import { tenantAuditTags } from '../../../../platform/audit/application/audit-tags';
 
 const S = LaundryOrderStatus;
 const ENTITY_TYPE = 'laundry_order';
+
+// `price`'s input without the actor or the order id: what `quote` prices.
+type QuoteInput = Omit<PriceLaundryOrderCommand, 'actorId' | 'orderId'>;
+
+// One quoted line, before persistence: exactly one target id is set.
+interface QuotedLine {
+  addOnId: string | null;
+  serviceId: string | null;
+  snapshot: LaundryOrderLinePricingSnapshot;
+}
 
 @Injectable()
 export class LaundryOrdersService {
@@ -42,6 +59,8 @@ export class LaundryOrdersService {
     private readonly policy: LaundryOrderStatusTransitionPolicy,
     private readonly customersService: CustomersService,
     private readonly pricingRulesService: PricingRulesService,
+    private readonly servicesService: ServicesService,
+    private readonly addOnsService: AddOnsService,
     @Inject(AUDIT_LOGGER) private readonly auditLogger: AuditLogger,
   ) {}
 
@@ -156,6 +175,40 @@ export class LaundryOrdersService {
     return this.transitionVerb(c, S.READY, 'laundry_order.ready');
   }
 
+  // Non-writing estimate (Amendment #164 §8.4.5): price's preconditions and
+  // quoting path, on a plain tenant-scoped read. No transaction, no lock, no
+  // write, no audit.
+  async previewPrice(
+    query: PreviewLaundryOrderPriceQuery,
+  ): Promise<LaundryPricePreview> {
+    const order = await this.orderRepository.findOneBy({
+      id: query.orderId,
+      tenantId: query.tenantId,
+    });
+    if (!order) {
+      throw new NotFoundException(`Laundry order ${query.orderId} not found`);
+    }
+    const quoted = await this.quote(order, query);
+    return {
+      estimatedTotalMinorUnits: quoted.reduce(
+        (sum, { snapshot }) => sum + snapshot.amountMinorUnits,
+        0,
+      ),
+      // `pricingRuleId` stays server-side: the preview payload does not carry it.
+      lines: quoted.map(({ addOnId, serviceId, snapshot }) => ({
+        addOnId,
+        serviceId,
+        amountMinorUnits: snapshot.amountMinorUnits,
+        description: snapshot.description,
+        minimumChargeApplied: snapshot.minimumChargeApplied,
+        minimumChargeMinorUnits: snapshot.minimumChargeMinorUnits,
+        quantity: snapshot.quantity,
+        rateMinorUnits: snapshot.rateMinorUnits,
+        unit: snapshot.unit,
+      })),
+    };
+  }
+
   // The immutable-snapshot operation, exactly once per order (spec §4.5).
   async price(command: PriceLaundryOrderCommand): Promise<LaundryOrder> {
     return this.dataSource.transaction((manager) =>
@@ -166,100 +219,29 @@ export class LaundryOrdersService {
           command.tenantId,
         );
 
-        // Precondition guard (no re-pricing). The load-bearing transition
-        // assertion is immediately before the status write below.
-        if (order.status !== S.WEIGHED) {
-          throw new BadRequestException(
-            `Cannot price a laundry order in status ${order.status}`,
-          );
-        }
-        if (order.weightGrams === null) {
-          throw new BadRequestException('Laundry order has no recorded weight');
-        }
-        this.validateQuantity(command.baseQuantity);
-        for (const addOn of command.addOns) {
-          this.validateQuantity(addOn.quantity);
-        }
+        // Every pricing precondition runs once, inside `quote` (#159 plan
+        // "Error precedence"). The load-bearing transition assertion is
+        // immediately before the status write below.
+        const quoted = await this.quote(order, command);
 
-        const asOf = new Date();
-        const targets: Array<{
-          column: 'addOnId' | 'serviceId';
-          id: string;
-          suppliedQuantity: number | undefined;
-        }> = [
-          {
-            column: 'serviceId',
-            id: command.baseServiceId,
-            suppliedQuantity: command.baseQuantity,
-          },
-          ...command.addOns.map((addOn) => ({
-            column: 'addOnId' as const,
-            id: addOn.addOnId,
-            suppliedQuantity: addOn.quantity,
-          })),
-        ];
-
-        const lines: LaundryOrderLineEntity[] = [];
-        let total = 0;
-
-        for (const target of targets) {
-          // Application-level same-tenant check (#84 slice decision 9): a
-          // cross-tenant `baseServiceId` / `addOnId` has no pricing rule in
-          // this tenant, so it falls through to the existing "no effective
-          // price" 400 below. Application half of I-1;
-          // `fk_laundry_order_line_service_tenant` / `_add_on_tenant` are
-          // the database half (#87 slice decision 4).
-          const rule = await this.pricingRulesService.resolveEffectivePricing(
-            target.column === 'serviceId'
-              ? { serviceId: target.id }
-              : { addOnId: target.id },
-            asOf,
-            command.tenantId,
-          );
-          if (!rule) {
-            throw new BadRequestException(
-              `No effective price for ${target.column} ${target.id}`,
-            );
-          }
-
-          const quantity = this.resolveQuantity(
-            rule.unit,
-            order.weightGrams,
-            target.suppliedQuantity,
-          );
-          const input: LaundryLinePricingInput = {
-            minimumChargeMinorUnits: rule.minimumChargeMinorUnits,
-            quantity,
-            rateMinorUnits: rule.priceMinorUnits,
-            unit: rule.unit,
-          };
-          const { amountMinorUnits, minimumChargeApplied } =
-            computeLaundryLineAmount(input);
-
-          const snapshot = Object.assign(
-            new LaundryOrderLinePricingSnapshotEmbeddable(),
-            {
-              pricingRuleId: rule.id,
-              amountMinorUnits,
-              minimumChargeApplied,
-              minimumChargeMinorUnits: rule.minimumChargeMinorUnits,
-              quantity,
-              rateMinorUnits: rule.priceMinorUnits,
-              unit: rule.unit,
-            },
-          );
-
+        const lines = quoted.map(({ addOnId, serviceId, snapshot }) => {
           // The locked order row's tenant (#87 slice decision 6).
           const line = manager.create(LaundryOrderLineEntity, {
-            addOnId: target.column === 'addOnId' ? target.id : null,
+            addOnId,
             laundryOrderId: order.id,
-            serviceId: target.column === 'serviceId' ? target.id : null,
+            serviceId,
             tenantId: order.tenantId,
           });
-          line.pricingSnapshot = snapshot;
-          lines.push(line);
-          total += amountMinorUnits;
-        }
+          line.pricingSnapshot = Object.assign(
+            new LaundryOrderLinePricingSnapshotEmbeddable(),
+            snapshot,
+          );
+          return line;
+        });
+        const total = quoted.reduce(
+          (sum, { snapshot }) => sum + snapshot.amountMinorUnits,
+          0,
+        );
 
         for (const line of lines) {
           await manager.save(line);
@@ -422,6 +404,143 @@ export class LaundryOrdersService {
       throw new NotFoundException(`Laundry order ${id} not found`);
     }
     return order;
+  }
+
+  // One quoting path for price and preview (spec §4.5 steps 1–4 and 3a;
+  // Amendment #164 §8.4.2, §8.4.5). Owns every pricing precondition, each
+  // run once, in this order: status, weight, quantity shape, the effective
+  // price of each target (base first, then add-ons in input order; the
+  // first missing one throws and later targets are not resolved), then the
+  // catalog names (base first, then add-ons in input order). Writes nothing.
+  private async quote(
+    order: LaundryOrderEntity,
+    input: QuoteInput,
+  ): Promise<QuotedLine[]> {
+    if (order.status !== S.WEIGHED) {
+      throw new BadRequestException(
+        `Cannot price a laundry order in status ${order.status}`,
+      );
+    }
+    if (order.weightGrams === null) {
+      throw new BadRequestException('Laundry order has no recorded weight');
+    }
+    const weightGrams = order.weightGrams;
+    this.validateQuantity(input.baseQuantity);
+    for (const addOn of input.addOns) {
+      this.validateQuantity(addOn.quantity);
+    }
+
+    const asOf = new Date();
+    const targets: Array<{
+      column: 'addOnId' | 'serviceId';
+      id: string;
+      suppliedQuantity: number | undefined;
+    }> = [
+      {
+        column: 'serviceId',
+        id: input.baseServiceId,
+        suppliedQuantity: input.baseQuantity,
+      },
+      ...input.addOns.map((addOn) => ({
+        column: 'addOnId' as const,
+        id: addOn.addOnId,
+        suppliedQuantity: addOn.quantity,
+      })),
+    ];
+
+    const priced: Array<{
+      snapshot: Omit<LaundryOrderLinePricingSnapshot, 'description'>;
+      target: (typeof targets)[number];
+    }> = [];
+    for (const target of targets) {
+      // Application-level same-tenant check (#84 slice decision 9): a
+      // cross-tenant `baseServiceId` / `addOnId` has no pricing rule in this
+      // tenant, so it falls through to the existing "no effective price" 400
+      // below. Application half of I-1; `fk_laundry_order_line_service_tenant`
+      // / `_add_on_tenant` are the database half (#87 slice decision 4).
+      const rule = await this.pricingRulesService.resolveEffectivePricing(
+        target.column === 'serviceId'
+          ? { serviceId: target.id }
+          : { addOnId: target.id },
+        asOf,
+        input.tenantId,
+      );
+      if (!rule) {
+        throw new BadRequestException(
+          `No effective price for ${target.column} ${target.id}`,
+        );
+      }
+
+      const quantity = this.resolveQuantity(
+        rule.unit,
+        weightGrams,
+        target.suppliedQuantity,
+      );
+      const pricingInput: LaundryLinePricingInput = {
+        minimumChargeMinorUnits: rule.minimumChargeMinorUnits,
+        quantity,
+        rateMinorUnits: rule.priceMinorUnits,
+        unit: rule.unit,
+      };
+      const { amountMinorUnits, minimumChargeApplied } =
+        computeLaundryLineAmount(pricingInput);
+      priced.push({
+        snapshot: {
+          pricingRuleId: rule.id,
+          amountMinorUnits,
+          minimumChargeApplied,
+          minimumChargeMinorUnits: rule.minimumChargeMinorUnits,
+          quantity,
+          rateMinorUnits: rule.priceMinorUnits,
+          unit: rule.unit,
+        },
+        target,
+      });
+    }
+
+    // Names only after every rule resolved (Amendment #164 §8.4.2): the
+    // invoice string rule, read in the caller's tenant (#84 slice
+    // decision 9). A missing row fails the command, like invoice
+    // generation's guard.
+    const [services, addOns] = await Promise.all([
+      this.servicesService.getServicesByIds(
+        [input.baseServiceId],
+        input.tenantId,
+      ),
+      this.addOnsService.getAddOnsByIds(
+        [...new Set(input.addOns.map((addOn) => addOn.addOnId))],
+        input.tenantId,
+      ),
+    ]);
+    const serviceName = new Map(services.map((s) => [s.id, s.name]));
+    const addOnName = new Map(addOns.map((a) => [a.id, a.name]));
+
+    return priced.map(({ snapshot, target }) => {
+      if (target.column === 'serviceId') {
+        const name = serviceName.get(target.id);
+        if (name === undefined) {
+          throw new BadRequestException(
+            `Service ${target.id} could not be resolved`,
+          );
+        }
+        return {
+          addOnId: null,
+          serviceId: target.id,
+          snapshot: { ...snapshot, description: name },
+        };
+      }
+      const name = addOnName.get(target.id);
+      if (name === undefined) {
+        throw new BadRequestException(
+          `Add-on ${target.id} could not be resolved`,
+        );
+      }
+      return {
+        addOnId: target.id,
+        serviceId: null,
+        snapshot: { ...snapshot, description: `${name} (add-on)` },
+      };
+    });
   }
 
   private requireFulfillment(

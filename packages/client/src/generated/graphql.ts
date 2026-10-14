@@ -863,7 +863,7 @@ export type CompleteJobMutation = { completeJob: { id: string, scheduledAt: unkn
 
 export type LaundryOrderRowFragment = { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, customer: { id: string, fullName: string } };
 
-export type LaundryOrderDetailFragment = { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } };
+export type LaundryOrderDetailFragment = { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null, description: string } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } };
 
 export type LaundryOrdersQueryVariables = Exact<{
   paging?: OffsetPaging | null | undefined;
@@ -879,7 +879,14 @@ export type LaundryOrderQueryVariables = Exact<{
 }>;
 
 
-export type LaundryOrderQuery = { laundryOrder: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } | null };
+export type LaundryOrderQuery = { laundryOrder: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null, description: string } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } | null };
+
+export type PreviewLaundryOrderPriceQueryVariables = Exact<{
+  input: PriceLaundryOrderInput;
+}>;
+
+
+export type PreviewLaundryOrderPriceQuery = { previewLaundryOrderPrice: { estimatedTotalMinorUnits: number, lines: Array<{ serviceId: string | null, addOnId: string | null, description: string, unit: PricingUnit, quantity: number, rateMinorUnits: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean }> } };
 
 export type ReceiveLaundryOrderMutationVariables = Exact<{
   input: ReceiveLaundryOrderInput;
@@ -893,98 +900,98 @@ export type WeighLaundryOrderMutationVariables = Exact<{
 }>;
 
 
-export type WeighLaundryOrderMutation = { weighLaundryOrder: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+export type WeighLaundryOrderMutation = { weighLaundryOrder: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null, description: string } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
 
 export type PriceLaundryOrderMutationVariables = Exact<{
   input: PriceLaundryOrderInput;
 }>;
 
 
-export type PriceLaundryOrderMutation = { priceLaundryOrder: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+export type PriceLaundryOrderMutation = { priceLaundryOrder: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null, description: string } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
 
 export type MarkLaundryOrderAwaitingPaymentMutationVariables = Exact<{
   input: LaundryOrderRefInput;
 }>;
 
 
-export type MarkLaundryOrderAwaitingPaymentMutation = { markLaundryOrderAwaitingPayment: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+export type MarkLaundryOrderAwaitingPaymentMutation = { markLaundryOrderAwaitingPayment: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null, description: string } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
 
 export type MarkLaundryOrderPaidMutationVariables = Exact<{
   input: LaundryOrderRefInput;
 }>;
 
 
-export type MarkLaundryOrderPaidMutation = { markLaundryOrderPaid: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+export type MarkLaundryOrderPaidMutation = { markLaundryOrderPaid: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null, description: string } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
 
 export type StartLaundryProcessingMutationVariables = Exact<{
   input: LaundryOrderRefInput;
 }>;
 
 
-export type StartLaundryProcessingMutation = { startLaundryProcessing: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+export type StartLaundryProcessingMutation = { startLaundryProcessing: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null, description: string } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
 
 export type MarkLaundryOrderReadyMutationVariables = Exact<{
   input: LaundryOrderRefInput;
 }>;
 
 
-export type MarkLaundryOrderReadyMutation = { markLaundryOrderReady: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+export type MarkLaundryOrderReadyMutation = { markLaundryOrderReady: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null, description: string } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
 
 export type MarkLaundryOrderAwaitingPickupMutationVariables = Exact<{
   input: LaundryOrderRefInput;
 }>;
 
 
-export type MarkLaundryOrderAwaitingPickupMutation = { markLaundryOrderAwaitingPickup: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+export type MarkLaundryOrderAwaitingPickupMutation = { markLaundryOrderAwaitingPickup: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null, description: string } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
 
 export type MarkLaundryOrderAwaitingDeliveryMutationVariables = Exact<{
   input: LaundryOrderRefInput;
 }>;
 
 
-export type MarkLaundryOrderAwaitingDeliveryMutation = { markLaundryOrderAwaitingDelivery: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+export type MarkLaundryOrderAwaitingDeliveryMutation = { markLaundryOrderAwaitingDelivery: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null, description: string } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
 
 export type CompleteLaundryOrderMutationVariables = Exact<{
   input: LaundryOrderRefInput;
 }>;
 
 
-export type CompleteLaundryOrderMutation = { completeLaundryOrder: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+export type CompleteLaundryOrderMutation = { completeLaundryOrder: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null, description: string } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
 
 export type CancelLaundryOrderMutationVariables = Exact<{
   input: LaundryOrderRefInput;
 }>;
 
 
-export type CancelLaundryOrderMutation = { cancelLaundryOrder: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+export type CancelLaundryOrderMutation = { cancelLaundryOrder: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null, description: string } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
 
 export type RejectLaundryOrderMutationVariables = Exact<{
   input: LaundryOrderRefInput;
 }>;
 
 
-export type RejectLaundryOrderMutation = { rejectLaundryOrder: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+export type RejectLaundryOrderMutation = { rejectLaundryOrder: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null, description: string } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
 
 export type MarkLaundryOrderLostMutationVariables = Exact<{
   input: LaundryOrderRefInput;
 }>;
 
 
-export type MarkLaundryOrderLostMutation = { markLaundryOrderLost: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+export type MarkLaundryOrderLostMutation = { markLaundryOrderLost: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null, description: string } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
 
 export type MarkLaundryOrderDamagedMutationVariables = Exact<{
   input: LaundryOrderRefInput;
 }>;
 
 
-export type MarkLaundryOrderDamagedMutation = { markLaundryOrderDamaged: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+export type MarkLaundryOrderDamagedMutation = { markLaundryOrderDamaged: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null, description: string } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
 
 export type RefundLaundryOrderMutationVariables = Exact<{
   input: LaundryOrderRefInput;
 }>;
 
 
-export type RefundLaundryOrderMutation = { refundLaundryOrder: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
+export type RefundLaundryOrderMutation = { refundLaundryOrder: { id: string, status: LaundryOrderStatus, fulfillmentType: LaundryFulfillmentType, weightGrams: number | null, totalMinorUnits: number | null, createdAt: unknown, lines: { nodes: Array<{ id: string, serviceId: string | null, addOnId: string | null, createdAt: unknown, pricingSnapshot: { rateMinorUnits: number, unit: PricingUnit, quantity: number, amountMinorUnits: number, minimumChargeMinorUnits: number | null, minimumChargeApplied: boolean, pricingRuleId: string | null, description: string } }>, pageInfo: { hasNextPage: boolean | null } }, customer: { id: string, fullName: string } } };
 
 export type LoginMutationVariables = Exact<{
   loginInput: LoginInput;
@@ -1207,6 +1214,7 @@ export const LaundryOrderDetailFragmentDoc = gql`
         minimumChargeMinorUnits
         minimumChargeApplied
         pricingRuleId
+        description
       }
     }
     pageInfo {
@@ -2692,6 +2700,60 @@ export type LaundryOrderQueryHookResult = ReturnType<typeof useLaundryOrderQuery
 export type LaundryOrderLazyQueryHookResult = ReturnType<typeof useLaundryOrderLazyQuery>;
 export type LaundryOrderSuspenseQueryHookResult = ReturnType<typeof useLaundryOrderSuspenseQuery>;
 export type LaundryOrderQueryResult = Apollo.QueryResult<LaundryOrderQuery, LaundryOrderQueryVariables>;
+export const PreviewLaundryOrderPriceDocument = gql`
+    query PreviewLaundryOrderPrice($input: PriceLaundryOrderInput!) {
+  previewLaundryOrderPrice(input: $input) {
+    estimatedTotalMinorUnits
+    lines {
+      serviceId
+      addOnId
+      description
+      unit
+      quantity
+      rateMinorUnits
+      amountMinorUnits
+      minimumChargeMinorUnits
+      minimumChargeApplied
+    }
+  }
+}
+    `;
+
+/**
+ * __usePreviewLaundryOrderPriceQuery__
+ *
+ * To run a query within a React component, call `usePreviewLaundryOrderPriceQuery` and pass it any options that fit your needs.
+ * When your component renders, `usePreviewLaundryOrderPriceQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = usePreviewLaundryOrderPriceQuery({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function usePreviewLaundryOrderPriceQuery(baseOptions: Apollo.QueryHookOptions<PreviewLaundryOrderPriceQuery, PreviewLaundryOrderPriceQueryVariables> & ({ variables: PreviewLaundryOrderPriceQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<PreviewLaundryOrderPriceQuery, PreviewLaundryOrderPriceQueryVariables>(PreviewLaundryOrderPriceDocument, options);
+      }
+export function usePreviewLaundryOrderPriceLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<PreviewLaundryOrderPriceQuery, PreviewLaundryOrderPriceQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<PreviewLaundryOrderPriceQuery, PreviewLaundryOrderPriceQueryVariables>(PreviewLaundryOrderPriceDocument, options);
+        }
+// @ts-ignore
+export function usePreviewLaundryOrderPriceSuspenseQuery(baseOptions?: Apollo.SuspenseQueryHookOptions<PreviewLaundryOrderPriceQuery, PreviewLaundryOrderPriceQueryVariables>): Apollo.UseSuspenseQueryResult<PreviewLaundryOrderPriceQuery, PreviewLaundryOrderPriceQueryVariables>;
+export function usePreviewLaundryOrderPriceSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<PreviewLaundryOrderPriceQuery, PreviewLaundryOrderPriceQueryVariables>): Apollo.UseSuspenseQueryResult<PreviewLaundryOrderPriceQuery | undefined, PreviewLaundryOrderPriceQueryVariables>;
+export function usePreviewLaundryOrderPriceSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<PreviewLaundryOrderPriceQuery, PreviewLaundryOrderPriceQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<PreviewLaundryOrderPriceQuery, PreviewLaundryOrderPriceQueryVariables>(PreviewLaundryOrderPriceDocument, options);
+        }
+export type PreviewLaundryOrderPriceQueryHookResult = ReturnType<typeof usePreviewLaundryOrderPriceQuery>;
+export type PreviewLaundryOrderPriceLazyQueryHookResult = ReturnType<typeof usePreviewLaundryOrderPriceLazyQuery>;
+export type PreviewLaundryOrderPriceSuspenseQueryHookResult = ReturnType<typeof usePreviewLaundryOrderPriceSuspenseQuery>;
+export type PreviewLaundryOrderPriceQueryResult = Apollo.QueryResult<PreviewLaundryOrderPriceQuery, PreviewLaundryOrderPriceQueryVariables>;
 export const ReceiveLaundryOrderDocument = gql`
     mutation ReceiveLaundryOrder($input: ReceiveLaundryOrderInput!) {
   receiveLaundryOrder(input: $input) {

@@ -110,6 +110,8 @@ function buildLaundryService(
     new LaundryOrderStatusTransitionPolicy(),
     customers,
     pricing,
+    services,
+    addOns,
     auditLogger,
   );
   return { addOns, customers, laundry, pricing, services };
@@ -237,6 +239,7 @@ describe('LaundryOrdersService (real Postgres)', () => {
     expect(base.pricingSnapshot).toEqual(
       expect.objectContaining({
         amountMinorUnits: 3525,
+        description: service.name,
         minimumChargeApplied: false,
         minimumChargeMinorUnits: 500,
         quantity: 2350,
@@ -249,6 +252,7 @@ describe('LaundryOrdersService (real Postgres)', () => {
     expect(addOnLine.pricingSnapshot).toEqual(
       expect.objectContaining({
         amountMinorUnits: 800,
+        description: `${addOn.name} (add-on)`,
         minimumChargeMinorUnits: null,
         unit: PricingUnit.FLAT,
       }),
@@ -293,6 +297,40 @@ describe('LaundryOrdersService (real Postgres)', () => {
       'laundry_order.awaiting_pickup',
       'laundry_order.completed',
     ]);
+  });
+
+  it('keeps the frozen description after a catalog rename (Amendment #164 §8.4.2)', async () => {
+    const { customer, service } = await fixture({ servicePrice: 1000 });
+    let order = await svc.laundry.receive({
+      actorId: 'actor-1',
+      customerId: customer.id,
+      tenantId: TENANT_ID,
+      fulfillmentType: LaundryFulfillmentType.PICKUP,
+    });
+    order = await svc.laundry.weigh({
+      actorId: 'actor-1',
+      orderId: order.id,
+      tenantId: TENANT_ID,
+      weightGrams: 1000,
+    });
+    await svc.laundry.price({
+      actorId: 'actor-1',
+      baseServiceId: service.id,
+      orderId: order.id,
+      tenantId: TENANT_ID,
+      addOns: [],
+    });
+
+    await svc.services.updateService(service.id, {
+      actorId: 'actor-1',
+      tenantId: TENANT_ID,
+      name: `Renamed ${Date.now()}`,
+    });
+
+    const [line] = await dsA.getRepository(LaundryOrderLineEntity).find({
+      where: { laundryOrderId: order.id },
+    });
+    expect(line.pricingSnapshot.description).toBe(service.name);
   });
 
   it('freezes each line snapshot against a later pricing-rule change', async () => {

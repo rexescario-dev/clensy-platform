@@ -6,6 +6,10 @@ import { connectionProbe, getByIdProbe } from './shapes';
 const RECEIVE = `mutation Gate($input: ReceiveLaundryOrderInput!) { receiveLaundryOrder(input: $input) { id } }`;
 const WEIGH = `mutation Gate($input: WeighLaundryOrderInput!) { weighLaundryOrder(input: $input) { id } }`;
 const PRICE = `mutation Gate($input: PriceLaundryOrderInput!) { priceLaundryOrder(input: $input) { id } }`;
+// The real preview payload, no aliases (#159): the outcome classifier reads
+// it by each line's one target id, with no count (`outcome.ts`
+// PRICE_PREVIEW_FIELDS).
+const PREVIEW = `query Gate($input: PriceLaundryOrderInput!) { previewLaundryOrderPrice(input: $input) { lines { serviceId addOnId } } }`;
 
 function transitionProbe(
   field: string,
@@ -143,6 +147,66 @@ export const LAUNDRY_PROBES: readonly Probe[] = [
     }),
     sameTenant: ({ own, prepared }) =>
       gqlCall('priceLaundryOrder', PRICE, {
+        input: {
+          addOns: [{ addOnId: own.addOnId }],
+          baseServiceId: own.serviceId,
+          orderId: prepared.orderId,
+        },
+      }),
+  },
+  {
+    // Same three cross-tenant variants as priceLaundryOrder: a foreign order
+    // is a missing order (404); a foreign service/add-on has no effective
+    // price in the caller's tenant (400), like a never-existed id.
+    crossTenant: [
+      {
+        call: ({ foreign, own }) =>
+          gqlCall('previewLaundryOrderPrice', PREVIEW, {
+            input: {
+              addOns: [{ addOnId: own.addOnId }],
+              baseServiceId: own.serviceId,
+              orderId: foreign[0],
+            },
+          }),
+        foreignIds: (_victim, preparedVictim) => [preparedVictim.orderId],
+        missing: { kind: 'error', status: 404 },
+        name: 'target order belongs to the other tenant',
+      },
+      {
+        call: ({ foreign, own, prepared }) =>
+          gqlCall('previewLaundryOrderPrice', PREVIEW, {
+            input: {
+              addOns: [{ addOnId: own.addOnId }],
+              baseServiceId: foreign[0],
+              orderId: prepared.orderId,
+            },
+          }),
+        foreignIds: (victim) => [victim.serviceId],
+        missing: { kind: 'error', status: 400 },
+        name: 'reference baseServiceId belongs to the other tenant',
+      },
+      {
+        call: ({ foreign, own, prepared }) =>
+          gqlCall('previewLaundryOrderPrice', PREVIEW, {
+            input: {
+              addOns: [{ addOnId: foreign[0] }],
+              baseServiceId: own.serviceId,
+              orderId: prepared.orderId,
+            },
+          }),
+        foreignIds: (victim) => [victim.addOnId],
+        missing: { kind: 'error', status: 400 },
+        name: 'reference addOnId belongs to the other tenant',
+      },
+    ],
+    key: 'Query.previewLaundryOrderPrice',
+    // The same-tenant preview succeeds and quotes the caller's own service.
+    ok: { id: ({ own }) => own.serviceId, kind: 'listIncludes' },
+    prepare: async (fixtures, tenant) => ({
+      orderId: await fixtures.laundryOrder(tenant, WEIGHED),
+    }),
+    sameTenant: ({ own, prepared }) =>
+      gqlCall('previewLaundryOrderPrice', PREVIEW, {
         input: {
           addOns: [{ addOnId: own.addOnId }],
           baseServiceId: own.serviceId,

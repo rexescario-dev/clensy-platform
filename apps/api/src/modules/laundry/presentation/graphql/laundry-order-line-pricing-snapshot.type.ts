@@ -27,4 +27,8 @@ export class LaundryOrderLinePricingSnapshotType {
 
   @Field(() => ID, { nullable: true })
   pricingRuleId!: string | null;
+
+  // Frozen at pricing (Amendment #164 §8.4.2); not re-read from the catalog.
+  @Field()
+  description!: string;
 }

@@ -52,7 +52,7 @@ describe('Root operation authorization (#90 sweep guard)', () => {
   });
 
   it('classifies exactly the live schema root fields, per operation (no unclassified, no stale)', () => {
-    expect(schemaKeys).toHaveLength(62);
+    expect(schemaKeys).toHaveLength(63);
     expect([...schemaKeys].sort()).toEqual(Object.keys(CLASSIFICATION).sort());
   });
 

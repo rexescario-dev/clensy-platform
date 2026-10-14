@@ -71,6 +71,50 @@ function okFrom(value: unknown, body: unknown): Outcome {
   return unexpected('scalar result', body);
 }
 
+// Fields whose payload is the laundry price preview (#159). It has no id of
+// its own and its only number is money, so it is read by its lines' target
+// ids (exactly one of serviceId / addOnId per line) and never as a
+// connection or a count. Scoped by field: no other result reaches this rule,
+// and this field never reaches the generic ones.
+const PRICE_PREVIEW_FIELDS = new Set(['previewLaundryOrderPrice']);
+
+function okFromPricePreview(value: unknown, body: unknown): Outcome {
+  if (typeof value !== 'object' || value === null) {
+    return unexpected('price preview is not an object', body);
+  }
+  const { id, lines, nodes, totalCount } = value as {
+    id?: unknown;
+    lines?: unknown;
+    nodes?: unknown;
+    totalCount?: unknown;
+  };
+  if (
+    !Array.isArray(lines) ||
+    id !== undefined ||
+    nodes !== undefined ||
+    totalCount !== undefined
+  ) {
+    return unexpected(
+      'price preview without lines, or with an id or count',
+      body,
+    );
+  }
+  const targetOf = (line: unknown): string | null => {
+    if (typeof line !== 'object' || line === null) return null;
+    const { addOnId, serviceId } = line as {
+      addOnId?: unknown;
+      serviceId?: unknown;
+    };
+    if (typeof serviceId === 'string' && addOnId === null) return serviceId;
+    if (typeof addOnId === 'string' && serviceId === null) return addOnId;
+    return null;
+  };
+  const ids = lines.map(targetOf);
+  return ids.every((target): target is string => target !== null)
+    ? { ids, kind: 'OK', totalCount: null }
+    : unexpected('price preview line without exactly one target id', body);
+}
+
 function fromStatus(status: number, message: string, body: unknown): Outcome {
   if (status === 401) return { kind: 'UNAUTHENTICATED' };
   if (status === 403) return { kind: 'FORBIDDEN' };
@@ -105,7 +149,10 @@ export function classifyGraphql(body: unknown, field: string): Outcome {
     return fromStatus(status, error.message ?? '', body);
   }
   if (!data || !(field in data)) return unexpected(`no data.${field}`, body);
-  return data[field] === null ? { kind: 'NULL' } : okFrom(data[field], body);
+  if (data[field] === null) return { kind: 'NULL' };
+  return PRICE_PREVIEW_FIELDS.has(field)
+    ? okFromPricePreview(data[field], body)
+    : okFrom(data[field], body);
 }
 
 export function classifyRest(status: number, body: unknown): Outcome {

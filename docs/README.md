@@ -115,3 +115,22 @@ REST `/bookings` stays as the REST/GraphQL comparison surface. It is authenticat
 Swagger (`/docs`, `/docs-json`, `/docs-yaml`) is now mounted only outside production, the same rule as GraphiQL. In production none of the three is served. Elsewhere they are unchanged and document the same REST paths and operations.
 
 Removed: the unimplemented `apps/worker` placeholder and the empty legacy `packages/ui/src/domain/` directory. Domain composition lives in `@clensy/web`.
+
+## Laundry price preview & frozen line description (#159)
+
+Amendment #164 to the [laundry lifecycle spec](superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md) (§8.4.2, §8.4.3, §8.4.5).
+
+**Saved line name.** `priceLaundryOrder` copies the catalog name onto each line as `pricingSnapshot.description`, inside its transaction:
+- a base-service line gets `Service.name`;
+- an add-on line gets `AddOn.name + " (add-on)"`, the same string invoice lines use.
+
+Renaming the service or add-on later does not change it. If a name can't be read in the caller's tenant, pricing fails with a 400 and nothing is written. Lines priced before the migration were filled with the name as it was **when the migration ran**, not when they were priced.
+
+**Price preview.** `previewLaundryOrderPrice(input: PriceLaundryOrderInput!)` is a read-only estimate for TENANT_OWNER, OPS_MANAGER and SCHEDULER, the same roles as pricing.
+- It runs the same checks, quantity rules, amount function and error order as `priceLaundryOrder`. Both go through one private `quote` helper.
+- It works only on a `WEIGHED` order with a recorded weight.
+- It writes nothing: no transaction, lock, line, status, total or audit event.
+- Each line shows the **current** catalog name. After pricing, the saved `description` is what counts.
+- A repeated add-on is quoted as its own line, exactly as pricing treats it.
+
+**Guards.** The query is classified in the root-operation inventory, the release-gate role matrix and probes, the tenant-read authorizer sweep, and the laundry/billing schema guard. The release-gate outcome classifier has one rule limited to `previewLaundryOrderPrice`. That rule reads each line's single `serviceId`/`addOnId` target and never treats the money total as a count.

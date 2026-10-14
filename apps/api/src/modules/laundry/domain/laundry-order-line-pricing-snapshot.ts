@@ -31,4 +31,8 @@ export interface LaundryOrderLinePricingSnapshot {
   minimumChargeApplied: boolean;
   // The `PricingRule.id` that priced this line. No foreign key.
   pricingRuleId: string | null;
+  // The catalog name copied once at pricing (Amendment #164 §8.4.2):
+  // `Service.name`, or `AddOn.name + " (add-on)"`. Not a foreign key; a
+  // later catalog rename does not change it.
+  description: string;
 }

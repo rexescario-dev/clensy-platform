@@ -5,8 +5,11 @@ import { DataSource } from 'typeorm';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { PricingUnit } from '../../../catalog/domain/pricing-unit';
+import { AddOnsService } from '../../../catalog/application/services/add-ons.service';
 import { PricingRulesService } from '../../../catalog/application/services/pricing-rules.service';
+import { ServicesService } from '../../../catalog/application/services/services.service';
 import { CustomersService } from '../../../customers/application/services/customers.service';
+import { PriceLaundryOrderCommand } from '../../application/commands/price-laundry-order.command';
 import { LaundryOrdersService } from '../../application/services/laundry-orders.service';
 import { LaundryFulfillmentType } from '../../domain/laundry-fulfillment-type';
 import { LaundryOrderStatus } from '../../domain/laundry-order-status';
@@ -47,6 +50,8 @@ describe('LaundryOrdersService', () => {
   let lineRepository: { find: jest.Mock };
   let customersService: { getCustomer: jest.Mock };
   let pricingRulesService: { resolveEffectivePricing: jest.Mock };
+  let servicesService: { getServicesByIds: jest.Mock };
+  let addOnsService: { getAddOnsByIds: jest.Mock };
   let auditLogger: { log: jest.Mock };
 
   const anOrder = (
@@ -86,6 +91,32 @@ describe('LaundryOrdersService', () => {
       getCustomer: jest.fn().mockResolvedValue({ id: 'cust-1' }),
     };
     pricingRulesService = { resolveEffectivePricing: jest.fn() };
+    // The catalog names `price` freezes (Amendment #164 §8.4.2): every id
+    // asked for resolves unless a test overrides the mock.
+    const NAMES: Record<string, string> = {
+      'ao-1': 'Ironing',
+      'ao-2': 'Starch',
+      'ao-a': 'Fabric Softener',
+      'svc-1': 'Wash & Fold',
+    };
+    servicesService = {
+      getServicesByIds: jest.fn((ids: string[]) =>
+        Promise.resolve(
+          ids
+            .filter((id) => id in NAMES)
+            .map((id) => ({ id, name: NAMES[id] })),
+        ),
+      ),
+    };
+    addOnsService = {
+      getAddOnsByIds: jest.fn((ids: string[]) =>
+        Promise.resolve(
+          ids
+            .filter((id) => id in NAMES)
+            .map((id) => ({ id, name: NAMES[id] })),
+        ),
+      ),
+    };
     auditLogger = { log: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -103,6 +134,8 @@ describe('LaundryOrdersService', () => {
         },
         { provide: CustomersService, useValue: customersService },
         { provide: PricingRulesService, useValue: pricingRulesService },
+        { provide: ServicesService, useValue: servicesService },
+        { provide: AddOnsService, useValue: addOnsService },
         { provide: AUDIT_LOGGER, useValue: auditLogger },
       ],
     }).compile();
@@ -312,6 +345,7 @@ describe('LaundryOrdersService', () => {
           pricingSnapshot: expect.objectContaining({
             pricingRuleId: 'rule-1',
             amountMinorUnits: 3000,
+            description: 'Wash & Fold',
             minimumChargeApplied: false,
             minimumChargeMinorUnits: null,
             quantity: 2000,
@@ -379,6 +413,53 @@ describe('LaundryOrdersService', () => {
       for (const row of savedRows) {
         expect(row).toHaveProperty('tenantId', TENANT);
       }
+    });
+
+    it('freezes the add-on description with the invoice suffix, once per repeated add-on', async () => {
+      pricingRulesService.resolveEffectivePricing.mockResolvedValue({
+        id: 'rule-1',
+        minimumChargeMinorUnits: null,
+        priceMinorUnits: 500,
+        unit: PricingUnit.FLAT,
+      });
+
+      await service.price(
+        cmd({ addOns: [{ addOnId: 'ao-1' }, { addOnId: 'ao-1' }] }),
+      );
+
+      const savedRows = (manager.save.mock.calls as unknown[][]).map(
+        (c) => c[0],
+      ) as Array<{
+        addOnId: string | null;
+        pricingSnapshot: { description: string };
+      }>;
+      expect(
+        savedRows.map((row) => [row.addOnId, row.pricingSnapshot.description]),
+      ).toEqual([
+        [null, 'Wash & Fold'],
+        ['ao-1', 'Ironing (add-on)'],
+        ['ao-1', 'Ironing (add-on)'],
+      ]);
+    });
+
+    it('looks names up in the command tenant', async () => {
+      pricingRulesService.resolveEffectivePricing.mockResolvedValue({
+        id: 'rule-1',
+        minimumChargeMinorUnits: null,
+        priceMinorUnits: 500,
+        unit: PricingUnit.FLAT,
+      });
+
+      await service.price(cmd({ addOns: [{ addOnId: 'ao-1' }] }));
+
+      expect(servicesService.getServicesByIds).toHaveBeenCalledWith(
+        ['svc-1'],
+        't-a',
+      );
+      expect(addOnsService.getAddOnsByIds).toHaveBeenCalledWith(
+        ['ao-1'],
+        't-a',
+      );
     });
 
     it('rejects when a target has no effective price and persists nothing', async () => {
@@ -747,6 +828,429 @@ describe('LaundryOrdersService', () => {
       expect(lineRepository.find).toHaveBeenCalledWith({
         order: { createdAt: 'ASC' },
         where: { laundryOrderId: 'order-1', tenantId: TENANT },
+      });
+    });
+  });
+
+  // Amendment #164 §8.4.5: the non-writing estimate, through the same quote
+  // path as `price` (vectors from laundry-line-pricing.spec.ts where they fit).
+  describe('previewPrice', () => {
+    const query = (
+      over: Partial<Parameters<LaundryOrdersService['previewPrice']>[0]> = {},
+    ) => ({
+      baseServiceId: 'svc-1',
+      orderId: 'order-1',
+      tenantId: TENANT,
+      addOns: [] as { addOnId: string; quantity?: number }[],
+      ...over,
+    });
+    const rule = (
+      unit: PricingUnit,
+      priceMinorUnits: number,
+      minimumChargeMinorUnits: number | null = null,
+    ) => ({
+      id: `rule-${unit}`,
+      minimumChargeMinorUnits,
+      priceMinorUnits,
+      unit,
+    });
+
+    beforeEach(() => {
+      orderRepository.findOneBy.mockResolvedValue(
+        anOrder({ status: LaundryOrderStatus.WEIGHED, weightGrams: 2500 }),
+      );
+    });
+
+    it('prices PER_KG on the weight, ignores a supplied quantity and applies the floor', async () => {
+      pricingRulesService.resolveEffectivePricing.mockResolvedValue(
+        rule(PricingUnit.PER_KG, 100, 500),
+      );
+
+      await expect(
+        service.previewPrice(query({ baseQuantity: 7 })),
+      ).resolves.toEqual({
+        estimatedTotalMinorUnits: 500,
+        lines: [
+          {
+            addOnId: null,
+            serviceId: 'svc-1',
+            amountMinorUnits: 500,
+            description: 'Wash & Fold',
+            minimumChargeApplied: true,
+            minimumChargeMinorUnits: 500,
+            quantity: 2500,
+            rateMinorUnits: 100,
+            unit: PricingUnit.PER_KG,
+          },
+        ],
+      });
+    });
+
+    it('prices PER_ITEM on baseQuantity, default 1, never on weight', async () => {
+      pricingRulesService.resolveEffectivePricing.mockResolvedValue(
+        rule(PricingUnit.PER_ITEM, 1200),
+      );
+
+      const three = await service.previewPrice(query({ baseQuantity: 3 }));
+      const one = await service.previewPrice(query());
+
+      expect(three.lines[0]).toEqual(
+        expect.objectContaining({ amountMinorUnits: 3600, quantity: 3 }),
+      );
+      expect(one.lines[0]).toEqual(
+        expect.objectContaining({ amountMinorUnits: 1200, quantity: 1 }),
+      );
+    });
+
+    it.each([PricingUnit.FLAT, PricingUnit.PER_SERVICE])(
+      'prices %s at quantity 1 and ignores a supplied quantity',
+      async (unit) => {
+        pricingRulesService.resolveEffectivePricing.mockResolvedValue(
+          rule(unit, 900),
+        );
+
+        const preview = await service.previewPrice(query({ baseQuantity: 4 }));
+
+        expect(preview.lines[0]).toEqual(
+          expect.objectContaining({ amountMinorUnits: 900, quantity: 1 }),
+        );
+        expect(preview.estimatedTotalMinorUnits).toBe(900);
+      },
+    );
+
+    it('prices add-ons by the same rule and a repeated addOnId as its own line', async () => {
+      pricingRulesService.resolveEffectivePricing.mockImplementation(
+        (target: { serviceId?: string }) =>
+          Promise.resolve(
+            target.serviceId
+              ? rule(PricingUnit.FLAT, 1000)
+              : rule(PricingUnit.PER_ITEM, 250),
+          ),
+      );
+
+      const preview = await service.previewPrice(
+        query({
+          addOns: [{ addOnId: 'ao-1', quantity: 2 }, { addOnId: 'ao-1' }],
+        }),
+      );
+
+      expect(
+        preview.lines.map((line) => [
+          line.serviceId ?? line.addOnId,
+          line.description,
+          line.quantity,
+          line.amountMinorUnits,
+        ]),
+      ).toEqual([
+        ['svc-1', 'Wash & Fold', 1, 1000],
+        ['ao-1', 'Ironing (add-on)', 2, 500],
+        ['ao-1', 'Ironing (add-on)', 1, 250],
+      ]);
+      expect(preview.estimatedTotalMinorUnits).toBe(1750);
+    });
+
+    it.each([LaundryOrderStatus.RECEIVED, LaundryOrderStatus.PRICED])(
+      'rejects a %s order',
+      async (status) => {
+        orderRepository.findOneBy.mockResolvedValue(
+          anOrder({ status, weightGrams: 2500 }),
+        );
+
+        await expect(service.previewPrice(query())).rejects.toThrow(
+          new BadRequestException(
+            `Cannot price a laundry order in status ${status}`,
+          ),
+        );
+      },
+    );
+
+    it('rejects a WEIGHED order without a recorded weight', async () => {
+      orderRepository.findOneBy.mockResolvedValue(
+        anOrder({ status: LaundryOrderStatus.WEIGHED, weightGrams: null }),
+      );
+
+      await expect(service.previewPrice(query())).rejects.toThrow(
+        new BadRequestException('Laundry order has no recorded weight'),
+      );
+    });
+
+    it('rejects a target with no effective price', async () => {
+      pricingRulesService.resolveEffectivePricing.mockResolvedValue(null);
+
+      await expect(service.previewPrice(query())).rejects.toThrow(
+        new BadRequestException('No effective price for serviceId svc-1'),
+      );
+    });
+
+    it('reads the order in the query tenant and 404s a missing one', async () => {
+      orderRepository.findOneBy.mockResolvedValue(null);
+
+      await expect(service.previewPrice(query())).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(orderRepository.findOneBy).toHaveBeenCalledWith({
+        id: 'order-1',
+        tenantId: TENANT,
+      });
+    });
+
+    it.each([0, 1.5])('rejects quantity %s', async (baseQuantity) => {
+      await expect(
+        service.previewPrice(query({ baseQuantity })),
+      ).rejects.toThrow(
+        new BadRequestException('quantity must be an integer >= 1'),
+      );
+    });
+
+    it('never writes: no transaction, no manager call, no audit', async () => {
+      pricingRulesService.resolveEffectivePricing.mockResolvedValue(
+        rule(PricingUnit.FLAT, 1000),
+      );
+
+      await service.previewPrice(query({ addOns: [{ addOnId: 'ao-1' }] }));
+
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      for (const mock of Object.values(manager)) {
+        expect(mock).not.toHaveBeenCalled();
+      }
+      expect(auditLogger.log).not.toHaveBeenCalled();
+    });
+
+    it('agrees with price line for line and in total', async () => {
+      pricingRulesService.resolveEffectivePricing.mockImplementation(
+        (target: { serviceId?: string }) =>
+          Promise.resolve(
+            target.serviceId
+              ? rule(PricingUnit.PER_KG, 1500, 500)
+              : rule(PricingUnit.PER_ITEM, 250),
+          ),
+      );
+      const order = anOrder({
+        status: LaundryOrderStatus.WEIGHED,
+        weightGrams: 2350,
+      });
+      orderRepository.findOneBy.mockResolvedValue(order);
+      manager.findOne.mockResolvedValue(order);
+      manager.findOneByOrFail.mockResolvedValue(order);
+      const input = query({ addOns: [{ addOnId: 'ao-1', quantity: 3 }] });
+
+      const preview = await service.previewPrice(input);
+      await service.price({ ...input, actorId: 'a' });
+
+      const saved = (manager.save.mock.calls as unknown[][]).map(
+        ([row]) =>
+          row as {
+            addOnId: string | null;
+            pricingSnapshot: Record<string, unknown>;
+            serviceId: string | null;
+          },
+      );
+      expect(preview.lines).toEqual(
+        saved.map(({ addOnId, pricingSnapshot, serviceId }) => {
+          const line: Record<string, unknown> = {
+            ...pricingSnapshot,
+            addOnId,
+            serviceId,
+          };
+          delete line.pricingRuleId;
+          return line;
+        }),
+      );
+      expect(manager.update).toHaveBeenCalledWith(
+        LaundryOrderEntity,
+        { id: 'order-1', tenantId: TENANT },
+        expect.objectContaining({
+          totalMinorUnits: preview.estimatedTotalMinorUnits,
+        }),
+      );
+    });
+  });
+
+  // Competing failures (#159 plan "Error precedence"): each case sets up two
+  // or more failures; the first in the table must win, and nothing is
+  // written. C1–C6 are characterization tests of `price` as it was before
+  // `quote` was extracted.
+  describe('error precedence', () => {
+    type PriceInput = Omit<PriceLaundryOrderCommand, 'actorId'>;
+    const ENTRY_POINTS: Record<
+      string,
+      (input: PriceInput) => Promise<unknown>
+    > = {
+      previewPrice: (input) => service.previewPrice(input),
+      price: (input) => service.price({ ...input, actorId: 'a' }),
+    };
+    const RULE = {
+      id: 'rule-1',
+      minimumChargeMinorUnits: null,
+      priceMinorUnits: 1000,
+      unit: PricingUnit.FLAT,
+    };
+
+    interface PrecedenceCase {
+      addOns?: PriceInput['addOns'];
+      baseQuantity?: number;
+      // Catalog ids whose effective price is missing.
+      missingRules?: string[];
+      // Catalog ids whose name cannot be read in the tenant.
+      missingNames?: string[];
+      // `false`: no catalog-name read may happen (a price error won first).
+      readsNames?: boolean;
+      order?: LaundryOrderEntity | null;
+      error: { message: string; type: new (...args: never[]) => Error };
+      resolveCalls: number;
+    }
+
+    const weighed = anOrder({
+      status: LaundryOrderStatus.WEIGHED,
+      weightGrams: 2000,
+    });
+    const badRequest = (message: string) => ({
+      message,
+      type: BadRequestException,
+    });
+
+    const CASES: Array<[string, PrecedenceCase]> = [
+      [
+        'C1 missing order beats invalid quantity',
+        {
+          baseQuantity: 0,
+          error: {
+            message: 'Laundry order order-1 not found',
+            type: NotFoundException,
+          },
+          order: null,
+          resolveCalls: 0,
+        },
+      ],
+      [
+        'C2 status beats invalid quantity',
+        {
+          baseQuantity: 0,
+          error: badRequest('Cannot price a laundry order in status PRICED'),
+          order: anOrder({
+            status: LaundryOrderStatus.PRICED,
+            weightGrams: 2000,
+          }),
+          resolveCalls: 0,
+        },
+      ],
+      [
+        'C3 weight beats invalid quantity',
+        {
+          baseQuantity: 0,
+          error: badRequest('Laundry order has no recorded weight'),
+          order: anOrder({
+            status: LaundryOrderStatus.WEIGHED,
+            weightGrams: null,
+          }),
+          resolveCalls: 0,
+        },
+      ],
+      [
+        'C4 add-on quantity beats a missing price',
+        {
+          addOns: [{ addOnId: 'ao-1', quantity: 0 }],
+          error: badRequest('quantity must be an integer >= 1'),
+          missingRules: ['svc-1'],
+          resolveCalls: 0,
+        },
+      ],
+      [
+        'C5 first missing price wins, later targets not resolved',
+        {
+          addOns: [{ addOnId: 'ao-1' }],
+          error: badRequest('No effective price for serviceId svc-1'),
+          missingRules: ['svc-1', 'ao-1'],
+          resolveCalls: 1,
+        },
+      ],
+      [
+        'C6 first missing add-on price wins',
+        {
+          addOns: [{ addOnId: 'ao-1' }, { addOnId: 'ao-2' }],
+          error: badRequest('No effective price for addOnId ao-1'),
+          missingRules: ['ao-1', 'ao-2'],
+          resolveCalls: 2,
+        },
+      ],
+      [
+        'C7 missing price beats missing name',
+        {
+          addOns: [{ addOnId: 'ao-1' }],
+          error: badRequest('No effective price for addOnId ao-1'),
+          missingNames: ['svc-1'],
+          missingRules: ['ao-1'],
+          readsNames: false,
+          resolveCalls: 2,
+        },
+      ],
+      [
+        'C8 base name beats add-on name',
+        {
+          addOns: [{ addOnId: 'ao-1' }],
+          error: badRequest('Service svc-1 could not be resolved'),
+          missingNames: ['svc-1', 'ao-1'],
+          resolveCalls: 2,
+        },
+      ],
+      [
+        'C9 add-on names in input order',
+        {
+          addOns: [{ addOnId: 'ao-1' }, { addOnId: 'ao-2' }],
+          error: badRequest('Add-on ao-2 could not be resolved'),
+          missingNames: ['ao-2'],
+          resolveCalls: 3,
+        },
+      ],
+    ];
+
+    describe.each(Object.keys(ENTRY_POINTS))('%s', (entryPoint) => {
+      it.each(CASES)('%s', async (_name, c) => {
+        const order = c.order === undefined ? weighed : c.order;
+        manager.findOne.mockResolvedValue(order);
+        orderRepository.findOneBy.mockResolvedValue(order);
+        const missing = new Set(c.missingRules ?? []);
+        const unnamed = new Set(c.missingNames ?? []);
+        const named = (ids: string[]) =>
+          Promise.resolve(
+            ids
+              .filter((id) => !unnamed.has(id))
+              .map((id) => ({ id, name: `Name ${id}` })),
+          );
+        servicesService.getServicesByIds.mockImplementation(named);
+        addOnsService.getAddOnsByIds.mockImplementation(named);
+        pricingRulesService.resolveEffectivePricing.mockImplementation(
+          (target: { addOnId?: string; serviceId?: string }) =>
+            Promise.resolve(
+              missing.has(target.serviceId ?? (target.addOnId as string))
+                ? null
+                : RULE,
+            ),
+        );
+
+        const error: unknown = await ENTRY_POINTS[entryPoint]({
+          baseServiceId: 'svc-1',
+          orderId: 'order-1',
+          tenantId: TENANT,
+          addOns: c.addOns ?? [],
+          baseQuantity: c.baseQuantity,
+        }).catch((e: unknown) => e);
+
+        expect(error).toBeInstanceOf(c.error.type);
+        expect((error as Error).message).toBe(c.error.message);
+        expect(
+          pricingRulesService.resolveEffectivePricing,
+        ).toHaveBeenCalledTimes(c.resolveCalls);
+        expect(manager.save).not.toHaveBeenCalled();
+        expect(manager.update).not.toHaveBeenCalled();
+        expect(auditLogger.log).not.toHaveBeenCalled();
+        if (entryPoint === 'previewPrice') {
+          expect(dataSource.transaction).not.toHaveBeenCalled();
+        }
+        if (c.readsNames === false) {
+          expect(servicesService.getServicesByIds).not.toHaveBeenCalled();
+          expect(addOnsService.getAddOnsByIds).not.toHaveBeenCalled();
+        }
       });
     });
   });
