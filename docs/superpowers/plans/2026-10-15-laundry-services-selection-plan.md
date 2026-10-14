@@ -2141,7 +2141,41 @@ Result: 5 of 9 items observed in full (1, 2, 5, 8, 9), item 7 partly observed, 3
 
 **Server-side enforcement.** Authorization and status enforcement stay server-side: §8.4.5 RBAC on `previewLaundryOrderPrice` (OPERATIONAL roles, `WEIGHED` only) and on `priceLaundryOrder`. The page's `laundryServicesView` and the editor are presentation only. This slice changed no API, resolver, role, schema, migration or client operation (the unchanged-path row above), so no server rule was altered.
 
-**M7.** Pending. `CLAUDE.md` requires a fresh independent reviewer, on the most capable model, for this slice (it changes application code), given this plan, the Accepted spec and the branch diff. The task-level reviews above are not a substitute.
+**M7 — Code Review: Approved for merge.** 2026-10-15. A fresh, independent agent on the most capable model (Opus 5.5) did this review, as `CLAUDE.md` requires for an application-code change. It did not write any of the change, and it was given this plan, the Accepted spec and the branch diff. **This is not a self-review.**
+
+It reviewed `18ceeb8..0484f56` in three passes:
+- the production code;
+- the tests, with the stale-response and returning-input tests read in full;
+- this execution record and the SDD ledger.
+
+It re-ran, read-only:
+- the 8 new or changed test files (683 passed);
+- the `@clensy/web` combobox and customer-picker suites (11 passed);
+- the customer-picker interaction suite (12 passed).
+
+It confirmed that the picker test files and `apps/api`, `packages/client` and `packages/ui` have an empty diff since `main`.
+
+**Blocking findings: none** (no Critical, no Important).
+
+Confirmed:
+- Every global constraint holds: no mutation is called, the client computes no amount, a quantity is sent only for a remembered `PER_ITEM` unit, there is no preview outside the editor, there is no browser-side catalog filter, and no server rule was added for repeated add-ons.
+- The hook's staleness design is sound. The reviewer traced StrictMode's double effect, out-of-order responses, a late success after a failure, unmount, and re-weigh.
+- The combobox extraction produces identical DOM for the customer picker.
+- The view matrix matches owner decision 4, including Ruling 2.
+- This execution record is accurate.
+
+Non-blocking minors:
+1. A false "This add-on is already on the order." can stay on a row after the conflicting row is removed or changed (`use-laundry-service-selection.ts`, `duplicate` clears only on that row's own edit). `ready` stays correctly blocked.
+2. Several "Number of items" inputs are not tied to their row for screen readers. Each row needs `role="group"` plus `aria-labelledby`.
+3. No visible loading state while a preview is pending.
+4. A failed `CurrentAdmin` query leaves a `WEIGHED` order's Services body blank (`roleResolved` treats an error as loading).
+
+Deferred-minor triage: every ledger minor stays deferred; none must be fixed before merge.
+
+Carry-forwards the reviewer requires to be written into #162's plan:
+- **(a) The A→B→A redundant request.** When the input goes A→B→A within one debounce window, `ready` blips true→false→true and one extra request is sent. Every `true` refers to the current `[weight, input]` key, so Confirm would never send wrong data. Fix: mirror `settled` in a ref and return early from the effect when the settled key and generation are current, with a test. This also aligns the code with planning decision (f)'s wording.
+- **(b) A retry path for a failed preview of an unchanged input.** Today re-choosing the same item gives the same key and no new request.
+- **(c) A visible `previewLoading` state.**
 
 ## Slice Completion Report
 
@@ -2152,12 +2186,12 @@ Result: 5 of 9 items observed in full (1, 2, 5, 8, 9), item 7 partly observed, 3
 | M4 | Plan **Accepted** |
 | M5 | Review **Accepted** |
 | M6 | **Complete** |
-| M7 | Pending |
+| M7 | **Approved** (fresh independent reviewer, Opus 5.5; no blocking findings) |
 | M8 | Pending |
 | M9 | Pending |
 | Branch | `feat/158-laundry-services-selection` |
 | PR | Not yet opened (to be opened after M7–M9) |
-| Status | **Ready for M7** |
+| Status | **M7 Approved**; ready for M8 / M9, or merge |
 
 ### Shipped
 
@@ -2180,4 +2214,4 @@ Result: 5 of 9 items observed in full (1, 2, 5, 8, 9), item 7 partly observed, 3
 
 ### Next Gate
 
-**M7 — Code Review**
+**M8 — Refactoring.** The owner chooses whether M7 minors 1–2 are taken here or in #162. Then **M9 — Documentation**, M10, and the PR.
