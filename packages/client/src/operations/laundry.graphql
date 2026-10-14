@@ -27,6 +27,7 @@ fragment LaundryOrderDetail on LaundryOrder {
         minimumChargeMinorUnits
         minimumChargeApplied
         pricingRuleId
+        description
       }
     }
     pageInfo {
@@ -55,6 +56,23 @@ query LaundryOrders(
 query LaundryOrder($id: ID!) {
   laundryOrder(id: $id) {
     ...LaundryOrderDetail
+  }
+}
+
+query PreviewLaundryOrderPrice($input: PriceLaundryOrderInput!) {
+  previewLaundryOrderPrice(input: $input) {
+    estimatedTotalMinorUnits
+    lines {
+      serviceId
+      addOnId
+      description
+      unit
+      quantity
+      rateMinorUnits
+      amountMinorUnits
+      minimumChargeMinorUnits
+      minimumChargeApplied
+    }
   }
 }
 
