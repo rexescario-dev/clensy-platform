@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 5)**. Ready for M6. |
+| Status | **Accepted (revision 5)**. M6 complete; ready for M7 (independent review). |
 | M5 decision | **Accepted** — 2026-10-14, revision 5 (`df8a2e4`), by the owner, on the fifth pass. No blocking findings. Confirmed: the release-gate checker reads the real `previewLaundryOrderPrice` payload (`lines { serviceId addOnId }`, no aliases, no count), scoped to that field only, with tests for valid, invalid-target, ambiguous, malformed and scoping cases. The probe covers a service and an add-on and keeps the 404 / 400 / 400 cross-tenant forms. This accepts the plan only: no planned test, lint, type-check or build has run, and it is not implementation approval. M7 MUST be a fresh independent review (`CLAUDE.md`: application code, schema, migration). |
 | M5 history | First pass (2026-10-14, owner): **Returned for Revision**. P1: the `quote` extraction must keep `price`'s existing error order, and the plan did not show that order or pin it. P2: the `quote` signature disagreed between Architecture and Task 2. P2: no test covered competing failures. Resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). Second pass (2026-10-14, owner): **Returned for Revision**. All three findings confirmed resolved. One P2: Task 2 said both that `price` keeps its preconditions and that `quote` takes them, so a precondition could run twice or the wording could be broken. Resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). Third pass (2026-10-14, owner): **Returned for Revision**. The revision-2 finding confirmed resolved. One P2: the release-gate probe aliased the money amount `estimatedTotalMinorUnits` as `totalCount`. Resolved in [Revision 4 (M5 review 3)](#revision-4-m5-review-3). Fourth pass (2026-10-14, owner): **Returned for Revision**. The money-as-count finding confirmed resolved. One P2: the `items` alias was a gate-only adapter, not the real `lines` payload, and its classifier rule was not tied to the preview. Resolved in [Revision 5 (M5 review 4)](#revision-5-m5-review-4). Fifth pass (2026-10-14, owner): **Accepted**. |
 | Date | 2026-10-14 |
@@ -573,3 +573,49 @@ Read-only, at `fb0791e`:
 - The release-gate outcome classifier (`release-gate/outcome.ts`) recognizes a single `{ id }`, an array of `{ id }`, or a `{ nodes, totalCount }` connection. A connection must carry a numeric `totalCount`. Anything else is `UNEXPECTED`. `engine.ts`'s `listIncludes` reads only `ids`.
 - `apps/web/lib/laundry-order-page.render.test.tsx` declares its own `Line` type, not the generated fragment type; the added fragment field does not affect it.
 - `packages/client/codegen.ts` reads `apps/api/src/schema.gql`.
+
+## Gate outcomes
+
+### M6 — Implementation complete (2026-10-14)
+
+Executed inline from `0ef2173`, in plan order: Task 1 `e8c4b56`; Task 2 `b8774dd` (characterization) and `9b3f612`; Task 3 `630af05`; Task 4 `0fa3c58`; Task 5 `50c334a`; Task 6 `d00e91d`; Task 7 `c7f38ae`.
+
+**TDD evidence.** New tests failed first, for the planned reason:
+- Task 1: `Cannot find module …/1790956800000-AddLaundryLineDescription`.
+- Task 2: C8, C9 and the three description tests failed (C1–C7 still passed).
+- Task 3: 23 tests failed with `service.previewPrice is not a function` (the preview cases, plus C1–C9 for the preview entry point).
+- Task 4: three resolver tests failed (missing `@Roles` metadata, then delegation), and the sweep guards rejected the unclassified `Query.previewLaundryOrderPrice` and `LaundryPricePreview.lines`. The classifier tests failed on the three `OK` rows (`object without id`) and on the preview `{ id }` scoping case.
+- Task 6: the client tests failed (`description` missing from the fragment; `PreviewLaundryOrderPriceDocument` undefined).
+
+**Characterization evidence (M6 step 3.6).** C1–C6 passed against the unchanged `price` and were committed alone (`b8774dd`). Each then failed against a temporary mutation that was never committed:
+- quantity validation moved before the status check → C2, C3 failed;
+- add-on quantity check dropped and every rule resolved before the loop → C4, C5, C6 failed;
+- quantity validated before the lock → C1, C2, C3 failed.
+
+The release-gate probe was shown to be live the same way: with its `ok` id set to a value the preview cannot return, Phase 4 failed for TENANT_OWNER, OPS_MANAGER and SCHEDULER, and reported `ids=[service, add-on]`. The file was then restored.
+
+**Deviations from the plan text (no change to behavior or product scope):**
+1. **Task 2, test fixtures.** The catalog-name mock defaults live in the spec's top-level `beforeEach`, so the precedence table shares them. An existing test prices add-on `ao-a`, so `ao-a` was added to the mock's name map.
+2. **Task 4, resolver spec.** The test "covers every @Mutation" now excludes both queries (`laundryOrder`, `previewLaundryOrderPrice`) from the RBAC keys.
+3. **Task 4, resolver.** `previewLaundryOrderPrice` is `async`, like `priceLaundryOrder`. `requireTenantId` throws synchronously, and the planned tenant-less test expects a rejected promise.
+4. **Task 6, schema file.** `apps/api/src/schema.gql` is gitignored (`.gitignore:21`), so it is regenerated locally on app boot and not committed. Only the generated client is committed.
+5. **Task 7, a guard the plan missed.** The full e2e run failed `laundry-billing.tenant-isolation` Case 0, which rejects any laundry/invoice root field outside its scoped inventory. `previewLaundryOrderPrice` returns no laundry/invoice entity, so it is now listed as a value root. `LaundryPricePreview` and `LaundryPricePreviewLine` joined that suite's no-`tenantId` check (`c7f38ae`).
+6. **Lint ordering.** `contextforge/record-key-order` and `contextforge/function-order` reordered some object keys and test helpers.
+7. **Local database.** The new migration was applied to the local `clensy` database (`pnpm --filter api migration:run`) before the e2e runs. The e2e suites use that database, as in earlier slices.
+
+**Validation (Task 7), at `c7f38ae`:**
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter api exec eslint "{src,test}/**/*.ts"` (the `lint` script without `--fix`) | Passed |
+| `pnpm --filter api build` | Passed |
+| `pnpm --filter api test` | Passed, 74 suites, 1066 tests |
+| `pnpm --filter api test:e2e` | Passed, 52 suites, 480 tests (first full run: 1 failure, deviation 5; re-run after `c7f38ae`: all passed) |
+| `pnpm --filter api test:e2e:release-gate` | Passed, 12 tests (Task 4) |
+| `pnpm --filter @clensy/client test` / `build` / `lint` | Passed, 13 tests / Passed / Passed |
+| `pnpm --filter web test` | Passed, 34 files, 831 tests |
+| `pnpm --filter web build` / `lint` | Passed / Passed |
+
+Scope check: `git diff --stat main` lists the File map, this plan, and `test/laundry-billing.tenant-isolation.e2e-spec.ts` (deviation 5; that file was already in the map for its raw insert). `apps/api/src/schema.gql` is absent because it is gitignored (deviation 4).
+
+M7 next: a fresh, independent reviewer on the most capable model, given this plan, the Accepted spec and the branch diff (`CLAUDE.md`).
