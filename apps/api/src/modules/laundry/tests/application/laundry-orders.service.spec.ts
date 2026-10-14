@@ -267,39 +267,28 @@ describe('LaundryOrdersService', () => {
       );
     });
 
-    it('rejects a negative weight', async () => {
-      manager.findOne.mockResolvedValue(
-        anOrder({ status: LaundryOrderStatus.RECEIVED }),
-      );
-      await expect(service.weigh(cmd({ weightGrams: -1 }))).rejects.toThrow(
-        BadRequestException,
-      );
-    });
-
-    it('rejects a zero weight before touching the order (Amendment #164 §8.4.1)', async () => {
-      manager.findOne.mockResolvedValue(
-        anOrder({ status: LaundryOrderStatus.RECEIVED }),
-      );
-      await expect(service.weigh(cmd({ weightGrams: 0 }))).rejects.toThrow(
-        new BadRequestException('weightGrams must be a positive integer'),
-      );
-      // Rejected before the transaction opens: no transaction, no locked
-      // read, no write, no audit (the spec's `dataSource.transaction`
-      // boundary assertion, as in the receive and price guard tests).
-      expect(dataSource.transaction).not.toHaveBeenCalled();
-      expect(manager.findOne).not.toHaveBeenCalled();
-      expect(manager.update).not.toHaveBeenCalled();
-      expect(auditLogger.log).not.toHaveBeenCalled();
-    });
-
-    it('rejects a non-integer weight', async () => {
-      manager.findOne.mockResolvedValue(
-        anOrder({ status: LaundryOrderStatus.RECEIVED }),
-      );
-      await expect(service.weigh(cmd({ weightGrams: 3.5 }))).rejects.toThrow(
-        BadRequestException,
-      );
-    });
+    it.each([
+      ['a negative', -1],
+      ['a zero', 0],
+      ['a non-integer', 3.5],
+    ])(
+      'rejects %s weight before touching the order (Amendment #164 §8.4.1)',
+      async (_label, weightGrams) => {
+        manager.findOne.mockResolvedValue(
+          anOrder({ status: LaundryOrderStatus.RECEIVED }),
+        );
+        await expect(service.weigh(cmd({ weightGrams }))).rejects.toThrow(
+          new BadRequestException('weightGrams must be a positive integer'),
+        );
+        // Rejected before the transaction opens: no transaction, no locked
+        // read, no write, no audit (the spec's `dataSource.transaction`
+        // boundary assertion, as in the receive and price guard tests).
+        expect(dataSource.transaction).not.toHaveBeenCalled();
+        expect(manager.findOne).not.toHaveBeenCalled();
+        expect(manager.update).not.toHaveBeenCalled();
+        expect(auditLogger.log).not.toHaveBeenCalled();
+      },
+    );
 
     it('rejects weighing a PRICED order', async () => {
       manager.findOne.mockResolvedValue(
