@@ -166,6 +166,7 @@ M5 round 1 (2026-10-15) reviewed the plan in five passes and returned it for rev
 | Round 2 | "any" in the outcome table overlapped "loading" | **Revised:** rows read "any resolved role" or "any, including loading". |
 | Final review | `OWNER` in the spec, `TENANT_OWNER` in the plan (P1-01) | **Clarified:** the same role; recorded under Global constraints with the code references. |
 | Final review | `Button` markup assumed by the card's regexes | **Verified:** `packages/ui/src/base/button.tsx` renders a native `<button>` with `{...props}`, so the children are its direct content. |
+| Final review | The role-loading render test rendered the page twice | **Fixed:** Services and Price are read from one `html`. |
 | Final review | The hook harness recorded renders during render, not on commit (P2-2) | **Fixed:** `renders` is pushed from a `useLayoutEffect` in `Probe`, so only committed results are checked. |
 | Tasks 6–7 | Catalog mock shape | **Revised** to the generated `ServicesQuery` / `AddOnsQuery` node shapes with `pageInfo`. Neither query has a pricing unit: the unit comes from the preview (#158), so the review's "include the unit" premise does not apply. The wrong catalog price stays. |
 
@@ -2240,10 +2241,10 @@ with:
       const outside = html.replace(section(html, 'weighing'), '').replace(services, '').replace(price, '');
 ```
 
-   - **`'renders an empty Services body while the role loads on a weighed order'`:** rename it to `'renders empty Services and Price bodies while the role loads on a weighed order with no total'`, and at the end add (M5 round 2):
+   - **`'renders an empty Services body while the role loads on a weighed order'`:** rename it to `'renders empty Services and Price bodies while the role loads on a weighed order with no total'`. Replace `const services = section(await renderPage(), 'services');` with `const html = await renderPage();` and `const services = section(html, 'services');`, so both sections come from one render (M5 final review). At the end, add (M5 round 2):
 
 ```tsx
-      const price = section(await renderPage(), 'price');
+      const price = section(html, 'price');
       // The body is empty: only the heading renders.
       expect(price).toMatch(/<\/h2><div[^>]*><\/div><\/section>$/);
       for (const absent of ['Estimate', 'Confirm price', '<button', 'Price is available after', 'This order was not priced.', 'Final price']) {
