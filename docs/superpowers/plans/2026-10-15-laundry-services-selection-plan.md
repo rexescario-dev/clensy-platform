@@ -2257,6 +2257,8 @@ There is no worthwhile behaviour-preserving refactor in scope. The M7 minors wer
 
 `docs/README.md` is unchanged: it holds API and isolation notes, and #158 changes no API. Editorial checks: the new relative links resolve, and the facts were checked against the code. READMEs are not linted.
 
+**PR CI.** [Run 38677501257](https://github.com/rexescario-dev/clensy-platform/actions/runs/38677501257) on PR #186 passed all four jobs: Lint, Test, Release gate and API e2e. The API suites that were not run locally (no API change) ran in CI as part of the standard pipeline, and they passed.
+
 ### M10 — Accepted, workflow validated (2026-10-15)
 
 ```text
