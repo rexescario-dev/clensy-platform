@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft** (M4), 2026-10-16, revision 3. M5 rounds 1 and 2 returned it for revision; every finding is answered in [M5 round 1 revisions](#m5-round-1-revisions). Awaiting M5 round 3. |
+| Status | **Accepted (revision 3)** at M5, 2026-10-16. M6 in progress. |
+| M5 decision | **Accepted** — 2026-10-16, revision 3 (`103bbcc`), by the owner's reviewer, after a final six-part review. "I have no remaining M5 blocker based on the plan text and review evidence provided." Rounds 1 and 2 returned the plan for revision; round 3 accepted the round-2 fixes. The final six-part pass raised P1-01 (role names), a `Button` markup check, P2-1 (withdrawn by the reviewer), P2-2 (committed-render recording) and one Part 5 cleanup, each resolved in the revisions log. The owner put the Weighing inconsistency in the PRICED-without-total rows out of scope.<br>The acceptance covers the plan, not the implementation. The reviewer read the supplied parts and did not inspect the branch or run any command. M6 must record real red/green and verification results, and M7 is an independent review of the branch diff against the Accepted spec. |
 | Date | 2026-10-15 |
 | Tracking issue | [#162](https://github.com/rexescario-dev/clensy-platform/issues/162) "Laundry price preview and confirmation". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) (merged in #183: the order page), [#159](https://github.com/rexescario-dev/clensy-platform/issues/159) (merged in #184: `previewLaundryOrderPrice`, frozen `description`) and [#158](https://github.com/rexescario-dev/clensy-platform/issues/158) (merged in #186: the selection hook and Services editor). |
 | Branch | `feat/162-laundry-price-review`, from `main` at `47e90b1`. One PR for this plan, its M5 record and the implementation. |
