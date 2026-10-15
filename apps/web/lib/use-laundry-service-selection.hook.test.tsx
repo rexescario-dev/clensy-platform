@@ -364,7 +364,7 @@ describe('useLaundryServiceSelection', () => {
     expect(latest.selection.addOns[1]).toMatchObject({ choice: ADD_ON_3, query: 'Folding', quantity: '7' });
   });
 
-  it('case 11: a duplicate add-on is not applied and says so until the next edit', () => {
+  it('case 11: a duplicate add-on is not applied and says so until the next edit, naming the add-on attempted', () => {
     render();
     addRow(ADD_ON_1);
     const second = addRow();
@@ -373,9 +373,9 @@ describe('useLaundryServiceSelection', () => {
     const row = latest.selection.addOns.find((candidate) => candidate.key === second);
     expect(row?.choice).toBeNull();
     expect(row?.query).toBe('iron');
-    expect(row?.duplicate).toBe(true);
+    expect(row?.duplicateOf).toBe(A1);
     edit(() => latest.changeAddOnQuery(second, 'ironi'));
-    expect(latest.selection.addOns.find((candidate) => candidate.key === second)?.duplicate).toBe(false);
+    expect(latest.selection.addOns.find((candidate) => candidate.key === second)?.duplicateOf).toBeNull();
   });
 
   it('case 12: editing the search text drops the choice', () => {

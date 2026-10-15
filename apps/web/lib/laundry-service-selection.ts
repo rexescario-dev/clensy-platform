@@ -41,8 +41,10 @@ export interface LaundryCatalogChoice {
 // never moves another row's text, choice or errors (owner decision 5).
 export interface LaundryAddOnRow {
   choice: LaundryCatalogChoice | null;
-  // The last choice was already on another row (§8.4.3: presentation only).
-  duplicate: boolean;
+  // The add-on id the last choice tried, blocked because another row held it
+  // (§8.4.3: presentation only). Shown by `laundryRowDuplicate` only while
+  // another row still holds it.
+  duplicateOf: string | null;
   key: number;
   // Item-count text; shown only for a remembered PER_ITEM unit.
   quantity: string;
@@ -51,6 +53,14 @@ export interface LaundryAddOnRow {
   query: string;
   // The search was left at least once.
   touched: boolean;
+}
+
+// Whether to show the duplicate message on `row`: it tried an add-on that
+// some other row still holds.
+export function laundryRowDuplicate(row: LaundryAddOnRow, selection: LaundryServiceSelection): boolean {
+  const attempted = row.duplicateOf;
+  if (attempted === null) return false;
+  return selection.addOns.some((other) => other.key !== row.key && other.choice?.id === attempted);
 }
 
 export interface LaundryServiceSelection {

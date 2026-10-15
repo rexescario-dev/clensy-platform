@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { formatMinorUnits } from '../../lib/format-price';
 import {
   laundryRateKey,
+  laundryRowDuplicate,
   laundryUnitKey,
   parseItemCount,
   type LaundryAddOnRow,
@@ -162,7 +163,7 @@ function AddOnRowEditor({
 }) {
   const label = t('order.services.addOn').replace('{n}', String(n));
   // One message per row, most specific first.
-  const error = row.duplicate
+  const error = laundryRowDuplicate(row, state.selection)
     ? t('order.services.duplicate')
     : row.touched && !row.choice
       ? t('order.services.error.emptyRow')

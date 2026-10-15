@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import {
   EMPTY_LAUNDRY_SERVICE_SELECTION,
   laundryRateKey,
+  laundryRowDuplicate,
   laundryServicesView,
   laundryUnitKey,
   matchPreview,
@@ -30,7 +31,7 @@ const IRON = { id: '22222222-2222-4222-8222-222222222222', name: 'Ironing' };
 const SOFT = { id: '33333333-3333-4333-8333-333333333333', name: 'Softener' };
 
 function row(key: number, choice: LaundryAddOnRow['choice'], quantity = '1'): LaundryAddOnRow {
-  return { choice, duplicate: false, key, quantity, quantityTouched: false, query: choice?.name ?? '', touched: false };
+  return { choice, duplicateOf: null, key, quantity, quantityTouched: false, query: choice?.name ?? '', touched: false };
 }
 
 function selection(overrides: Partial<LaundryServiceSelection> = {}): LaundryServiceSelection {
@@ -282,5 +283,39 @@ describe('laundryRateKey', () => {
     ['PER_SERVICE', 'flat'],
   ] as const)('%s → %s', (unit, key) => {
     expect(laundryRateKey(unit)).toBe(key);
+  });
+});
+
+describe('laundryRowDuplicate', () => {
+  const blocked = (key: number): LaundryAddOnRow => ({ ...row(key, null), duplicateOf: IRON.id });
+
+  it('is true while another row holds the attempted add-on', () => {
+    const rows = [row(1, IRON), blocked(2)];
+    expect(laundryRowDuplicate(rows[1]!, selection({ addOns: rows }))).toBe(true);
+  });
+
+  it('is false once the holding row is removed', () => {
+    const rows = [row(1, IRON), blocked(2)];
+    expect(laundryRowDuplicate(rows[1]!, selection({ addOns: [rows[1]!] }))).toBe(false);
+  });
+
+  it('is false once the holding row holds another add-on', () => {
+    const rows = [row(1, SOFT), blocked(2)];
+    expect(laundryRowDuplicate(rows[1]!, selection({ addOns: rows }))).toBe(false);
+  });
+
+  it('is false once the holding row has no choice', () => {
+    const rows = [row(1, null), blocked(2)];
+    expect(laundryRowDuplicate(rows[1]!, selection({ addOns: rows }))).toBe(false);
+  });
+
+  it('is false for duplicateOf null, even when another row holds an add-on', () => {
+    const rows = [row(1, IRON), row(2, null)];
+    expect(laundryRowDuplicate(rows[1]!, selection({ addOns: rows }))).toBe(false);
+  });
+
+  it('is never true from the row itself', () => {
+    const own: LaundryAddOnRow = { ...row(1, IRON), duplicateOf: IRON.id };
+    expect(laundryRowDuplicate(own, selection({ addOns: [own] }))).toBe(false);
   });
 });

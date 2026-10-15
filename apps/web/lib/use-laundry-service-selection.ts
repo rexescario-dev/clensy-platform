@@ -108,7 +108,7 @@ function rememberUnits(units: LaundryRememberedUnits, lines: LaundryPreview['lin
 }
 
 function newRow(key: number): LaundryAddOnRow {
-  return { choice: null, duplicate: false, key, quantity: '1', quantityTouched: false, query: '', touched: false };
+  return { choice: null, duplicateOf: null, key, quantity: '1', quantityTouched: false, query: '', touched: false };
 }
 
 export function useLaundryServiceSelection({
@@ -199,7 +199,7 @@ export function useLaundryServiceSelection({
     changeAddOnQuantity: (rowKey, text) => updateRow(rowKey, (row) => ({ ...row, quantity: text })),
     // A user edit drops the row's choice (the picker selection contract, #160).
     changeAddOnQuery: (rowKey, text) =>
-      updateRow(rowKey, (row) => ({ ...row, choice: null, duplicate: false, query: text })),
+      updateRow(rowKey, (row) => ({ ...row, choice: null, duplicateOf: null, query: text })),
     changeBaseQuantity: (text) => setSelection((current) => ({ ...current, baseQuantity: text })),
     changeBaseQuery: (text) => setSelection((current) => ({ ...current, base: null, baseQuery: text })),
     // The same add-on twice is blocked here, in the UI only (§8.4.3): the
@@ -211,8 +211,8 @@ export function useLaundryServiceSelection({
           ...current,
           addOns: current.addOns.map((row) => {
             if (row.key !== rowKey) return row;
-            if (taken) return { ...row, choice: null, duplicate: true };
-            return { ...row, choice, duplicate: false, quantity: '1', quantityTouched: false, query: choice.name };
+            if (taken) return { ...row, choice: null, duplicateOf: choice.id };
+            return { ...row, choice, duplicateOf: null, quantity: '1', quantityTouched: false, query: choice.name };
           }),
         };
       }),

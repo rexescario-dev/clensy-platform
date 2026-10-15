@@ -429,6 +429,45 @@ describe('LaundryServicesEditor', () => {
     }
   });
 
+  describe('case 9b: the duplicate message lasts only while the add-on is still taken', () => {
+    const MESSAGE = 'This add-on is already on the order.';
+
+    async function blockedSecondRow() {
+      mount();
+      await chooseBase(WASH);
+      const first = await addRow(IRON);
+      const second = await addRow();
+      type(second, 'Iron');
+      await settle();
+      act(() => el(`#${second.id}-option-${IRON}`).click());
+      await settle(3);
+      expect(rowOf(second).textContent).toContain(MESSAGE);
+      return { first, second };
+    }
+
+    it('remove case: removing the holding row hides it in the same render, keeping the typed text', async () => {
+      const { second } = await blockedSecondRow();
+      click('Remove add-on 1');
+      expect(paragraphs(MESSAGE)).toHaveLength(0);
+      expect(text()).not.toContain(MESSAGE);
+      expect(addOnInputs()).toHaveLength(1);
+      expect(addOnInputs()[0]!.id).toBe(second.id);
+      expect(second.value).toBe('Iron');
+    });
+
+    it('change case: changing the holding row to another add-on hides it', async () => {
+      const { first, second } = await blockedSecondRow();
+      type(first, 'Soft');
+      expect(paragraphs(MESSAGE)).toHaveLength(0);
+      await settle();
+      act(() => el(`#${first.id}-option-${SOFT}`).click());
+      await settle(3);
+      expect(first.value).toBe('Softener');
+      expect(text()).not.toContain(MESSAGE);
+      expect(second.value).toBe('Iron');
+    });
+  });
+
   describe('case 10: empty base and empty row, through the real picker', () => {
     it('base: the error follows blur, the choice and the dropped choice', async () => {
       mount();
