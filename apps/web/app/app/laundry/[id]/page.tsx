@@ -278,7 +278,7 @@ function PricingSections({
   verbs: readonly LaundryOrderVerb[];
 }) {
   const view = laundryServicesView({
-    hasLines: order.lines.nodes.length > 0,
+    hasTotal: order.totalMinorUnits !== null,
     roleResolved,
     status: order.status,
     verbs,
@@ -333,8 +333,6 @@ function ServicesBody({
           <SavedLines order={order} t={t} />
         </div>
       );
-    case 'lines':
-      return <SavedLines order={order} t={t} />;
   }
 }
 

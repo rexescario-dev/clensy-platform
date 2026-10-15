@@ -1,19 +1,20 @@
 import type { PreviewLaundryOrderPriceQuery, PriceLaundryOrderInput, PricingUnit } from '@clensy/client';
 import type { LaundryOrderStatus, LaundryOrderVerb } from '@clensy/web';
 import { isUuid } from './laundry-order-list-query';
-import { LAUNDRY_PRICED_STATUSES } from './laundry-order-page';
 
-// What the Services section shows (owner decision 4, #158). The editor
-// only when the actor may price (`laundryOrderActions` already intersects
-// WEIGHED with the operational roles, spec §4.4). Nothing on a WEIGHED
-// order until the role is known, so read-only copy never flashes before
-// the editor. CANCELLED and REJECTED never show the locked sentence: the
-// status alone does not prove pricing (#155 decision a).
-export type LaundryServicesView = 'beforeWeigh' | 'editor' | 'hidden' | 'lines' | 'locked' | 'none';
+// What the Services section shows (owner decision 4, #158). A persisted
+// total means the order was priced (the API writes lines and the total only
+// in `priceLaundryOrder`), so it alone selects the locked sentence, as it
+// selects Price's Final card (#162 planning decision a). Without a total,
+// the sentence is never shown. The editor only when the actor may price
+// (`laundryOrderActions` already intersects WEIGHED with the operational
+// roles, spec §4.4). Nothing on a WEIGHED order until the role is known, so
+// read-only copy never flashes before the editor.
+export type LaundryServicesView = 'beforeWeigh' | 'editor' | 'hidden' | 'locked' | 'none';
 
 export interface LaundryServicesViewInput {
-  // The order has saved (priced) lines.
-  hasLines: boolean;
+  // `order.totalMinorUnits !== null`.
+  hasTotal: boolean;
   // `currentAdmin.role` has loaded.
   roleResolved: boolean;
   status: LaundryOrderStatus;
@@ -21,15 +22,17 @@ export interface LaundryServicesViewInput {
   verbs: readonly LaundryOrderVerb[];
 }
 
-export function laundryServicesView({ hasLines, roleResolved, status, verbs }: LaundryServicesViewInput): LaundryServicesView {
+export function laundryServicesView({ hasTotal, roleResolved, status, verbs }: LaundryServicesViewInput): LaundryServicesView {
+  if (hasTotal) return 'locked';
+  // The role is checked before the verb (#162 M5 round 2), so the editor
+  // never shows while the role loads, whatever `verbs` holds.
+  if (status === 'WEIGHED' && !roleResolved) return 'hidden';
   // The status is checked as well as the verb (M5 part 2): the editor can
   // never appear outside WEIGHED, even if the client verb table changes.
   if (status === 'WEIGHED' && verbs.includes('price')) return 'editor';
-  if (status === 'WEIGHED' && !roleResolved) return 'hidden';
   if (status === 'WEIGHED') return 'none';
   if (status === 'RECEIVED') return 'beforeWeigh';
-  if (LAUNDRY_PRICED_STATUSES.has(status)) return 'locked';
-  return hasLines ? 'lines' : 'none';
+  return 'none';
 }
 
 export interface LaundryCatalogChoice {
