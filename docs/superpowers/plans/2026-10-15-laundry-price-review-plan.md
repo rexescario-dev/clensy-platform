@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft** (M4), 2026-10-15, revision 2. M5 round 1 returned it for revision; every finding is answered in [M5 round 1 revisions](#m5-round-1-revisions). Awaiting M5 round 2. |
+| Status | **Draft** (M4), 2026-10-16, revision 3. M5 rounds 1 and 2 returned it for revision; every finding is answered in [M5 round 1 revisions](#m5-round-1-revisions). Awaiting M5 round 3. |
 | Date | 2026-10-15 |
 | Tracking issue | [#162](https://github.com/rexescario-dev/clensy-platform/issues/162) "Laundry price preview and confirmation". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) (merged in #183: the order page), [#159](https://github.com/rexescario-dev/clensy-platform/issues/159) (merged in #184: `previewLaundryOrderPrice`, frozen `description`) and [#158](https://github.com/rexescario-dev/clensy-platform/issues/158) (merged in #186: the selection hook and Services editor). |
 | Branch | `feat/162-laundry-price-review`, from `main` at `47e90b1`. One PR for this plan, its M5 record and the implementation. |
@@ -93,12 +93,12 @@ These were recorded from the brainstorm with the owner on 2026-10-15. Each one b
 |---|---|---|---|---|
 | any | set | any, including loading | Final price, no Confirm | Locked sentence |
 | RECEIVED | null | loading | Nothing | "Weigh the order before choosing services." |
-| RECEIVED | null | any | "Price is available after …" | "Weigh the order before choosing services." |
+| RECEIVED | null | any resolved role | "Price is available after …" | "Weigh the order before choosing services." |
 | WEIGHED | null | loading | Nothing | Nothing |
 | WEIGHED | null | operational | Estimate card, Confirm | Editor |
-| WEIGHED | null | other | "Price is available after …" | "No services selected yet." |
-| CANCELLED, REJECTED | null | any | "This order was not priced." | "No services selected yet." |
-| PRICED and every later status (inconsistent: the API never leaves these without a total) | null | any | "This order was not priced." | "No services selected yet." |
+| WEIGHED | null | other resolved role | "Price is available after …" | "No services selected yet." |
+| CANCELLED, REJECTED | null | any, including loading | "This order was not priced." | "No services selected yet." |
+| PRICED and every later status (inconsistent: the API never leaves these without a total) | null | any, including loading | "This order was not priced." | "No services selected yet." |
 
 No row without a total reaches the Estimate card except WEIGHED for an operational role. The inconsistent rows are safe and non-editable. Task 1 pins each row, by literal tests and by the exhaustive matrix; Task 6 renders the CANCELLED/REJECTED, inconsistent PRICED, and later-status-with-total rows.
 
@@ -161,6 +161,9 @@ M5 round 1 (2026-10-15) reviewed the plan in five passes and returned it for rev
 | Task 5 | Grep before removing copy; focus effect on `pending` | Already steps of the plan; unchanged. |
 | Tasks 6–7 | Terminal render test contradicts itself | **Revised** with planning decision (a). |
 | Tasks 6–7 | Refetch test double | **Revised:** `settleRefetch` sets the resulting query state, settles the promise and re-renders; its comment says it does not exercise Apollo's refetch. |
+| Round 2 | `laundryServicesView` checked the verb before the unresolved role | **Fixed:** the role check comes first; Task 1 adds the WEIGHED, role-loading, `price`-verb case. `laundryPriceView` already checked the role before the verb. |
+| Round 2 | The cited role-loading test named only Services | **Revised:** the test is renamed and asserts the empty Price body, with no Estimate, Confirm or fallback sentence. |
+| Round 2 | "any" in the outcome table overlapped "loading" | **Revised:** rows read "any resolved role" or "any, including loading". |
 | Tasks 6–7 | Catalog mock shape | **Revised** to the generated `ServicesQuery` / `AddOnsQuery` node shapes with `pageInfo`. Neither query has a pricing unit: the unit comes from the preview (#158), so the review's "include the unit" premise does not apply. The wrong catalog price stays. |
 
 ## Global constraints
@@ -623,10 +626,16 @@ Planning decision (a). In `laundry-service-selection.test.ts`:
   it.each(['CANCELLED', 'REJECTED', 'PRICED', 'PAID'] as const)('%s without a total shows the none sentence, not locked', (status) => {
     expect(laundryServicesView({ hasTotal: false, roleResolved: true, status, verbs: [] })).toBe('none');
   });
+
+  // #162 M5 round 2: the unresolved role is checked before the verb, so the
+  // helper keeps its own rule even if a caller passes a stale `price` verb.
+  it('hides a WEIGHED order while the role loads, even with a price verb', () => {
+    expect(laundryServicesView({ hasTotal: false, roleResolved: false, status: 'WEIGHED', verbs: ['price'] })).toBe('hidden');
+  });
 ```
 
 Run: `pnpm --filter web exec vitest run lib/laundry-service-selection.test.ts`
-Expected: FAIL. Vitest does not type-check, so the tests run against the old function, which reads `hasLines` as `undefined`: every RECEIVED or WEIGHED case with a total fails on `locked`, and every priced status without a total fails on `none`.
+Expected: FAIL. Vitest does not type-check, so the tests run against the old function, which reads `hasLines` as `undefined`: every RECEIVED or WEIGHED case with a total fails on `locked`, every priced status without a total fails on `none`, and the role-loading case with a `price` verb fails on `editor`.
 
 - [ ] **Step 6: Change `laundryServicesView`**
 
@@ -658,10 +667,12 @@ export interface LaundryServicesViewInput {
 
 export function laundryServicesView({ hasTotal, roleResolved, status, verbs }: LaundryServicesViewInput): LaundryServicesView {
   if (hasTotal) return 'locked';
+  // The role is checked before the verb (#162 M5 round 2), so the editor
+  // never shows while the role loads, whatever `verbs` holds.
+  if (status === 'WEIGHED' && !roleResolved) return 'hidden';
   // The status is checked as well as the verb (M5 part 2): the editor can
   // never appear outside WEIGHED, even if the client verb table changes.
   if (status === 'WEIGHED' && verbs.includes('price')) return 'editor';
-  if (status === 'WEIGHED' && !roleResolved) return 'hidden';
   if (status === 'WEIGHED') return 'none';
   if (status === 'RECEIVED') return 'beforeWeigh';
   return 'none';
@@ -2218,10 +2229,15 @@ with:
       const outside = html.replace(section(html, 'weighing'), '').replace(services, '').replace(price, '');
 ```
 
-   - **`'renders an empty Services body while the role loads on a weighed order'`:** at the end, add:
+   - **`'renders an empty Services body while the role loads on a weighed order'`:** rename it to `'renders empty Services and Price bodies while the role loads on a weighed order with no total'`, and at the end add (M5 round 2):
 
 ```tsx
-      expect(section(await renderPage(), 'price')).toMatch(/<\/h2><div[^>]*><\/div><\/section>$/);
+      const price = section(await renderPage(), 'price');
+      // The body is empty: only the heading renders.
+      expect(price).toMatch(/<\/h2><div[^>]*><\/div><\/section>$/);
+      for (const absent of ['Estimate', 'Confirm price', '<button', 'Price is available after', 'This order was not priced.', 'Final price']) {
+        expect(price).not.toContain(absent);
+      }
 ```
 
    - **`it.each(['CUSTOMER_SUPPORT', 'FINANCE', 'ANALYST', 'SUPER_ADMIN'])('shows %s no editor on a weighed order', …)`:**
@@ -2319,7 +2335,7 @@ with:
     });
 ```
 
-   The other two inconsistent-state cases the review named are already pinned: an unresolved role with no total on a WEIGHED order renders an empty Price body (`'renders an empty Services body while the role loads on a weighed order'`, above), and a role without the `price` verb sees no Confirm (`'shows %s no editor and no Confirm on a weighed order'`, above).
+   The other two inconsistent-state cases the review named are already pinned: an unresolved role with no total on a WEIGHED order renders an empty Price body, with no Estimate, Confirm or fallback sentence (`'renders empty Services and Price bodies while the role loads on a weighed order with no total'`, above), and a role without the `price` verb sees no Confirm (`'shows %s no editor and no Confirm on a weighed order'`, above).
 
 7. In `'offers the weighing editor to an operational role on a received order, and controls only there'`, nothing changes: Price shows a sentence with no button for `RECEIVED`.
 8. **`'warns when more lines exist than were loaded'`:** replace its body with:
