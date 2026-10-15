@@ -167,7 +167,7 @@ M5 round 1 (2026-10-15) reviewed the plan in five passes and returned it for rev
 | Final review | `OWNER` in the spec, `TENANT_OWNER` in the plan (P1-01) | **Clarified:** the same role; recorded under Global constraints with the code references. |
 | Final review | `Button` markup assumed by the card's regexes | **Verified:** `packages/ui/src/base/button.tsx` renders a native `<button>` with `{...props}`, so the children are its direct content. |
 | Final review | The role-loading render test rendered the page twice | **Fixed:** Services and Price are read from one `html`. |
-| Final review | The hook harness recorded renders during render, not on commit (P2-2) | **Fixed:** `renders` is pushed from a `useLayoutEffect` in `Probe`, so only committed results are checked. |
+| Final review | The hook harness recorded renders during render, not on commit (P2-2) | **Fixed:** `renders` is pushed from a `useLayoutEffect` in `Probe`, so only committed results are checked. Case 20 (ready) and case 24 (failed) both assert over the committed results after the return to A. |
 | Tasks 6–7 | Catalog mock shape | **Revised** to the generated `ServicesQuery` / `AddOnsQuery` node shapes with `pageInfo`. Neither query has a pricing unit: the unit comes from the preview (#158), so the review's "include the unit" premise does not apply. The wrong catalog price stays. |
 
 ## Global constraints
@@ -870,9 +870,13 @@ Append inside `describe('useLaundryServiceSelection', …)`, after the last exis
     expect(latest.previewError).not.toBeNull();
     chooseBase(OTHER_BASE_CHOICE);
     wait(100);
+    const mark = renders.length;
     chooseBase();
     wait(1000);
     expect(sent()).toBe(1);
+    // Every committed state after the return shows A's failure: no loading
+    // flash, no ready.
+    expect(renders.slice(mark).every((result) => result.previewError !== null && !result.previewLoading && !result.ready)).toBe(true);
     expect(latest.previewError).not.toBeNull();
     expect(latest.ready).toBe(false);
     edit(() => latest.retryPreview());
