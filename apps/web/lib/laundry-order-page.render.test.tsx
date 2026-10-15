@@ -127,10 +127,13 @@ vi.mock('@clensy/client', () => ({
       refetch: () => Promise.resolve(),
     };
   },
-  usePriceLaundryOrderMutation: (...args: unknown[]) => {
-    page.priceMutationCalls.push(args);
-    return [() => Promise.resolve({ data: {} }), { loading: false }];
-  },
+  usePriceLaundryOrderMutation: () => [
+    (...args: unknown[]) => {
+      page.priceMutationCalls.push(args);
+      return Promise.resolve({ data: {} });
+    },
+    { loading: false },
+  ],
   useServicesQuery: (options: unknown) => {
     page.servicesCalls.push(options);
     return { data: undefined, error: undefined, loading: false };
@@ -190,7 +193,7 @@ describe('laundry order page', () => {
     expect(page.invoiceOptions[0]).toMatchObject({ skip: false, variables: { laundryOrderId: ID } });
   });
 
-  it('renders the header, back link and no list, drawer or controls', async () => {
+  it('renders the header, back link, no list or drawer, and no controls in the read-only sections', async () => {
     const html = await renderPage();
     expect(count(html, '<h1')).toBe(1);
     expect(html).toMatch(/<h1[^>]*>Ana Reyes<\/h1>/);
@@ -202,9 +205,15 @@ describe('laundry order page', () => {
     expect(html).toContain('Back to laundry orders');
     expect(html).not.toContain('role="dialog"');
     expect(html).not.toContain('<table');
-    expect(html).not.toContain('<button');
-    expect(html).not.toContain('<form');
-    expect(html).not.toContain('<input');
+    // Weighing, Services and Price may hold controls (#155, #158, #162).
+    // Everything before the first section, and Overview, Invoice and
+    // Actions, stay read-only.
+    const header = html.slice(0, html.indexOf('<section'));
+    for (const part of [header, section(html, 'overview'), section(html, 'invoice'), section(html, 'actions')]) {
+      expect(part).not.toContain('<button');
+      expect(part).not.toContain('<form');
+      expect(part).not.toContain('<input');
+    }
   });
 
   it('renders the summary as a responsive definition list', async () => {
@@ -245,20 +254,30 @@ describe('laundry order page', () => {
     expect(section(html, 'weighing')).not.toContain('Recorded weight');
     expect(section(html, 'services')).toContain('Weigh the order before choosing services.');
     expect(section(html, 'services')).not.toContain('No services selected yet.');
-    expect(section(html, 'price')).toContain('Not priced yet.');
+    expect(section(html, 'price')).toContain('Price is available after the order is weighed and services are chosen.');
+    expect(section(html, 'price')).not.toContain('<button');
   });
 
-  it('shows the recorded weight, the total and the lines once priced', async () => {
-    const priced = (id: string, unit: Line['pricingSnapshot']['unit'], quantity: number, amount: number, description: string, extra: Partial<Line> = {}, minimum = false) => {
+  it('shows the recorded weight, and the Final price breakdown in Price only, once priced', async () => {
+    const priced = (id: string, unit: Line['pricingSnapshot']['unit'], quantity: number, amount: number, rate: number, description: string, extra: Partial<Line> = {}, minimum: number | null = null) => {
       const base = line(id, unit, quantity, amount, extra);
-      return { ...base, pricingSnapshot: { ...base.pricingSnapshot, description, minimumChargeApplied: minimum } };
+      return {
+        ...base,
+        pricingSnapshot: {
+          ...base.pricingSnapshot,
+          description,
+          minimumChargeApplied: minimum !== null,
+          minimumChargeMinorUnits: minimum,
+          rateMinorUnits: rate,
+        },
+      };
     };
     page.order = order({
       lines: {
         nodes: [
-          priced('l1', 'PER_KG', 2505, 30000, 'Wash & fold', {}, true),
-          priced('l2', 'PER_ITEM', 3, 9000, 'Ironing (add-on)', { addOnId: 'a1', serviceId: null }),
-          priced('l3', 'FLAT', 1, 6000, 'Softener (add-on)', { addOnId: 'a2', serviceId: null }),
+          priced('l1', 'PER_KG', 2505, 30000, 5000, 'Wash & fold', {}, 30000),
+          priced('l2', 'PER_ITEM', 3, 9000, 3000, 'Ironing (add-on)', { addOnId: 'a1', serviceId: null }),
+          priced('l3', 'FLAT', 1, 6000, 6000, 'Softener (add-on)', { addOnId: 'a2', serviceId: null }),
         ],
         pageInfo: { hasNextPage: false },
       },
@@ -267,44 +286,42 @@ describe('laundry order page', () => {
     const html = await renderPage();
     const overview = section(html, 'overview');
     expect(overview).toContain('3 services priced.');
-    expect(overview).toMatch(/<a[^>]*href="#laundry-order-services"[^>]*>See Services<\/a>/);
+    expect(overview).toMatch(/<a[^>]*href="#laundry-order-price"[^>]*>See Price<\/a>/);
+    expect(overview).not.toContain('#laundry-order-services');
     expect(overview).not.toContain('<li');
-    expect(overview).not.toContain('Base service');
-    expect(overview).not.toContain('Minimum charge applied');
     const services = section(html, 'services');
     expect(services).toContain('Services are locked because this order has been priced.');
-    expect(count(services, '<li')).toBe(3);
-    for (const description of ['Wash &amp; fold', 'Ironing (add-on)', 'Softener (add-on)']) {
-      expect(services).toContain(description);
+    expect(services).not.toContain('<li');
+    expect(services).not.toContain('Wash &amp; fold');
+    expect(services).not.toContain('₱');
+    const price = section(html, 'price');
+    expect(price).toContain('Final price');
+    expect(price).not.toContain('Estimate');
+    expect(price).not.toContain('Confirm price');
+    expect(price).not.toContain('<button');
+    expect(count(price, '<li')).toBe(3);
+    for (const text of ['Wash &amp; fold', 'Ironing (add-on)', 'Softener (add-on)', '2.505 kg', '3 items', '₱50.00 per kg', '₱30.00 per item', '₱60.00 flat', '₱300.00', '₱90.00', 'Order total', '₱450.00']) {
+      expect(price).toContain(text);
     }
-    expect(services).toContain('Per kg');
-    expect(services).toContain('>Weight</dt>');
-    expect(services).toContain('2.505 kg');
-    expect(services).toContain('Per item');
-    expect(services).toContain('>Items</dt>');
-    expect(services).toContain('>3</dd>');
-    expect(services).toContain('Flat');
-    expect(count(services, '>Weight</dt>') + count(services, '>Items</dt>')).toBe(2);
-    expect(services).toContain('₱300.00');
-    expect(count(services, 'Minimum charge applied')).toBe(1);
-    expect(services).not.toContain('More lines are not loaded.');
+    expect(count(price, 'Minimum charge applied')).toBe(1);
+    expect(price).toContain('Minimum charge applied (₱300.00).');
+    expect(price).not.toContain('More lines are not loaded.');
     expect(section(html, 'weighing')).toContain('Recorded weight');
     expect(section(html, 'weighing')).toContain('2.505 kg');
-    expect(section(html, 'price')).toContain('Order total');
-    expect(section(html, 'price')).toContain('₱450.00');
   });
 
-  it('points to Services with a singular count for one saved line', async () => {
+  it('points to Price with a singular count for one saved line', async () => {
     page.order = order({ lines: { nodes: [line('l1', 'FLAT', 1, 100)], pageInfo: { hasNextPage: false } }, status: 'PRICED' });
     const overview = section(await renderPage(), 'overview');
     expect(overview).toContain('1 service priced.');
     expect(overview).not.toContain('1 services priced.');
+    expect(overview).toContain('href="#laundry-order-price"');
   });
 
   describe('Services editor and views (#158)', () => {
     const OPERATIONAL = ['TENANT_OWNER', 'OPS_MANAGER', 'SCHEDULER', 'CUSTOMER_SUPPORT', 'FINANCE', 'ANALYST', 'SUPER_ADMIN'];
 
-    it('offers the editor to OPS_MANAGER on a weighed order, with controls only in Weighing and Services', async () => {
+    it('offers the editor and the Estimate card to OPS_MANAGER on a weighed order, with controls only in Weighing, Services and Price', async () => {
       page.order = order({ status: 'WEIGHED', totalMinorUnits: null });
       page.role = 'OPS_MANAGER';
       const html = await renderPage();
@@ -312,11 +329,15 @@ describe('laundry order page', () => {
       expect(services).toMatch(/role="combobox"[^>]*/);
       expect(services).toMatch(/aria-label="Base service"|>Base service<\/label>/);
       expect(services).toContain('Add add-on');
-      expect(services).toContain('This is a preview. The price is final only after you confirm it.');
       expect(services).not.toContain('Weigh the order');
       expect(services).not.toContain('No services selected yet.');
       expect(services).not.toContain('locked');
-      const outside = html.replace(section(html, 'weighing'), '').replace(services, '');
+      const price = section(html, 'price');
+      expect(price).toContain('>Estimate<');
+      expect(price).not.toContain('Final price');
+      expect(price).toContain('Select a base service to see an estimate.');
+      expect(price).toMatch(/<button[^>]*disabled=""[^>]*>Confirm price<\/button>/);
+      const outside = html.replace(section(html, 'weighing'), '').replace(services, '').replace(price, '');
       expect(outside).not.toContain('<button');
       expect(outside).not.toContain('<form');
       expect(outside).not.toContain('<input');
@@ -325,28 +346,41 @@ describe('laundry order page', () => {
       expect(page.priceMutationCalls).toEqual([]);
     });
 
-    it('renders an empty Services body while the role loads on a weighed order', async () => {
+    it('renders empty Services and Price bodies while the role loads on a weighed order with no total', async () => {
       page.order = order({ status: 'WEIGHED', totalMinorUnits: null });
       page.role = undefined;
-      const services = section(await renderPage(), 'services');
+      const html = await renderPage();
+      const services = section(html, 'services');
       expect(services).toContain('<h2');
       expect(services).not.toContain('No services selected yet.');
       expect(services).not.toContain('<input');
       expect(services).not.toContain('Weigh the order');
       expect(services).toMatch(/<\/h2><div[^>]*><\/div><\/section>$/);
       expect(page.previewQuery).not.toHaveBeenCalled();
+      const price = section(html, 'price');
+      // The body is empty: only the heading renders.
+      expect(price).toMatch(/<\/h2><div[^>]*><\/div><\/section>$/);
+      for (const absent of ['Estimate', 'Confirm price', '<button', 'Price is available after', 'This order was not priced.', 'Final price']) {
+        expect(price).not.toContain(absent);
+      }
     });
 
-    it.each(['CUSTOMER_SUPPORT', 'FINANCE', 'ANALYST', 'SUPER_ADMIN'])('shows %s no editor on a weighed order', async (role) => {
+    it.each(['CUSTOMER_SUPPORT', 'FINANCE', 'ANALYST', 'SUPER_ADMIN'])('shows %s no editor and no Confirm on a weighed order', async (role) => {
       page.order = order({ status: 'WEIGHED', totalMinorUnits: null });
       page.role = role;
-      const services = section(await renderPage(), 'services');
+      const html = await renderPage();
+      const services = section(html, 'services');
       expect(services).toContain('No services selected yet.');
       expect(services).not.toContain('<input');
       expect(services).not.toContain('role="combobox"');
       expect(services).not.toContain('<button');
       expect(services).not.toContain('Base service');
       expect(page.previewQuery).not.toHaveBeenCalled();
+      const price = section(html, 'price');
+      expect(price).toContain('Price is available after the order is weighed and services are chosen.');
+      expect(price).not.toContain('Confirm price');
+      expect(price).not.toContain('<button');
+      expect(price).not.toContain('Estimate');
     });
 
     it.each(OPERATIONAL)('asks %s to weigh a received order before choosing services', async (role) => {
@@ -357,22 +391,32 @@ describe('laundry order page', () => {
       expect(services).not.toContain('role="combobox"');
     });
 
-    it('locks Services and lists the saved lines on a priced order for CUSTOMER_SUPPORT', async () => {
+    it('locks Services and shows the Final price to CUSTOMER_SUPPORT on a priced order', async () => {
       page.order = order({ lines: { nodes: [line('l1', 'FLAT', 1, 100)], pageInfo: { hasNextPage: false } }, status: 'PRICED' });
       page.role = 'CUSTOMER_SUPPORT';
-      const services = section(await renderPage(), 'services');
+      const html = await renderPage();
+      const services = section(html, 'services');
       expect(services).toContain('Services are locked because this order has been priced.');
-      expect(services).toContain('Wash &amp; fold');
+      expect(services).not.toContain('Wash &amp; fold');
       expect(services).not.toContain('<input');
-      expect(services).not.toContain('role="combobox"');
+      const price = section(html, 'price');
+      expect(price).toContain('Final price');
+      expect(price).toContain('Wash &amp; fold');
+      expect(price).not.toContain('Confirm price');
     });
 
-    it.each(['CANCELLED', 'REJECTED'])('lists the saved lines of a %s order without the locked sentence', async (status) => {
+    it.each(['CANCELLED', 'REJECTED'])('never calls a %s order without a total priced, even with lines in the payload', async (status) => {
       page.order = order({ lines: { nodes: [line('l1', 'FLAT', 1, 100)], pageInfo: { hasNextPage: false } }, status, totalMinorUnits: null });
-      const services = section(await renderPage(), 'services');
-      expect(services).toContain('Wash &amp; fold');
-      expect(services).not.toContain('Services are locked');
+      const html = await renderPage();
+      const services = section(html, 'services');
+      expect(services).toContain('No services selected yet.');
+      expect(services).not.toContain('has been priced');
+      expect(services).not.toContain('Wash &amp; fold');
       expect(services).not.toContain('<input');
+      const price = section(html, 'price');
+      expect(price).toContain('This order was not priced.');
+      expect(price).not.toContain('Estimate');
+      expect(price).not.toContain('Final price');
     });
 
     it.each(['CANCELLED', 'REJECTED'])('says no services were selected on a %s order without lines', async (status) => {
@@ -380,6 +424,48 @@ describe('laundry order page', () => {
       const services = section(await renderPage(), 'services');
       expect(services).toContain('No services selected yet.');
       expect(services).not.toContain('Services are locked');
+      expect(section(await renderPage(), 'price')).toContain('This order was not priced.');
+    });
+
+    it('shows the Final price for an order cancelled after pricing (§4.3 note 5)', async () => {
+      page.order = order({ lines: { nodes: [line('l1', 'FLAT', 1, 45000)], pageInfo: { hasNextPage: false } }, status: 'CANCELLED', totalMinorUnits: 45000 });
+      page.role = 'TENANT_OWNER';
+      const price = section(await renderPage(), 'price');
+      expect(price).toContain('Final price');
+      expect(price).toContain('₱450.00');
+      expect(price).not.toContain('Confirm price');
+    });
+
+    it('shows the Final price while the role loads on a priced order', async () => {
+      page.order = order({ status: 'PRICED' });
+      page.role = undefined;
+      expect(section(await renderPage(), 'price')).toContain('Final price');
+    });
+
+    // M5 round 1: inconsistent status/total pairs (owner decision 5).
+    it('shows PRICED with no total as not priced, with no editor, Estimate or Confirm', async () => {
+      page.order = order({ lines: { nodes: [], pageInfo: { hasNextPage: false } }, status: 'PRICED', totalMinorUnits: null });
+      page.role = 'OPS_MANAGER';
+      const html = await renderPage();
+      const price = section(html, 'price');
+      expect(price).toContain('This order was not priced.');
+      expect(price).not.toContain('Estimate');
+      expect(price).not.toContain('<button');
+      const services = section(html, 'services');
+      expect(services).toContain('No services selected yet.');
+      expect(services).not.toContain('has been priced');
+      expect(services).not.toContain('<input');
+    });
+
+    it('shows the Final price for a later status with a total, to a role that cannot price', async () => {
+      page.order = order({ lines: { nodes: [line('l1', 'FLAT', 1, 45000)], pageInfo: { hasNextPage: false } }, status: 'PROCESSING', totalMinorUnits: 45000 });
+      page.role = 'CUSTOMER_SUPPORT';
+      const html = await renderPage();
+      const price = section(html, 'price');
+      expect(price).toContain('Final price');
+      expect(price).toContain('₱450.00');
+      expect(price).not.toContain('<button');
+      expect(section(html, 'services')).toContain('Services are locked because this order has been priced.');
     });
   });
 
@@ -483,10 +569,11 @@ describe('laundry order page', () => {
   it('warns when more lines exist than were loaded', async () => {
     page.order = order({ lines: { nodes: [line('l1', 'FLAT', 1, 100)], pageInfo: { hasNextPage: true } } });
     const html = await renderPage();
-    expect(section(html, 'services')).toContain('More lines are not loaded.');
+    expect(section(html, 'price')).toContain('More lines are not loaded.');
+    expect(section(html, 'services')).not.toContain('More lines are not loaded.');
     const overview = section(html, 'overview');
     expect(overview).toContain('Services are priced.');
-    expect(overview).toContain('href="#laundry-order-services"');
+    expect(overview).toContain('href="#laundry-order-price"');
     expect(overview).not.toMatch(/\d+ services? priced/);
   });
 

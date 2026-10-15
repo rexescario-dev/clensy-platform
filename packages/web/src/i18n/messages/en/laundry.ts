@@ -120,20 +120,12 @@ export const laundry = {
       paymentStatus: 'Payment status',
       total: 'Invoice total',
     },
-    lines: {
-      amount: 'Amount',
-      items: 'Items',
-      minimumCharge: 'Minimum charge applied',
-      more: 'More lines are not loaded.',
-      unit: 'Unit',
-      weight: 'Weight',
-    },
     overview: {
       noLines: 'No lines yet. Lines are added when the order is priced.',
       priced: '{n} services priced.',
       pricedOne: '1 service priced.',
       pricedPartial: 'Services are priced.',
-      seeServices: 'See Services',
+      seePrice: 'See Price',
     },
     price: {
       beforePricing: 'Price is available after the order is weighed and services are chosen.',
@@ -154,7 +146,7 @@ export const laundry = {
       minimumAppliedAmount: 'Minimum charge applied ({amount}).',
       more: 'More lines are not loaded.',
       noBase: 'Select a base service to see an estimate.',
-      notPriced: 'Not priced yet.',
+      notPriced: 'This order was not priced.',
       rate: {
         flat: '{price} flat',
         perItem: '{price} per item',
@@ -203,12 +195,6 @@ export const laundry = {
       fulfillment: 'Fulfillment',
       total: 'Total',
       weight: 'Weight',
-    },
-    unit: {
-      FLAT: 'Flat',
-      PER_ITEM: 'Per item',
-      PER_KG: 'Per kg',
-      PER_SERVICE: 'Per service',
     },
     weighing: {
       add: 'Add bag',
