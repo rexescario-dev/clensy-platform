@@ -683,4 +683,45 @@ describe('LaundryServicesEditor', () => {
     expect(calls().length).toBeGreaterThan(0);
     expect(priceMutation).not.toHaveBeenCalled();
   });
+  describe('case 19: rows are groups for screen readers', () => {
+    function group(name: string): HTMLElement {
+      const found = [...container.querySelectorAll<HTMLElement>('[role="group"]')].filter(
+        (candidate) => candidate.getAttribute('aria-label') === name,
+      );
+      expect(found, `group "${name}"`).toHaveLength(1);
+      return found[0]!;
+    }
+
+    const groupNames = () =>
+      [...container.querySelectorAll('[role="group"]')].map((candidate) => candidate.getAttribute('aria-label'));
+
+    function counts(within: HTMLElement) {
+      return [...within.querySelectorAll('label')].filter((label) => label.textContent === 'Number of items');
+    }
+
+    it('finds each count input within its own base or add-on group', async () => {
+      mount();
+      await chooseBase(SHOES);
+      await addRow(IRON);
+      await addRow(SOFT);
+      expect(groupNames()).toEqual(['Base service', 'Add-on 1', 'Add-on 2']);
+      expect(counts(group('Base service'))).toHaveLength(1);
+      expect(counts(group('Add-on 1'))).toHaveLength(1);
+      expect(counts(group('Add-on 2'))).toHaveLength(0);
+      expect(group('Base service').querySelector('#laundry-base-count')).not.toBeNull();
+      expect(group('Add-on 1').contains(addOnInputs()[0]!)).toBe(true);
+      expect(group('Add-on 2').contains(addOnInputs()[1]!)).toBe(true);
+    });
+
+    it('renumbers the group labels after a remove', async () => {
+      mount();
+      await chooseBase(SHOES);
+      await addRow(IRON);
+      await addRow(SOFT);
+      click('Remove add-on 1');
+      expect(groupNames()).toEqual(['Base service', 'Add-on 1']);
+      expect(addOnInputs()[0]!.value).toBe('Softener');
+      expect(group('Add-on 1').contains(addOnInputs()[0]!)).toBe(true);
+    });
+  });
 });

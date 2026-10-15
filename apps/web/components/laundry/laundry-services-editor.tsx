@@ -78,7 +78,7 @@ export function LaundryServicesEditor({ state }: LaundryServicesEditorProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+      <div role="group" aria-label={t('order.services.base')} className="flex flex-col gap-2 sm:flex-row sm:items-start">
         <div className="flex-1">
           <CatalogPicker
             id={BASE_SEARCH_ID}
@@ -171,7 +171,7 @@ function AddOnRowEditor({
         ? t('order.services.noPriceRow')
         : undefined;
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-slate-200 p-3">
+    <div role="group" aria-label={label} className="flex flex-col gap-2 rounded-md border border-slate-200 p-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
         <div className="flex-1">
           <CatalogPicker
