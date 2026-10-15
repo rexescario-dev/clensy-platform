@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 3)** at M5, 2026-10-16. M6 in progress. |
+| Status | **Accepted (revision 3)** at M5, 2026-10-16. M6 complete ([Execution record](#execution-record)); M7 pending (independent review). |
 | M5 decision | **Accepted** — 2026-10-16, revision 3 (`103bbcc`), by the owner's reviewer, after a final six-part review. "I have no remaining M5 blocker based on the plan text and review evidence provided." Rounds 1 and 2 returned the plan for revision; round 3 accepted the round-2 fixes. The final six-part pass raised P1-01 (role names), a `Button` markup check, P2-1 (withdrawn by the reviewer), P2-2 (committed-render recording) and one Part 5 cleanup, each resolved in the revisions log. The owner put the Weighing inconsistency in the PRICED-without-total rows out of scope.<br>The acceptance covers the plan, not the implementation. The reviewer read the supplied parts and did not inspect the branch or run any command. M6 must record real red/green and verification results, and M7 is an independent review of the branch diff against the Accepted spec. |
 | Date | 2026-10-15 |
 | Tracking issue | [#162](https://github.com/rexescario-dev/clensy-platform/issues/162) "Laundry price preview and confirmation". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) (merged in #183: the order page), [#159](https://github.com/rexescario-dev/clensy-platform/issues/159) (merged in #184: `previewLaundryOrderPrice`, frozen `description`) and [#158](https://github.com/rexescario-dev/clensy-platform/issues/158) (merged in #186: the selection hook and Services editor). |
@@ -3184,4 +3184,62 @@ git commit -m "docs(162): record the M6 verification"
 
 ## Execution record
 
-*(Appended at M6 and later gates.)*
+### M6 — 2026-10-16
+
+Executed inline (Native), in plan order, on `feat/162-laundry-price-review` from the M5 acceptance commit `8c8d928`. Every `Expected:` line was compared with the real output.
+
+| Task | Commits | Red | Green |
+|---|---|---|---|
+| 1 | `4fe3b4c` | `laundry-price-review.test.ts`: import unresolved. `laundry-service-selection.test.ts`: 244 failed (every total-true case outside the editor, priced statuses without a total, role-loading with a `price` verb) | 502/502 and 547/547 |
+| 2 | `0313266` | 6 failed: cases 20, 22 (×3), 23, 24 (`retryPreview is not a function`, `complete` undefined, a second request on the A→B→A return) | 39/39 |
+| 3 | `238bbfd` | `./use-confirm-laundry-price` unresolved | 9/9 |
+| 4 | `774e0a7` | `../components/laundry/laundry-price-card` unresolved | 11/11 |
+| 5 | `5c87a9c` | 10 failed: services cases 1, 3, 4, 5 (×2), 6, 17, 20, 21 and the weighing disabled case | 659/659 (editor, hook and selection suites together) |
+| 6 | `30e3f76`, `0646366` | Render: 19 failed. Interaction: 13 of 13 failed (no Estimate card) | 149/149 (render, interaction, page helpers) |
+
+**Characterization tests** (pass before the change; shown able to fail against a deliberate break made outside the committed change, then reverted):
+- Task 2, hook case 21: dropping the generation check from the A→B→A guard made it fail (`expected 2 to be 3`).
+- Task 6, the section-marker test `['WEIGHED', 'OPS_MANAGER', 'services']`: mapping the `price` verb to `price` in `currentLaundryOrderSection` made it fail.
+- Task 4, the Confirm-disabled assertions: forcing `disabled={false}` failed card cases 3 (×4), 4 and 8.
+
+**Rulings (deviations from the plan's text):**
+1. Task 4: the card tests checked the Confirm tag for the substring `disabled`, which `@clensy/ui` `Button`'s classes (`disabled:pointer-events-none` …) always contain, so case 2 failed and cases 3, 4 and 8 passed vacuously. They assert the attribute `disabled=""` instead.
+2. Task 5: services case 20 called `countInput(rowOf(…))`, but the existing helper takes the search input. It now passes `addOnInputs()[0]`.
+3. Task 5: case 20's "nothing left enabled" check excludes the harness's own `#elsewhere` button, which is outside the editor.
+4. Task 6: `pnpm --filter web lint` (first run at Task 6) failed 19 ordering errors (`sort-type-constituents`, `contextforge/record-key-order`) in plan-supplied code. Fixed by reordering only, in `0646366`.
+
+**Interim failures:** after Task 1, the two cases of `'lists the saved lines of a %s order…'` failed, as the plan said. After Task 5, `'offers the editor to OPS_MANAGER …'` also failed on the removed preview note, which the plan did not list; Task 6 Step 1 replaced both.
+
+**Copy removal greps** (Task 5 Step 6, Task 6 Step 5): no translation-key use outside `laundry.ts`. The only `order.lines.` hits are data properties (`order.lines.nodes` in the API and the list page).
+
+### Task 7 — verification (actual results)
+
+| Check | Result |
+|---|---|
+| `pnpm --filter web test` | PASS — 48 files, 2176 tests, exit 0 |
+| `pnpm --filter web lint` | PASS — exit 0 |
+| `pnpm --filter web exec tsc --noEmit` | PASS — exit 0 |
+| `pnpm --filter @clensy/web test` | PASS — 16 files, 417 tests, exit 0 |
+| `pnpm --filter @clensy/web lint` | PASS — exit 0 |
+| `pnpm --filter @clensy/web build` | PASS — exit 0 |
+| `git diff --stat main...HEAD -- apps/api packages/client packages/ui 'apps/web/app/app/laundry/page.tsx'` | Empty |
+| API suites | **NOT RUN** — no API code changes in this slice; not claimed as covered |
+
+**Browser check.** The local Docker stack (built 2026-10-09) predated #159's preview query, so with the owner's approval it was rebuilt from this branch (`docker compose up -d --build`; the migrate step reported no pending migrations). A headless Chromium script signed in as the seed TENANT_OWNER and opened WEIGHED order `6b5c8992-…` at 1280 px and 375 px:
+
+| Check | 1280 px | 375 px |
+|---|---|---|
+| No base: "Select a base service to see an estimate.", Confirm disabled | PASS | PASS |
+| Loading: "Updating estimate…" right after choosing | PASS | PASS |
+| Failed (preview request aborted): "Couldn’t calculate the estimate." with Try again | PASS | PASS |
+| Try again: "Updating estimate…", then ready | PASS | PASS |
+| Ready: name, "2.50 kg", "₱15.00 per kg", "₱37.50", Estimated total "₱37.50", Confirm enabled | PASS | PASS |
+| Long name wraps in the left column, amount right-aligned | PASS | PASS (name box 241 px wide, amount at the right edge) |
+| No horizontal scroll | PASS | PASS (before and after Confirm) |
+| Confirm reads "Confirming…", the toast "Price confirmed." shows, the card becomes Final price, Services shows the locked sentence | — | PASS |
+
+Not run, with reasons:
+- **CUSTOMER_SUPPORT on a WEIGHED and a PRICED order:** no password for a CUSTOMER_SUPPORT account in this database. Covered only by the render tests (`'shows %s no editor and no Confirm on a weighed order'`, `'locks Services and shows the Final price to CUSTOMER_SUPPORT on a priced order'`).
+- **Minimum-charge note, per-item rows:** the seeded catalog for this tenant has no minimum-charge rule and no per-item service. Covered only by card cases 2 and 5.
+
+Observation outside this slice: at 375 px the existing toast sits flush against the left edge of the viewport. The toast is `@clensy/ui`'s, unchanged here.
