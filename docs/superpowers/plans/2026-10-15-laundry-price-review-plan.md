@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft** (M4), 2026-10-15. Awaiting M5 Plan Review. |
+| Status | **Draft** (M4), 2026-10-15, revision 2. M5 round 1 returned it for revision; every finding is answered in [M5 round 1 revisions](#m5-round-1-revisions). Awaiting M5 round 2. |
 | Date | 2026-10-15 |
 | Tracking issue | [#162](https://github.com/rexescario-dev/clensy-platform/issues/162) "Laundry price preview and confirmation". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) (merged in #183: the order page), [#159](https://github.com/rexescario-dev/clensy-platform/issues/159) (merged in #184: `previewLaundryOrderPrice`, frozen `description`) and [#158](https://github.com/rexescario-dev/clensy-platform/issues/158) (merged in #186: the selection hook and Services editor). |
 | Branch | `feat/162-laundry-price-review`, from `main` at `47e90b1`. One PR for this plan, its M5 record and the implementation. |
@@ -76,7 +76,7 @@ These were recorded from the brainstorm with the owner on 2026-10-15. Each one b
 4. **The nav marker is unchanged.** `currentLaundryOrderSection` keeps mapping `price` to **Services** (#156 M4). It stays based on order-level state only, never on the selection or the preview.
 5. **The Price view table, in precedence order.**
    1. A persisted total means **Final price**, whatever the status or role, including while the role loads.
-   2. Otherwise, `CANCELLED` or `REJECTED` shows "This order was not priced." It never falls through to the Estimate card, even if preview data is still in memory.
+   2. Otherwise, any status other than `RECEIVED` or `WEIGHED` shows "This order was not priced.": `CANCELLED` and `REJECTED`, and the inconsistent case of a later status with no total. It never falls through to the Estimate card, even if preview data is still in memory.
    3. Otherwise, while the role is unresolved, the section shows nothing, the same guard #158 uses.
    4. `WEIGHED` with permission to `price` shows the **Estimate** card (decision 3).
    5. `RECEIVED`, and `WEIGHED` without `price`, show "Price is available after the order is weighed and services are chosen." This is the issue's wording, kept as is.
@@ -87,6 +87,21 @@ These were recorded from the brainstorm with the owner on 2026-10-15. Each one b
    4. *Success:* toast "Price confirmed.", then await the refetch. The card switches to Final when the status is `PRICED`.
    5. *Failure:* an alert shows the server message or "Unable to price order.". Selections stay, the order is refetched, and the guard is released and editing re-enabled once the refetch settles. The alert clears on the next selection change or Confirm. If the refetch fails, the page's existing order-error state takes over, and nothing assumes the order is still priceable.
 
+**Outcome table (M5 round 1).** Every status, with and without a persisted total, for Price (decision 5) and Services (planning decision a). "Operational" is TENANT_OWNER, OPS_MANAGER or SCHEDULER, the roles `laundryOrderActions` gives `price` on WEIGHED (§4.4).
+
+| Status | Total | Role | Price | Services |
+|---|---|---|---|---|
+| any | set | any, including loading | Final price, no Confirm | Locked sentence |
+| RECEIVED | null | loading | Nothing | "Weigh the order before choosing services." |
+| RECEIVED | null | any | "Price is available after …" | "Weigh the order before choosing services." |
+| WEIGHED | null | loading | Nothing | Nothing |
+| WEIGHED | null | operational | Estimate card, Confirm | Editor |
+| WEIGHED | null | other | "Price is available after …" | "No services selected yet." |
+| CANCELLED, REJECTED | null | any | "This order was not priced." | "No services selected yet." |
+| PRICED and every later status (inconsistent: the API never leaves these without a total) | null | any | "This order was not priced." | "No services selected yet." |
+
+No row without a total reaches the Estimate card except WEIGHED for an operational role. The inconsistent rows are safe and non-editable. Task 1 pins each row, by literal tests and by the exhaustive matrix; Task 6 renders the CANCELLED/REJECTED, inconsistent PRICED, and later-status-with-total rows.
+
 **M5-requested precisions folded in at design approval:** see owner decisions 3 and 5. Section 2 also asked for three corrections:
 - the renamed priced-order render test (Task 6, Step 1);
 - a synchronous double invocation, plus editors disabled through the refetch on failure as well as on success (Task 3, Task 6);
@@ -96,7 +111,11 @@ These were recorded from the brainstorm with the owner on 2026-10-15. Each one b
 
 These are not in the issue, the spec, or the owner decisions above. Each is the smallest choice that keeps the stated contract, and M5 may return any of them.
 
-- **(a) Services for `CANCELLED` / `REJECTED` with saved lines.** #158 showed the saved lines there with no locked sentence (its owner decision 4). Lines now live in Price (decision 1). `laundryServicesView` is unchanged and still returns `lines`. `ServicesBody` now renders the same sentence as `locked` ("Services are locked because this order has been priced."), because saved lines prove the order was priced. #155 decision a only kept the sentence off when the *status alone* had to prove it.
+- **(a) Services is keyed on the total, not on saved lines (revised at M5 round 1).** #158 showed a `CANCELLED` / `REJECTED` order's saved lines with no locked sentence (its owner decision 4). Lines now live in Price (decision 1), so that `lines` view goes away. `laundryServicesView` takes `hasTotal` (`order.totalMinorUnits !== null`) in place of `hasLines`:
+  - a total → `locked`, "Services are locked because this order has been priced.", whatever the status. This is the same signal that selects Price's Final card, so the two sections never disagree;
+  - no total → never `locked`. Outside RECEIVED and WEIGHED it is `none`, "No services selected yet.", next to Price's "This order was not priced.".
+
+  Evidence that the total is the right signal: the API writes order lines and `totalMinorUnits` only inside `price()` (`apps/api/src/modules/laundry/application/services/laundry-orders.service.ts`), in one transaction that also sets `PRICED`. Choosing services in the editor writes nothing; it drives the non-saving preview (§8.4.5). An order cancelled after pricing keeps its total (§4.3 note 5). The Weighing view (#155) is unchanged and still locks by status.
 - **(b) Row layout.**
   - Each row is a two-column grid: the text on the left, the amount on the right. The left column holds the name, then the quantity in its unit when there is one ("2.505 kg", "3 items", "1 item"), then the rate phrase ("₱50.00 per kg", "₱25.00 per item", "₱150.00 flat"). Each is its own `<p>`.
   - The rate phrase carries the unit, so there is no separate "Per kg" label. This is the issue's "unit phrase … rate".
@@ -112,6 +131,37 @@ These are not in the issue, the spec, or the owner decisions above. Each is the 
   - `order.services.byWeight`, `order.services.flat`, `order.services.note` and `order.services.rate.*`, the last moved to `order.price.rate.*`.
 
   `order.price.notPriced` changes from "Not priced yet." to "This order was not priced.". The before-pricing case now has its own key.
+
+## M5 round 1 revisions
+
+M5 round 1 (2026-10-15) reviewed the plan in five passes and returned it for revision. Each finding, and what changed:
+
+| Pass | Finding | Disposition |
+|---|---|---|
+| Design | (a) treats saved lines as proof of pricing | **Revised.** Services is keyed on the total, the same signal as Price; see planning decision (a), with the API evidence. |
+| Design, Tasks 3–4, Tasks 6–7 | Source of "More lines are not loaded." | **Already grounded; now cited.** `order.lines.pageInfo.hasNextPage`, from the #156 query; present in the generated `LaundryOrderQuery` type as `boolean \| null`. The page passes `more={… === true}` (Task 6) and never infers it from a row count. No API change. |
+| Design, Tasks 6–7 | Outcomes for every status/total pair | **Added** the outcome table under owner decisions, plus Task 6 render tests for PRICED with no total and a later status with a total. |
+| Design | Tasks missing from the review copy | Resolved: the review received all tasks. |
+| Tasks 1–2 | Roles hard-coded in the test helper | No change. The literal role-set test keeps the helper and `laundryOrderActions` aligned. |
+| Tasks 1–2 | `pricingSnapshot` might be null | **Verified non-null** in the generated type; noted in Task 1 Interfaces. |
+| Tasks 1–2 | Test count | The earlier text already said "plus the named cases"; now an exact count: 502. |
+| Tasks 1–2 | `retryPreview()` not a true no-op | **Fixed:** early return when there is no key; case 22 asserts no render. |
+| Tasks 1–2 | `complete` undefined | **Cited:** it already exists in the hook (line 183), built from `previewInputFromSelection`; Task 2 Interfaces quote it. |
+| Tasks 1–2 | A→B→A after a failure | **Added** hook case 24. |
+| Tasks 3–4 | Page behavior on a failed refetch | Already pinned by interaction case 10. |
+| Tasks 3–4 | Apollo result and error types | **Verified:** Apollo 3.14 resolved results carry `errors`; the call matches `laundry-weighing-editor.tsx:135`. |
+| Tasks 3–4 | `ready` with a null total | **Fixed:** the card shows `failed`; card case 8. |
+| Tasks 3–4 | Stale preview, loading, retry, Final from saved data | Pinned by interaction cases 2, 11, 12, card case 3, render cases; **added** interaction case 13 (base change after ready). |
+| Tasks 3–4 | Alert clearing at the page | Already pinned by interaction case 7 and hook case 7. |
+| Tasks 3–4 | Copy paths, network fallback | **Verified:** keys sit under `laundry.order.price`; `graphQLErrorMessage` returns `undefined` for a plain `Error`, so the fallback shows. |
+| Task 5 | Disabled submit must be cancelled | Already true (`preventDefault()` first); **added** the `dispatchEvent(...) === false` assertion. |
+| Task 5 | Combobox honors `disabled` | **Verified:** `packages/web/src/laundry/laundry-search-combobox.tsx:153` disables the input, and the list renders only when expanded. |
+| Task 5 | Count validity independent of blur | Already true (`previewInputFromSelection` never reads `quantityTouched`); hook case 23 now asserts it with an unblurred `0`. |
+| Task 5 | Disabled tests by name; add/remove while disabled | **Revised** editor case 20; **added** case 21. |
+| Task 5 | Grep before removing copy; focus effect on `pending` | Already steps of the plan; unchanged. |
+| Tasks 6–7 | Terminal render test contradicts itself | **Revised** with planning decision (a). |
+| Tasks 6–7 | Refetch test double | **Revised:** `settleRefetch` sets the resulting query state, settles the promise and re-renders; its comment says it does not exercise Apollo's refetch. |
+| Tasks 6–7 | Catalog mock shape | **Revised** to the generated `ServicesQuery` / `AddOnsQuery` node shapes with `pageInfo`. Neither query has a pricing unit: the unit comes from the preview (#158), so the review's "include the unit" premise does not apply. The wrong catalog price stays. |
 
 ## Global constraints
 
@@ -141,8 +191,10 @@ These are the input classes most likely to bite a user that the issue does not s
 |---|---|---|
 | `apps/web/lib/laundry-price-review.ts` | Create | `laundryPriceView`, `laundryEstimateState`, `laundryPreviewRows`, `laundrySnapshotRows`, `LaundryPriceRow` |
 | `apps/web/lib/laundry-price-review.test.ts` | Create | Table tests for the three |
+| `apps/web/lib/laundry-service-selection.ts` | Modify | `laundryServicesView` keyed on `hasTotal`; the `lines` view removed (planning decision a) |
+| `apps/web/lib/laundry-service-selection.test.ts` | Modify | The view matrix on `hasTotal` |
 | `apps/web/lib/use-laundry-service-selection.ts` | Modify | A→B→A early return, `retryPreview`, `complete` |
-| `apps/web/lib/use-laundry-service-selection.hook.test.tsx` | Modify | Cases 20–23 |
+| `apps/web/lib/use-laundry-service-selection.hook.test.tsx` | Modify | Cases 20–24 |
 | `apps/web/lib/use-confirm-laundry-price.ts` | Create | `useConfirmLaundryPrice` |
 | `apps/web/lib/use-confirm-laundry-price.hook.test.tsx` | Create | Guard, success, failure, refetch |
 | `apps/web/components/laundry/laundry-price-card.tsx` | Create | `LaundryPriceCard` (estimate / final) |
@@ -166,6 +218,8 @@ Implements decisions 1, 3, 5; planning decisions (b), (c), (f); §8.4.4 ("The cl
 **Files:**
 - Create: `apps/web/lib/laundry-price-review.ts`
 - Test: `apps/web/lib/laundry-price-review.test.ts`
+- Modify: `apps/web/lib/laundry-service-selection.ts` (`laundryServicesView`, planning decision a)
+- Test: `apps/web/lib/laundry-service-selection.test.ts`
 
 **Interfaces:**
 - Consumes: `laundryLineQuantity(unit, quantity): LaundryLineQuantity` and `LaundryLineQuantity` from `./laundry-order-page`; `laundryRateKey(unit): LaundryRateKey`, `LaundryRateKey` and `LaundryPreviewLine` from `./laundry-service-selection`.
@@ -176,7 +230,8 @@ Implements decisions 1, 3, 5; planning decisions (b), (c), (f); §8.4.4 ("The cl
   - `laundryEstimateState(input: { complete: boolean; hasBase: boolean; previewError: boolean; previewLoading: boolean; ready: boolean }): LaundryEstimateState`
   - `interface LaundryPriceRow { amountMinorUnits: number; key: string; minimumCharge: { minorUnits: number | null } | null; name: string; quantity: LaundryLineQuantity; rateKey: LaundryRateKey; rateMinorUnits: number }`
   - `laundryPreviewRows(lines: readonly LaundryPreviewLine[]): LaundryPriceRow[]` (keys `preview-<index>`)
-  - `laundrySnapshotRows(lines: readonly LaundrySnapshotLine[]): LaundryPriceRow[]` (keys are line ids), where `LaundrySnapshotLine = NonNullable<LaundryOrderQuery['laundryOrder']>['lines']['nodes'][number]`
+  - `laundrySnapshotRows(lines: readonly LaundrySnapshotLine[]): LaundryPriceRow[]` (keys are line ids), where `LaundrySnapshotLine = NonNullable<LaundryOrderQuery['laundryOrder']>['lines']['nodes'][number]`. `pricingSnapshot` is non-null in the generated `LaundryOrderQuery` type (`packages/client/src/generated/graphql.ts`); only `minimumChargeMinorUnits` is nullable, handled by planning decision (c).
+  - Changed: `LaundryServicesView = 'beforeWeigh' | 'editor' | 'hidden' | 'locked' | 'none'` (`lines` is removed), and `LaundryServicesViewInput.hasLines` is replaced by `hasTotal: boolean` (`order.totalMinorUnits !== null`).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -528,12 +583,102 @@ export function laundrySnapshotRows(lines: readonly LaundrySnapshotLine[]): Laun
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `pnpm --filter web exec vitest run lib/laundry-price-review.test.ts`
-Expected: PASS. The count is the matrix (15 × 2 × 2 × 8 = 480) plus the named cases.
+Expected: PASS, 502 tests: the matrix (15 statuses × 2 fulfillment types × 2 total values × 8 role values = 480) plus 22 named tests (8 view, 10 estimate state, 4 rows).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Key the Services view on the total (failing test)**
+
+Planning decision (a). In `laundry-service-selection.test.ts`:
+
+1. Delete the line `import { LAUNDRY_PRICED_STATUSES } from './laundry-order-page';`.
+2. Replace the `expected` helper with:
+
+```ts
+  function expected(status: LaundryOrderStatus, role: AdminRole | undefined, hasTotal: boolean) {
+    // A persisted total wins, as in Price (#162 owner decision 5.1).
+    if (hasTotal) return 'locked';
+    if (status === 'WEIGHED') {
+      if (role === undefined) return 'hidden';
+      return OPERATIONAL.has(role) ? 'editor' : 'none';
+    }
+    if (status === 'RECEIVED') return 'beforeWeigh';
+    // No total: never priced, so never "locked because … priced".
+    return 'none';
+  }
+```
+
+3. In the matrix loop, rename `hasLines` to `hasTotal` in the `for`, the test name (`total ${String(hasTotal)}`), the call and the `expected` call.
+4. In the literal-role test and in `'never shows the editor outside WEIGHED …'`, replace `hasLines: false` with `hasTotal: false`. In `'shows the editor for exactly …'`, rename the inner loop variable and the call's `hasLines` to `hasTotal`. Its expected set does not change: with a total, WEIGHED is `locked`, so only the no-total runs add editors.
+5. Replace `'shows the locked sentence for CANCELLED and REJECTED never, with or without lines'` with:
+
+```ts
+  // #162 M5 round 1: `locked` says the order "has been priced", so it is
+  // shown exactly when the order has a total, whatever the status.
+  it('locks Services exactly when the order has a total', () => {
+    for (const status of LAUNDRY_ORDER_STATUSES) {
+      expect(laundryServicesView({ hasTotal: true, roleResolved: false, status, verbs: ['price'] })).toBe('locked');
+      expect(laundryServicesView({ hasTotal: false, roleResolved: true, status, verbs: ['price'] })).not.toBe('locked');
+    }
+  });
+
+  it.each(['CANCELLED', 'REJECTED', 'PRICED', 'PAID'] as const)('%s without a total shows the none sentence, not locked', (status) => {
+    expect(laundryServicesView({ hasTotal: false, roleResolved: true, status, verbs: [] })).toBe('none');
+  });
+```
+
+Run: `pnpm --filter web exec vitest run lib/laundry-service-selection.test.ts`
+Expected: FAIL. Vitest does not type-check, so the tests run against the old function, which reads `hasLines` as `undefined`: every RECEIVED or WEIGHED case with a total fails on `locked`, and every priced status without a total fails on `none`.
+
+- [ ] **Step 6: Change `laundryServicesView`**
+
+In `laundry-service-selection.ts`:
+
+1. Delete `import { LAUNDRY_PRICED_STATUSES } from './laundry-order-page';`.
+2. Replace the comment, type, input and function, from `// What the Services section shows (owner decision 4, #158).` through the end of `laundryServicesView`, with:
+
+```ts
+// What the Services section shows (owner decision 4, #158). A persisted
+// total means the order was priced (the API writes lines and the total only
+// in `priceLaundryOrder`), so it alone selects the locked sentence, as it
+// selects Price's Final card (#162 planning decision a). Without a total,
+// the sentence is never shown. The editor only when the actor may price
+// (`laundryOrderActions` already intersects WEIGHED with the operational
+// roles, spec §4.4). Nothing on a WEIGHED order until the role is known, so
+// read-only copy never flashes before the editor.
+export type LaundryServicesView = 'beforeWeigh' | 'editor' | 'hidden' | 'locked' | 'none';
+
+export interface LaundryServicesViewInput {
+  // `order.totalMinorUnits !== null`.
+  hasTotal: boolean;
+  // `currentAdmin.role` has loaded.
+  roleResolved: boolean;
+  status: LaundryOrderStatus;
+  // `laundryOrderActions(status, fulfillmentType, role)`.
+  verbs: readonly LaundryOrderVerb[];
+}
+
+export function laundryServicesView({ hasTotal, roleResolved, status, verbs }: LaundryServicesViewInput): LaundryServicesView {
+  if (hasTotal) return 'locked';
+  // The status is checked as well as the verb (M5 part 2): the editor can
+  // never appear outside WEIGHED, even if the client verb table changes.
+  if (status === 'WEIGHED' && verbs.includes('price')) return 'editor';
+  if (status === 'WEIGHED' && !roleResolved) return 'hidden';
+  if (status === 'WEIGHED') return 'none';
+  if (status === 'RECEIVED') return 'beforeWeigh';
+  return 'none';
+}
+```
+
+`LAUNDRY_PRICED_STATUSES` stays exported from `laundry-order-page.ts`; the Weighing view (#155) still uses it, unchanged.
+
+3. Keep `page.tsx` compiling until Task 6 replaces `ServicesBody`: in `PricingSections`, replace `hasLines: order.lines.nodes.length > 0,` with `hasTotal: order.totalMinorUnits !== null,`, and in `ServicesBody` delete `case 'lines':` and the `return <SavedLines order={order} t={t} />;` under it.
+
+Run: `pnpm --filter web exec vitest run lib/laundry-service-selection.test.ts`
+Expected: PASS. The render case `'lists the saved lines of a %s order without the locked sentence'` now fails (a cancelled order with lines and no total shows "No services selected yet."); Task 6, Step 1 replaces it. No other suite changes.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add apps/web/lib/laundry-price-review.ts apps/web/lib/laundry-price-review.test.ts
+git add apps/web/lib/laundry-price-review.ts apps/web/lib/laundry-price-review.test.ts apps/web/lib/laundry-service-selection.ts apps/web/lib/laundry-service-selection.test.ts 'apps/web/app/app/laundry/[id]/page.tsx'
 git commit -m "feat(162): add the price view, estimate state and row helpers"
 ```
 
@@ -549,7 +694,7 @@ Implements decision 3 (retry, readiness) and the #158 M7 carry-forwards 1 and 2.
 
 **Interfaces:**
 - Produces, added to `LaundryServiceSelectionState`:
-  - `complete: boolean`: base chosen, every row chosen, every count valid.
+  - `complete: boolean`: base chosen, every row chosen, every count valid. It already exists inside the hook (`use-laundry-service-selection.ts:183`, `const complete = input !== null && selection.addOns.every((row) => row.choice !== null);`) and is only exported here. `input` is `previewInputFromSelection`, the same builder that makes `priceInput`, which returns `null` for any count `parseItemCount` rejects and never reads `quantityTouched`. So the error message waits for blur, but completeness never does. There is no second definition of valid input.
   - `retryPreview: () => void`: re-requests the current key under a new generation. It is a no-op when there is no key.
 
 - [ ] **Step 1: Record every render in the test harness**
@@ -665,7 +810,10 @@ Append inside `describe('useLaundryServiceSelection', …)`, after the last exis
 
     it('does nothing without a previewable selection', () => {
       render();
+      const mark = renders.length;
       edit(() => latest.retryPreview());
+      // A true no-op (M5 round 1): no state change, so no render.
+      expect(renders.length).toBe(mark);
       wait(1000);
       expect(sent()).toBe(0);
       expect(latest.previewLoading).toBe(false);
@@ -681,15 +829,40 @@ Append inside `describe('useLaundryServiceSelection', …)`, after the last exis
     expect(latest.complete).toBe(false);
     edit(() => latest.chooseAddOn(row, ADD_ON_1));
     expect(latest.complete).toBe(true);
+    // Typed, never blurred (M5 round 1): the message waits for blur, but
+    // completeness and readiness do not.
     edit(() => latest.changeBaseQuantity('0'));
     expect(latest.complete).toBe(false);
+    expect(latest.ready).toBe(false);
+    expect(latest.priceInput).toBeNull();
+  });
+
+  // M5 round 1: a settled failure is a settled outcome too. A→B→A within one
+  // debounce keeps A's failure and sends nothing; only Try again re-sends.
+  it('case 24: A fails, then A→B→A within one debounce keeps the failure and sends nothing more', async () => {
+    render();
+    chooseBase();
+    wait(300);
+    await rejectCall(0, new Error('network down'));
+    expect(latest.previewError).not.toBeNull();
+    chooseBase(OTHER_BASE_CHOICE);
+    wait(100);
+    chooseBase();
+    wait(1000);
+    expect(sent()).toBe(1);
+    expect(latest.previewError).not.toBeNull();
+    expect(latest.ready).toBe(false);
+    edit(() => latest.retryPreview());
+    wait(300);
+    expect(sent()).toBe(2);
+    expect(input(1)).toEqual(input(0));
   });
 ```
 
 - [ ] **Step 3: Run the tests to verify they fail**
 
 Run: `pnpm --filter web exec vitest run lib/use-laundry-service-selection.hook.test.tsx`
-Expected: FAIL. Cases 20 and 22 fail on `ready`, `sent()` and `retryPreview is not a function`. Case 23 fails on `complete` being `undefined`. Case 21 passes as a **characterization test**: it pins the existing planning decision f behavior. Cases 1–19 pass.
+Expected: FAIL. Cases 20 and 22 fail on `ready`, `sent()` and `retryPreview is not a function`. Case 23 fails on `complete` being `undefined`. Case 24 fails on `sent()` (A is asked again today) and on `retryPreview`. Case 21 passes as a **characterization test**: it pins the existing planning decision f behavior. Cases 1–19 pass.
 
 - [ ] **Step 4: Implement**
 
@@ -777,6 +950,8 @@ with:
 
 ```ts
     retryPreview: () => {
+      // Nothing to re-send: change no state (M5 round 1).
+      if (key === null) return;
       settledRef.current = null;
       setSettled(null);
       setRetries((count) => count + 1);
@@ -1329,6 +1504,18 @@ describe('LaundryPriceCard', () => {
     expect(html).toContain('tabular-nums');
     expect(html).not.toContain('<table');
   });
+
+  // M5 round 1: an inconsistent `ready` with no server total is never a
+  // blank estimate and never shows rows or an invented total.
+  it('case 8: ready without a total shows the failed state, no rows, and a disabled Confirm', () => {
+    const html = estimate({ state: 'ready', totalMinorUnits: null });
+    expect(html).toContain('Couldn’t calculate the estimate.');
+    expect(html).toContain('>Try again</button>');
+    for (const absent of ['Wash &amp; fold', '₱123.45', 'Estimated total', '₱999.99']) {
+      expect(html).not.toContain(absent);
+    }
+    expect(confirmTag(html)).toContain('disabled');
+  });
 });
 ```
 
@@ -1447,12 +1634,16 @@ function EstimateBody({
   t,
   totalMinorUnits,
 }: Extract<LaundryPriceCardProps, { kind: 'estimate' }> & { t: Translate }) {
-  const sentence = STATE_SENTENCE[state];
-  const ready = state === 'ready' && totalMinorUnits !== null;
+  // `ready` without a server total is inconsistent (M5 round 1). It shows as
+  // `failed`, with Try again, never as a blank estimate and never with an
+  // invented total.
+  const shown: LaundryEstimateState = state === 'ready' && totalMinorUnits === null ? 'failed' : state;
+  const sentence = STATE_SENTENCE[shown];
+  const ready = shown === 'ready' && totalMinorUnits !== null;
   return (
     <>
       <div aria-live="polite">{sentence ? <p className="mt-3 text-slate-600">{t(sentence)}</p> : null}</div>
-      {state === 'failed' ? (
+      {shown === 'failed' ? (
         <Button type="button" variant="secondary" className="mt-2" onClick={onRetry}>
           {t('order.price.retry')}
         </Button>
@@ -1529,7 +1720,7 @@ function Footer({ label, totalMinorUnits }: { label: string; totalMinorUnits: nu
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `pnpm --filter web exec vitest run lib/laundry-price-card.render.test.tsx`
-Expected: PASS (10 tests). `Button` (`@clensy/ui`) renders a plain `<button>` with its text as the only child, so the button regexes match on text and `disabled=""`, not on classes.
+Expected: PASS (11 tests). `Button` (`@clensy/ui`) renders a plain `<button>` with its text as the only child, so the button regexes match on text and `disabled=""`, not on classes.
 
 - [ ] **Step 6: Commit**
 
@@ -1643,13 +1834,34 @@ function mount(weightGrams: number | null = WEIGHT, disabled = false) {
     await chooseBase(SHOES);
     await addRow(IRON);
     mount(WEIGHT, true);
-    const controls = [...container.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input, button')].filter(
-      (control) => control.id !== 'elsewhere',
-    );
-    expect(controls.length).toBeGreaterThanOrEqual(6);
-    expect(controls.every((control) => control.disabled)).toBe(true);
+    // Named one by one (M5 round 1), so a control the combobox renders
+    // differently cannot hide behind a count.
+    const named: (HTMLInputElement | HTMLButtonElement)[] = [
+      baseInput(),
+      el<HTMLInputElement>('#laundry-base-count'),
+      addOnInputs()[0]!,
+      countInput(rowOf(addOnInputs()[0]!))!,
+      button('Add add-on'),
+      button('Remove add-on 1'),
+    ];
+    for (const control of named) expect(control.disabled, control.id || control.textContent).toBe(true);
+    // And nothing in the editor is left enabled.
+    expect([...container.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input, button')].filter((control) => !control.disabled)).toEqual([]);
     mount(WEIGHT, false);
     expect(baseInput().disabled).toBe(false);
+  });
+
+  it('case 21: while disabled, Add add-on and Remove change no rows', async () => {
+    mount();
+    await chooseBase(SHOES);
+    await addRow(IRON);
+    mount(WEIGHT, true);
+    const before = addOnInputs().map((input) => input.value);
+    click('Add add-on');
+    click('Remove add-on 1');
+    await settle();
+    expect(addOnInputs().map((input) => input.value)).toEqual(before);
+    expect(addOnInputs()).toHaveLength(1);
   });
 ```
 
@@ -1679,9 +1891,13 @@ and append inside `describe('laundry weighing editor', …)`:
     const controls = [...container.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input, button')];
     expect(controls.length).toBeGreaterThanOrEqual(3);
     expect(controls.every((control) => control.disabled)).toBe(true);
+    // The handler calls preventDefault() before the guard, so the dropped
+    // submit is also cancelled (M5 round 1).
+    let notCancelled = true;
     act(() => {
-      container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      notCancelled = container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     });
+    expect(notCancelled).toBe(false);
     expect(weigh.calls).toEqual([]);
     await mount(2500, false);
     expect(button('Record weight').disabled).toBe(false);
@@ -1693,7 +1909,7 @@ and append inside `describe('laundry weighing editor', …)`:
 Run: `pnpm --filter web exec vitest run lib/laundry-services-editor.interaction.test.tsx lib/laundry-weighing-editor.interaction.test.tsx`
 Expected: FAIL.
 - The services cases 1, 3, 4, 5, 6 and 17 fail on the text that is still shown.
-- Services case 20 fails on enabled controls.
+- Services cases 20 and 21 fail: the controls are enabled, and the clicks add and remove rows.
 - The weighing case fails on enabled controls.
 
 The other cases pass.
@@ -1834,7 +2050,7 @@ In `laundry-weighing-editor.tsx`:
   const locked = pending || disabled;
 ```
 
-4. In `handleSubmit`, replace `if (inFlight.current) return;` with `if (inFlight.current || disabled) return;`.
+4. In `handleSubmit`, replace `if (inFlight.current) return;` with `if (inFlight.current || disabled) return;`. Keep `event.preventDefault();` as the handler's first line (it is today, `laundry-weighing-editor.tsx:114`), so a dropped submit is still cancelled.
 5. In the JSX, replace every `disabled={pending}` (the entry `FormField`, the remove `Button`, the "Add bag" `Button`, and the submit `Button`) with `disabled={locked}`. The focus-return effect keeps watching `pending` only.
 
 - [ ] **Step 6: Remove the editor-only copy**
@@ -2039,19 +2255,21 @@ with:
     });
 ```
 
-   - **`'lists the saved lines of a %s order without the locked sentence'`:** replace it with (planning decision a):
+   - **`'lists the saved lines of a %s order without the locked sentence'`:** replace it with (planning decision a). The fixture, lines with no total, cannot come from the API (lines and the total are written together in `priceLaundryOrder`), so it pins the safe outcome: neither section claims a price.
 
 ```tsx
-    it.each(['CANCELLED', 'REJECTED'])('says a %s order with saved lines has locked services, and lists no lines there', async (status) => {
+    it.each(['CANCELLED', 'REJECTED'])('never calls a %s order without a total priced, even with lines in the payload', async (status) => {
       page.order = order({ lines: { nodes: [line('l1', 'FLAT', 1, 100)], pageInfo: { hasNextPage: false } }, status, totalMinorUnits: null });
       const html = await renderPage();
       const services = section(html, 'services');
-      expect(services).toContain('Services are locked because this order has been priced.');
+      expect(services).toContain('No services selected yet.');
+      expect(services).not.toContain('has been priced');
       expect(services).not.toContain('Wash &amp; fold');
       expect(services).not.toContain('<input');
-      // No total: decision 5 never shows an estimate for these statuses.
-      expect(section(html, 'price')).toContain('This order was not priced.');
-      expect(section(html, 'price')).not.toContain('Estimate');
+      const price = section(html, 'price');
+      expect(price).toContain('This order was not priced.');
+      expect(price).not.toContain('Estimate');
+      expect(price).not.toContain('Final price');
     });
 ```
 
@@ -2073,7 +2291,35 @@ with:
       page.role = undefined;
       expect(section(await renderPage(), 'price')).toContain('Final price');
     });
+
+    // M5 round 1: inconsistent status/total pairs (owner decision 5).
+    it('shows PRICED with no total as not priced, with no editor, Estimate or Confirm', async () => {
+      page.order = order({ lines: { nodes: [], pageInfo: { hasNextPage: false } }, status: 'PRICED', totalMinorUnits: null });
+      page.role = 'OPS_MANAGER';
+      const html = await renderPage();
+      const price = section(html, 'price');
+      expect(price).toContain('This order was not priced.');
+      expect(price).not.toContain('Estimate');
+      expect(price).not.toContain('<button');
+      const services = section(html, 'services');
+      expect(services).toContain('No services selected yet.');
+      expect(services).not.toContain('has been priced');
+      expect(services).not.toContain('<input');
+    });
+
+    it('shows the Final price for a later status with a total, to a role that cannot price', async () => {
+      page.order = order({ lines: { nodes: [line('l1', 'FLAT', 1, 45000)], pageInfo: { hasNextPage: false } }, status: 'PROCESSING', totalMinorUnits: 45000 });
+      page.role = 'CUSTOMER_SUPPORT';
+      const html = await renderPage();
+      const price = section(html, 'price');
+      expect(price).toContain('Final price');
+      expect(price).toContain('₱450.00');
+      expect(price).not.toContain('<button');
+      expect(section(html, 'services')).toContain('Services are locked because this order has been priced.');
+    });
 ```
+
+   The other two inconsistent-state cases the review named are already pinned: an unresolved role with no total on a WEIGHED order renders an empty Price body (`'renders an empty Services body while the role loads on a weighed order'`, above), and a role without the `price` verb sees no Confirm (`'shows %s no editor and no Confirm on a weighed order'`, above).
 
 7. In `'offers the weighing editor to an operational role on a received order, and controls only there'`, nothing changes: Price shows a sentence with no button for `RECEIVED`.
 8. **`'warns when more lines exist than were loaded'`:** replace its body with:
@@ -2164,14 +2410,28 @@ vi.mock('@apollo/client', async (importOriginal) => ({
   useApolloClient: () => ({ query: page.preview }),
 }));
 
+// The generated `ServicesQuery` / `AddOnsQuery` node shapes
+// (`packages/client/src/generated/graphql.ts`). Neither carries a pricing
+// unit: the unit is learned from the preview response (#158), which is why
+// `CatalogEntry.unit` feeds only `answer` below. The catalog price is a
+// deliberate 99900, so a figure on screen from anywhere but the preview fails
+// the tests (§8.4.4).
+function catalogNode(entry: CatalogEntry, listKey: 'addOns' | 'services') {
+  return listKey === 'services'
+    ? { active: true, activePricing: { priceMinorUnits: 99900 }, durationMinutes: 60, id: entry.id, name: entry.name }
+    : { active: true, description: null, id: entry.id, name: entry.name, priceMinorUnits: 99900 };
+}
+
 function catalogQuery(entries: CatalogEntry[], listKey: 'addOns' | 'services') {
   return (options: { skip?: boolean; variables: { filter: { name?: { iLike: string } } } }) => {
     if (options.skip) return { data: undefined, error: undefined, loading: false };
     const text = (options.variables.filter.name?.iLike ?? '').replaceAll('%', '').toLowerCase();
-    const nodes = entries
-      .filter((entry) => entry.name.toLowerCase().includes(text))
-      .map((entry) => ({ id: entry.id, activePricing: { priceMinorUnits: 99900 }, name: entry.name, priceMinorUnits: 99900 }));
-    return { data: { [listKey]: { nodes, totalCount: nodes.length } }, error: undefined, loading: false };
+    const nodes = entries.filter((entry) => entry.name.toLowerCase().includes(text)).map((entry) => catalogNode(entry, listKey));
+    return {
+      data: { [listKey]: { nodes, pageInfo: { hasNextPage: false, hasPreviousPage: false }, totalCount: nodes.length } },
+      error: undefined,
+      loading: false,
+    };
   };
 }
 
@@ -2326,6 +2586,23 @@ async function finish(list: Deferred[], index: number, how: 'reject' | 'resolve'
   });
 }
 
+// Settles refetch `index` the way Apollo leaves the order query afterwards
+// (M5 round 1). It does NOT exercise Apollo's refetch: `useLaundryOrderQuery`
+// is mocked to read `page`. It sets the query state the real hook would
+// expose (new data on success, `error` on failure), settles the promise the
+// page awaits, and re-renders, so the page's response to that state is what
+// these tests prove.
+async function settleRefetch(index: number, outcome: { error: Error } | { order: unknown }) {
+  if ('order' in outcome) {
+    page.order = outcome.order;
+    await finish(page.refetches, index, 'resolve', { data: { laundryOrder: outcome.order } });
+  } else {
+    page.orderError = outcome.error;
+    await finish(page.refetches, index, 'reject', outcome.error);
+  }
+  mount();
+}
+
 function section(name: string): HTMLElement {
   const found = container.querySelector<HTMLElement>(`#laundry-order-${name}`);
   expect(found, name).not.toBeNull();
@@ -2446,9 +2723,7 @@ describe('order page price review (#162)', () => {
     expect(page.refetch).toHaveBeenCalledTimes(1);
     expect(controls('services').every((control) => control.disabled)).toBe(true);
     expect(controls('weighing').every((control) => control.disabled)).toBe(true);
-    page.order = pricedOrder();
-    await finish(page.refetches, 0, 'resolve', undefined);
-    mount();
+    await settleRefetch(0, { order: pricedOrder() });
     expect(priceText()).toContain('Final price');
     expect(priceText()).not.toContain('Confirm price');
     expect(priceText()).not.toContain('Estimate');
@@ -2479,8 +2754,7 @@ describe('order page price review (#162)', () => {
     expect(page.refetch).toHaveBeenCalledTimes(1);
     expect(controls('services').every((control) => control.disabled)).toBe(true);
     expect(controls('weighing').every((control) => control.disabled)).toBe(true);
-    await finish(page.refetches, 0, 'resolve', undefined);
-    mount();
+    await settleRefetch(0, { order: weighed() });
     expect(controls('services').some((control) => control.disabled)).toBe(false);
     expect(controls('weighing').some((control) => control.disabled)).toBe(false);
     expect(baseInput().value).toBe('Wash');
@@ -2495,7 +2769,7 @@ describe('order page price review (#162)', () => {
     act(() => confirmButton().click());
     await finish(page.prices, 0, 'reject', new Error('network down'));
     expect(section('price').querySelector('[role="alert"]')?.textContent).toBe('Unable to price order.');
-    await finish(page.refetches, 0, 'resolve', undefined);
+    await settleRefetch(0, { order: weighed() });
   });
 
   // Review focus 2: another actor cancelled the order first.
@@ -2503,9 +2777,7 @@ describe('order page price review (#162)', () => {
     await readyWithWash();
     act(() => confirmButton().click());
     await finish(page.prices, 0, 'reject', new Error('network down'));
-    page.order = weighed({ status: 'CANCELLED' });
-    await finish(page.refetches, 0, 'resolve', undefined);
-    mount();
+    await settleRefetch(0, { order: weighed({ status: 'CANCELLED' }) });
     expect(priceText()).toContain('This order was not priced.');
     expect(section('price').querySelector('button')).toBeNull();
   });
@@ -2514,9 +2786,7 @@ describe('order page price review (#162)', () => {
     await readyWithWash();
     act(() => confirmButton().click());
     await finish(page.prices, 0, 'resolve', { data: { priceLaundryOrder: { id: page.id } } });
-    page.orderError = new Error('reload failed');
-    await finish(page.refetches, 0, 'reject', page.orderError);
-    mount();
+    await settleRefetch(0, { error: new Error('reload failed') });
     expect(container.textContent).toContain('Unable to load laundry order.');
     expect(container.querySelector('#laundry-order-price')).toBeNull();
   });
@@ -2548,6 +2818,22 @@ describe('order page price review (#162)', () => {
     expect(page.previewCalls.length).toBe(before + 1);
     expect(page.previewCalls[before]).toEqual(page.previewCalls[before - 1]);
     expect(baseInput().value).toBe('Wash');
+    expect(confirmButton().disabled).toBe(false);
+  });
+
+  // M5 round 1: a selection change after the estimate is shown makes it stale.
+  it('case 13: a new base after the estimate is shown hides the old rows and disables Confirm until its preview arrives', async () => {
+    await readyWithWash();
+    expect(priceText()).toContain('₱123.45');
+    type(baseInput(), 'Sho');
+    await pick(baseInput(), SHOES, 0);
+    expect(priceText()).toContain('Updating estimate…');
+    expect(priceText()).not.toContain('Wash');
+    expect(priceText()).not.toContain('₱123.45');
+    expect(priceText()).not.toContain('₱999.99');
+    expect(confirmButton().disabled).toBe(true);
+    await settle(3);
+    expect(priceText()).toContain('Shoes');
     expect(confirmButton().disabled).toBe(false);
   });
 });
@@ -2660,7 +2946,7 @@ function PricingSections({
   verbs: readonly LaundryOrderVerb[];
 }) {
   const view = laundryServicesView({
-    hasLines: order.lines.nodes.length > 0,
+    hasTotal: order.totalMinorUnits !== null,
     roleResolved,
     status: order.status,
     verbs,
@@ -2690,8 +2976,9 @@ function PricingSections({
 }
 
 // Owner decision 4 (#158). Price lists a priced order's lines (#162 owner
-// decision 1). Saved lines prove pricing, so `lines` reads as locked too
-// (#162 planning decision a).
+// decision 1). `locked` is keyed on the persisted total, the same signal as
+// Price's Final card, so the two sections never disagree (#162 planning
+// decision a).
 function ServicesBody({
   disabled,
   selection,
@@ -2713,7 +3000,6 @@ function ServicesBody({
     case 'none':
       return <p>{t('order.services.none')}</p>;
     case 'locked':
-    case 'lines':
       return <p>{t('order.services.locked')}</p>;
   }
 }
@@ -2855,9 +3141,11 @@ git commit -m "docs(162): record the M6 verification"
 | No client arithmetic | §8.4.4; issue Acceptance | 1 (case 2), 6 (case 1) |
 | No edit-price or reprice action | §8.6; issue Immutability | Global constraints |
 | Price owns the breakdown; Overview link; Services locked only | Decision 1 | 6 |
+| Services locked exactly when there is a total; Price and Services never disagree | Planning decision (a); M5 round 1 | 1, 6 |
+| Inconsistent status/total pairs are safe and non-editable | Decision 5; outcome table | 1, 4 (case 8), 6 |
 | Editor keeps selection only | Decision 2 | 5 |
-| Estimate states and retry | Decision 3; #158 M7 items 2, 3 | 1, 2, 4, 6 (cases 2, 12) |
-| No `ready` blip on A→B→A | #158 M7 item 1 | 2 |
+| Estimate states and retry | Decision 3; #158 M7 items 2, 3 | 1, 2, 4, 6 (cases 2, 12, 13) |
+| No `ready` blip on A→B→A, for a ready or a failed result | #158 M7 item 1 | 2 (cases 20, 24) |
 | Nav marker unchanged | Decision 4 | 6 (characterization) |
 | Confirm flow, guard, frozen editors, refetch on both paths | Decision 6 | 3, 5, 6 (cases 5–10) |
 
