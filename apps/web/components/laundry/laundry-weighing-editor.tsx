@@ -11,6 +11,9 @@ export interface LaundryWeighingEditorProps {
   // Every control is disabled, and a submit is dropped, while a price is
   // confirmed (#162 owner decision 6.3).
   disabled?: boolean;
+  // Told when a save starts and when it ends, after the reload that follows
+  // it, so the page can hold Confirm meanwhile (#162 M7 follow-up).
+  onPendingChange?: (pending: boolean) => void;
   // Refetches the order after a recorded weight, so the summary's Weight
   // card and the "Recorded weight" line show the saved value (#155).
   onRecorded: () => Promise<unknown>;
@@ -43,7 +46,13 @@ function entry(key: number, text: string): Entry {
 // spec §8.4.4, #155). Rows are never persisted (§8.2): a re-weigh starts
 // from one row holding the recorded total. The server stays authoritative
 // (§8.4.1); this form only stops input it would reject anyway.
-export function LaundryWeighingEditor({ disabled = false, onRecorded, orderId, weightGrams }: LaundryWeighingEditorProps) {
+export function LaundryWeighingEditor({
+  disabled = false,
+  onPendingChange,
+  onRecorded,
+  orderId,
+  weightGrams,
+}: LaundryWeighingEditorProps) {
   const t = useClensyTranslations('laundry');
   const toast = useToast();
   const [weigh] = useWeighLaundryOrderMutation();
@@ -127,6 +136,7 @@ export function LaundryWeighingEditor({ disabled = false, onRecorded, orderId, w
     }
     inFlight.current = true;
     setPending(true);
+    onPendingChange?.(true);
     const total = summary.totalGrams;
     try {
       // The client sets no `errorPolicy`, so Apollo's default `'none'`
@@ -159,6 +169,7 @@ export function LaundryWeighingEditor({ disabled = false, onRecorded, orderId, w
     } finally {
       inFlight.current = false;
       setPending(false);
+      onPendingChange?.(false);
     }
   }
 

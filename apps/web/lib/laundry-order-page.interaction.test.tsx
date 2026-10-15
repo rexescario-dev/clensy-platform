@@ -52,6 +52,9 @@ const page = vi.hoisted(() => ({
   refetches: [] as Deferred[],
   role: 'OPS_MANAGER',
   weigh: vi.fn(),
+  // Set by the one case that records a weight on purpose.
+  weighExpected: false,
+  weighs: [] as Deferred[],
 }));
 
 vi.mock('next/navigation', () => ({
@@ -203,6 +206,9 @@ beforeEach(() => {
   page.invoice.mockReset();
   page.paid.mockReset();
   page.weigh.mockReset();
+  page.weigh.mockImplementation(deferred(page.weighs));
+  page.weighs.length = 0;
+  page.weighExpected = false;
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -215,7 +221,7 @@ afterEach(() => {
   // Issue Acceptance: Confirm never generates an invoice or marks an order paid.
   expect(page.invoice).not.toHaveBeenCalled();
   expect(page.paid).not.toHaveBeenCalled();
-  expect(page.weigh).not.toHaveBeenCalled();
+  if (!page.weighExpected) expect(page.weigh).not.toHaveBeenCalled();
 });
 
 function mount() {
@@ -491,5 +497,31 @@ describe('order page price review (#162)', () => {
     await settle(3);
     expect(priceText()).toContain('Shoes');
     expect(confirmButton().disabled).toBe(false);
+  });
+
+  // #162 M7 follow-up (owner decision): a weight being saved makes the
+  // estimate stale before the order refetch shows the new weight, so Confirm
+  // waits for the save and its reload.
+  it('case 14: while a new weight is saved and reloaded, the estimate is Updating and Confirm does nothing', async () => {
+    page.weighExpected = true;
+    await readyWithWash();
+    const bag = section('weighing').querySelector<HTMLInputElement>('input')!;
+    type(bag, '3');
+    act(() => [...section('weighing').querySelectorAll('button')].find((button) => button.textContent === 'Record weight')!.click());
+    expect(page.weigh).toHaveBeenCalledTimes(1);
+    expect(priceText()).toContain('Updating estimate…');
+    expect(priceText()).not.toContain('₱123.45');
+    expect(confirmButton().disabled).toBe(true);
+    act(() => confirmButton().click());
+    expect(page.price).not.toHaveBeenCalled();
+    await finish(page.weighs, 0, 'resolve', { data: { weighLaundryOrder: { id: page.id, status: 'WEIGHED', weightGrams: 3000 } } });
+    expect(page.refetch).toHaveBeenCalledTimes(1);
+    expect(priceText()).toContain('Updating estimate…');
+    expect(confirmButton().disabled).toBe(true);
+    await settleRefetch(0, { order: weighed({ weightGrams: 3000 }) });
+    await settle(3);
+    expect(confirmButton().disabled).toBe(false);
+    expect(page.previewCalls[page.previewCalls.length - 1]).toEqual(page.previewCalls[0]);
+    expect(page.price).not.toHaveBeenCalled();
   });
 });

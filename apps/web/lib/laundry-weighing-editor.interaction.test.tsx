@@ -63,12 +63,18 @@ let container: HTMLDivElement;
 let root: Root;
 let onRecorded: Mock<() => Promise<unknown>>;
 
-async function mount(weightGrams: number | null, disabled = false) {
+async function mount(weightGrams: number | null, disabled = false, onPendingChange?: (pending: boolean) => void) {
   const { LaundryWeighingEditor } = await import('../components/laundry/laundry-weighing-editor');
   act(() =>
     root.render(
       <ToastProvider>
-        <LaundryWeighingEditor disabled={disabled} onRecorded={onRecorded} orderId={ORDER_ID} weightGrams={weightGrams} />
+        <LaundryWeighingEditor
+          disabled={disabled}
+          onPendingChange={onPendingChange}
+          onRecorded={onRecorded}
+          orderId={ORDER_ID}
+          weightGrams={weightGrams}
+        />
       </ToastProvider>,
     ),
   );
@@ -510,5 +516,50 @@ describe('laundry weighing editor', () => {
     expect(weigh.calls).toEqual([]);
     await mount(2500, false);
     expect(button('Record weight').disabled).toBe(false);
+  });
+
+  // #162 M7 follow-up: the page blocks Confirm while a weight is being saved,
+  // through the save and the reload that follows it.
+  describe('onPendingChange', () => {
+    it('reports a save in flight until the reload settles', async () => {
+      const changes: boolean[] = [];
+      let reload = () => {};
+      onRecorded.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            reload = () => resolve(undefined);
+          }),
+      );
+      await mount(2500, false, (pending) => changes.push(pending));
+      click('Record weight');
+      expect(changes).toEqual([true]);
+      await act(async () => {
+        weigh.resolve();
+      });
+      expect(onRecorded).toHaveBeenCalledTimes(1);
+      expect(changes).toEqual([true]);
+      await act(async () => {
+        reload();
+      });
+      expect(changes).toEqual([true, false]);
+    });
+
+    it('reports the end of a failed save', async () => {
+      const changes: boolean[] = [];
+      await mount(2500, false, (pending) => changes.push(pending));
+      click('Record weight');
+      await act(async () => {
+        weigh.reject(new Error('network down'));
+      });
+      expect(changes).toEqual([true, false]);
+    });
+
+    it('reports nothing for a submit that sends no request', async () => {
+      const changes: boolean[] = [];
+      await mount(null, false, (pending) => changes.push(pending));
+      click('Record weight');
+      expect(weigh.calls).toEqual([]);
+      expect(changes).toEqual([]);
+    });
   });
 });

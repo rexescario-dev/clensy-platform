@@ -13,7 +13,7 @@ import {
 } from '@clensy/web';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { LaundryServicesEditor } from '../../../../components/laundry/laundry-services-editor';
 import { LaundryPriceCard } from '../../../../components/laundry/laundry-price-card';
 import { LaundryWeighingEditor } from '../../../../components/laundry/laundry-weighing-editor';
@@ -73,6 +73,10 @@ function LaundryOrderWorkspace({ id }: { id: string }) {
   // Lives here, above Weighing and Price, so both editors are disabled
   // while a price is confirmed and its refetch runs (#162 owner decision 6.3).
   const confirmPrice = useConfirmLaundryPrice({ refetch: () => orderQuery.refetch() });
+  // A weight being saved and reloaded makes the estimate stale before the
+  // order shows the new weight, so Price holds Confirm until both settle
+  // (#162 M7 follow-up).
+  const [weighing, setWeighing] = useState(false);
 
   const backLink = (
     <div>
@@ -169,12 +173,20 @@ function LaundryOrderWorkspace({ id }: { id: string }) {
           disabled={confirmPrice.confirming}
           order={order}
           verbs={verbs}
+          onPendingChange={setWeighing}
           onRecorded={() => orderQuery.refetch()}
           t={t}
         />
       </OrderSection>
 
-      <PricingSections confirmPrice={confirmPrice} order={order} roleResolved={role !== undefined} verbs={verbs} t={t} />
+      <PricingSections
+        confirmPrice={confirmPrice}
+        order={order}
+        roleResolved={role !== undefined}
+        verbs={verbs}
+        weighing={weighing}
+        t={t}
+      />
 
       <OrderSection section="invoice" t={t}>
         <InvoiceBody
@@ -248,12 +260,14 @@ function OverviewBody({ order, t }: { order: LaundryOrderDetail; t: Translate })
 // value, so it changes only after a save's refetch.
 function WeighingBody({
   disabled,
+  onPendingChange,
   onRecorded,
   order,
   t,
   verbs,
 }: {
   disabled: boolean;
+  onPendingChange: (pending: boolean) => void;
   onRecorded: () => Promise<unknown>;
   order: LaundryOrderDetail;
   t: Translate;
@@ -276,7 +290,13 @@ function WeighingBody({
   return (
     <div className="flex flex-col gap-3">
       {recorded}
-      <LaundryWeighingEditor disabled={disabled} onRecorded={onRecorded} orderId={order.id} weightGrams={order.weightGrams} />
+      <LaundryWeighingEditor
+        disabled={disabled}
+        onPendingChange={onPendingChange}
+        onRecorded={onRecorded}
+        orderId={order.id}
+        weightGrams={order.weightGrams}
+      />
     </div>
   );
 }
@@ -291,12 +311,14 @@ function PricingSections({
   roleResolved,
   t,
   verbs,
+  weighing,
 }: {
   confirmPrice: ConfirmLaundryPriceState;
   order: LaundryOrderDetail;
   roleResolved: boolean;
   t: Translate;
   verbs: readonly LaundryOrderVerb[];
+  weighing: boolean;
 }) {
   const view = laundryServicesView({
     hasTotal: order.totalMinorUnits !== null,
@@ -322,7 +344,7 @@ function PricingSections({
       </OrderSection>
 
       <OrderSection section="price" t={t}>
-        <PriceBody confirmPrice={confirmPrice} order={order} selection={selection} t={t} view={priceView} />
+        <PriceBody confirmPrice={confirmPrice} order={order} selection={selection} t={t} view={priceView} weighing={weighing} />
       </OrderSection>
     </>
   );
@@ -367,12 +389,15 @@ function PriceBody({
   selection,
   t,
   view,
+  weighing,
 }: {
   confirmPrice: ConfirmLaundryPriceState;
   order: LaundryOrderDetail;
   selection: LaundryServiceSelectionState;
   t: Translate;
   view: LaundryPriceView;
+  // A weight save and its reload are in flight: the estimate is stale.
+  weighing: boolean;
 }) {
   if (view === 'final' && order.totalMinorUnits !== null) {
     return (
@@ -387,7 +412,9 @@ function PriceBody({
   if (view === 'beforePricing') return <p>{t('order.price.beforePricing')}</p>;
   if (view === 'notPriced') return <p>{t('order.price.notPriced')}</p>;
   if (view !== 'estimate') return null;
-  const { preview, priceInput, ready } = selection;
+  const { preview, priceInput } = selection;
+  // A weight being saved counts as a loading preview (owner decision 3).
+  const ready = selection.ready && !weighing;
   // Only for the selection Confirm used: any edit replaces the object
   // (planning decision e).
   const failure = confirmPrice.failure?.selection === selection.selection ? confirmPrice.failure.message : undefined;
@@ -401,7 +428,7 @@ function PriceBody({
         complete: selection.complete,
         hasBase: selection.selection.base !== null,
         previewError: selection.previewError !== null,
-        previewLoading: selection.previewLoading,
+        previewLoading: selection.previewLoading || weighing,
         ready,
       })}
       totalMinorUnits={preview?.estimatedTotalMinorUnits ?? null}
