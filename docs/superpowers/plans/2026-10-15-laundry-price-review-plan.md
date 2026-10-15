@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 3)** at M5, 2026-10-16. M6 complete ([Execution record](#execution-record)); M7 pending (independent review). |
+| Status | **Accepted (revision 3)** at M5, 2026-10-16. M6 complete ([Execution record](#execution-record)); M7 **Approved for merge** (independent review). |
 | M5 decision | **Accepted** — 2026-10-16, revision 3 (`103bbcc`), by the owner's reviewer, after a final six-part review. "I have no remaining M5 blocker based on the plan text and review evidence provided." Rounds 1 and 2 returned the plan for revision; round 3 accepted the round-2 fixes. The final six-part pass raised P1-01 (role names), a `Button` markup check, P2-1 (withdrawn by the reviewer), P2-2 (committed-render recording) and one Part 5 cleanup, each resolved in the revisions log. The owner put the Weighing inconsistency in the PRICED-without-total rows out of scope.<br>The acceptance covers the plan, not the implementation. The reviewer read the supplied parts and did not inspect the branch or run any command. M6 must record real red/green and verification results, and M7 is an independent review of the branch diff against the Accepted spec. |
 | Date | 2026-10-15 |
 | Tracking issue | [#162](https://github.com/rexescario-dev/clensy-platform/issues/162) "Laundry price preview and confirmation". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) (merged in #183: the order page), [#159](https://github.com/rexescario-dev/clensy-platform/issues/159) (merged in #184: `previewLaundryOrderPrice`, frozen `description`) and [#158](https://github.com/rexescario-dev/clensy-platform/issues/158) (merged in #186: the selection hook and Services editor). |
@@ -3243,3 +3243,23 @@ Not run, with reasons:
 - **Minimum-charge note, per-item rows:** the seeded catalog for this tenant has no minimum-charge rule and no per-item service. Covered only by card cases 2 and 5.
 
 Observation outside this slice: at 375 px the existing toast sits flush against the left edge of the viewport. The toast is `@clensy/ui`'s, unchanged here.
+
+### M7 — Approved for merge (2026-10-16)
+
+A fresh, independent agent on the most capable model (Opus 5.5) reviewed `47e90b1..bfc179d` against the Accepted spec and this plan. It did not write the change. **This is not a self-review.**
+- **Re-ran:**
+  - `pnpm --filter web test`: 48 files, 2176 passed;
+  - `pnpm --filter web lint`, `pnpm --filter web exec tsc --noEmit` and `pnpm --filter @clensy/web lint`: exit 0;
+  - `pnpm --filter @clensy/web test`: 16 files, 417 passed;
+  - the unchanged-paths diff, including `docs/workflows/**`: empty;
+  - commit trailers: none.
+- **`@clensy/web build`:** not re-run, because it writes build output. The reviewer relied on the M6 record.
+- **Conformance:** Tasks 1–7 covered, nothing reordered, skipped or added. It checked §8.4.2, §8.4.4, §8.4.5, §4.3 note 5, §4.4 and §8.6. Each Review focus item, and each race traced (double Confirm, editors frozen through the refetch on both paths, A→B→A with an in-flight B, retry with no key), is handled and pinned by a test.
+- **The four M6 rulings:** each judged correct.
+- **Blocking findings:** none.
+- **Minor findings, non-blocking:**
+  1. Confirm is not blocked while a weight save is in flight. A weight recorded just before Confirm can be priced before the page has refetched, so the Final price uses the new weight rather than the estimate on screen. The server's figure is correct. The plan's owner decision 6.3 freezes the editors during Confirm, not the reverse.
+  2. The browser check signed in as the seed TENANT_OWNER, not OPS_MANAGER as Task 7 names. Both are operational roles with the same `price` verb and code path.
+  3. The A→B→A skip reuses a settled result however long B lasted. It is no staler than a preview left on screen, and the server reprices at Confirm.
+- **Declined to judge:** estimate staleness after a catalog change (#158 behaviour); focus after Confirm (not specified); the toast position at 375 px (`@clensy/ui`, out of scope); Weighing's sentence in the inconsistent rows (owner put it out of scope).
+
