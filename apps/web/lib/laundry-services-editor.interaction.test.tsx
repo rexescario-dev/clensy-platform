@@ -724,7 +724,7 @@ describe('LaundryServicesEditor', () => {
     mount(WEIGHT, true);
     // Named one by one (M5 round 1), so a control the combobox renders
     // differently cannot hide behind a count.
-    const named: (HTMLInputElement | HTMLButtonElement)[] = [
+    const named: (HTMLButtonElement | HTMLInputElement)[] = [
       baseInput(),
       el<HTMLInputElement>('#laundry-base-count'),
       addOnInputs()[0]!,
@@ -736,7 +736,7 @@ describe('LaundryServicesEditor', () => {
     // And nothing in the editor is left enabled. `#elsewhere` is the
     // harness's own focus target, outside the editor.
     expect(
-      [...container.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input, button')].filter(
+      [...container.querySelectorAll<HTMLButtonElement | HTMLInputElement>('input, button')].filter(
         (control) => !control.disabled && control.id !== 'elsewhere',
       ),
     ).toEqual([]);

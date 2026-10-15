@@ -10,8 +10,7 @@ type Translate = (key: string) => string;
 const CAPTION_ID = 'laundry-price-caption';
 
 export type LaundryPriceCardProps =
-  | { kind: 'final'; more: boolean; rows: readonly LaundryPriceRow[]; totalMinorUnits: number }
-  | {
+  {
       kind: 'estimate';
       confirming: boolean;
       // The confirm failure to show, already limited to the current
@@ -23,7 +22,7 @@ export type LaundryPriceCardProps =
       rows: readonly LaundryPriceRow[];
       state: LaundryEstimateState;
       totalMinorUnits: number | null;
-    };
+    } | { kind: 'final'; more: boolean; rows: readonly LaundryPriceRow[]; totalMinorUnits: number };
 
 // The Price section's card (#162). An estimate is built from the current
 // preview, a final price from the frozen snapshot (§8.4.4). Every figure is

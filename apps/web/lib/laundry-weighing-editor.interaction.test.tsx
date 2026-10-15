@@ -497,7 +497,7 @@ describe('laundry weighing editor', () => {
   // #162 owner decision 6.3: frozen while a price is confirmed.
   it('disables every input and button, and drops a submit, while disabled', async () => {
     await mount(2500, true);
-    const controls = [...container.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input, button')];
+    const controls = [...container.querySelectorAll<HTMLButtonElement | HTMLInputElement>('input, button')];
     expect(controls.length).toBeGreaterThanOrEqual(3);
     expect(controls.every((control) => control.disabled)).toBe(true);
     // The handler calls preventDefault() before the guard, so the dropped

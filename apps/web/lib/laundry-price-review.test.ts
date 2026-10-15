@@ -133,13 +133,13 @@ describe('price rows', () => {
   function previewLine(overrides: Partial<LaundryPreviewLine>): LaundryPreviewLine {
     return {
       addOnId: null,
+      serviceId: null,
       amountMinorUnits: 0,
       description: 'Line',
       minimumChargeApplied: false,
       minimumChargeMinorUnits: null,
       quantity: 1,
       rateMinorUnits: 0,
-      serviceId: null,
       unit: 'FLAT',
       ...overrides,
     };
@@ -147,7 +147,7 @@ describe('price rows', () => {
 
   it('case 1: maps each unit to its quantity and rate key, keyed by position', () => {
     const rows = laundryPreviewRows([
-      previewLine({ description: 'Wash', quantity: 2505, rateMinorUnits: 5000, serviceId: 's1', unit: 'PER_KG' }),
+      previewLine({ serviceId: 's1', description: 'Wash', quantity: 2505, rateMinorUnits: 5000, unit: 'PER_KG' }),
       previewLine({ addOnId: 'a1', description: 'Ironing (add-on)', quantity: 3, rateMinorUnits: 2500, unit: 'PER_ITEM' }),
       previewLine({ addOnId: 'a2', description: 'Softener (add-on)', rateMinorUnits: 15000, unit: 'FLAT' }),
       previewLine({ addOnId: 'a3', description: 'Duvet (add-on)', rateMinorUnits: 20000, unit: 'PER_SERVICE' }),
@@ -182,20 +182,20 @@ describe('price rows', () => {
 
   it('case 4: snapshot rows use the frozen description and the line id', () => {
     const line: SnapshotLine = {
-      addOnId: null,
-      createdAt: '2026-10-15T09:00:00.000Z',
       id: 'line-1',
+      addOnId: null,
+      serviceId: 's1',
+      createdAt: '2026-10-15T09:00:00.000Z',
       pricingSnapshot: {
+        pricingRuleId: null,
         amountMinorUnits: 30000,
         description: 'Wash & fold',
         minimumChargeApplied: true,
         minimumChargeMinorUnits: 30000,
-        pricingRuleId: null,
         quantity: 2505,
         rateMinorUnits: 5000,
         unit: 'PER_KG',
       },
-      serviceId: 's1',
     };
     expect(laundrySnapshotRows([line])).toEqual([
       {
