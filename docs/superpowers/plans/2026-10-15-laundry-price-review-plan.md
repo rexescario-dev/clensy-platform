@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 3)** at M5, 2026-10-16. M6 complete ([Execution record](#execution-record)); M7 **Approved for merge** (independent review), with the owner-directed follow-up re-reviewed and approved; M8 N/A; M9 complete. PR [#187](https://github.com/rexescario-dev/clensy-platform/pull/187). |
+| Status | **Accepted (revision 3)** at M5, 2026-10-16. M6 complete ([Execution record](#execution-record)); M7 **Approved for merge** (independent review), with the owner-directed follow-up re-reviewed and approved; M8 N/A; M9 complete; M10 validated. PR [#187](https://github.com/rexescario-dev/clensy-platform/pull/187). |
 | M5 decision | **Accepted** — 2026-10-16, revision 3 (`103bbcc`), by the owner's reviewer, after a final six-part review. "I have no remaining M5 blocker based on the plan text and review evidence provided." Rounds 1 and 2 returned the plan for revision; round 3 accepted the round-2 fixes. The final six-part pass raised P1-01 (role names), a `Button` markup check, P2-1 (withdrawn by the reviewer), P2-2 (committed-render recording) and one Part 5 cleanup, each resolved in the revisions log. The owner put the Weighing inconsistency in the PRICED-without-total rows out of scope.<br>The acceptance covers the plan, not the implementation. The reviewer read the supplied parts and did not inspect the branch or run any command. M6 must record real red/green and verification results, and M7 is an independent review of the branch diff against the Accepted spec. |
 | Date | 2026-10-15 |
 | Tracking issue | [#162](https://github.com/rexescario-dev/clensy-platform/issues/162) "Laundry price preview and confirmation". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) (merged in #183: the order page), [#159](https://github.com/rexescario-dev/clensy-platform/issues/159) (merged in #184: `previewLaundryOrderPrice`, frozen `description`) and [#158](https://github.com/rexescario-dev/clensy-platform/issues/158) (merged in #186: the selection hook and Services editor). |
@@ -3308,4 +3308,85 @@ There is no worthwhile behaviour-preserving refactor in scope. The M7 behaviour 
   - drops the removed `lines.*`, `unit.*`, and the Services rate, `byWeight`, `flat` and `note` keys.
 
 `docs/README.md` is unchanged: #162 changes no API. Editorial checks: the new relative links resolve, the facts were checked against the code, and no README mentions a removed key or `hasLines`. READMEs are not linted.
+
+**PR CI.** [Run 38778078915](https://github.com/rexescario-dev/clensy-platform/actions/runs/38778078915) on PR #187 passed all four jobs: Lint, Test, Release gate and API e2e. The API suites not run locally (no API change) ran there and passed.
+
+### M10 — Accepted, workflow validated (2026-10-16)
+
+```text
+Decision: Accepted
+Subject: workflow prompt library
+Governing specification: docs/workflows/specs/agent-workflow-design.md
+```
+
+**Subject.** The installed workflow (`docs/workflows/`) was run on #162 from M4 to M9.
+- There was no M2 or M3. #162 implements Amendment #164 §8.4.2–§8.4.5, which was already Accepted, and the owner agreed every decision was UI or presentation, not a pricing-contract change.
+- The Context Forge dispatch asked for "Brainstorm (project default)". It settled six owner decisions before M4. The workflow's selection rule (an Accepted spec, so start at M4) governed the stage.
+
+**Asset inventory.** Unchanged. There are no orphan assets, and `docs/workflows/` was not edited.
+
+**Checks:**
+- **§2.5 gate:** the M5 acceptance record (`8c8d928`, 00:27:33) precedes the first M6 commit (`4fe3b4c`, 00:28:58).
+- **M5 return path:** rounds 1 and 2 returned the plan, and each finding was answered in the revisions log. The final six-part pass raised P1-01, the `Button` check, P2-1 (withdrawn) and P2-2, plus one cleanup. All were resolved before acceptance at revision 3.
+- **Authority model:** the spec governed semantics (the preview is the only estimate source, `priceLaundryOrder` runs once, the snapshot is shown after pricing, there is no reprice), and the plan governed sequencing. M6's four rulings corrected the plan's test code only, and each is recorded.
+- **M7 independence:** `CLAUDE.md`'s rule was honoured twice. A fresh Opus reviewer did the whole-branch review, and another did the follow-up re-review. Both were read-only and were given the spec, the plan and the diff.
+- **Providers:** GitHub was used for issues #162 and #154, the branch and PR #187, all through `gh`. The GitHub MCP server failed to connect, and nothing fell back to it.
+- **Reporting:** Slice Completion Reports were emitted at M6 and below.
+- **§2.8:** one PR carries the plan, its M5 record, the implementation, the follow-up and the docs.
+- **Attribution:** no commit on the branch carries a `Co-Authored-By` trailer or a "Generated with" line.
+
+**Blocking findings:** none.
+
+**Non-blocking observations:**
+1. **The plan's code again tripped the repo's custom lint rules** (`contextforge/record-key-order`, `sort-type-constituents`), and one plan test passed vacuously (the `disabled` substring). Linting and dry-running plan code at M4 would catch both. This is the same lesson as #158.
+2. **The local Docker stack had drifted behind main.** It was built on 2026-10-09 and lacked #159's preview query. It was rebuilt from the branch with the owner's approval. The migrate step reported no pending migration.
+3. **The M7 reviewer found a real gap that the plan had not covered:** Confirm during a weight save. It was fixed in this slice by owner decision, with a re-review. This is evidence that the whole-branch independent review earns its cost.
+4. **The browser check could not reach CUSTOMER_SUPPORT** (no password), **nor minimum-charge or per-item rows** (not in the seed data). The render and card tests are the deterministic coverage.
+
+Gate: **Workflow validated.**
+
+## Slice Completion Report (final)
+
+| Field | Result |
+| --- | --- |
+| Slice | #162 Laundry price preview and confirmation |
+| Tracking | https://github.com/rexescario-dev/clensy-platform/issues/162 |
+| M4 | Plan **Accepted** |
+| M5 | Review **Accepted** |
+| M6 | **Complete** (with an owner-directed follow-up) |
+| M7 | **Approved** (and the follow-up re-reviewed and approved) |
+| M8 | N/A |
+| M9 | **Complete** |
+| Branch | `feat/162-laundry-price-review` |
+| PR | https://github.com/rexescario-dev/clensy-platform/pull/187 |
+| Status | **Ready for merge** |
+
+### Shipped
+
+- **Price section:**
+  - an operational role on a WEIGHED order sees an Estimate card built from the current preview, with Confirm price;
+  - any order with a total shows Final price from the frozen snapshot;
+  - everyone else sees one sentence.
+- **Estimate states:** no base, incomplete, "Updating estimate…", failed with Try again (a real new request), and ready. A stale, pending or failed preview never shows a breakdown or enables Confirm.
+- **Confirm:**
+  - sends the previewed input unchanged, once, with a synchronous guard against a double click;
+  - both editors stay disabled through the mutation and the refetch;
+  - shows a toast on success and an alert on failure;
+  - waits while a weight is being saved.
+- **Services and Overview:** Services handles selection and counts only, and is locked exactly when the order has a total. Overview links to Price. There is no client arithmetic.
+- **#158 carry-forwards:** no ready flicker on an A→B→A return, a retry, and a visible loading state.
+
+### Validation
+
+| Check | Result |
+| --- | --- |
+| Tests | **Passed** (`web` 2180; `@clensy/web` 417; CI Test and API e2e) |
+| Typecheck | **Passed** |
+| Lint | **Passed** (local and CI) |
+| Build | **Passed** (`@clensy/web build`; CI Release gate) |
+| Package validation | N/A |
+
+### Next Gate
+
+None. The slice is complete pending merge under the owner's norms.
 
