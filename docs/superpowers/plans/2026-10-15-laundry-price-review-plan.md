@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 3)** at M5, 2026-10-16. M6 complete ([Execution record](#execution-record)); M7 **Approved for merge** (independent review), with the owner-directed follow-up re-reviewed and approved; M8 N/A. |
+| Status | **Accepted (revision 3)** at M5, 2026-10-16. M6 complete ([Execution record](#execution-record)); M7 **Approved for merge** (independent review), with the owner-directed follow-up re-reviewed and approved; M8 N/A; M9 complete. |
 | M5 decision | **Accepted** — 2026-10-16, revision 3 (`103bbcc`), by the owner's reviewer, after a final six-part review. "I have no remaining M5 blocker based on the plan text and review evidence provided." Rounds 1 and 2 returned the plan for revision; round 3 accepted the round-2 fixes. The final six-part pass raised P1-01 (role names), a `Button` markup check, P2-1 (withdrawn by the reviewer), P2-2 (committed-render recording) and one Part 5 cleanup, each resolved in the revisions log. The owner put the Weighing inconsistency in the PRICED-without-total rows out of scope.<br>The acceptance covers the plan, not the implementation. The reviewer read the supplied parts and did not inspect the branch or run any command. M6 must record real red/green and verification results, and M7 is an independent review of the branch diff against the Accepted spec. |
 | Date | 2026-10-15 |
 | Tracking issue | [#162](https://github.com/rexescario-dev/clensy-platform/issues/162) "Laundry price preview and confirmation". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) (merged in #183: the order page), [#159](https://github.com/rexescario-dev/clensy-platform/issues/159) (merged in #184: `previewLaundryOrderPrice`, frozen `description`) and [#158](https://github.com/rexescario-dev/clensy-platform/issues/158) (merged in #186: the selection hook and Services editor). |
@@ -3292,4 +3292,20 @@ M7 minors 2 and 3 need no code change. Minor 2 is recorded here: the browser che
 There is no worthwhile behaviour-preserving refactor in scope. The M7 behaviour minor was handled as the owner-directed follow-up above. The remaining minors are deferred:
 - the test-strength note above;
 - M7 minor 3, the A→B→A skip having no age limit, which needs no change.
+
+### M9 — Complete
+
+`7785425` documents what shipped. Scope: `apps/web/README.md` and `packages/web/README.md`.
+- **`apps/web/README.md`, order page section:**
+  - Overview points to Price.
+  - The read-only rule now covers Weighing, Services and Price.
+  - Weighing documents `onPendingChange` and `disabled`.
+  - Services has five views keyed on `hasTotal`, selection and counts only, and the A→B→A note.
+  - A new **Price** bullet covers the view order, the card layout, the Estimate states, Confirm and Final price.
+  - "More lines are not loaded." now shows in Price.
+- **`packages/web/README.md`, laundry copy paragraph:**
+  - the `order.price.*` keys and `overview.seePrice`;
+  - drops the removed `lines.*`, `unit.*`, and the Services rate, `byWeight`, `flat` and `note` keys.
+
+`docs/README.md` is unchanged: #162 changes no API. Editorial checks: the new relative links resolve, the facts were checked against the code, and no README mentions a removed key or `hasLines`. READMEs are not linted.
 
