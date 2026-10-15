@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **M6 complete** (2026-10-15); M7 pending. Plan **Accepted (revision 6)** at M5, 2026-10-15. Revision 7 folded in the four final-review suggestions (tests and records only; no behavior or product semantics change). |
+| Status | **Accepted (revision 6)** at M5, 2026-10-15; revision 7 folded in the final-review suggestions. M6 complete ([Execution record](#execution-record)); M7 Approved for merge (independent review), with owner-directed follow-ups re-reviewed and approved; M8 N/A; M9 complete; M10 validated. PR: see the final Slice Completion Report. |
 | M5 decision | **Accepted** — 2026-10-15, revision 6 (`e580ce7`), by the owner, after a six-part review. "Approved for M6 implementation at revision 6, with the suggestions above." No confirmed P1 or P2 remains. Parts 1–5 raised one P1 (Part 4) and seven P2s, each resolved in revisions 2–6 (M5 history). The final pass on Tasks 6–7 found none.<br>Its four suggestions are taken in revision 7:<br>• (1) a `SUPER_ADMIN` page-render case (Task 6 case 4);<br>• (2) the static render's no-preview assertion, stated as initial-render only, with no timers or events (Task 6 case 2);<br>• (3) literal verification evidence: API suites NOT RUN, the unchanged-path diff as its own row, actual counts for `web` and all three `@clensy/web` commands (Task 7 Step 1);<br>• (4) a seeded-data limitation recorded as not run rather than substituted (Task 7 Step 2).<br>The acceptance covers the plan, not the implementation. The reviewer read the supplied parts and did not inspect the branch or run any command. M6 must record real red/green and verification results, and M7 is an independent review of the branch diff against the Accepted spec. |
 | M5 history | Part 1 (2026-10-15, owner): **no P1**; overall acceptance reserved until all six parts are reviewed.<br>• **P2 (planning decision c):** the first `PER_ITEM` choice's two-request transition must be proven by test, with the first response never leaving the UI ready while the second input is current. Resolved in revision 2: Task 4 case 5 asserts each step of the transition.<br>• **Suggestion (owner decision 4):** make the view matrix exhaustive against the real status and role types. Taken in revision 2: the Task 1 table test iterates `LAUNDRY_ORDER_STATUSES` (keys of a `Record<LaundryOrderStatus, …>`) × both fulfillment types × saved lines yes/no × role loading and every `ADMIN_ROLES` entry. This adds `SUPER_ADMIN`, which revision 1's hand-written role list missed. A count check pins 15 statuses and 7 roles.<br>• **Suggestion (planning decision e):** test stale-result rejection, not request cancellation. Taken in revision 2: Task 4 case 14 resolves the superseded request for real and covers an out-of-order success, a late success after a current failure, a superseded failure, and unmount, with `console.error` spied.<br>Part 2 (2026-10-15, owner): **no P1**.<br>• **P2 (Task 1 `matchPreview`):** it checked ids, not that the input was the current one; it could accept a preview for an outdated quantity. Resolved in revision 3 by the reviewer's second option. The `matchPreview` contract is now stated as line correspondence only (no quantity, order id or weight), with a test pinning that. Exact current-input identity is the hook's `[weightGrams, input]` key, proven by the new Task 4 case 19: an outdated base count, add-on count and weight each resolve with matching ids and never become current.<br>• **Suggestion 1 (matrix independence):** taken. Literal-role tests pin the editor to exactly `WEIGHED` × TENANT_OWNER, OPS_MANAGER, SCHEDULER. `laundryServicesView` now also requires `status === 'WEIGHED'`, so the "whatever the verbs claim" test forces a `price` verb on every other status. Revision 2's version of that test only used the helper's own verbs.<br>• **Suggestion 2 (duplicate ids):** taken. `missingPriceTarget` declines (`null`, so the raw message shows) when more than one row holds the named add-on, with a test.<br>• **Suggestion 3 (guards):** taken. `matchPreview` guards `base`, each line and each sent add-on explicitly. Checked: `apps/web` sets `strict` without `noUncheckedIndexedAccess`, and its lint has no type-checked rules, so the guards compile and lint as written.<br>Part 3 (2026-10-15, owner): **no P1**.<br>• **P2 (Task 2, customer picker focus/blur):** closed by evidence plus one test.<br>  – `LaundryCustomerPickerProps` is unchanged and does not declare `openOnFocus`, `onFocus` or `onBlur`, so the wrapper can't pass them and the defaults reproduce the old behavior exactly.<br>  – The unedited customer-picker interaction suite (12 cases) and static suite (5 cases) already cover blur, Enter, Escape, click and popup mousedown. Their coverage is listed in Task 2.<br>  – New Task 2 interaction case 6 pins the one uncovered rule: focus alone does not open the customer picker.<br>• **P2 (Task 3, stale catalog results):** Task 3 case 5 now runs the actual race with the per-variables mock (an in-flight `%wa%` settling or lingering while `wash` is current, in both orders). New case 7, in its own file, runs the same race on real Apollo (`MockedProvider`, delayed responses). If case 7 fails, the plan adds a `result.variables` identity guard before Task 3 is committed.<br>• **Suggestion 1 (truncated):** taken. Truncation is the `truncated` prop, not a status, and `ready` + `true`/`false`/unset and `loading`/`error` + `true` are each asserted.<br>• **Suggestion 2 (regression net):** taken. Step 7 re-runs the two exact Step 1 commands, compares counts, and records an empty diff for both test files.<br>• **Suggestion 3 (trimming):** taken. A helper test documents that `laundryCatalogSearchVariables` does not trim; the hook does.<br>Part 4 (2026-10-15, owner): **P1**, resolved in revision 5.<br>• **P1 (Task 4 Step 3):** units were remembered from any successful payload before `matchPreview` could reject it, so a rejected preview could change later quantities and #162's input. Fixed:<br>  – Task 1 splits the input-only check out as `previewCorresponds(input, preview)`, which `matchPreview` now calls first.<br>  – `runPreview` turns a payload that does not correspond into a failure outcome, so it never reaches `units` or `settled`.<br>  – Case 15 asserts that `units` is unchanged after a mismatched response.<br>• **P2 (stale protection relied on cleanup):** a response now applies, to `units` or `settled`, only if all three hold: the effect is still live, no newer request has been sent (`generation`), and the latest committed key (`latestKey`, set in an effect) is still the request's key. Case 19 asserts that an outdated response leaves `units` unchanged.<br>• **Suggestion 1:** taken (case 15).<br>• **Suggestion 2:** taken. Case 18's `afterEach` checks every recorded `client.query` call, including rejected ones, for document identity, operation name and type, and `network-only`.<br>• **Suggestion 3:** taken. `ready` still requires a matched current preview, and case 19 asserts that a successful response alone never makes it true.<br>Part 5 (2026-10-15, owner): **no P1**, two P2s, resolved in revision 6.<br>• **P2 1 (blur errors):** Task 5 case 10 now drives the real combobox. It focuses and moves focus away (DOM `focusout`), never calling `touchBase`/`touchAddOn` directly. It asserts the error and its ARIA wiring appear, then clear after a keyboard or click choice and return after an edit and blur, for the base and for an add-on row.<br>• **P2 2 (focus after add/remove):** case 15 first asserts the rendered rows (the new row exists; the removed row, and its "Remove add-on 2" button, are gone), then `document.activeElement`. It also covers removing the last row.<br>• **Suggestions, all taken:** count recovery (case 7); the missing-price marker moves with the current choice and clears at once (case 11); exact rate assertions (case 17); a reference search covering dynamic keys before removing copy (Step 1); and the Step 5 run order with actual results recorded. |
 | Date | 2026-10-15 |
@@ -2215,3 +2215,131 @@ Carry-forwards the reviewer requires to be written into #162's plan:
 ### Next Gate
 
 **M8 — Refactoring.** The owner chooses whether M7 minors 1–2 are taken here or in #162. Then **M9 — Documentation**, M10, and the PR.
+
+## Owner-directed follow-ups (post-M7)
+
+**Owner decision (2026-10-15):** fix M7 minors 1 and 2 in this slice, before the PR, and post M7's three carry-forwards on #162 ([comment](https://github.com/rexescario-dev/clensy-platform/issues/162#issuecomment-6183808441)).
+
+**Not M8.** Both minors change behaviour: one fixes a stale message and the other adds accessibility markup. The M8 prompt allows only behaviour-preserving refactors, so these are owner-directed M6 follow-ups (TDD), followed by a fresh M7 re-review.
+
+| Commit | Change | Evidence |
+| --- | --- | --- |
+| `f499325` | **Duplicate add-on message.** `LaundryAddOnRow.duplicate: boolean` becomes `duplicateOf: string \| null` (the add-on id that was blocked). The pure `laundryRowDuplicate(row, selection)` shows the message only while another row currently holds that add-on. Removing or changing the holding row hides it in the same render. The row's own text edit still clears it. `ready` is unchanged. | RED: 9 failed. GREEN: the 3 changed files pass. Tests cover six helper cases, the hook (case 11) and the editor driven through the real UI (remove and change cases). |
+| `d6710f1` | **Row groups for screen readers.** The base block and each add-on row are `role="group"`, with `aria-label` equal to the row label. Visible text, classes and the combobox are unchanged. | RED: 2 failed. GREEN: count inputs are found per group, and the groups renumber after a remove. |
+
+Full run after both commits:
+- `pnpm --filter web test`: 44 files, 1622 passed.
+- `pnpm --filter web lint`: clean.
+- `pnpm --filter web exec tsc --noEmit`: clean.
+
+**M7 re-review: Approved for merge.** A fresh, independent agent on the most capable model (Opus 5.5) reviewed `114f271..d6710f1`. It did not write the change. **This is not a self-review.**
+- It re-ran the three changed test files: 606 passed.
+- Both follow-ups are ADDRESSED. The new tests would fail against the old stored flag, and against a helper that ignored other rows' current choices.
+- No constraint is broken. Nothing outside `apps/web` changed.
+- Blocking findings: none. Non-blocking: a missing blank line before the case 19 `describe`.
+
+### M8 — N/A
+
+There is no worthwhile behaviour-preserving refactor in scope. The M7 minors were behavioural and were handled as follow-ups (above). The deferred cosmetic minors (test key order, a comment on the Ruling 2 line, a `.map` block body, a comment reflow) are not worth a separate refactor pass for the risk involved.
+
+### M9 — Complete
+
+`c7ac408` documents what shipped. Scope: `apps/web/README.md` and `packages/web/README.md`.
+- **`apps/web/README.md`, order page section:**
+  - Overview now shows a pointer instead of the line list.
+  - A new **Services** bullet covers the views, the editor and the preview rules, and the selection state lifted for #162.
+  - "More lines are not loaded." now shows in Services.
+  - `LaundrySearchCombobox` is added to the component list.
+- **`packages/web/README.md`, laundry section:**
+  - #158 and its plan are cited.
+  - `<LaundrySearchCombobox>` is documented, and `<LaundryCustomerPicker>` is described as a wrapper with unchanged behaviour.
+  - The copy paragraph covers `order.services.*` and `order.overview.*`.
+
+`docs/README.md` is unchanged: it holds API and isolation notes, and #158 changes no API. Editorial checks: the new relative links resolve, and the facts were checked against the code. READMEs are not linted.
+
+### M10 — Accepted, workflow validated (2026-10-15)
+
+```text
+Decision: Accepted
+Subject: workflow prompt library
+Governing specification: docs/workflows/specs/agent-workflow-design.md
+```
+
+**Subject.** The installed workflow (`docs/workflows/`) was run on #158 from M4 to M9.
+- There was no M2 or M3, because #158 implements Amendment #164 §8.4.2–§8.4.5, which was already Accepted.
+- The Context Forge dispatch asked for "Brainstorm (project default)". It was used to settle seven owner decisions before M4. The workflow's selection rule (an Accepted spec, so start at M4) governed the stage. This is the #155 and #156 precedent.
+
+**Asset inventory.** Unchanged. There are no orphan assets, and `docs/workflows/` was not edited.
+
+**Checks:**
+- **§2.5 gate:** the M5 acceptance record (`85eb57b`, 01:23:33) precedes the first M6 commit (`f8aedb2`, 01:26:37).
+- **M5 return path:** M5 ran in six parts.
+  - One P1 (Part 4) and seven P2s were each resolved by a numbered revision (2–6), logged in the M5 history row.
+  - The final pass accepted revision 6. Its four suggestions were folded into revision 7, which changed tests and records only.
+- **Authority model:**
+  - The spec governed semantics: the preview is the only price source, a quantity goes only with `PER_ITEM`, and repeated add-ons stay legal on the server.
+  - The plan governed sequencing.
+  - Where the plan contradicted itself, M6 ruled in the spec's favour: Ruling 2 follows owner decision 4's table, and Ruling 1 only moves the copy-key removal later, with the same end state.
+- **M7 independence:** `CLAUDE.md`'s rule was honoured twice. A fresh Opus reviewer did the whole-branch review, and another did the follow-up re-review. Both were read-only and were given the spec, the plan and the diff.
+- **Providers:** GitHub was used for issues #158, #154, #159, #162 and #164, the branch and the PR, all through `gh`. The GitHub MCP server failed to connect, and nothing fell back to it.
+- **Reporting:** Slice Completion Reports were emitted at M6 and below.
+- **§2.8:** one PR carries the plan, its M5 record, the implementation, the follow-ups and the docs.
+- **Attribution:** none of the 20 commits on the branch since `18ceeb8` carries a `Co-Authored-By` trailer or a "Generated with" line. This is the owner's global rule.
+
+**Blocking findings:** none.
+
+**Non-blocking observations:**
+1. **The six-part M5 found real defects before code existed.** The one P1 (remembered units taken from a rejected preview) and a self-contradicting test in Task 1 (caught by M6's pre-flight scan) would each have shipped a subtle state bug.
+2. **Per-task reviews earned their cost this time.** They caught three tests that could not fail:
+   - the catalog search race;
+   - the unmount case, because React 19 no longer warns on a set-state after unmount;
+   - case 15's missing assertion.
+
+   Each was fixed with a recorded "remove the guard, see it fail" check.
+3. **The plan's code repeatedly tripped the repo's custom lint rules** (`contextforge/record-key-order`, `sort-keys`). Running lint on plan code at M4 (#155's executed pre-validation) would avoid this.
+4. **Local data limits the browser check.** The local catalog has only per-kg services and no unpriced add-on, so browser items 3, 4 and 6 were not run. The interaction tests are the deterministic coverage.
+5. **A process-safety incident during cleanup.** A subagent's broad `pkill` matched a root-owned `next-server` that the session did not start. It was denied, and nothing was killed. Future runs should stop only the PIDs they started.
+
+Gate: **Workflow validated.**
+
+## Slice Completion Report (final)
+
+| Field | Result |
+| --- | --- |
+| Slice | #158 Laundry services and add-ons selection |
+| Tracking | https://github.com/rexescario-dev/clensy-platform/issues/158 |
+| M4 | Plan **Accepted** |
+| M5 | Review **Accepted** |
+| M6 | **Complete** (with owner-directed follow-ups) |
+| M7 | **Approved** (and follow-ups re-reviewed and approved) |
+| M8 | N/A |
+| M9 | **Complete** |
+| Branch | `feat/158-laundry-services-selection` |
+| PR | Opened after this record (see the PR on the branch) |
+| Status | **Ready for merge** |
+
+### Shipped
+
+- **Services editor:** on a `WEIGHED` order, staff with an operational role choose a base service and add-ons from server-searched pickers (first 20 active entries on focus).
+- **Unit, count and rate:** each line's unit, item count (`PER_ITEM` only) and rate come from `previewLaundryOrderPrice`. The client computes no amount, and stale or mismatched previews never take effect.
+- **Errors and duplicates:**
+  - A missing price shows a named alert and a row marker.
+  - A duplicate add-on is blocked in the UI only, with a message that shows only while the add-on is taken.
+  - Rows are grouped for screen readers.
+- **Read-only views:** before weighing, for non-pricing roles, priced orders (locked sentence and saved lines with frozen names), and `CANCELLED`/`REJECTED` orders. Overview points to Services.
+- **State for #162:** the selection and current preview are lifted above the Services and Price sections. #162's carry-forwards are posted on that issue.
+- **Combobox:** a generic `LaundrySearchCombobox` was extracted from the customer picker, whose behaviour is unchanged.
+
+### Validation
+
+| Check | Result |
+| --- | --- |
+| Tests | **Passed** (`web` 1622; `@clensy/web` 417). API suites not run: no API change. |
+| Typecheck | **Passed** |
+| Lint | **Passed** |
+| Build | **Passed** |
+| Package validation | N/A |
+
+### Next Gate
+
+None. The slice is complete pending merge under the owner's norms.
