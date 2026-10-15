@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 3)** at M5, 2026-10-16. M6 complete ([Execution record](#execution-record)); M7 **Approved for merge** (independent review). |
+| Status | **Accepted (revision 3)** at M5, 2026-10-16. M6 complete ([Execution record](#execution-record)); M7 **Approved for merge** (independent review), with the owner-directed follow-up re-reviewed and approved; M8 N/A. |
 | M5 decision | **Accepted** — 2026-10-16, revision 3 (`103bbcc`), by the owner's reviewer, after a final six-part review. "I have no remaining M5 blocker based on the plan text and review evidence provided." Rounds 1 and 2 returned the plan for revision; round 3 accepted the round-2 fixes. The final six-part pass raised P1-01 (role names), a `Button` markup check, P2-1 (withdrawn by the reviewer), P2-2 (committed-render recording) and one Part 5 cleanup, each resolved in the revisions log. The owner put the Weighing inconsistency in the PRICED-without-total rows out of scope.<br>The acceptance covers the plan, not the implementation. The reviewer read the supplied parts and did not inspect the branch or run any command. M6 must record real red/green and verification results, and M7 is an independent review of the branch diff against the Accepted spec. |
 | Date | 2026-10-15 |
 | Tracking issue | [#162](https://github.com/rexescario-dev/clensy-platform/issues/162) "Laundry price preview and confirmation". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) (merged in #183: the order page), [#159](https://github.com/rexescario-dev/clensy-platform/issues/159) (merged in #184: `previewLaundryOrderPrice`, frozen `description`) and [#158](https://github.com/rexescario-dev/clensy-platform/issues/158) (merged in #186: the selection hook and Services editor). |
@@ -3277,4 +3277,19 @@ Full run after the commit:
 - `pnpm --filter @clensy/web test`: 16 files, 417 passed.
 
 M7 minors 2 and 3 need no code change. Minor 2 is recorded here: the browser check used the seed TENANT_OWNER, an operational role with the same `price` path as OPS_MANAGER.
+
+**M7 re-review: Approved for merge.** A fresh, independent agent on the most capable model (Opus 5.5) reviewed `4a75768..391f2f8`. It did not write the change. **This is not a self-review.**
+- **Re-ran:**
+  - the two changed suites: 56/56;
+  - `pnpm --filter web test`: 48 files, 2180 passed;
+  - lint and `tsc`: clean.
+- **Minor 1 is ADDRESSED.** Confirm is held from the start of a save until the save and its refetch settle, on both paths. Calls to `onPendingChange` are always paired, and never made for a submit that sends no request. `weighing` cannot stick at `true`, because it lives in the workspace, which stays mounted. A save and a Confirm cannot both run, in either order. The Task 1–7 estimate precedence is unchanged.
+- **Blocking findings:** none.
+- **Non-blocking (deferred):** case 14 clicks a Confirm button that is already disabled, so `onConfirm`'s own `!weighing` refusal is not exercised separately. The card's disabled state covers it today, the same pattern as the existing `ready` guard.
+
+### M8 — N/A
+
+There is no worthwhile behaviour-preserving refactor in scope. The M7 behaviour minor was handled as the owner-directed follow-up above. The remaining minors are deferred:
+- the test-strength note above;
+- M7 minor 3, the A→B→A skip having no age limit, which needs no change.
 
