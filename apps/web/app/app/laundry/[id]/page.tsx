@@ -14,6 +14,7 @@ import {
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type { ReactNode } from 'react';
+import { LaundryServicesEditor } from '../../../../components/laundry/laundry-services-editor';
 import { LaundryWeighingEditor } from '../../../../components/laundry/laundry-weighing-editor';
 import { formatMinorUnits } from '../../../../lib/format-price';
 import { isUuid } from '../../../../lib/laundry-order-list-query';
@@ -27,15 +28,21 @@ import {
   resolvedInvoiceNodes,
   type LaundryOrderSection,
 } from '../../../../lib/laundry-order-page';
+import { laundryServicesView, type LaundryServicesView } from '../../../../lib/laundry-service-selection';
+import {
+  useLaundryServiceSelection,
+  type LaundryServiceSelectionState,
+} from '../../../../lib/use-laundry-service-selection';
 
 type LaundryOrderDetail = NonNullable<LaundryOrderQuery['laundryOrder']>;
 type Invoice = InvoiceForOrderQuery['invoices']['nodes'][number];
 type Translate = (key: string) => string;
 
 // The order workspace (lifecycle spec §8.4.4, #156). Weighing records a
-// weight (#155). Services (#158), Price (#162), Invoice (#166) and
-// Actions (#165) still show facts until their issues add controls. The
-// list still opens the drawer until the cutover (#161).
+// weight (#155). Services chooses the base service and add-ons and
+// previews their units and rates (#158). Price (#162), Invoice (#166) and
+// Actions (#165) still show facts until their issues add controls. The list
+// still opens the drawer until the cutover (#161).
 export default function LaundryOrderPage() {
   const { id } = useParams<{ id: string }>();
   // A new key per order, so moving between orders starts fresh.
@@ -150,17 +157,7 @@ function LaundryOrderWorkspace({ id }: { id: string }) {
         <WeighingBody order={order} verbs={verbs} onRecorded={() => orderQuery.refetch()} t={t} />
       </OrderSection>
 
-      <OrderSection section="services" t={t}>
-        <p>{t(order.lines.nodes.length > 0 ? 'order.services.priced' : 'order.services.none')}</p>
-      </OrderSection>
-
-      <OrderSection section="price" t={t}>
-        {order.totalMinorUnits === null ? (
-          <p>{t('order.price.notPriced')}</p>
-        ) : (
-          <Fact term={t('order.price.total')}>{formatMinorUnits(order.totalMinorUnits)}</Fact>
-        )}
-      </OrderSection>
+      <PricingSections order={order} roleResolved={role !== undefined} verbs={verbs} t={t} />
 
       <OrderSection section="invoice" t={t}>
         <InvoiceBody
@@ -205,46 +202,26 @@ function Fact({ term, children }: { term: string; children: ReactNode }) {
   );
 }
 
+// Before pricing, the existing sentence; afterwards one line that points
+// at Services, which owns the line list (owner decision 1). The count is
+// the saved lines, never the selection or the preview. A partial page has
+// no reliable count (planning decision g).
 function OverviewBody({ order, t }: { order: LaundryOrderDetail; t: Translate }) {
   const { nodes, pageInfo } = order.lines;
+  if (nodes.length === 0) return <p>{t('order.overview.noLines')}</p>;
+  const summary =
+    pageInfo.hasNextPage === true
+      ? t('order.overview.pricedPartial')
+      : nodes.length === 1
+        ? t('order.overview.pricedOne')
+        : t('order.overview.priced').replace('{n}', String(nodes.length));
   return (
-    <div className="flex flex-col gap-3">
-      {nodes.length === 0 ? (
-        <p>{t('order.overview.noLines')}</p>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {nodes.map((line) => {
-            const { amountMinorUnits, minimumChargeApplied, quantity, unit } = line.pricingSnapshot;
-            const shown = laundryLineQuantity(unit, quantity);
-            return (
-              <li key={line.id} className="rounded-md border border-slate-200 p-3">
-                <p className="font-medium text-slate-900">
-                  {t(line.serviceId ? 'order.lines.service' : 'order.lines.addOn')}
-                </p>
-                <dl className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  <div>
-                    <dt className="text-slate-500">{t('order.lines.unit')}</dt>
-                    <dd>{t(`order.unit.${unit}`)}</dd>
-                  </div>
-                  {shown ? (
-                    <div>
-                      <dt className="text-slate-500">{t(`order.lines.${shown.kind}`)}</dt>
-                      <dd>{shown.value}</dd>
-                    </div>
-                  ) : null}
-                  <div>
-                    <dt className="text-slate-500">{t('order.lines.amount')}</dt>
-                    <dd>{formatMinorUnits(amountMinorUnits)}</dd>
-                  </div>
-                </dl>
-                {minimumChargeApplied ? <p className="mt-2 text-slate-600">{t('order.lines.minimumCharge')}</p> : null}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      {pageInfo.hasNextPage === true ? <p className="text-slate-600">{t('order.lines.more')}</p> : null}
-    </div>
+    <p>
+      {summary}{' '}
+      <a href={`#${laundryOrderSectionId('services')}`} className="underline">
+        {t('order.overview.seeServices')}
+      </a>
+    </p>
   );
 }
 
@@ -281,6 +258,121 @@ function WeighingBody({
     <div className="flex flex-col gap-3">
       {recorded}
       <LaundryWeighingEditor onRecorded={onRecorded} orderId={order.id} weightGrams={order.weightGrams} />
+    </div>
+  );
+}
+
+// Services and Price share the selection and its current preview (#158).
+// The state lives here, above both sections, so price review (#162) reads
+// it instead of starting a second preview. The workspace is keyed by order
+// id, so another order starts with an empty selection.
+function PricingSections({
+  order,
+  roleResolved,
+  t,
+  verbs,
+}: {
+  order: LaundryOrderDetail;
+  roleResolved: boolean;
+  t: Translate;
+  verbs: readonly LaundryOrderVerb[];
+}) {
+  const view = laundryServicesView({
+    hasLines: order.lines.nodes.length > 0,
+    roleResolved,
+    status: order.status,
+    verbs,
+  });
+  const selection = useLaundryServiceSelection({
+    enabled: view === 'editor',
+    orderId: order.id,
+    weightGrams: order.weightGrams,
+  });
+  return (
+    <>
+      <OrderSection section="services" t={t}>
+        <ServicesBody order={order} selection={selection} t={t} view={view} />
+      </OrderSection>
+
+      <OrderSection section="price" t={t}>
+        {order.totalMinorUnits === null ? (
+          <p>{t('order.price.notPriced')}</p>
+        ) : (
+          <Fact term={t('order.price.total')}>{formatMinorUnits(order.totalMinorUnits)}</Fact>
+        )}
+      </OrderSection>
+    </>
+  );
+}
+
+// Owner decision 4 (#158).
+function ServicesBody({
+  order,
+  selection,
+  t,
+  view,
+}: {
+  order: LaundryOrderDetail;
+  selection: LaundryServiceSelectionState;
+  t: Translate;
+  view: LaundryServicesView;
+}) {
+  switch (view) {
+    case 'hidden':
+      return null;
+    case 'editor':
+      return <LaundryServicesEditor state={selection} />;
+    case 'beforeWeigh':
+      return <p>{t('order.services.beforeWeigh')}</p>;
+    case 'none':
+      return <p>{t('order.services.none')}</p>;
+    case 'locked':
+      return (
+        <div className="flex flex-col gap-3">
+          <p>{t('order.services.locked')}</p>
+          <SavedLines order={order} t={t} />
+        </div>
+      );
+    case 'lines':
+      return <SavedLines order={order} t={t} />;
+  }
+}
+
+// The saved lines, by their frozen names (§8.4.2; owner decision 1). After
+// pricing the page shows the snapshot, never a new estimate (§8.4.4).
+function SavedLines({ order, t }: { order: LaundryOrderDetail; t: Translate }) {
+  const { nodes, pageInfo } = order.lines;
+  return (
+    <div className="flex flex-col gap-3">
+      <ul className="flex flex-col gap-2">
+        {nodes.map((line) => {
+          const { amountMinorUnits, description, minimumChargeApplied, quantity, unit } = line.pricingSnapshot;
+          const shown = laundryLineQuantity(unit, quantity);
+          return (
+            <li key={line.id} className="rounded-md border border-slate-200 p-3">
+              <p className="font-medium text-slate-900">{description}</p>
+              <dl className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <div>
+                  <dt className="text-slate-500">{t('order.lines.unit')}</dt>
+                  <dd>{t(`order.unit.${unit}`)}</dd>
+                </div>
+                {shown ? (
+                  <div>
+                    <dt className="text-slate-500">{t(`order.lines.${shown.kind}`)}</dt>
+                    <dd>{shown.value}</dd>
+                  </div>
+                ) : null}
+                <div>
+                  <dt className="text-slate-500">{t('order.lines.amount')}</dt>
+                  <dd>{formatMinorUnits(amountMinorUnits)}</dd>
+                </div>
+              </dl>
+              {minimumChargeApplied ? <p className="mt-2 text-slate-600">{t('order.lines.minimumCharge')}</p> : null}
+            </li>
+          );
+        })}
+      </ul>
+      {pageInfo.hasNextPage === true ? <p className="text-slate-600">{t('order.lines.more')}</p> : null}
     </div>
   );
 }

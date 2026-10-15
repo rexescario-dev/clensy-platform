@@ -11,6 +11,7 @@ type Line = {
   id: string;
   pricingSnapshot: {
     amountMinorUnits: number;
+    description: string;
     minimumChargeApplied: boolean;
     minimumChargeMinorUnits: number | null;
     pricingRuleId: string | null;
@@ -30,6 +31,7 @@ function line(id: string, unit: Line['pricingSnapshot']['unit'], quantity: numbe
     pricingSnapshot: {
       pricingRuleId: null,
       amountMinorUnits: amount,
+      description: 'Wash & fold',
       minimumChargeApplied: false,
       minimumChargeMinorUnits: null,
       quantity,
@@ -56,6 +58,8 @@ function order(overrides: Record<string, unknown> = {}) {
 
 const page = vi.hoisted(() => ({
   id: '',
+  // Every call of the catalog pickers and of the pricing mutation.
+  addOnsCalls: [] as unknown[],
   invoiceError: undefined as Error | undefined,
   invoiceLoading: false,
   invoiceNodes: [] as unknown[],
@@ -70,7 +74,11 @@ const page = vi.hoisted(() => ({
   orderOptions: [] as Array<{ fetchPolicy?: string; skip?: boolean; variables?: unknown }>,
   // Apollo keeps an earlier order's data while the query reloads or after it fails.
   orderRetained: false,
+  // The preview request of `useLaundryServiceSelection`; a static render sends none.
+  previewQuery: vi.fn(),
+  priceMutationCalls: [] as unknown[],
   role: 'TENANT_OWNER' as string | undefined,
+  servicesCalls: [] as unknown[],
 }));
 
 vi.mock('next/navigation', () => ({
@@ -80,7 +88,17 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(''),
 }));
 
+vi.mock('@apollo/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@apollo/client')>()),
+  useApolloClient: () => ({ query: page.previewQuery }),
+}));
+
 vi.mock('@clensy/client', () => ({
+  PreviewLaundryOrderPriceDocument: {},
+  useAddOnsQuery: (options: unknown) => {
+    page.addOnsCalls.push(options);
+    return { data: undefined, error: undefined, loading: false };
+  },
   useCurrentAdminQuery: () => ({
     data: page.role === undefined ? undefined : { currentAdmin: { role: page.role } },
   }),
@@ -108,6 +126,14 @@ vi.mock('@clensy/client', () => ({
       loading: page.orderLoading,
       refetch: () => Promise.resolve(),
     };
+  },
+  usePriceLaundryOrderMutation: (...args: unknown[]) => {
+    page.priceMutationCalls.push(args);
+    return [() => Promise.resolve({ data: {} }), { loading: false }];
+  },
+  useServicesQuery: (options: unknown) => {
+    page.servicesCalls.push(options);
+    return { data: undefined, error: undefined, loading: false };
   },
   // The weighing editor's mutation; never called by a static render.
   useWeighLaundryOrderMutation: () => [() => Promise.resolve({ data: {} }), { loading: false }],
@@ -150,6 +176,10 @@ beforeEach(() => {
   page.orderLoading = false;
   page.orderOptions.length = 0;
   page.orderRetained = false;
+  page.previewQuery.mockReset();
+  page.addOnsCalls.length = 0;
+  page.servicesCalls.length = 0;
+  page.priceMutationCalls.length = 0;
   page.role = 'TENANT_OWNER';
 });
 
@@ -213,17 +243,22 @@ describe('laundry order page', () => {
     // TENANT_OWNER may weigh, so the editor replaces "Not weighed yet." (#155);
     // an unweighed order has no recorded line.
     expect(section(html, 'weighing')).not.toContain('Recorded weight');
-    expect(section(html, 'services')).toContain('No services selected yet.');
+    expect(section(html, 'services')).toContain('Weigh the order before choosing services.');
+    expect(section(html, 'services')).not.toContain('No services selected yet.');
     expect(section(html, 'price')).toContain('Not priced yet.');
   });
 
   it('shows the recorded weight, the total and the lines once priced', async () => {
+    const priced = (id: string, unit: Line['pricingSnapshot']['unit'], quantity: number, amount: number, description: string, extra: Partial<Line> = {}, minimum = false) => {
+      const base = line(id, unit, quantity, amount, extra);
+      return { ...base, pricingSnapshot: { ...base.pricingSnapshot, description, minimumChargeApplied: minimum } };
+    };
     page.order = order({
       lines: {
         nodes: [
-          line('l1', 'PER_KG', 2505, 30000, { pricingSnapshot: { ...line('x', 'PER_KG', 2505, 30000).pricingSnapshot, minimumChargeApplied: true } }),
-          line('l2', 'PER_ITEM', 3, 9000, { addOnId: 'a1', serviceId: null }),
-          line('l3', 'FLAT', 1, 6000, { addOnId: 'a2', serviceId: null }),
+          priced('l1', 'PER_KG', 2505, 30000, 'Wash & fold', {}, true),
+          priced('l2', 'PER_ITEM', 3, 9000, 'Ironing (add-on)', { addOnId: 'a1', serviceId: null }),
+          priced('l3', 'FLAT', 1, 6000, 'Softener (add-on)', { addOnId: 'a2', serviceId: null }),
         ],
         pageInfo: { hasNextPage: false },
       },
@@ -231,25 +266,121 @@ describe('laundry order page', () => {
     });
     const html = await renderPage();
     const overview = section(html, 'overview');
-    expect(count(overview, '<li')).toBe(3);
-    expect(overview).toContain('Base service');
-    expect(count(overview, '>Add-on<')).toBe(2);
-    expect(overview).toContain('Per kg');
-    expect(overview).toContain('>Weight</dt>');
-    expect(overview).toContain('2.505 kg');
-    expect(overview).toContain('Per item');
-    expect(overview).toContain('>Items</dt>');
-    expect(overview).toContain('>3</dd>');
-    expect(overview).toContain('Flat');
-    expect(count(overview, '>Weight</dt>') + count(overview, '>Items</dt>')).toBe(2);
-    expect(overview).toContain('₱300.00');
-    expect(count(overview, 'Minimum charge applied')).toBe(1);
-    expect(overview).not.toContain('More lines are not loaded.');
+    expect(overview).toContain('3 services priced.');
+    expect(overview).toMatch(/<a[^>]*href="#laundry-order-services"[^>]*>See Services<\/a>/);
+    expect(overview).not.toContain('<li');
+    expect(overview).not.toContain('Base service');
+    expect(overview).not.toContain('Minimum charge applied');
+    const services = section(html, 'services');
+    expect(services).toContain('Services are locked because this order has been priced.');
+    expect(count(services, '<li')).toBe(3);
+    for (const description of ['Wash &amp; fold', 'Ironing (add-on)', 'Softener (add-on)']) {
+      expect(services).toContain(description);
+    }
+    expect(services).toContain('Per kg');
+    expect(services).toContain('>Weight</dt>');
+    expect(services).toContain('2.505 kg');
+    expect(services).toContain('Per item');
+    expect(services).toContain('>Items</dt>');
+    expect(services).toContain('>3</dd>');
+    expect(services).toContain('Flat');
+    expect(count(services, '>Weight</dt>') + count(services, '>Items</dt>')).toBe(2);
+    expect(services).toContain('₱300.00');
+    expect(count(services, 'Minimum charge applied')).toBe(1);
+    expect(services).not.toContain('More lines are not loaded.');
     expect(section(html, 'weighing')).toContain('Recorded weight');
     expect(section(html, 'weighing')).toContain('2.505 kg');
-    expect(section(html, 'services')).toContain('Services are priced. The lines are listed under Overview.');
     expect(section(html, 'price')).toContain('Order total');
     expect(section(html, 'price')).toContain('₱450.00');
+  });
+
+  it('points to Services with a singular count for one saved line', async () => {
+    page.order = order({ lines: { nodes: [line('l1', 'FLAT', 1, 100)], pageInfo: { hasNextPage: false } }, status: 'PRICED' });
+    const overview = section(await renderPage(), 'overview');
+    expect(overview).toContain('1 service priced.');
+    expect(overview).not.toContain('1 services priced.');
+  });
+
+  describe('Services editor and views (#158)', () => {
+    const OPERATIONAL = ['TENANT_OWNER', 'OPS_MANAGER', 'SCHEDULER', 'CUSTOMER_SUPPORT', 'FINANCE', 'ANALYST', 'SUPER_ADMIN'];
+
+    it('offers the editor to OPS_MANAGER on a weighed order, with controls only in Weighing and Services', async () => {
+      page.order = order({ status: 'WEIGHED', totalMinorUnits: null });
+      page.role = 'OPS_MANAGER';
+      const html = await renderPage();
+      const services = section(html, 'services');
+      expect(services).toMatch(/role="combobox"[^>]*/);
+      expect(services).toMatch(/aria-label="Base service"|>Base service<\/label>/);
+      expect(services).toContain('Add add-on');
+      expect(services).toContain('This is a preview. The price is final only after you confirm it.');
+      expect(services).not.toContain('Weigh the order');
+      expect(services).not.toContain('No services selected yet.');
+      expect(services).not.toContain('locked');
+      const outside = html.replace(section(html, 'weighing'), '').replace(services, '');
+      expect(outside).not.toContain('<button');
+      expect(outside).not.toContain('<form');
+      expect(outside).not.toContain('<input');
+      // A static render runs no effects, so the first render sends no request.
+      expect(page.previewQuery).not.toHaveBeenCalled();
+      expect(page.priceMutationCalls).toEqual([]);
+    });
+
+    it('renders an empty Services body while the role loads on a weighed order', async () => {
+      page.order = order({ status: 'WEIGHED', totalMinorUnits: null });
+      page.role = undefined;
+      const services = section(await renderPage(), 'services');
+      expect(services).toContain('<h2');
+      expect(services).not.toContain('No services selected yet.');
+      expect(services).not.toContain('<input');
+      expect(services).not.toContain('Weigh the order');
+      expect(services).toMatch(/<\/h2><div[^>]*><\/div><\/section>$/);
+      expect(page.previewQuery).not.toHaveBeenCalled();
+    });
+
+    it.each(['CUSTOMER_SUPPORT', 'FINANCE', 'ANALYST', 'SUPER_ADMIN'])('shows %s no editor on a weighed order', async (role) => {
+      page.order = order({ status: 'WEIGHED', totalMinorUnits: null });
+      page.role = role;
+      const services = section(await renderPage(), 'services');
+      expect(services).toContain('No services selected yet.');
+      expect(services).not.toContain('<input');
+      expect(services).not.toContain('role="combobox"');
+      expect(services).not.toContain('<button');
+      expect(services).not.toContain('Base service');
+      expect(page.previewQuery).not.toHaveBeenCalled();
+    });
+
+    it.each(OPERATIONAL)('asks %s to weigh a received order before choosing services', async (role) => {
+      page.order = order({ status: 'RECEIVED', totalMinorUnits: null, weightGrams: null });
+      page.role = role;
+      const services = section(await renderPage(), 'services');
+      expect(services).toContain('Weigh the order before choosing services.');
+      expect(services).not.toContain('role="combobox"');
+    });
+
+    it('locks Services and lists the saved lines on a priced order for CUSTOMER_SUPPORT', async () => {
+      page.order = order({ lines: { nodes: [line('l1', 'FLAT', 1, 100)], pageInfo: { hasNextPage: false } }, status: 'PRICED' });
+      page.role = 'CUSTOMER_SUPPORT';
+      const services = section(await renderPage(), 'services');
+      expect(services).toContain('Services are locked because this order has been priced.');
+      expect(services).toContain('Wash &amp; fold');
+      expect(services).not.toContain('<input');
+      expect(services).not.toContain('role="combobox"');
+    });
+
+    it.each(['CANCELLED', 'REJECTED'])('lists the saved lines of a %s order without the locked sentence', async (status) => {
+      page.order = order({ lines: { nodes: [line('l1', 'FLAT', 1, 100)], pageInfo: { hasNextPage: false } }, status, totalMinorUnits: null });
+      const services = section(await renderPage(), 'services');
+      expect(services).toContain('Wash &amp; fold');
+      expect(services).not.toContain('Services are locked');
+      expect(services).not.toContain('<input');
+    });
+
+    it.each(['CANCELLED', 'REJECTED'])('says no services were selected on a %s order without lines', async (status) => {
+      page.order = order({ status, totalMinorUnits: null });
+      const services = section(await renderPage(), 'services');
+      expect(services).toContain('No services selected yet.');
+      expect(services).not.toContain('Services are locked');
+    });
   });
 
   // #155: controls appear only inside Weighing; every other section stays read-only.
@@ -352,7 +483,11 @@ describe('laundry order page', () => {
   it('warns when more lines exist than were loaded', async () => {
     page.order = order({ lines: { nodes: [line('l1', 'FLAT', 1, 100)], pageInfo: { hasNextPage: true } } });
     const html = await renderPage();
-    expect(section(html, 'overview')).toContain('More lines are not loaded.');
+    expect(section(html, 'services')).toContain('More lines are not loaded.');
+    const overview = section(html, 'overview');
+    expect(overview).toContain('Services are priced.');
+    expect(overview).toContain('href="#laundry-order-services"');
+    expect(overview).not.toMatch(/\d+ services? priced/);
   });
 
   it.each([

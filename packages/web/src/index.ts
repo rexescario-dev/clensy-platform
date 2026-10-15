@@ -37,6 +37,12 @@ export type { LaundryOrderProgressProps } from './laundry/laundry-order-progress
 export { LaundryFulfillmentFieldset } from './laundry/laundry-fulfillment-fieldset';
 export type { LaundryFulfillmentFieldsetProps } from './laundry/laundry-fulfillment-fieldset';
 export { LaundryCustomerPicker } from './laundry/laundry-customer-picker';
+export { LaundrySearchCombobox } from './laundry/laundry-search-combobox';
+export type {
+  LaundrySearchComboboxCopy,
+  LaundrySearchComboboxProps,
+  LaundrySearchStatus,
+} from './laundry/laundry-search-combobox';
 export type {
   LaundryCustomerOption,
   LaundryCustomerPickerProps,
