@@ -2284,7 +2284,7 @@ Governing specification: docs/workflows/specs/agent-workflow-design.md
 - **Providers:** GitHub was used for issues #158, #154, #159, #162 and #164, the branch and the PR, all through `gh`. The GitHub MCP server failed to connect, and nothing fell back to it.
 - **Reporting:** Slice Completion Reports were emitted at M6 and below.
 - **§2.8:** one PR carries the plan, its M5 record, the implementation, the follow-ups and the docs.
-- **Attribution:** none of the 20 commits on the branch since `18ceeb8` carries a `Co-Authored-By` trailer or a "Generated with" line. This is the owner's global rule.
+- **Attribution:** no commit on the branch since `18ceeb8` carries a `Co-Authored-By` trailer or a "Generated with" line. This is the owner's global rule.
 
 **Blocking findings:** none.
 
