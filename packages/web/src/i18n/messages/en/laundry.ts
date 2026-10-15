@@ -136,7 +136,9 @@ export const laundry = {
       seeServices: 'See Services',
     },
     price: {
+      failure: 'Unable to price order.',
       notPriced: 'Not priced yet.',
+      success: 'Price confirmed.',
       total: 'Order total',
     },
     sections: {
