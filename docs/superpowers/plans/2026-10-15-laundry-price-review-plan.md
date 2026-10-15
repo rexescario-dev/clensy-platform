@@ -164,6 +164,8 @@ M5 round 1 (2026-10-15) reviewed the plan in five passes and returned it for rev
 | Round 2 | `laundryServicesView` checked the verb before the unresolved role | **Fixed:** the role check comes first; Task 1 adds the WEIGHED, role-loading, `price`-verb case. `laundryPriceView` already checked the role before the verb. |
 | Round 2 | The cited role-loading test named only Services | **Revised:** the test is renamed and asserts the empty Price body, with no Estimate, Confirm or fallback sentence. |
 | Round 2 | "any" in the outcome table overlapped "loading" | **Revised:** rows read "any resolved role" or "any, including loading". |
+| Final review | `OWNER` in the spec, `TENANT_OWNER` in the plan (P1-01) | **Clarified:** the same role; recorded under Global constraints with the code references. |
+| Final review | `Button` markup assumed by the card's regexes | **Verified:** `packages/ui/src/base/button.tsx` renders a native `<button>` with `{...props}`, so the children are its direct content. |
 | Final review | The hook harness recorded renders during render, not on commit (P2-2) | **Fixed:** `renders` is pushed from a `useLayoutEffect` in `Probe`, so only committed results are checked. |
 | Tasks 6–7 | Catalog mock shape | **Revised** to the generated `ServicesQuery` / `AddOnsQuery` node shapes with `pageInfo`. Neither query has a pricing unit: the unit comes from the preview (#158), so the review's "include the unit" premise does not apply. The wrong catalog price stays. |
 
@@ -178,6 +180,7 @@ M5 round 1 (2026-10-15) reviewed the plan in five passes and returned it for rev
 - SHALL NOT change `currentLaundryOrderSection`, the Invoice or Actions bodies, the list page or the drawer (decision 4).
 - SHALL keep the eyebrow "Estimate" wherever a figure comes from the preview, and "Final price" wherever it comes from the snapshot (issue Acceptance).
 - SHALL show the Confirm control only in the Estimate card, which only an operational role on a `WEIGHED` order sees (§4.4; decision 5).
+- Role names: the spec's §4.4 table writes `OWNER` as shorthand for the `TENANT_OWNER` role; its §8.4.5 spells out "TENANT_OWNER, OPS_MANAGER, SCHEDULER". The code uses `TENANT_OWNER` (`apps/api/src/modules/laundry/presentation/graphql/laundry-order.resolver.ts:23`, `packages/web/src/laundry/laundry-order-actions.ts:88`), and no role named `OWNER` exists. This plan uses `TENANT_OWNER` throughout.
 
 ## Review focus
 
