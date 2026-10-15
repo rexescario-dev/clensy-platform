@@ -100,7 +100,7 @@ These were recorded from the brainstorm with the owner on 2026-10-15. Each one b
 | CANCELLED, REJECTED | null | any, including loading | "This order was not priced." | "No services selected yet." |
 | PRICED and every later status (inconsistent: the API never leaves these without a total) | null | any, including loading | "This order was not priced." | "No services selected yet." |
 
-No row without a total reaches the Estimate card except WEIGHED for an operational role. The inconsistent rows are safe and non-editable. Task 1 pins each row, by literal tests and by the exhaustive matrix; Task 6 renders the CANCELLED/REJECTED, inconsistent PRICED, and later-status-with-total rows.
+No row without a total reaches the Estimate card except WEIGHED for an operational role. The inconsistent rows are safe and non-editable. **Out of scope (owner, 2026-10-16):** in the inconsistent PRICED-and-later rows, Weighing (#155) still shows its status-based locked sentence. #162 does not change Weighing. Task 1 pins each row, by literal tests and by the exhaustive matrix; Task 6 renders the CANCELLED/REJECTED, inconsistent PRICED, and later-status-with-total rows.
 
 **M5-requested precisions folded in at design approval:** see owner decisions 3 and 5. Section 2 also asked for three corrections:
 - the renamed priced-order render test (Task 6, Step 1);
