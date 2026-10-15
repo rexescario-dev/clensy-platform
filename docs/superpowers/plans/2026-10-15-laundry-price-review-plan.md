@@ -3263,3 +3263,18 @@ A fresh, independent agent on the most capable model (Opus 5.5) reviewed `47e90b
   3. The A→B→A skip reuses a settled result however long B lasted. It is no staler than a preview left on screen, and the server reprices at Confirm.
 - **Declined to judge:** estimate staleness after a catalog change (#158 behaviour); focus after Confirm (not specified); the toast position at 375 px (`@clensy/ui`, out of scope); Weighing's sentence in the inconsistent rows (owner put it out of scope).
 
+## Owner-directed follow-up (post-M7)
+
+**Owner decision (2026-10-16):** fix M7 minor 1 in this slice, before the PR. This is not M8, because it changes behaviour. It is an owner-directed M6 follow-up, done test-first, followed by a fresh M7 re-review.
+
+| Commit | Change | Evidence |
+| --- | --- | --- |
+| `32df4c9` | **Confirm waits for a weight save.** `LaundryWeighingEditor` takes `onPendingChange?: (pending: boolean) => void` and calls it when a save starts and when it ends, after the reload that follows it, on success and on failure. A submit that sends no request reports nothing. The workspace keeps `weighing` state. Price treats it as a loading preview (owner decision 3): "Updating estimate…", no breakdown, Confirm disabled, and `onConfirm` refuses. No new copy. | RED: 2 failed in the weighing suite (`onPendingChange` never called) and 1 in the page suite (case 14: the old estimate still showed while saving). GREEN: 56/56 in the two suites. |
+
+Full run after the commit:
+- `pnpm --filter web test`: 48 files, 2180 passed;
+- `pnpm --filter web lint` and `pnpm --filter web exec tsc --noEmit`: exit 0;
+- `pnpm --filter @clensy/web test`: 16 files, 417 passed.
+
+M7 minors 2 and 3 need no code change. Minor 2 is recorded here: the browser check used the seed TENANT_OWNER, an operational role with the same `price` path as OPS_MANAGER.
+
