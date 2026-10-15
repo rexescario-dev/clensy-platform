@@ -2,17 +2,14 @@
 
 import type { PricingUnit } from '@clensy/client';
 import { Button, FormField } from '@clensy/ui';
-import { LaundrySearchCombobox, formatWeightGrams, useClensyTranslations } from '@clensy/web';
+import { LaundrySearchCombobox, useClensyTranslations } from '@clensy/web';
 import { useEffect, useRef, useState } from 'react';
-import { formatMinorUnits } from '../../lib/format-price';
 import {
-  laundryRateKey,
   laundryRowDuplicate,
   laundryUnitKey,
   parseItemCount,
   type LaundryAddOnRow,
   type LaundryCatalogChoice,
-  type LaundryPreviewLine,
 } from '../../lib/laundry-service-selection';
 import { useLaundryAddOnSearch, useLaundryServiceSearch } from '../../lib/use-laundry-catalog-search';
 import type { LaundryServiceSelectionState } from '../../lib/use-laundry-service-selection';
@@ -31,18 +28,20 @@ function addOnCountId(key: number): string {
 }
 
 export interface LaundryServicesEditorProps {
+  // Every control is disabled while a price is confirmed (#162 owner
+  // decision 6.3).
+  disabled?: boolean;
   // From `useLaundryServiceSelection`, owned by the page (#158).
   state: LaundryServiceSelectionState;
 }
 
 // Base service and add-ons for a WEIGHED order (lifecycle spec §8.4.4,
-// #158). Every unit, count input and rate comes from the server: the count
-// input from the remembered unit, the unit display and rate from the
-// current preview only (owner decision 6). It never prices (#162 does) and
-// computes no amount.
-export function LaundryServicesEditor({ state }: LaundryServicesEditorProps) {
+// #158). It chooses services and takes counts only: the count input shows
+// for a remembered PER_ITEM unit, and the Price card shows every unit, rate
+// and amount (#162 owner decision 2). It never prices and computes no amount.
+export function LaundryServicesEditor({ disabled = false, state }: LaundryServicesEditorProps) {
   const t = useClensyTranslations('laundry');
-  const { preview, previewError, selection, units } = state;
+  const { previewError, selection, units } = state;
   const addRef = useRef<HTMLButtonElement>(null);
   // A row to focus once it has rendered; a new object per request.
   const [focusRow, setFocusRow] = useState<{ key: number } | null>(null);
@@ -89,6 +88,7 @@ export function LaundryServicesEditor({ state }: LaundryServicesEditorProps) {
             onBlur={state.touchBase}
             onQueryChange={state.changeBaseQuery}
             onSelect={state.chooseBase}
+            disabled={disabled}
             t={t}
           />
         </div>
@@ -96,7 +96,7 @@ export function LaundryServicesEditor({ state }: LaundryServicesEditorProps) {
           countId={BASE_COUNT_ID}
           count={selection.baseQuantity}
           countTouched={selection.baseQuantityTouched}
-          line={preview?.base ?? null}
+          disabled={disabled}
           rememberedUnit={selection.base ? units[laundryUnitKey('service', selection.base.id)] : undefined}
           onCountBlur={state.touchBaseQuantity}
           onCountChange={state.changeBaseQuantity}
@@ -109,7 +109,7 @@ export function LaundryServicesEditor({ state }: LaundryServicesEditorProps) {
           key={row.key}
           n={index + 1}
           noPrice={target?.kind === 'addOn' && target.key === row.key}
-          line={preview?.addOns.get(row.key) ?? null}
+          disabled={disabled}
           row={row}
           rememberedUnit={row.choice ? units[laundryUnitKey('addOn', row.choice.id)] : undefined}
           state={state}
@@ -126,6 +126,7 @@ export function LaundryServicesEditor({ state }: LaundryServicesEditorProps) {
         type="button"
         variant="secondary"
         className="self-start"
+        disabled={disabled}
         onClick={() => setFocusRow({ key: state.addAddOn() })}
       >
         {t('order.services.addAddOn')}
@@ -136,14 +137,12 @@ export function LaundryServicesEditor({ state }: LaundryServicesEditorProps) {
           {alert}
         </p>
       ) : null}
-
-      <p className="text-slate-600">{t('order.services.note')}</p>
     </div>
   );
 }
 
 function AddOnRowEditor({
-  line,
+  disabled,
   n,
   noPrice,
   onRemove,
@@ -152,7 +151,7 @@ function AddOnRowEditor({
   state,
   t,
 }: {
-  line: LaundryPreviewLine | null;
+  disabled: boolean;
   n: number;
   noPrice: boolean;
   onRemove: () => void;
@@ -183,6 +182,7 @@ function AddOnRowEditor({
             onBlur={() => state.touchAddOn(row.key)}
             onQueryChange={(text) => state.changeAddOnQuery(row.key, text)}
             onSelect={(choice) => state.chooseAddOn(row.key, choice)}
+            disabled={disabled}
             t={t}
           />
         </div>
@@ -190,27 +190,27 @@ function AddOnRowEditor({
           countId={addOnCountId(row.key)}
           count={row.quantity}
           countTouched={row.quantityTouched}
-          line={line}
+          disabled={disabled}
           rememberedUnit={rememberedUnit}
           onCountBlur={() => state.touchAddOnQuantity(row.key)}
           onCountChange={(text) => state.changeAddOnQuantity(row.key, text)}
           t={t}
         />
       </div>
-      <Button type="button" variant="secondary" className="self-start" onClick={onRemove}>
+      <Button type="button" variant="secondary" className="self-start" disabled={disabled} onClick={onRemove}>
         {t('order.services.removeAddOn').replace('{n}', String(n))}
       </Button>
     </div>
   );
 }
 
-// The count input from the remembered unit; the unit display and the rate
-// from the current preview line only (owner decision 6).
+// The count input for a remembered PER_ITEM unit (owner decision 6). The
+// unit display and the rate are in the Price card (#162 owner decision 2).
 function LineDetail({
   count,
   countId,
   countTouched,
-  line,
+  disabled,
   onCountBlur,
   onCountChange,
   rememberedUnit,
@@ -219,42 +219,28 @@ function LineDetail({
   count: string;
   countId: string;
   countTouched: boolean;
-  line: LaundryPreviewLine | null;
+  disabled: boolean;
   onCountBlur: () => void;
   onCountChange: (text: string) => void;
   rememberedUnit: PricingUnit | undefined;
   t: Translate;
 }) {
+  if (rememberedUnit !== 'PER_ITEM') return null;
   const countError = countTouched && parseItemCount(count) === null ? t('order.services.error.count') : undefined;
   return (
     <div className="flex flex-col gap-2 sm:w-56">
-      {line?.unit === 'PER_KG' ? (
-        <div>
-          <p className="font-medium text-slate-900">{t('order.services.byWeight')}</p>
-          <p>{formatWeightGrams(line.quantity)}</p>
-        </div>
-      ) : null}
-      {line?.unit === 'FLAT' || line?.unit === 'PER_SERVICE' ? (
-        <p className="font-medium text-slate-900">{t('order.services.flat')}</p>
-      ) : null}
-      {rememberedUnit === 'PER_ITEM' ? (
-        <FormField
-          label={t('order.services.count')}
-          name={countId}
-          type="text"
-          inputMode="numeric"
-          autoComplete="off"
-          value={count}
-          error={countError}
-          onChange={(event) => onCountChange(event.currentTarget.value)}
-          onBlur={onCountBlur}
-        />
-      ) : null}
-      {line ? (
-        <p className="text-slate-600">
-          {t(`order.services.rate.${laundryRateKey(line.unit)}`).replace('{price}', formatMinorUnits(line.rateMinorUnits))}
-        </p>
-      ) : null}
+      <FormField
+        label={t('order.services.count')}
+        name={countId}
+        type="text"
+        inputMode="numeric"
+        autoComplete="off"
+        value={count}
+        error={countError}
+        disabled={disabled}
+        onChange={(event) => onCountChange(event.currentTarget.value)}
+        onBlur={onCountBlur}
+      />
     </div>
   );
 }
@@ -262,6 +248,7 @@ function LineDetail({
 // A catalog search on the shared combobox. It browses on focus (owner
 // decision 3); the server does every filter.
 function CatalogPicker({
+  disabled,
   error,
   id,
   kind,
@@ -272,6 +259,7 @@ function CatalogPicker({
   query,
   t,
 }: {
+  disabled: boolean;
   error: string | undefined;
   id: string;
   kind: 'addOn' | 'service';
@@ -289,6 +277,7 @@ function CatalogPicker({
   return (
     <LaundrySearchCombobox
       id={id}
+      disabled={disabled}
       copy={{
         empty: t(`order.services.search.${kind}.empty`),
         error: t(`order.services.search.${kind}.error`),

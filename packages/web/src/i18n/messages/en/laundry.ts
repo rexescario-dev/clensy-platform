@@ -178,7 +178,6 @@ export const laundry = {
       addOn: 'Add-on {n}',
       base: 'Base service',
       beforeWeigh: 'Weigh the order before choosing services.',
-      byWeight: 'Priced by weight',
       count: 'Number of items',
       duplicate: 'This add-on is already on the order.',
       error: {
@@ -186,18 +185,11 @@ export const laundry = {
         count: 'Enter a whole number of items, at least 1.',
         emptyRow: 'Choose an add-on or remove this row.',
       },
-      flat: 'Flat price',
       locked: 'Services are locked because this order has been priced.',
       noPrice: '{name} has no current price.',
       noPriceRow: 'No current price.',
       none: 'No services selected yet.',
-      note: 'This is a preview. The price is final only after you confirm it.',
       previewFailure: 'Couldn’t preview the price.',
-      rate: {
-        flat: '{price} flat',
-        perItem: '{price} per item',
-        perKg: '{price} per kg',
-      },
       removeAddOn: 'Remove add-on {n}',
       search: {
         addOn: { empty: 'No active add-ons match.', error: 'Couldn’t load add-ons.' },

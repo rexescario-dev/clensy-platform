@@ -63,16 +63,17 @@ let container: HTMLDivElement;
 let root: Root;
 let onRecorded: Mock<() => Promise<unknown>>;
 
-async function mount(weightGrams: number | null) {
+async function mount(weightGrams: number | null, disabled = false) {
   const { LaundryWeighingEditor } = await import('../components/laundry/laundry-weighing-editor');
   act(() =>
     root.render(
       <ToastProvider>
-        <LaundryWeighingEditor onRecorded={onRecorded} orderId={ORDER_ID} weightGrams={weightGrams} />
+        <LaundryWeighingEditor disabled={disabled} onRecorded={onRecorded} orderId={ORDER_ID} weightGrams={weightGrams} />
       </ToastProvider>,
     ),
   );
 }
+
 
 function inputs(): HTMLInputElement[] {
   return [...container.querySelectorAll<HTMLInputElement>('input')];
@@ -491,5 +492,23 @@ describe('laundry weighing editor', () => {
     click('Record weight');
     expect(weigh.calls).toEqual([]);
     expect(container.textContent).toContain('Weight must be greater than zero.');
+  });
+
+  // #162 owner decision 6.3: frozen while a price is confirmed.
+  it('disables every input and button, and drops a submit, while disabled', async () => {
+    await mount(2500, true);
+    const controls = [...container.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input, button')];
+    expect(controls.length).toBeGreaterThanOrEqual(3);
+    expect(controls.every((control) => control.disabled)).toBe(true);
+    // The handler calls preventDefault() before the guard, so the dropped
+    // submit is also cancelled (M5 round 1).
+    let notCancelled = true;
+    act(() => {
+      notCancelled = container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    expect(notCancelled).toBe(false);
+    expect(weigh.calls).toEqual([]);
+    await mount(2500, false);
+    expect(button('Record weight').disabled).toBe(false);
   });
 });

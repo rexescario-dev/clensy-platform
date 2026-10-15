@@ -8,6 +8,9 @@ import { graphQLErrorMessage } from '../../lib/graphql-error-message';
 import { kilogramsInputFromGrams, summarizeWeightEntries } from '../../lib/laundry-weight-entries';
 
 export interface LaundryWeighingEditorProps {
+  // Every control is disabled, and a submit is dropped, while a price is
+  // confirmed (#162 owner decision 6.3).
+  disabled?: boolean;
   // Refetches the order after a recorded weight, so the summary's Weight
   // card and the "Recorded weight" line show the saved value (#155).
   onRecorded: () => Promise<unknown>;
@@ -40,7 +43,7 @@ function entry(key: number, text: string): Entry {
 // spec §8.4.4, #155). Rows are never persisted (§8.2): a re-weigh starts
 // from one row holding the recorded total. The server stays authoritative
 // (§8.4.1); this form only stops input it would reject anyway.
-export function LaundryWeighingEditor({ onRecorded, orderId, weightGrams }: LaundryWeighingEditorProps) {
+export function LaundryWeighingEditor({ disabled = false, onRecorded, orderId, weightGrams }: LaundryWeighingEditorProps) {
   const t = useClensyTranslations('laundry');
   const toast = useToast();
   const [weigh] = useWeighLaundryOrderMutation();
@@ -61,6 +64,8 @@ export function LaundryWeighingEditor({ onRecorded, orderId, weightGrams }: Laun
   // object per submit, so a repeat submit on the same row focuses it again.
   const [focusRow, setFocusRow] = useState<{ key: number } | null>(null);
   const summary = summarizeWeightEntries(entries.map((row) => row.text));
+  // A save in flight or a price being confirmed (#162).
+  const locked = pending || disabled;
 
   // Every control is disabled while a save and its refetch run, so a
   // browser drops focus to <body>. Once they settle, focus goes back to
@@ -112,7 +117,7 @@ export function LaundryWeighingEditor({ onRecorded, orderId, weightGrams }: Laun
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (inFlight.current) return;
+    if (inFlight.current || disabled) return;
     setAttempted(true);
     setFailure(undefined);
     if (!summary.submittable) {
@@ -176,18 +181,18 @@ export function LaundryWeighingEditor({ onRecorded, orderId, weightGrams }: Laun
                 autoComplete="off"
                 value={row.text}
                 error={error}
-                disabled={pending}
+                disabled={locked}
                 onChange={(event) => changeEntry(row.key, event.currentTarget.value)}
                 onBlur={() => touchEntry(row.key)}
               />
             </div>
-            <Button type="button" variant="secondary" disabled={pending} onClick={() => removeEntry(row.key)}>
+            <Button type="button" variant="secondary" disabled={locked} onClick={() => removeEntry(row.key)}>
               {t('order.weighing.remove').replace('{n}', n)}
             </Button>
           </div>
         );
       })}
-      <Button type="button" variant="secondary" disabled={pending} onClick={addEntry} className="self-start">
+      <Button type="button" variant="secondary" disabled={locked} onClick={addEntry} className="self-start">
         {t('order.weighing.add')}
       </Button>
       <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
@@ -209,7 +214,7 @@ export function LaundryWeighingEditor({ onRecorded, orderId, weightGrams }: Laun
       <Button
         ref={recordRef}
         type="submit"
-        disabled={pending}
+        disabled={locked}
         aria-describedby={summary.formError ? FORM_ERROR_ID : undefined}
         className="w-full sm:w-auto sm:self-start"
       >

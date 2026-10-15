@@ -84,11 +84,11 @@ vi.mock('@clensy/client', async (importOriginal) => ({
 const { useLaundryServiceSelection } = await import('./use-laundry-service-selection');
 const { LaundryServicesEditor } = await import('../components/laundry/laundry-services-editor');
 
-function Harness({ weightGrams }: { weightGrams: number | null }) {
+function Harness({ disabled = false, weightGrams }: { disabled?: boolean; weightGrams: number | null }) {
   const state = useLaundryServiceSelection({ enabled: true, orderId: ORDER, weightGrams });
   return (
     <div>
-      <LaundryServicesEditor state={state} />
+      <LaundryServicesEditor disabled={disabled} state={state} />
       <button type="button" id="elsewhere">
         Elsewhere
       </button>
@@ -156,8 +156,8 @@ afterEach(() => {
   for (const recorded of calls()) expect(recorded.query).toBe(PreviewLaundryOrderPriceDocument);
 });
 
-function mount(weightGrams: number | null = WEIGHT) {
-  act(() => root.render(<Harness weightGrams={weightGrams} />));
+function mount(weightGrams: number | null = WEIGHT, disabled = false) {
+  act(() => root.render(<Harness disabled={disabled} weightGrams={weightGrams} />));
 }
 
 // Runs the debounce and the request, then lets the promise settle. Called
@@ -276,14 +276,14 @@ function rowOf(input: HTMLElement): HTMLElement {
 }
 
 describe('LaundryServicesEditor', () => {
-  it('case 1: lays out with the base search, no form or submit, and the preview note', () => {
+  it('case 1: lays out with the base search, no form or submit, and no preview note', () => {
     mount();
     expect(container.firstElementChild!.firstElementChild!.className).toBe('flex flex-col gap-4');
     expect(labelTexts()).toContain('Base service');
     expect(el<HTMLLabelElement>('label[for="laundry-base-service"]').textContent).toBe('Base service');
     expect(container.querySelector('form')).toBeNull();
     expect(container.querySelector('button[type="submit"]')).toBeNull();
-    expect(text()).toContain('This is a preview. The price is final only after you confirm it.');
+    expect(text()).not.toContain('This is a preview.');
   });
 
   it('case 2: browses the services on focus, and the add-ons in an add-on search', async () => {
@@ -308,17 +308,17 @@ describe('LaundryServicesEditor', () => {
     ]);
   });
 
-  it('case 3: PER_KG shows the weight and the per-kg rate, with no count input', async () => {
+  it('case 3: PER_KG shows no count input, and no unit, weight or rate', async () => {
     mount();
     await chooseBase(WASH);
-    expect(text()).toContain('Priced by weight');
-    expect(text()).toContain('2.505 kg');
+    expect(text()).not.toContain('Priced by weight');
+    expect(text()).not.toContain('2.505 kg');
     expect(container.querySelector('input[inputmode="numeric"]')).toBeNull();
     expect(labelTexts()).not.toContain('Number of items');
-    expect(rates()).toEqual(['₱50.00 per kg']);
+    expect(rates()).toEqual([]);
   });
 
-  it('case 4: PER_ITEM shows a numeric count input holding 1, and the per-item rate', async () => {
+  it('case 4: PER_ITEM shows a numeric count input holding 1, and no rate', async () => {
     mount();
     await chooseBase(SHOES);
     const count = el<HTMLInputElement>('#laundry-base-count');
@@ -327,17 +327,14 @@ describe('LaundryServicesEditor', () => {
     expect(el<HTMLLabelElement>('label[for="laundry-base-count"]').textContent).toBe('Number of items');
     expect(labelTexts().filter((label) => label.includes('kg'))).toEqual([]);
     expect(text()).not.toContain('Priced by weight');
-    expect(rates()).toEqual(['₱25.00 per item']);
+    expect(rates()).toEqual([]);
   });
 
-  it.each([
-    [DRY, '₱150.00 flat'],
-    [DUVET, '₱200.00 flat'],
-  ])('case 5: %s shows a flat price and its flat rate, with no count input', async (id, rate) => {
+  it.each([[DRY], [DUVET]])('case 5: %s shows no count input and no flat price or rate', async (id) => {
     mount();
     await chooseBase(id);
-    expect(text()).toContain('Flat price');
-    expect(rates()).toEqual([rate]);
+    expect(text()).not.toContain('Flat price');
+    expect(rates()).toEqual([]);
     expect(container.querySelector('input[inputmode="numeric"]')).toBeNull();
   });
 
@@ -354,23 +351,20 @@ describe('LaundryServicesEditor', () => {
     expect(countInput(first)?.value).toBe('1');
     expect(rowOf(first).textContent).toContain('Number of items');
     expect(countInput(second)).toBeNull();
-    expect(rowOf(second).textContent).toContain('Flat price');
+    expect(rowOf(second).textContent).not.toContain('Flat price');
     expect(rowOf(second).textContent).not.toContain('Number of items');
   });
 
   describe('case 7: an invalid count', () => {
-    it.each([['0'], [''], ['-1'], ['1.5']])('"%s" shows the error after blur and drops the rate', async (value) => {
+    it.each([['0'], [''], ['-1'], ['1.5']])('"%s" shows the error after blur and keeps the count input', async (value) => {
       mount();
       await chooseBase(SHOES);
-      expect(rates()).toEqual(['₱25.00 per item']);
       const count = el<HTMLInputElement>('#laundry-base-count');
       type(count, value);
       leave(count);
       expect(text()).toContain('Enter a whole number of items, at least 1.');
       expect(container.querySelector('#laundry-base-count')).not.toBeNull();
-      expect(rates()).toEqual([]);
       await settle(2);
-      expect(rates()).toEqual([]);
     });
 
     it('recovers: typing 2 clears the error at once, and one request shows that response', async () => {
@@ -381,11 +375,9 @@ describe('LaundryServicesEditor', () => {
       leave(count);
       expect(text()).toContain('Enter a whole number of items, at least 1.');
       const before = calls().length;
-      preview.rate = 3700;
       type(count, '2');
       leave(count);
       expect(text()).not.toContain('Enter a whole number of items, at least 1.');
-      expect(rates()).toEqual([]);
       await act(async () => {
         vi.advanceTimersByTime(299);
       });
@@ -395,21 +387,18 @@ describe('LaundryServicesEditor', () => {
       });
       expect(calls().length).toBe(before + 1);
       expect(calls()[before]!.input.baseQuantity).toBe(2);
-      expect(rates()).toEqual(['₱37.00 per item']);
     });
   });
 
-  it('case 8: after a failed preview of a PER_ITEM base, the count input stays and the rate is gone', async () => {
+  it('case 8: after a failed preview of a PER_ITEM base, the count input stays', async () => {
     mount();
     await chooseBase(SHOES);
-    expect(rates()).toEqual(['₱25.00 per item']);
     preview.failIf = () => new Error('network down');
     type(el<HTMLInputElement>('#laundry-base-count'), '3');
     await settle();
     expect(alerts()).toEqual(['Couldn’t preview the price.']);
     expect(container.querySelector('#laundry-base-count')).not.toBeNull();
     expect(el<HTMLInputElement>('#laundry-base-count').value).toBe('3');
-    expect(rates()).toEqual([]);
   });
 
   it('case 9: a duplicate add-on is flagged on its row, keeps its text and is never sent twice', async () => {
@@ -557,7 +546,6 @@ describe('LaundryServicesEditor', () => {
       expect(paragraphs('No current price.')).toHaveLength(0);
       await settle(3);
       expect(alerts()).toEqual([]);
-      expect(rates()).toEqual(['₱50.00 per kg', '₱25.00 per item']);
     });
 
     it('the base marker follows the current choice: switching Wash to Dry clean clears it at once', async () => {
@@ -582,7 +570,6 @@ describe('LaundryServicesEditor', () => {
       expect(paragraphs('No current price.')).toHaveLength(0);
       await settle(2);
       expect(alerts()).toEqual([]);
-      expect(rates()).toEqual(['₱150.00 flat']);
     });
   });
 
@@ -668,13 +655,17 @@ describe('LaundryServicesEditor', () => {
     expect(countInput(inputs[1]!)?.value).toBe('4');
   });
 
-  it('case 17: every rate is the preview rate, never the catalog list price', async () => {
+  // #162 owner decision 2: the Price card owns every rate, unit and amount.
+  it('case 17: shows no rate, unit, amount or preview note', async () => {
     mount();
     await chooseBase(WASH);
     await addRow(IRON);
-    expect(rates()).toEqual(['₱50.00 per kg', '₱25.00 per item']);
-    expect(text().match(/₱/g)).toHaveLength(2);
-    expect(text()).not.toContain('₱999.00');
+    await addRow(SOFT);
+    expect(rates()).toEqual([]);
+    expect(text()).not.toContain('₱');
+    expect(text()).not.toContain('Priced by weight');
+    expect(text()).not.toContain('Flat price');
+    expect(text()).not.toContain('This is a preview.');
   });
 
   it('case 18: the first preview request uses only the preview query', async () => {
@@ -723,5 +714,46 @@ describe('LaundryServicesEditor', () => {
       expect(addOnInputs()[0]!.value).toBe('Softener');
       expect(group('Add-on 1').contains(addOnInputs()[0]!)).toBe(true);
     });
+  });
+
+  // #162 owner decision 6.3: frozen while a price is confirmed.
+  it('case 20: disabled disables every search, count input and button', async () => {
+    mount();
+    await chooseBase(SHOES);
+    await addRow(IRON);
+    mount(WEIGHT, true);
+    // Named one by one (M5 round 1), so a control the combobox renders
+    // differently cannot hide behind a count.
+    const named: (HTMLInputElement | HTMLButtonElement)[] = [
+      baseInput(),
+      el<HTMLInputElement>('#laundry-base-count'),
+      addOnInputs()[0]!,
+      countInput(addOnInputs()[0]!)!,
+      button('Add add-on'),
+      button('Remove add-on 1'),
+    ];
+    for (const control of named) expect(control.disabled, control.id || control.textContent).toBe(true);
+    // And nothing in the editor is left enabled. `#elsewhere` is the
+    // harness's own focus target, outside the editor.
+    expect(
+      [...container.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input, button')].filter(
+        (control) => !control.disabled && control.id !== 'elsewhere',
+      ),
+    ).toEqual([]);
+    mount(WEIGHT, false);
+    expect(baseInput().disabled).toBe(false);
+  });
+
+  it('case 21: while disabled, Add add-on and Remove change no rows', async () => {
+    mount();
+    await chooseBase(SHOES);
+    await addRow(IRON);
+    mount(WEIGHT, true);
+    const before = addOnInputs().map((input) => input.value);
+    click('Add add-on');
+    click('Remove add-on 1');
+    await settle();
+    expect(addOnInputs().map((input) => input.value)).toEqual(before);
+    expect(addOnInputs()).toHaveLength(1);
   });
 });
