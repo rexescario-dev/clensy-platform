@@ -164,6 +164,7 @@ M5 round 1 (2026-10-15) reviewed the plan in five passes and returned it for rev
 | Round 2 | `laundryServicesView` checked the verb before the unresolved role | **Fixed:** the role check comes first; Task 1 adds the WEIGHED, role-loading, `price`-verb case. `laundryPriceView` already checked the role before the verb. |
 | Round 2 | The cited role-loading test named only Services | **Revised:** the test is renamed and asserts the empty Price body, with no Estimate, Confirm or fallback sentence. |
 | Round 2 | "any" in the outcome table overlapped "loading" | **Revised:** rows read "any resolved role" or "any, including loading". |
+| Final review | The hook harness recorded renders during render, not on commit (P2-2) | **Fixed:** `renders` is pushed from a `useLayoutEffect` in `Probe`, so only committed results are checked. |
 | Tasks 6–7 | Catalog mock shape | **Revised** to the generated `ServicesQuery` / `AddOnsQuery` node shapes with `pageInfo`. Neither query has a pricing unit: the unit comes from the preview (#158), so the review's "include the unit" premise does not apply. The wrong catalog price stays. |
 
 ## Global constraints
@@ -728,14 +729,21 @@ with:
 let latest: Hook;
 let props: Props;
 // Every committed render's result, to catch a flicker between two checks.
+// Pushed from a layout effect, which runs once per commit, so a render
+// React abandons or repeats is never recorded (M5 final review, P2-2).
 const renders: Hook[] = [];
 
 function Probe(current: Props) {
-  latest = useLaundryServiceSelection(current);
-  renders.push(latest);
+  const result = useLaundryServiceSelection(current);
+  latest = result;
+  useLayoutEffect(() => {
+    renders.push(result);
+  });
   return null;
 }
 ```
+
+Also replace `import { act } from 'react';` with `import { act, useLayoutEffect } from 'react';`.
 
 In `beforeEach`, after `unitKeySpy.mockClear();`, add `renders.length = 0;`.
 
