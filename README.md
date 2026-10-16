@@ -24,6 +24,7 @@ flowchart LR
 
 - Docker with Compose v2
 - Node.js 20 and pnpm 10.30.3 (run `corepack enable`; the version is pinned in `package.json`)
+- Free host ports **3000** (API), **3001** (web) and **5432** (Postgres). 3000 and 3001 are fixed in `docker-compose.yml`; the Postgres port is `DB_PORT` in `.env`.
 
 ## Run locally
 
@@ -50,6 +51,8 @@ flowchart LR
    pnpm install
    pnpm db:seed
    ```
+
+   The seed is safe to repeat, but each run resets its own rows: the fixture customer, property, service, team and three bookings return to their seed values, and the seed admin's password, role and active flag are reset. It never touches other data. pnpm may warn about "ignored build scripts"; the steps here do not need them.
 
 5. **Open http://localhost:3001** and sign in with the seed email and password.
 
@@ -81,6 +84,7 @@ Expected output: `{"data":{"__typename":"Query"}}`.
 | Problem | Fix |
 | --- | --- |
 | `api` keeps restarting with `JWT_SECRET must be set` | Set `JWT_SECRET` in `apps/api/.env`, then `docker compose up -d --build`. |
+| `port is already allocated` or `address already in use` for 3000 or 3001 | Another process or Compose stack uses the port. Stop it (`docker ps`, `lsof -i :3000`); these two ports cannot be changed from `.env`. |
 | Postgres cannot bind port 5432 | Another Postgres is running. Change `DB_PORT` in both `.env` files. |
 | Login fails | Set `ADMIN_SEED_EMAIL`/`ADMIN_SEED_PASSWORD` in `apps/api/.env` and run `pnpm db:seed`. |
 | `api` and `web` never start | A migration failed: `docker compose logs migrate`. |
