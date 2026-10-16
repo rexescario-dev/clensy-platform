@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 3)** at M5, 2026-10-16. M6 complete ([Execution record](#execution-record)); M7 **Approved for merge** (independent review); M8 N/A; M9 complete. Browser check and screen-reader pass **NOT RUN** (owner action before #181 closes). PR [#190](https://github.com/rexescario-dev/clensy-platform/pull/190). |
+| Status | **Accepted (revision 3)** at M5, 2026-10-16. M6 complete ([Execution record](#execution-record)); M7 **Approved for merge** (independent review); M8 N/A; M9 complete; merged in PR [#190](https://github.com/rexescario-dev/clensy-platform/pull/190) (`9fd0ef6`); M10 validated (after merge, in a follow-up docs PR). Browser check and screen-reader pass **NOT RUN** (owner action before #181 closes). |
 | M5 decision | **Accepted** — 2026-10-16, revision 3 (`9d43bea`), by the owner, after a third pass: "M5: Accept. The plan is ready to proceed to M6 native execution." M5-5, M5-6 and M5-7 are resolved. One execution-time check, not a blocker: verify that the query-recording mock exposes the asserted variables in the documented shape, and that the popup assertions target the actual visible result container. Conditions: record actual test results rather than treating predicted red-phase counts as pass criteria; investigate unexpected failures; do not broaden scope. M7 MUST be a fresh, independent review. The acceptance does not authorize a push or any other external action. |
 | M5 history | First pass (2026-10-16, owner): **Returned for Revision**, findings M5-1 to M5-4, resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). Second pass (2026-10-16, owner, reviewed `e37ca44`): **Returned for Revision**, findings M5-5 to M5-7. The reviewer recorded M5-1 to M5-4 as satisfactory. M5-5 to M5-7 are resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). The owner directs **native** execution once accepted, with the required fresh, independent M7 review. |
 | Date | 2026-10-16 |
@@ -1227,3 +1227,89 @@ No maintainability improvement worth its risk. The diff is three small source ch
 ### PR CI — 2026-10-16
 
 PR [#190](https://github.com/rexescario-dev/clensy-platform/pull/190), run [38912141103](https://github.com/rexescario-dev/clensy-platform/actions/runs/38912141103) on `516420f`. All required checks pass: API e2e (1m43s), Lint (1m7s), Release gate (53s), Test (1m14s). Merge state: `CLEAN`. M10 was not run for this slice; the owner directed merge and closeout.
+
+### M10 — Accepted, workflow validated (2026-10-16)
+
+```text
+Decision: Accepted
+Subject: workflow prompt library
+Governing specification: docs/workflows/specs/agent-workflow-design.md
+```
+
+**Subject.** The installed workflow (`docs/workflows/`, generic 1.4.1) was run on #181 from the brainstorm to closeout.
+- **No M2 or M3.** #181 changes only how the §8.4.4 intake UI is exposed to assistive technology. The owner approved going without a spec amendment at the brainstorm.
+- **Dispatch vs stage:** the Context Forge dispatch asked for "Brainstorm (project default)". The brainstorm settled three owner decisions before M4. The workflow's selection rule (an Accepted spec exists, so start at M4) governed the stage.
+
+**Asset inventory.** Unchanged:
+- `README.md`;
+- `specs/agent-workflow-design.md`;
+- `conventions/prompt-library.md` and `conventions/reporting-conventions.md`;
+- `prompts/` for M2–M10 (`specification`, `design-review`, `implementation-planning`, `plan-review`, `implementation-execution`, `code-review`, `refactoring`, `documentation-execution`, `workflow-validation`).
+
+Every asset `workflow.yaml` lists exists. `git diff 8c7a11b 9fd0ef6 -- docs/workflows .claude workflow.yaml` is empty, and there are no orphan assets.
+
+**Checks:**
+- **§2.5 gate:** the M5 acceptance record (`7aad64a`, 21:39:12) precedes the first M6 commit (`1d9735c`, 21:40:24).
+- **M5 return path:** two rounds returned the plan (M5-1 to M5-4, then M5-5 to M5-7). Each finding has a row in the revision logs, and revision 3 was accepted.
+- **Authority model:**
+  - **Semantics:** the spec (§8.4.4) governed, and it was not changed.
+  - **Sequencing:** the plan governed. M6 kept task order and per-task commits. Its one ruling concerned only how characterization evidence was obtained, and it is recorded.
+- **Red-phase evidence (M5-4):** every red run's actual count is recorded and matched the prediction. Both characterization tests carry mutation evidence that was never committed (M6 prompt step 3).
+- **M7 independence:** `CLAUDE.md`'s rule was honoured. A fresh, read-only Opus 5.5 reviewer was given the spec, the plan and the diff, and it re-ran the checks.
+- **Providers:** GitHub was used for issues #181 and #154, the branch, PR #190, CI and the merge, all through `gh`. The GitHub MCP server failed to connect at session start, and nothing fell back to it.
+- **Reporting:** Slice Completion Reports were emitted at M6, M7 and closeout.
+- **§2.8:** one PR (#190) carried the plan, its M5 record, the implementation, the M7–M9 records and the CI record.
+- **§2.12:** the merge was verified (`9fd0ef6`; the branch head is an ancestor of `main`) before closeout.
+- **Attribution:** no commit carries a `Co-Authored-By` trailer or a "Generated with" line (user `CLAUDE.md`).
+
+**Blocking findings:** none.
+
+**Non-blocking observations:**
+1. **M10 ran after the merge.** §2.6 places M10 before closeout, with its report in the slice PR (§2.8). Here the owner directed merge and closeout first and asked for M10 afterwards, so this report lands in a follow-up docs-only PR. The cost is one extra PR; traceability is kept by this record and its PR link.
+2. **A characterization claim that red could not show.** The plan said two characterization assertions "already pass" at red, but they followed the first failing assertion in the same test. M6 used mutation evidence instead.
+   - **M4 lesson:** put characterization assertions in their own test, or before a test's first expected failure.
+3. **The local Docker stack had drifted behind the branch again,** as in #162. The browser check was recorded NOT RUN, because the API's CORS origin pins the web origin to `:3001` and a rebuild needs the owner's approval.
+   - **Suggested project policy (not workflow):** record in `CLAUDE.md` whether an agent may rebuild the local stack for a browser check.
+4. **Manual acceptance criteria outlive the slice.** #181's screen-reader criteria cannot be met by automated tests, so the PR said "Part of" and the issue stays open for the owner's pass (planning decision (h)). The workflow handled this through planning decision (h) and the closeout's Remaining work. Neither the workflow nor the issue template has a field for it.
+5. **The plan's code passed the repo's custom lint rules on first run** (unlike #158 and #162). The M5 reviews' focus on test design (M5-2, M5-5, M5-6) produced tests that pinned the request, the response and the node identity, not only the announced text.
+
+Gate: **Workflow validated.**
+
+## Slice Completion Report (final)
+
+| Field | Result |
+| --- | --- |
+| Slice | #181 Intake screen-reader polish |
+| Tracking | https://github.com/rexescario-dev/clensy-platform/issues/181 |
+| M4 | Plan **Accepted** (revision 3) |
+| M5 | Review **Accepted** |
+| M6 | **Complete** |
+| M7 | **Approved** (fresh, independent reviewer) |
+| M8 | **N/A** |
+| M9 | **Complete** |
+| Branch | `feat/181-intake-screen-reader-polish` (merged) |
+| PR | https://github.com/rexescario-dev/clensy-platform/pull/190 |
+| Status | **Slice complete** |
+
+### Shipped
+
+- **Fulfillment radios:** each is named by its title, and its description is read once. While a server error shows, both radios are marked invalid and each is described by the error. The fieldset is described by its helper only.
+- **Server field errors:** focus moves to the first field with an error, in form order. Generic failures keep the dialog alert.
+- **Search messages:** the customer picker and the services editor announce them through one persistent, polite status region. The popup is visually unchanged.
+
+### Validation
+
+| Check | Result |
+| --- | --- |
+| Tests | **Passed** (`web` 2184/2184; `@clensy/web` 418/418; CI Test and API e2e) |
+| Typecheck | **Passed** |
+| Lint | **Passed** (local and CI) |
+| Build | **Passed** (`@clensy/web build`; CI Release gate) |
+| Package validation | **Passed** (no API, client, `@clensy/ui`, validation, i18n or `docs/workflows` change) |
+
+Manual: the browser check and the screen-reader pass are **NOT RUN**. The owner runs them before #181 closes.
+
+### Next Gate
+
+**None — slice complete**
+
