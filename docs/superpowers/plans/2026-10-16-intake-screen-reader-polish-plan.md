@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft** (M4). Awaiting Plan Review (M5). |
+| Status | **Draft (revision 2)** (M4). Awaiting Plan Review (M5), second pass. |
+| M5 history | First pass (2026-10-16, owner): **Returned for Revision**, findings M5-1 to M5-4. All four are resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). |
 | Date | 2026-10-16 |
 | Tracking issue | [#181](https://github.com/rexescario-dev/clensy-platform/issues/181) "Laundry intake dialog: screen-reader polish for the fulfillment error and customer search status". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Follow-up from [#160](https://github.com/rexescario-dev/clensy-platform/issues/160) / PR [#179](https://github.com/rexescario-dev/clensy-platform/pull/179): M7 triage T2-a, T2-b and the M7 live-region observation, listed under Deferred in the [Laundry Intake Modal plan](2026-10-13-laundry-intake-modal-plan.md#deferred-not-in-this-plan). The manual keyboard pass is [#161](https://github.com/rexescario-dev/clensy-platform/issues/161) (open). |
 | Branch | `feat/181-intake-screen-reader-polish`, from `main` at `8c7a11b`. One PR for this plan, its M5 record and the implementation. |
@@ -18,6 +19,7 @@
 | Package names | `pnpm --filter web` is `apps/web` (package `web`). `pnpm --filter @clensy/web` is `packages/web`. Two different packages; both appear in verification on purpose. |
 | Baseline | At planning time, on `8c7a11b`, the five affected test files passed: `pnpm --filter @clensy/web exec vitest run` on the three static files, 15/15; `pnpm --filter web exec vitest run` on the two jsdom files, 39/39. This is a baseline, not pre-validation. |
 | Pre-validation | **None.** No code in this plan was run before M5. Every `Expected:` line is a prediction until M6 records the actual result. |
+| Red-phase evidence | Each "verify it fails" step gives the **behavioral** failure to expect and a **predicted** count. The count is not a pass criterion. At every red phase the implementer records the **actual** totals (failed / passed) and each failing test's name and first failure message in the Execution record. If the actual result differs from the prediction (another test fails, a test fails for another reason, or a test passes early), stop and find out why before writing the implementation. Record the explanation next to the result. |
 | M7 | Application code changes. `CLAUDE.md` requires a **fresh independent reviewer** on the most capable model, given this plan, the Accepted spec and the branch diff. |
 
 **Goal:** Close the three #181 findings without visual or copy change:
@@ -34,8 +36,9 @@
   - Passes the Controller's `field.ref` to the fieldset as `inputRef`.
   - After setting every server field error, calls `form.setFocus` on the first field in form order (`customerId`, then `fulfillmentType`) that has one.
 - **`LaundrySearchCombobox`** (`packages/web`, used by the customer picker and the services editor):
-  - Derives one search message from its existing props (status, options, truncated). The popup shows that message as before, but without a live role.
-  - A `<p role="status" class="sr-only">` that is always mounted, outside the popup, carries the same message while the list is expanded, and is empty otherwise. There is no new state.
+  - The popup keeps its four conditional lines exactly as they are. Only their `role` attributes are removed.
+  - A separate announcement message is derived from the same props (status, options, truncated), with no new state.
+  - A `<p role="status" class="sr-only">` that is always mounted, outside the popup, holds that message while the list is expanded, and is empty otherwise.
 
 **Tech Stack:** React 19, react-hook-form 7.88, Vitest (`renderToStaticMarkup` in `packages/web`; jsdom with fake timers in `apps/web`), Tailwind (`sr-only`).
 
@@ -87,14 +90,16 @@ Out of scope (owner-confirmed): an M2 amendment, any `FormField` or other `@clen
   - react-hook-form 7.88's `setFocus` focuses inside `setTimeout(0)` (read in `dist/index.esm.mjs` at planning time). The focus therefore runs after React commits the error markup, so the error id already exists when focus lands.
   - The jsdom suite uses fake timers, so the tests advance `vi.advanceTimersByTime(0)` inside `act` before asserting focus.
   - `setError(..., { shouldFocus: true })` was not used: it focuses synchronously, in the middle of the loop.
-- **(e) One message per status, in this order:** loading → "Searching…"; error → the error line; ready with no options → the empty line; ready and truncated → the more line; otherwise none.
-  - Today a `ready` result with no options **and** `truncated` would render both the empty and the more lines. That needs a server count above zero with an empty page, which does not occur in practice. It now renders the empty line only.
-  - This is the only markup difference in a visible line apart from the removed role. It is pinned by a static test.
+- **(e) The visible lines are unchanged; the announcement has its own priority rule** (revised for M5-1).
+  - The popup keeps today's four independent conditions. A `ready` result with no options **and** `truncated` still shows both the empty and the more lines, and a static characterization test pins that.
+  - The region carries one message, chosen in this order: loading → "Searching…"; error → the error line; ready with no options → the empty line; ready and truncated → the more line; otherwise empty.
+  - For the empty-and-truncated combination, the region announces only the empty line. That line tells the user there is nothing to pick now, and the more line adds nothing they can act on in an empty list. A jsdom rendering test pins it.
+  - The only markup change to a visible line is the removed `role` attribute.
 - **(f) Region markup:**
   - `<p id="${id}-status" role="status" class="sr-only">`, placed right after the popup `<div>` and before the field error.
   - `role="status"` implies `aria-live="polite"` and `aria-atomic="true"`, so no extra attributes are added.
   - `sr-only` is absolutely positioned, so it adds no flex gap to the field's layout.
-- **(g) The region is empty whenever the list is not expanded** (`expanded` is already `open && status !== 'idle'`). That covers Escape, blur, selection, a cleared text, and the idle status. Reopening (ArrowDown, typing, or focus with `openOnFocus`) fills it again from the same derived message.
+- **(g) The region is empty whenever the list is not expanded** (`expanded` is already `open && status !== 'idle'`). That covers Escape, blur, selection, a cleared text, and the idle status. Reopening (ArrowDown, typing, or focus with `openOnFocus`) fills it again from the same derived announcement.
   - Keystrokes while a search stays `loading` leave the text unchanged, so nothing is re-announced.
   - When results arrive with options and no truncation, the region empties. No result count is announced (out of scope).
 - **(h) Manual screen-reader pass.** This is #181's first three acceptance criteria. DOM tests cannot prove what a screen reader announces.
@@ -103,9 +108,20 @@ Out of scope (owner-confirmed): an M2 amendment, any `FormField` or other `@clen
   - #181 is not closed until the pass is recorded. The PR may still merge on the owner's decision; that is the owner's call at closeout, not this plan's.
 - **Inherited by the services editor (informative).** The services editor uses the same combobox, so it gets fix 3 with its own copy. A grep at planning time found no services or order-page test that queries a live role on a search line. `alerts()` in `laundry-services-editor.interaction.test.tsx` collects `[role="alert"]` for pricing messages only. Removing the search error's `role="alert"` can only remove an entry that no test expects.
 
+## Revision 2 (M5 review 1)
+
+The owner's first M5 pass (2026-10-16) returned the plan for revision, with no redesign. Each finding and its resolution:
+
+| Finding | Severity | Resolution |
+| --- | --- | --- |
+| **M5-1** Visible popup changed: `searchMessage()` dropped the more line for an empty page that is also truncated. | Medium | **Changed.** The popup keeps its four conditional lines exactly; Task 3 Step 5 (3) removes only their `role` attributes. A separate `searchAnnouncement()` feeds the region only, with the priority rule in planning decision (e). A static characterization test pins both visible lines for that case. A jsdom rendering test pins the region's single message. |
+| **M5-2** The transition tests forced states by re-rendering, but claimed user behavior. | Medium | **Changed.** Task 3 now has explicit test layers. (1) Static markup. (2) A combobox **rendering** test, labelled as props → announcement, including the priority rule and idle. (3) A combobox **interaction** test with fixed props, where only typing, Escape, ArrowDown, Enter, blur and clearing open and close the list. (4) A list-page **search lifecycle** test through the real hook, its 300 ms debounce (fake timers) and the query mock: Searching… → no match → more matches → failure → Searching… for the next search, all in one node. |
+| **M5-3** Prove the ref follows the checked radio. | Medium | **Changed.** Task 2's fulfillment test now asserts, before the second submit, that `DELIVERY` is checked, `PICKUP` is not, and the first error and its ids are gone. It moves focus to the customer field so the next assertion can only pass if focus moves. After the second rejection it asserts the new message and ids, that `DELIVERY` is still checked, that focus is on `DELIVERY`, and that focus is not on `PICKUP`. The `customerId`-first test (server lists fulfillment first) is retained. |
+| **M5-4** Predicted red-phase counts are brittle. | Low | **Changed.** A **Red-phase evidence** row in the header makes the counts predictions, not pass criteria. Every red step now names the behavioral failure to expect. The implementer records actual totals and failure messages, and investigates any difference before implementing. |
+
 ## Global constraints
 
-- **SHALL NOT** change any copy, visible class string, layout or row styling. The visible search lines keep the classes `px-3 py-2 text-sm text-slate-500` (or `text-red-600` for the error).
+- **SHALL NOT** change any copy, visible class string, layout or row styling. The visible search lines keep their four existing conditions, their order and their classes: `px-3 py-2 text-sm text-slate-500`, or `text-red-600` for the error. The only change to them is the removed `role` attribute.
 - **SHALL NOT** add `role="alert"` or `aria-live` to any field error.
 - **SHALL NOT** change `FormField`, `FormDialog`, `Modal` or anything else in `@clensy/ui`, or any API, schema, operation or generated client.
 - **SHALL** keep the dialog's generic failure (`Unable to create laundry order.`) and the unconfirmed-create message on the existing `role="alert"`, without moving focus.
@@ -120,8 +136,8 @@ The input classes most likely to bite a user that no existing test exercises. Ea
 1. **A server fulfillment error while `DELIVERY` is checked.** Focus must land on the `DELIVERY` radio, not the stale `PICKUP` one. Task 2, `fulfillment` test.
 2. **The server lists the fulfillment error before the customer error.** Focus goes to the customer field (form order), and both errors show. Task 2, new test.
 3. **A second server error replaces a cleared one.** The error id appears once, after the description, the text is the new message, and `aria-invalid` is back. Task 2, `fulfillment` test.
-4. **A failed search, then the user types again.** The region switches from the error to "Searching…", and no stale error stays announced. Task 3, jsdom transitions test.
-5. **More typing while a search is still loading.** The same region node keeps the same text, so nothing is re-announced and no second region appears. Task 3, jsdom transitions test.
+4. **A failed search, then the user types again.** Through the real search hook, debounce and query mock, the region switches from the error to "Searching…", and no stale error stays announced. Task 3, list-page lifecycle test.
+5. **More typing while a search is still loading.** The same region node keeps the same text, so nothing is re-announced and no second region appears. Task 3, combobox rendering test and list-page lifecycle test.
 
 ## File map
 
@@ -129,12 +145,12 @@ The input classes most likely to bite a user that no existing test exercises. Ea
 | --- | --- | --- |
 | `packages/web/src/laundry/laundry-fulfillment-fieldset.tsx` | Radio naming, descriptions, invalid state, `inputRef` | 1 |
 | `packages/web/src/laundry/laundry-fulfillment-fieldset.test.tsx` | Two tests changed | 1 |
-| `apps/web/lib/laundry-list-page.interaction.test.tsx` | Fulfillment error assertions (Task 1); focus assertions and one new test (Task 2); search-error query (Task 3) | 1, 2, 3 |
+| `apps/web/lib/laundry-list-page.interaction.test.tsx` | Fulfillment error assertions (Task 1); focus assertions and one new test (Task 2); search-error query and one new lifecycle test (Task 3) | 1, 2, 3 |
 | `apps/web/components/laundry/create-laundry-order-dialog.tsx` | `inputRef`, focus the first errored field | 2 |
 | `packages/web/src/laundry/laundry-search-combobox.tsx` | Derived message, persistent status region, no live roles on lines | 3 |
 | `packages/web/src/laundry/laundry-search-combobox.test.tsx` | One test changed, one added | 3 |
 | `packages/web/src/laundry/laundry-customer-picker.test.tsx` | One test changed | 3 |
-| `apps/web/lib/laundry-search-combobox.interaction.test.tsx` | Harness props, two tests added | 3 |
+| `apps/web/lib/laundry-search-combobox.interaction.test.tsx` | Harness props; a rendering test and an interaction test added | 3 |
 | This plan | Execution record | 4 |
 
 ---
@@ -203,7 +219,7 @@ The `/<fieldset[^>]*aria-describedby="fulfillment-fixed"/` pattern requires the 
 - [ ] **Step 2: Run the static tests to verify they fail**
 
 Run: `pnpm --filter @clensy/web exec vitest run src/laundry/laundry-fulfillment-fieldset.test.tsx`
-Expected: FAIL, 2 failed and 2 passed. The first changed test fails on `aria-labelledby`. The second fails on the fieldset's `aria-describedby`.
+Expected: FAIL. The behavior to see: the first changed test fails because the radios have no `aria-labelledby`; the second fails because the fieldset is still described by the error. Predicted: 2 failed, 2 passed. Record the actual totals and failure messages (see Red-phase evidence).
 
 - [ ] **Step 3: Implement**
 
@@ -306,7 +322,7 @@ Expected: PASS, 4/4.
 The fieldset change breaks one existing assertion in `apps/web/lib/laundry-list-page.interaction.test.tsx`. Confirm that first:
 
 Run: `pnpm --filter web exec vitest run lib/laundry-list-page.interaction.test.tsx -t "server fulfillment error"`
-Expected: FAIL. The fieldset's `aria-describedby` is `laundry-fulfillment-fixed`, but the test expects `laundry-fulfillment-fixed laundry-fulfillment-error`.
+Expected: FAIL. The fieldset's `aria-describedby` is now `laundry-fulfillment-fixed`, but the test expects `laundry-fulfillment-fixed laundry-fulfillment-error`. Predicted: 1 failed. Record the actual result.
 
 In the test `'shows a server fulfillment error on the fulfillment field, and clears it when fulfillment changes'`, replace:
 
@@ -437,18 +453,26 @@ Replace the whole test `'shows a server fulfillment error on the fulfillment fie
     expect(dialog()!.querySelector('[role="alert"]')).toBeNull();
     expect(button('Create order').disabled).toBe(false);
     // The checked radio fires no change; choosing the other one does.
-    act(() => document.querySelector<HTMLInputElement>('#laundry-fulfillment-DELIVERY')!.click());
+    const pickup = () => document.querySelector<HTMLInputElement>('#laundry-fulfillment-PICKUP')!;
+    const delivery = () => document.querySelector<HTMLInputElement>('#laundry-fulfillment-DELIVERY')!;
+    act(() => delivery().click());
     await act(async () => {}); // react-hook-form re-validates asynchronously
+    // Before the second submit: DELIVERY is the checked radio and the first error is gone.
+    expect(delivery().checked).toBe(true);
+    expect(pickup().checked).toBe(false);
     expect(error()).toBeNull();
     expectFulfillmentDescribed(false);
-    // A later server error on the new choice: the ref followed the checked radio.
+    // Focus starts elsewhere, so the assertion below can only pass if focus moves.
     act(() => customerField().focus());
     await submitCreate();
     await rejectFulfillment('fulfillmentType should not be empty');
     runFocusTimer();
+    // The new error is applied, and focus followed the ref to the newly checked radio.
     expect(error()!.textContent).toBe('fulfillmentType should not be empty');
     expectFulfillmentDescribed(true);
-    expect(document.activeElement).toBe(document.querySelector('#laundry-fulfillment-DELIVERY'));
+    expect(delivery().checked).toBe(true);
+    expect(document.activeElement).toBe(delivery());
+    expect(document.activeElement).not.toBe(pickup());
     expect(nav.receiveCalls).toEqual([
       { customerId: 'c1', fulfillmentType: 'PICKUP' },
       { customerId: 'c1', fulfillmentType: 'DELIVERY' },
@@ -507,7 +531,7 @@ with:
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `pnpm --filter web exec vitest run lib/laundry-list-page.interaction.test.tsx`
-Expected: FAIL, 3 failed and 31 passed. The customer-error, fulfillment-error and both-fields tests fail on `document.activeElement`. The generic-failure test passes already: it is a **characterization** assertion, since no focus code runs on that path today or after this task.
+Expected: FAIL. The behavior to see: the customer-error, fulfillment-error and both-fields tests fail on a `document.activeElement` assertion, because nothing moves focus after a server rejection yet. The fulfillment test must fail at its **first** focus assertion (`PICKUP`), not earlier. A failure before that point means the test or Task 1 is wrong; investigate. The generic-failure test passes already. It is a **characterization** assertion: no focus code runs on that path, today or after this task. Predicted: 3 failed, 31 passed. Record the actual totals and failure messages.
 
 - [ ] **Step 3: Implement**
 
@@ -578,11 +602,20 @@ Implements Owner decision 3; planning decisions (e)–(g); lock-downs 3 and 4. I
 - Test: `packages/web/src/laundry/laundry-search-combobox.test.tsx`
 - Test: `packages/web/src/laundry/laundry-customer-picker.test.tsx`
 - Test: `apps/web/lib/laundry-search-combobox.interaction.test.tsx`
-- Test: `apps/web/lib/laundry-list-page.interaction.test.tsx` (the failed-search test)
+- Test: `apps/web/lib/laundry-list-page.interaction.test.tsx` (the failed-search test, and a new lifecycle test)
 
 **Interfaces:**
 - Consumes: nothing new.
 - Produces: element id `${id}-status` (`role="status"`, class `sr-only`). There is no prop or export change.
+
+**Test layers** (M5-1, M5-2):
+
+| Layer | File | What it proves |
+| --- | --- | --- |
+| Static markup | `packages/web` combobox and picker tests | The visible lines are unchanged except for the removed role, including both lines for empty-and-truncated. There is exactly one empty region, placed after the popup. |
+| Rendering (props → announcement) | combobox jsdom, rendering test | The status-to-message mapping and its priority rule, driven by props on an open list. It deliberately does not claim to be user behavior. |
+| Interaction | combobox jsdom, interaction test | With props fixed, typing, Escape, reopening, selection, blur and clearing open and close the list. The same region node fills and empties with it. |
+| Search lifecycle | list-page jsdom, lifecycle test | Through the real `useLaundryCustomerSearch` hook, its 300 ms debounce and the customers-query mock: Searching… → no match → more matches → failure → Searching… for the next search, all in one node. |
 
 - [ ] **Step 1: Write the failing static tests**
 
@@ -595,10 +628,13 @@ In `packages/web/src/laundry/laundry-search-combobox.test.tsx`, in `'shows one l
 with:
 
 ```tsx
+    // The lines keep their markup; only the live role goes (#181).
     expect(render({ status: 'error' })).toContain('<p class="px-3 py-2 text-sm text-red-600">Search failed.</p>');
     expect(render({ status: 'loading' })).toContain('<p class="px-3 py-2 text-sm text-slate-500">Looking…</p>');
-    // One line at most: an empty page is not also "more" (planning decision (e)).
-    expect(render({ status: 'ready', truncated: true })).not.toContain('More results exist.');
+    // Characterization: an empty page that is also truncated still shows both lines (planning decision (e)).
+    const emptyAndMore = render({ status: 'ready', truncated: true });
+    expect(emptyAndMore).toContain('<p class="px-3 py-2 text-sm text-slate-500">Nothing found.</p>');
+    expect(emptyAndMore).toContain('<p class="px-3 py-2 text-sm text-slate-500">More results exist.</p>');
 ```
 
 Add a new test after it:
@@ -609,6 +645,7 @@ Add a new test after it:
       { status: 'idle' },
       { status: 'loading' },
       { status: 'ready' },
+      { status: 'ready', truncated: true },
       { options: [WASH], status: 'ready', truncated: true },
       { status: 'error' },
       { error: 'Pick a service.', status: 'error' },
@@ -641,11 +678,11 @@ with:
 - [ ] **Step 2: Run the static tests to verify they fail**
 
 Run: `pnpm --filter @clensy/web exec vitest run src/laundry/laundry-search-combobox.test.tsx src/laundry/laundry-customer-picker.test.tsx`
-Expected: FAIL, 3 failed and 9 passed. Two tests fail on the error line's `role="alert"`; the new region test fails on the missing region.
+Expected: FAIL. The behavior to see: the error line still carries `role="alert"` (in the two changed tests), and there is no `#svc-status` region (the new test). The empty-and-truncated characterization assertions already pass. If they fail, stop: they describe today's markup. Predicted: 3 failed, 9 passed. Record the actual totals and failure messages.
 
 - [ ] **Step 3: Write the failing jsdom tests**
 
-In `apps/web/lib/laundry-search-combobox.interaction.test.tsx`, replace the `Harness` signature and its `options` prop:
+In `apps/web/lib/laundry-search-combobox.interaction.test.tsx`, replace the `Harness` signature:
 
 ```tsx
 function Harness({ openOnFocus, status = 'ready' }: { openOnFocus?: boolean; status?: LaundrySearchStatus }) {
@@ -667,7 +704,7 @@ function Harness({
 }) {
 ```
 
-and, inside it, replace:
+Inside it, replace:
 
 ```tsx
         options={OPTIONS}
@@ -690,21 +727,24 @@ function statusRegion(): HTMLElement {
 }
 ```
 
-Add two tests at the end of the `describe` block:
+Add two tests at the end of the `describe` block. The first is the **rendering** layer: it opens the list once, then drives the search state through props.
 
 ```tsx
-  it('announces each search message through one persistent polite region outside the popup', () => {
+  it('maps each search state to one region message while the list is open (rendering)', () => {
     act(() => root.render(<Harness status="loading" />));
     const region = statusRegion();
     expect(region.getAttribute('role')).toBe('status');
     expect(region.closest('[hidden]')).toBeNull();
     expect(region.textContent).toBe(''); // closed
-    type('a');
+    type('a'); // opens the list; from here only props change
     expect(region.textContent).toBe('Looking…');
     type('al'); // still loading: the same node keeps the same text, so nothing is re-announced
     expect(statusRegion()).toBe(region);
     expect(region.textContent).toBe('Looking…');
     act(() => root.render(<Harness options={[]} />));
+    expect(region.textContent).toBe('Nothing found.');
+    // Priority rule: an empty page that is also truncated announces only the empty line.
+    act(() => root.render(<Harness options={[]} truncated />));
     expect(region.textContent).toBe('Nothing found.');
     act(() => root.render(<Harness truncated />));
     expect(region.textContent).toBe('More.');
@@ -712,47 +752,53 @@ Add two tests at the end of the `describe` block:
     expect(region.textContent).toBe(''); // results, nothing more to say
     act(() => root.render(<Harness status="error" />));
     expect(region.textContent).toBe('Search failed.');
-    expect(container.querySelectorAll('[role="status"]')).toHaveLength(1);
     expect(container.querySelectorAll('[role="alert"]')).toHaveLength(0);
-    act(() => root.render(<Harness status="loading" />)); // the user types again after a failure
-    type('alp');
-    expect(region.textContent).toBe('Looking…');
+    act(() => root.render(<Harness status="idle" />));
+    expect(region.textContent).toBe(''); // idle is never expanded
     expect(statusRegion()).toBe(region);
     expect(container.querySelectorAll('[role="status"]')).toHaveLength(1);
   });
+```
 
-  it('empties the region whenever the list closes, and fills it again when it reopens', () => {
-    act(() => root.render(<Harness options={[]} />));
-    act(() => field().focus());
-    type('a');
-    expect(statusRegion().textContent).toBe('Nothing found.');
-    press('Escape');
-    expect(expanded()).toBe('false');
-    expect(statusRegion().textContent).toBe('');
-    press('ArrowDown'); // reopens
-    expect(expanded()).toBe('true');
-    expect(statusRegion().textContent).toBe('Nothing found.');
-    act(() => container.querySelector<HTMLButtonElement>('#elsewhere')!.focus()); // blur
-    expect(statusRegion().textContent).toBe('');
+The second is the **interaction** layer. Props stay fixed (`truncated`, so an open list always has something to announce), and only user actions open and close the list:
+
+```tsx
+  it('keeps one region node through typing, closing, reopening and selection, empty whenever the list is closed', () => {
     act(() => root.render(<Harness truncated />));
+    const region = statusRegion();
     act(() => field().focus());
-    type('al');
-    expect(statusRegion().textContent).toBe('More.');
-    press('ArrowDown');
+    expect(expanded()).toBe('false'); // this picker opens on typing, not on focus
+    expect(region.textContent).toBe('');
+    type('a');
+    expect(expanded()).toBe('true');
+    expect(region.textContent).toBe('More.');
+    press('Escape'); // dismissal
+    expect(expanded()).toBe('false');
+    expect(region.textContent).toBe('');
+    press('ArrowDown'); // reopens, with the first option active
+    expect(expanded()).toBe('true');
+    expect(region.textContent).toBe('More.');
     press('Enter'); // selection
     expect(selected).toEqual(['a']);
-    expect(statusRegion().textContent).toBe('');
+    expect(expanded()).toBe('false');
+    expect(region.textContent).toBe('');
     type('Alph');
-    expect(statusRegion().textContent).toBe('More.');
-    type(''); // cleared text
-    expect(statusRegion().textContent).toBe('');
-    act(() => root.render(<Harness openOnFocus status="idle" />));
+    expect(region.textContent).toBe('More.');
+    act(() => container.querySelector<HTMLButtonElement>('#elsewhere')!.focus()); // blur
+    expect(expanded()).toBe('false');
+    expect(region.textContent).toBe('');
     act(() => field().focus());
-    expect(statusRegion().textContent).toBe(''); // idle
+    type('Al');
+    expect(region.textContent).toBe('More.');
+    type(''); // a cleared text closes this picker
+    expect(expanded()).toBe('false');
+    expect(region.textContent).toBe('');
+    expect(statusRegion()).toBe(region);
+    expect(container.querySelectorAll('[role="status"]')).toHaveLength(1);
   });
 ```
 
-In `apps/web/lib/laundry-list-page.interaction.test.tsx`, replace the body of `'shows a failed search inline'`:
+In `apps/web/lib/laundry-list-page.interaction.test.tsx`, rename `'shows a failed search inline'` to `'shows a failed search inline and announces it politely'`, and replace its last two lines:
 
 ```tsx
     act(() => vi.advanceTimersByTime(300));
@@ -773,12 +819,42 @@ with:
     expect(dialog()!.querySelector('[role="alert"]')).toBeNull();
 ```
 
-Rename that test to `'shows a failed search inline and announces it politely'`.
+Add the **search lifecycle** test directly after it:
+
+```tsx
+  it('announces the search lifecycle in one region, and a failed search gives way to Searching… when the next one starts', () => {
+    nav.customerResults['%an%'] = { nodes: [ANA], totalCount: 21 };
+    nav.customerResults['%ana%'] = { error: new Error('down'), nodes: [] };
+    start();
+    openCreate();
+    const region = document.querySelector('#laundry-customer-status')!;
+    expect(region.textContent).toBe('');
+    typeCustomer('zz'); // preset empty response
+    expect(region.textContent).toBe('Searching…'); // debouncing
+    act(() => vi.advanceTimersByTime(300));
+    expect(region.textContent).toBe('No customers match.');
+    typeCustomer('an');
+    expect(region.textContent).toBe('Searching…');
+    act(() => vi.advanceTimersByTime(300));
+    expect(region.textContent).toBe('More customers match. Type more of the name to narrow the search.');
+    typeCustomer('ana');
+    expect(region.textContent).toBe('Searching…');
+    act(() => vi.advanceTimersByTime(300));
+    expect(region.textContent).toBe('Unable to search customers.');
+    typeCustomer('anab'); // the next search starts; no response, so it stays in flight
+    expect(region.textContent).toBe('Searching…');
+    act(() => vi.advanceTimersByTime(300));
+    expect(region.textContent).toBe('Searching…');
+    expect(document.querySelector('#laundry-customer-status')).toBe(region);
+    expect(dialog()!.querySelectorAll('[role="status"]')).toHaveLength(1);
+    expect(dialog()!.querySelector('[role="alert"]')).toBeNull();
+  });
+```
 
 - [ ] **Step 4: Run the jsdom tests to verify they fail**
 
 Run: `pnpm --filter web exec vitest run lib/laundry-search-combobox.interaction.test.tsx lib/laundry-list-page.interaction.test.tsx`
-Expected: FAIL, 3 failed and 39 passed: the two new combobox tests, and the failed-search test, which finds no `#svc-status` or `#laundry-customer-status`.
+Expected: FAIL. The behavior to see: the two new combobox tests, the renamed failed-search test and the lifecycle test each fail at their first region lookup, because there is no `#svc-status` or `#laundry-customer-status` yet (a `null` dereference or a `null` attribute). Every other test passes. Predicted: 4 failed, 39 passed. Record the actual totals and failure messages. A new test that fails anywhere other than the region lookup must be investigated before Step 5.
 
 - [ ] **Step 5: Implement**
 
@@ -800,16 +876,16 @@ with:
 // which listens for Escape on `document`, stays open. With the list closed,
 // Escape reaches the Modal as usual.
 //
-// The search message (searching, empty, more, error) is shown in the popup
-// and announced by one status region that is always mounted outside it
-// (#181). `hidden` takes the popup out of the accessibility tree, and some
-// screen readers announce only changes to a live region that already
-// exists. The region holds the message while the list is open and is empty
-// otherwise; the popup line carries no live role, so nothing is read twice.
+// Search messages are announced by one status region that is always
+// mounted outside the popup (#181). `hidden` takes the popup out of the
+// accessibility tree, and some screen readers announce only changes to a
+// live region that already exists. The region holds one message while the
+// list is open and is empty otherwise. The popup's lines are unchanged but
+// carry no live role, so nothing is read twice.
 export function LaundrySearchCombobox<T extends { id: string }>({
 ```
 
-(2) Derive the message. Replace:
+(2) Derive the announcement. Replace:
 
 ```tsx
   const listboxId = `${id}-listbox`;
@@ -824,10 +900,10 @@ with:
   const errorId = `${id}-error`;
   const statusId = `${id}-status`;
   const expanded = open && status !== 'idle';
-  const message = searchMessage(status, copy, options.length === 0, truncated);
+  const announcement = searchAnnouncement(status, copy, options.length === 0, truncated);
 ```
 
-(3) Replace the four status lines and add the region. Replace:
+(3) Remove the live roles from the four lines and add the region. Replace:
 
 ```tsx
         {status === 'loading' ? (
@@ -856,21 +932,28 @@ with:
 with:
 
 ```tsx
-        {message ? (
-          <p className={`px-3 py-2 text-sm ${status === 'error' ? 'text-red-600' : 'text-slate-500'}`}>{message}</p>
+        {status === 'loading' ? <p className="px-3 py-2 text-sm text-slate-500">{copy.searching}</p> : null}
+        {status === 'ready' && options.length === 0 ? (
+          <p className="px-3 py-2 text-sm text-slate-500">{copy.empty}</p>
         ) : null}
+        {status === 'ready' && truncated ? <p className="px-3 py-2 text-sm text-slate-500">{copy.more}</p> : null}
+        {status === 'error' ? <p className="px-3 py-2 text-sm text-red-600">{copy.error}</p> : null}
       </div>
       <p id={statusId} role="status" className="sr-only">
-        {expanded ? message : ''}
+        {expanded ? announcement : ''}
       </p>
 ```
+
+(Line wrapping is whatever the formatter produces. Only the removed `role` attributes and the added region are intended.)
 
 (4) Add the module-private helper after the component (`contextforge/function-order`: exported functions first, then private ones):
 
 ```tsx
-// The one search line for a status, or '' for none. An empty result is not
-// also "more": that needs a server count above zero with no page.
-function searchMessage(
+// The one message the status region announces for a search state, or ''.
+// The popup can show both the empty and the more line (a server count above
+// zero with an empty page); the region then announces only the empty line,
+// the one that says there is nothing to pick.
+function searchAnnouncement(
   status: LaundrySearchStatus,
   copy: LaundrySearchComboboxCopy,
   empty: boolean,
@@ -890,7 +973,7 @@ Run: `pnpm --filter @clensy/web exec vitest run src/laundry/laundry-search-combo
 Expected: PASS, 16/16.
 
 Run: `pnpm --filter web exec vitest run lib/laundry-search-combobox.interaction.test.tsx lib/laundry-list-page.interaction.test.tsx lib/laundry-customer-picker.interaction.test.tsx lib/laundry-services-editor.interaction.test.tsx`
-Expected: PASS, every test in all four files. The customer picker and services editor files are unchanged regression checks.
+Expected: PASS for every test in all four files: combobox 8, list page 35, and the customer-picker and services-editor files unchanged, as regression checks. Record the actual totals.
 
 - [ ] **Step 7: Commit**
 
@@ -958,7 +1041,8 @@ git commit -m "docs(181): record the M6 verification"
 | Customer server error follows the same pattern | #181 proposal 1 ("so customer and fulfillment errors behave the same"); Owner decision 1 | 2 |
 | Generic failures stay on the dialog alert and do not move focus | Owner decision 1; #160 plan Global Constraints | 2 (characterization) |
 | Each radio's name is its title; description read once | #181 acceptance 2; Owner decision 2 | 1, 4 (manual) |
-| Search lines announced on change, without duplicates | #181 acceptance 3; Owner decision 3 | 3, 4 (manual) |
+| Search lines announced on change, without duplicates | #181 acceptance 3; Owner decision 3 | 3 (rendering, interaction, lifecycle), 4 (manual) |
+| Visible popup lines unchanged apart from the removed role | Owner design approval; M5-1 | 3 (static characterization) |
 | Region reflects existing status; clears on close, selection, dismissal | Owner design approval | 3 |
 | Static and jsdom tests updated; no visual or copy change | #181 acceptance 4 | 1–3, 4 (browser) |
 | Intake remains the §8.4.4 dialog; no semantics change | Spec §8.4.4 | Global constraints |
