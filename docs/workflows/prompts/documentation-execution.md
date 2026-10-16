@@ -46,6 +46,7 @@ Also required:
 5. **Require traceability.** For each documentation change, state which implementation or process artifact caused it (spec Status, plan completion, merge, new prompt file, etc.).
 6. **Describe shipped or approved reality.** Avoid future-tense “will support…” claims unless documenting planned work in roadmap (or equivalent planning) artifacts.
 7. **Update for consistency, not redesign.** Prefer references over restating contracts. MUST NOT invent new product semantics or “fix” the design in docs.
+   For a live setting outside the repository, documentation surfaces describe the configuration and never copy its payload ([configuration-change convention](../conventions/configuration-change.md) C2).
 8. **Terminology pass.** Use terms as defined in Accepted specs/glossary. Resolve drift; do not introduce synonyms for the same concept without definition.
 9. **No implementation via docs.** Documentation edits MUST NOT require implementation changes. If documentation exposes a product inconsistency, route back to M2–M7 rather than silently changing code or contracts.
 10. **Editorial verification** (documentation’s “tests”). Check and record:

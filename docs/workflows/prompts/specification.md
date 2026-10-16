@@ -45,6 +45,15 @@ When a later slice changes an Accepted specification:
 4. **Keep the remainder Accepted.** The unchanged remainder stays **Accepted** throughout; downstream stages may keep relying on it.
 5. **Stop at Draft.** Hand the amendment to **Design Review (M3)**.
 
+### Live configuration outside the repository
+
+When the deliverable includes a live setting outside the repository ([configuration-change convention](../conventions/configuration-change.md)):
+
+1. **Declare it.** Name the live setting and its target.
+2. **Name its source of truth.**
+3. **State the undo approach.**
+4. **Optionally state the exact payload** as the approved reference (convention C2).
+
 ### Recommended section checklist *(adapt to document kind)*
 
 | Concern | Include when |

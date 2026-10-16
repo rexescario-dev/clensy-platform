@@ -45,6 +45,7 @@ Validate the **workflow assets themselves** (prompt library + governing process 
 | Naming/terminology consistent | Return |
 | Full workflow executable without inventing instructions | Return |
 | Traceability to Accepted predecessors required where applicable | Return |
+| For a configuration-change slice: confirmation events, verification evidence and an M7 live finding are recorded ([configuration-change convention](../conventions/configuration-change.md) C8, C9) | Return |
 
 ## Outputs
 
