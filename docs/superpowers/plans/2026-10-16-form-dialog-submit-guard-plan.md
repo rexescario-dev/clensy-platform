@@ -4,8 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft (revision 3)** (M4), 2026-10-17. Awaiting Plan Review (M5). |
-| M5 history | First pass (2026-10-17, owner, reviewed `af0dd9b`): **Returned for Revision**, required revisions M5-1 to M5-3 and four non-blocking items. All are resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). The owner approved the `requestClose` architecture and the `ConfirmDialog` characterization tests without changes. Second pass (2026-10-17, owner, reviewed `2e9a298`): **Returned for Revision**, one final correction, M5-4. M5-1 to M5-3 and the non-blocking items are recorded as resolved. M5-4 is resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). |
+| Status | **Draft (revision 4)** (M4), 2026-10-17. Awaiting Plan Review (M5). |
+| M5 history | First pass (2026-10-17, owner, reviewed `af0dd9b`): **Returned for Revision**, required revisions M5-1 to M5-3 and four non-blocking items. All are resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). The owner approved the `requestClose` architecture and the `ConfirmDialog` characterization tests without changes. Second pass (2026-10-17, owner, reviewed `2e9a298`): **Returned for Revision**, one final correction, M5-4. M5-1 to M5-3 and the non-blocking items are recorded as resolved. M5-4 is resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). Third pass (2026-10-17, owner, reviewed `6687d29`): **Returned for Revision**, one remaining M5-4 edge case: `cleanup` ran under `set -e`, so a failed `git worktree remove` could skip the prune and the directory removal. Everything else is recorded as resolved. The fix is in [Revision 4 (M5 review 3)](#revision-4-m5-review-3). |
 | Date | 2026-10-16 |
 | Tracking issue | [#180](https://github.com/rexescario-dev/clensy-platform/issues/180) "Keep form dialogs open while a submit is in flight". Follow-up from [#160](https://github.com/rexescario-dev/clensy-platform/issues/160) / PR [#179](https://github.com/rexescario-dev/clensy-platform/pull/179), M7 triage T5-a. |
 | Branch | `feat/180-form-dialog-submit-guard`, from `main` at `fcd1c6f`. One PR for the amendment, this plan, its M5 record and the implementation. The branch also carries the Context Forge workflow update (generic 1.5.0), committed in `3a9c010` at the owner's request. |
@@ -180,16 +180,20 @@ git commit -m "test(web): intake dialog stays open on dismissal while a create i
 
 The proof never writes to the working tree. It checks out the committed branch `HEAD` (Tasks 1 and 2) in a temporary detached worktree. There it puts back the original `FormDialog` from the pinned baseline `fcd1c6f`, and runs only the new test.
 
-The script runs with `set -euo pipefail`, so any failed setup, check or cleanup command stops it with a non-zero exit. The `EXIT` trap removes the worktree on every exit path. The one expected failure, vitest's, is captured explicitly and then verified to be the right failure. Save the script to a scratch file outside the repository and run it with `bash <file>` from the repository root, so `exit` ends the script and not your shell.
+The script runs with `set -euo pipefail`, so any failed setup, check or cleanup command stops it with a non-zero exit. The `EXIT` trap runs a best-effort cleanup on every exit path. It attempts each step, removing the worktree, pruning worktree metadata and deleting the temporary directory, even if an earlier step fails. Check 5 then verifies independently that nothing remains. The one expected failure, vitest's, is captured explicitly and then verified to be the right failure. Save the script to a scratch file outside the repository and run it with `bash <file>` from the repository root, so `exit` ends the script and not your shell.
 
 ```bash
 set -euo pipefail
 before="$(git status --porcelain=v1)"
 proof="$(mktemp -d)"
 wt="$proof/wt"
+# Best-effort: every step is attempted even if an earlier one fails.
+# Check 5 below still fails the proof if anything remains.
 cleanup() {
-  if [ -d "$wt" ]; then git worktree remove --force "$wt"; fi
-  git worktree prune
+  if [ -d "$wt" ]; then
+    git worktree remove --force "$wt" || true
+  fi
+  git worktree prune || true
   rm -rf "$proof"
 }
 trap cleanup EXIT
@@ -324,4 +328,10 @@ git commit -m "docs(180): record M6 execution"
 | Finding | Resolution |
 | --- | --- |
 | **M5-4** (required): the worktree proof used `set -u` only, so a failed `git worktree add`, baseline restore or other unguarded command could be followed by later ones. The final instruction also counted four results instead of five. | Task 2 Step 4 now runs as a script under `set -euo pipefail`, with an idempotent `EXIT` trap. The only expected failure, vitest's, is captured into `status`. It counts as proof only if vitest exited non-zero, the JSON result exists, and exactly one test failed (the `#180` test, with `not to be null`, at item 2) and none passed. Each of the five checks prints `CHECK n OK` or exits non-zero, and the record instruction lists all five. |
+
+## Revision 4 (M5 review 3)
+
+| Finding | Resolution |
+| --- | --- |
+| **M5-4, cleanup edge case** (required): `cleanup` ran under `set -e`, so a failed `git worktree remove --force` could exit before `git worktree prune` and `rm -rf "$proof"`. | `cleanup` is now best-effort. `git worktree remove` and `git worktree prune` each end in `\|\| true`, and `rm -rf "$proof"` always runs. Check 5 is unchanged and still fails the proof if the worktree or its directory remains, so a cleanup failure is not hidden. |
 
