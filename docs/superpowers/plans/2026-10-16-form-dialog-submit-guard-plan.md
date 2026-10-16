@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 4)** at M5, 2026-10-17. M6 complete ([Execution record](#execution-record)); M7 **Approved for merge** (independent review); M8 N/A; M9 complete; M10 **Accepted** (the slice carries the workflow update). Ready for merge (owner). PR [#192](https://github.com/rexescario-dev/clensy-platform/pull/192). |
+| Status | **Accepted (revision 4)** at M5, 2026-10-17. M6 complete ([Execution record](#execution-record)); M7 **Approved for merge** (independent review); M8 N/A; M9 complete; M10 **Accepted** (the slice carries the workflow update); merged in PR [#192](https://github.com/rexescario-dev/clensy-platform/pull/192) (`00b8e29`); [closeout](#closeout-2026-10-17) complete. #180 closed. |
 | M5 decision | **Accepted** — 2026-10-17, revision 4 (`63f98a8`), by the owner: "The implementation plan is accepted for M6 execution." The execution contract the owner set: preserve the `requestClose` architecture and the `ConfirmDialog` characterization tests; implement only the agreed `@clensy/ui` behavior and the specified web regression test; run the disposable-worktree red proof and record all five results (a failure for any reason other than the expected regression assertion is not proof); record actual verification results, not predicted counts; audit changed paths against `fcd1c6f`, keeping the workflow update distinct from #180; do not merge or skip later gates; M7 requires a fresh, independent reviewer. Execution: **native**, as recommended. The acceptance is not a claim that anything has passed. |
 | M5 history | First pass (2026-10-17, owner, reviewed `af0dd9b`): **Returned for Revision**, required revisions M5-1 to M5-3 and four non-blocking items. All are resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). The owner approved the `requestClose` architecture and the `ConfirmDialog` characterization tests without changes. Second pass (2026-10-17, owner, reviewed `2e9a298`): **Returned for Revision**, one final correction, M5-4. M5-1 to M5-3 and the non-blocking items are recorded as resolved. M5-4 is resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). Third pass (2026-10-17, owner, reviewed `6687d29`): **Returned for Revision**, one remaining M5-4 edge case: `cleanup` ran under `set -e`, so a failed `git worktree remove` could skip the prune and the directory removal. Everything else is recorded as resolved. The fix is in [Revision 4 (M5 review 3)](#revision-4-m5-review-3). |
 | Date | 2026-10-16 |
@@ -494,3 +494,89 @@ Non-blocking observations:
 
 Gate: Workflow validated
 ```
+
+### Closeout (2026-10-17)
+
+**Merge check (§2.12, before the merge).** Each applicable stage was checked in order. All had a recorded passing outcome, and no stage was skipped or overridden.
+
+| Gate | Outcome |
+| --- | --- |
+| M1 | Installed prompt library present |
+| M2 | Amendment #180 drafted |
+| M3 | Amendment #180 Accepted |
+| M4 | Plan drafted |
+| M5 | Plan Accepted (revision 4) |
+| M6 | Complete |
+| M7 | Approved for merge (independent) |
+| M8 | N/A |
+| M9 | Complete |
+| M10 | Accepted |
+
+**Owner PR review (after M7).** The owner reviewed PR #192 and found one documentation inconsistency. The #160 plan's T5-a follow-up still read as open (present tense), with the resolution only in its last clause. It was restated as resolved in `12b2135`, and the M9 record was updated in `bf51fc4`. Both are docs-only commits, so the M7 approval of the code still stands. The owner found no code-level blocker.
+
+**Merge.**
+- Authorized by the owner ("merge, closeout").
+- Merged as a merge commit, pinned to the CI-verified head `bf51fc4`: `gh pr merge 192 --merge --match-head-commit bf51fc4…`. PR CI (Lint, Test, Release gate, API e2e) was green on that head.
+
+**Verification.**
+- PR #192 shows `MERGED`, with merge commit `00b8e29`, at 2026-10-16T17:44:27Z (UTC).
+- `main` fast-forwarded locally to `00b8e29`.
+- #180 closed automatically ("Closes #180").
+
+**Post-merge cleanup.**
+- The project defines no cleanup policy, and earlier slice branches are kept on the remote, so the remote branch is kept (a no-op).
+- The plan's local, git-ignored execution workspace was deleted.
+
+**Final M7 position.** Approved for merge, no blocking findings. Two non-blocking observations were **accepted without a fix in this slice**:
+1. The combined refused-then-close sequence has no `@clensy/ui` test of its own. The intake regression test covers it end to end (`laundry-list-page.interaction.test.tsx`).
+2. Focus staying trapped while submitting (§8.3.1 item 6) has no new test, because jsdom has no layout. The hook is unchanged.
+
+The other observations have the outcomes listed under Follow-ups below, or need no action.
+
+**Follow-ups.**
+
+| Item | Outcome |
+| --- | --- |
+| Dialog hook Escape timing (passive-effect window; predates #180) | Deferred: filed as [#193](https://github.com/rexescario-dev/clensy-platform/issues/193) (`enhancement`) |
+| `ConfirmDialog` dismissal while `confirming` (spec §8.7) | Design question, decision only: filed as [#194](https://github.com/rexescario-dev/clensy-platform/issues/194) (`question`) |
+| Combined refused-then-close `@clensy/ui` test | Not filed. Low priority; covered end to end. Handoff note only. |
+| Two Context Forge package gaps (M10): the M4 self-check doesn't schedule characterization-test failure evidence; the README Layout block omits two convention files | Filed in `rexescario-dev/context-forge` as two issues: [context-forge#129](https://github.com/rexescario-dev/context-forge/issues/129) (the M4 self-check gap; higher priority) and [context-forge#130](https://github.com/rexescario-dev/context-forge/issues/130) (the README Layout gap) |
+
+## Slice Completion Report (final)
+
+| Field | Result |
+| --- | --- |
+| Slice | #180 Form dialog submit guard |
+| Tracking | https://github.com/rexescario-dev/clensy-platform/issues/180 |
+| M4 | Plan **Accepted** (revision 4) |
+| M5 | Review **Accepted** |
+| M6 | **Complete** |
+| M7 | **Approved** (fresh, independent reviewer) |
+| M8 | **N/A** |
+| M9 | **Complete** |
+| Branch | `feat/180-form-dialog-submit-guard` |
+| PR | https://github.com/rexescario-dev/clensy-platform/pull/192 (merged, `00b8e29`) |
+| Status | **Slice complete** |
+
+### Shipped
+
+- While a `FormDialog` is submitting, Escape, a backdrop click and every other user-initiated dismissal are refused, with no feedback and no replay (§8.3.1).
+- A topmost submitting `FormDialog` consumes Escape. No dialog beneath it closes (§8.3.2).
+- Once `submitting` is false, after success or failure, dismissal works as before. Programmatic close always works (§8.3.1 item 7, §8.3.3).
+- All nine `FormDialog` callers get this from one `@clensy/ui` change, with no caller edits. On laundry intake, a failed create always shows its error in the dialog.
+- The Context Forge workflow update (generic 1.5.0) shipped in the same PR, as the owner requested. M10 validated it.
+
+### Validation
+
+| Check | Result |
+| --- | --- |
+| Tests | **Passed**: `@clensy/ui` 96/96, `web` 2185/2185, `@clensy/web` 418/418, `api` 1071/1071, `@clensy/validation` 79/79, `@clensy/client` 13/13 |
+| Typecheck | **Passed**: `@clensy/ui` `tsc --noEmit`, `web` `tsc --noEmit` |
+| Lint | **Passed**: `pnpm run lint` (turbo 6/6) |
+| Build | **Passed**: `tsc --noEmit` build tasks. `next build` not run. |
+| Package validation | **Passed**: `pnpm install --frozen-lockfile`; PR CI green on `bf51fc4` |
+
+### Next Gate
+
+None — slice complete
+
