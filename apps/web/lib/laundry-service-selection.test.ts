@@ -21,7 +21,6 @@ import {
   type LaundryAddOnRow,
   type LaundryServiceSelection,
 } from './laundry-service-selection';
-import { LAUNDRY_PRICED_STATUSES } from './laundry-order-page';
 
 type Line = PreviewLaundryOrderPriceQuery['previewLaundryOrderPrice']['lines'][number];
 
@@ -64,14 +63,16 @@ describe('laundryServicesView', () => {
   // `AdminRole`, so a new status or role joins this matrix without an edit
   // here. Every status × both fulfillment types × role loading and each
   // role × saved lines yes/no.
-  function expected(status: LaundryOrderStatus, role: AdminRole | undefined, hasLines: boolean) {
+  function expected(status: LaundryOrderStatus, role: AdminRole | undefined, hasTotal: boolean) {
+    // A persisted total wins, as in Price (#162 owner decision 5.1).
+    if (hasTotal) return 'locked';
     if (status === 'WEIGHED') {
       if (role === undefined) return 'hidden';
       return OPERATIONAL.has(role) ? 'editor' : 'none';
     }
     if (status === 'RECEIVED') return 'beforeWeigh';
-    if (LAUNDRY_PRICED_STATUSES.has(status)) return 'locked';
-    return hasLines ? 'lines' : 'none';
+    // No total: never priced, so never "locked because … priced".
+    return 'none';
   }
 
   it('covers all 15 statuses and all 7 roles', () => {
@@ -81,12 +82,12 @@ describe('laundryServicesView', () => {
 
   for (const status of LAUNDRY_ORDER_STATUSES) {
     for (const fulfillment of ['PICKUP', 'DELIVERY'] as const) {
-      for (const hasLines of [false, true]) {
+      for (const hasTotal of [false, true]) {
         for (const role of [undefined, ...ADMIN_ROLES]) {
-          it(`${status}, ${fulfillment}, lines ${String(hasLines)}: ${role ?? 'role loading'}`, () => {
+          it(`${status}, ${fulfillment}, total ${String(hasTotal)}: ${role ?? 'role loading'}`, () => {
             const verbs = laundryOrderActions(status, fulfillment, role);
-            expect(laundryServicesView({ hasLines, roleResolved: role !== undefined, status, verbs })).toBe(
-              expected(status, role, hasLines),
+            expect(laundryServicesView({ hasTotal, roleResolved: role !== undefined, status, verbs })).toBe(
+              expected(status, role, hasTotal),
             );
           });
         }
@@ -100,7 +101,7 @@ describe('laundryServicesView', () => {
   it.each(['TENANT_OWNER', 'OPS_MANAGER', 'SCHEDULER'] as const)('shows the editor to %s on a WEIGHED order', (role) => {
     for (const fulfillment of ['PICKUP', 'DELIVERY'] as const) {
       const verbs = laundryOrderActions('WEIGHED', fulfillment, role);
-      expect(laundryServicesView({ hasLines: false, roleResolved: true, status: 'WEIGHED', verbs })).toBe('editor');
+      expect(laundryServicesView({ hasTotal: false, roleResolved: true, status: 'WEIGHED', verbs })).toBe('editor');
     }
   });
 
@@ -110,8 +111,8 @@ describe('laundryServicesView', () => {
       for (const role of ADMIN_ROLES) {
         for (const fulfillment of ['PICKUP', 'DELIVERY'] as const) {
           const verbs = laundryOrderActions(status, fulfillment, role);
-          for (const hasLines of [false, true]) {
-            if (laundryServicesView({ hasLines, roleResolved: true, status, verbs }) === 'editor') editors.add(`${status}:${role}`);
+          for (const hasTotal of [false, true]) {
+            if (laundryServicesView({ hasTotal, roleResolved: true, status, verbs }) === 'editor') editors.add(`${status}:${role}`);
           }
         }
       }
@@ -122,15 +123,27 @@ describe('laundryServicesView', () => {
   it('never shows the editor outside WEIGHED, whatever the verbs claim', () => {
     for (const status of LAUNDRY_ORDER_STATUSES.filter((s) => s !== 'WEIGHED')) {
       // A forced `price` verb: the view checks the status itself, not only the verbs.
-      expect(laundryServicesView({ hasLines: false, roleResolved: true, status, verbs: ['price'] })).not.toBe('editor');
+      expect(laundryServicesView({ hasTotal: false, roleResolved: true, status, verbs: ['price'] })).not.toBe('editor');
     }
   });
 
-  it('shows the locked sentence for CANCELLED and REJECTED never, with or without lines', () => {
-    for (const status of ['CANCELLED', 'REJECTED'] as const) {
-      expect(laundryServicesView({ hasLines: true, roleResolved: true, status, verbs: [] })).toBe('lines');
-      expect(laundryServicesView({ hasLines: false, roleResolved: true, status, verbs: [] })).toBe('none');
+  // #162 M5 round 1: `locked` says the order "has been priced", so it is
+  // shown exactly when the order has a total, whatever the status.
+  it('locks Services exactly when the order has a total', () => {
+    for (const status of LAUNDRY_ORDER_STATUSES) {
+      expect(laundryServicesView({ hasTotal: true, roleResolved: false, status, verbs: ['price'] })).toBe('locked');
+      expect(laundryServicesView({ hasTotal: false, roleResolved: true, status, verbs: ['price'] })).not.toBe('locked');
     }
+  });
+
+  it.each(['CANCELLED', 'REJECTED', 'PRICED', 'PAID'] as const)('%s without a total shows the none sentence, not locked', (status) => {
+    expect(laundryServicesView({ hasTotal: false, roleResolved: true, status, verbs: [] })).toBe('none');
+  });
+
+  // #162 M5 round 2: the unresolved role is checked before the verb, so the
+  // helper keeps its own rule even if a caller passes a stale `price` verb.
+  it('hides a WEIGHED order while the role loads, even with a price verb', () => {
+    expect(laundryServicesView({ hasTotal: false, roleResolved: false, status: 'WEIGHED', verbs: ['price'] })).toBe('hidden');
   });
 });
 

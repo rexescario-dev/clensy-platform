@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { PreviewLaundryOrderPriceDocument, type PreviewLaundryOrderPriceQuery, type PriceLaundryOrderInput, type PricingUnit } from '@clensy/client';
-import { act } from 'react';
+import { act, useLayoutEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -68,9 +68,17 @@ let container: HTMLDivElement;
 let root: Root | null;
 let latest: Hook;
 let props: Props;
+// Every committed render's result, to catch a flicker between two checks.
+// Pushed from a layout effect, which runs once per commit, so a render
+// React abandons or repeats is never recorded (M5 final review, P2-2).
+const renders: Hook[] = [];
 
 function Probe(current: Props) {
-  latest = useLaundryServiceSelection(current);
+  const result = useLaundryServiceSelection(current);
+  latest = result;
+  useLayoutEffect(() => {
+    renders.push(result);
+  });
   return null;
 }
 
@@ -170,6 +178,7 @@ beforeEach(() => {
   );
   priceMutation.mockReset();
   unitKeySpy.mockClear();
+  renders.length = 0;
   props = DEFAULT_PROPS;
   container = document.createElement('div');
   root = createRoot(container);
@@ -662,5 +671,134 @@ describe('useLaundryServiceSelection', () => {
       wait(1000);
       expect(sent()).toBe(2);
     });
+  });
+
+  // #158 M7 carry-forward 1: a return to A within one debounce, before B
+  // was ever sent, keeps A's current result: no ready flicker, no request.
+  it('case 20: A→B→A within one debounce keeps ready and sends nothing more', async () => {
+    render();
+    chooseBase();
+    wait(300);
+    await resolveCall(0, payload([baseLine()]));
+    expect(latest.ready).toBe(true);
+    chooseBase(OTHER_BASE_CHOICE);
+    expect(latest.ready).toBe(false);
+    expect(latest.previewLoading).toBe(true);
+    wait(100);
+    const mark = renders.length;
+    chooseBase();
+    expect(latest.ready).toBe(true);
+    wait(1000);
+    expect(sent()).toBe(1);
+    expect(renders.slice(mark).every((result) => result.ready)).toBe(true);
+    expect(latest.priceInput).toEqual(input(0));
+  });
+
+  // Planning decision f still holds: once B was sent, A is asked again.
+  it('case 21: A→B→A across a sent request requests A again', async () => {
+    render();
+    chooseBase();
+    wait(300);
+    await resolveCall(0, payload([baseLine()]));
+    chooseBase(OTHER_BASE_CHOICE);
+    wait(300);
+    expect(sent()).toBe(2);
+    chooseBase();
+    expect(latest.ready).toBe(false);
+    wait(300);
+    expect(sent()).toBe(3);
+    expect(input(2)).toEqual(input(0));
+    await resolveCall(2, payload([baseLine()]));
+    expect(latest.ready).toBe(true);
+  });
+
+  // #158 M7 carry-forward 2 (#162 owner decision 3).
+  describe('case 22: retryPreview', () => {
+    it('re-sends the same input after a failure and keeps the selection', async () => {
+      render();
+      chooseBase();
+      const row = addRow(ADD_ON_1);
+      wait(300);
+      await rejectCall(0, new Error('network down'));
+      expect(latest.previewError).not.toBeNull();
+      const selection = latest.selection;
+      edit(() => latest.retryPreview());
+      expect(latest.previewError).toBeNull();
+      expect(latest.previewLoading).toBe(true);
+      expect(latest.ready).toBe(false);
+      expect(latest.selection).toBe(selection);
+      wait(300);
+      expect(sent()).toBe(2);
+      expect(input(1)).toEqual(input(0));
+      await resolveCall(1, payload([baseLine(), addOnLine(A1)]));
+      expect(latest.ready).toBe(true);
+      expect(latest.preview?.addOns.get(row)?.addOnId).toBe(A1);
+    });
+
+    it('a second failure shows again, and a late first response is ignored', async () => {
+      render();
+      chooseBase();
+      wait(300);
+      edit(() => latest.retryPreview());
+      wait(300);
+      expect(sent()).toBe(2);
+      await rejectCall(1, new Error('still down'));
+      await resolveCall(0, payload([baseLine()]));
+      expect(latest.previewError).not.toBeNull();
+      expect(latest.ready).toBe(false);
+    });
+
+    it('does nothing without a previewable selection', () => {
+      render();
+      const mark = renders.length;
+      edit(() => latest.retryPreview());
+      // A true no-op (M5 round 1): no state change, so no render.
+      expect(renders.length).toBe(mark);
+      wait(1000);
+      expect(sent()).toBe(0);
+      expect(latest.previewLoading).toBe(false);
+    });
+  });
+
+  it('case 23: complete needs a base, every row chosen and every count valid', async () => {
+    render();
+    expect(latest.complete).toBe(false);
+    await learnBasePerItem();
+    expect(latest.complete).toBe(true);
+    const row = addRow();
+    expect(latest.complete).toBe(false);
+    edit(() => latest.chooseAddOn(row, ADD_ON_1));
+    expect(latest.complete).toBe(true);
+    // Typed, never blurred (M5 round 1): the message waits for blur, but
+    // completeness and readiness do not.
+    edit(() => latest.changeBaseQuantity('0'));
+    expect(latest.complete).toBe(false);
+    expect(latest.ready).toBe(false);
+    expect(latest.priceInput).toBeNull();
+  });
+
+  // M5 round 1: a settled failure is a settled outcome too. A→B→A within one
+  // debounce keeps A's failure and sends nothing; only Try again re-sends.
+  it('case 24: A fails, then A→B→A within one debounce keeps the failure and sends nothing more', async () => {
+    render();
+    chooseBase();
+    wait(300);
+    await rejectCall(0, new Error('network down'));
+    expect(latest.previewError).not.toBeNull();
+    chooseBase(OTHER_BASE_CHOICE);
+    wait(100);
+    const mark = renders.length;
+    chooseBase();
+    wait(1000);
+    expect(sent()).toBe(1);
+    // Every committed state after the return shows A's failure: no loading
+    // flash, no ready.
+    expect(renders.slice(mark).every((result) => result.previewError !== null && !result.previewLoading && !result.ready)).toBe(true);
+    expect(latest.previewError).not.toBeNull();
+    expect(latest.ready).toBe(false);
+    edit(() => latest.retryPreview());
+    wait(300);
+    expect(sent()).toBe(2);
+    expect(input(1)).toEqual(input(0));
   });
 });

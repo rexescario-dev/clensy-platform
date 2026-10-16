@@ -46,6 +46,10 @@ export interface LaundryServiceSelectionState {
   previewError: LaundryPreviewError | null;
   // True through the debounce and the request.
   previewLoading: boolean;
+  // Base chosen, every add-on row chosen, every count valid. False whenever
+  // the input cannot be built. #162 shows "Finish choosing services" for a
+  // chosen base that is not complete.
+  complete: boolean;
   // The exact input `preview` was computed from; `null` whenever `preview` is.
   priceInput: PriceLaundryOrderInput | null;
   // Base chosen, every row chosen, every count valid, and a current
@@ -61,6 +65,10 @@ export interface LaundryServiceSelectionState {
   chooseAddOn: (key: number, choice: LaundryCatalogChoice) => void;
   chooseBase: (choice: LaundryCatalogChoice) => void;
   removeAddOn: (key: number) => void;
+  // Asks for the current input again, under a new request, after a failure
+  // (#158 M7 carry-forward 2). The selection is untouched. Nothing happens
+  // when nothing can be previewed.
+  retryPreview: () => void;
   touchAddOn: (key: number) => void;
   touchAddOnQuantity: (key: number) => void;
   touchBase: () => void;
@@ -122,6 +130,9 @@ export function useLaundryServiceSelection({
   // Both are written only in effects and callbacks, never during render.
   const generation = useRef(0);
   const latestKey = useRef<string | null>(null);
+  // The key and generation of the settled outcome, readable in the timer
+  // (#158 M7 carry-forward 1).
+  const settledRef = useRef<{ generation: number; key: string } | null>(null);
   const [selection, setSelection] = useState<LaundryServiceSelection>(EMPTY_LAUNDRY_SERVICE_SELECTION);
   const [units, setUnits] = useState<LaundryRememberedUnits>({});
   // The request sent for a key, and the outcome that came back for it.
@@ -129,6 +140,9 @@ export function useLaundryServiceSelection({
   // requested is requested again (planning decision f).
   const [requested, setRequested] = useState<{ generation: number; key: string } | null>(null);
   const [settled, setSettled] = useState<{ generation: number; key: string; outcome: PreviewOutcome } | null>(null);
+  // Bumped by `retryPreview`, so the request effect runs again for an
+  // unchanged key.
+  const [retries, setRetries] = useState(0);
 
   const input = enabled && weightGrams !== null ? previewInputFromSelection(orderId, selection, units) : null;
   // The staleness key: the input and the weight it was quoted against
@@ -144,6 +158,11 @@ export function useLaundryServiceSelection({
     const [, keyInput] = JSON.parse(key) as [number, PriceLaundryOrderInput];
     let live = true;
     const timer = setTimeout(() => {
+      // A→B→A within one debounce (#158 M7 carry-forward 1): the newest
+      // request sent was for this key, and its outcome has settled, so it
+      // is still current. Asking again would only flip `ready` off and on.
+      // A retry clears `settledRef` first, so it always asks.
+      if (settledRef.current?.key === key && settledRef.current.generation === generation.current) return;
       generation.current += 1;
       const sent = { generation: generation.current, key };
       setRequested(sent);
@@ -154,6 +173,7 @@ export function useLaundryServiceSelection({
         // latest committed key is still this request's key.
         if (!live || generation.current !== sent.generation || latestKey.current !== sent.key) return;
         if (outcome.ok) setUnits((current) => rememberUnits(current, outcome.data.lines));
+        settledRef.current = sent;
         setSettled({ ...sent, outcome });
       });
     }, LAUNDRY_PREVIEW_DEBOUNCE_MS);
@@ -161,7 +181,7 @@ export function useLaundryServiceSelection({
       live = false;
       clearTimeout(timer);
     };
-  }, [client, key]);
+  }, [client, key, retries]);
 
   const outcome =
     key !== null && requested?.key === key && settled?.key === key && settled.generation === requested.generation
@@ -224,6 +244,7 @@ export function useLaundryServiceSelection({
         baseQuantityTouched: false,
         baseQuery: choice.name,
       })),
+    complete,
     preview,
     previewError,
     previewLoading,
@@ -231,6 +252,13 @@ export function useLaundryServiceSelection({
     ready: complete && preview !== null && !previewLoading,
     removeAddOn: (rowKey) =>
       setSelection((current) => ({ ...current, addOns: current.addOns.filter((row) => row.key !== rowKey) })),
+    retryPreview: () => {
+      // Nothing to re-send: change no state (M5 round 1).
+      if (key === null) return;
+      settledRef.current = null;
+      setSettled(null);
+      setRetries((count) => count + 1);
+    },
     selection,
     touchAddOn: (rowKey) => updateRow(rowKey, (row) => ({ ...row, touched: true })),
     touchAddOnQuantity: (rowKey) => updateRow(rowKey, (row) => ({ ...row, quantityTouched: true })),

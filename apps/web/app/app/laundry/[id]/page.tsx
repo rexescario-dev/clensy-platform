@@ -13,8 +13,9 @@ import {
 } from '@clensy/web';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { LaundryServicesEditor } from '../../../../components/laundry/laundry-services-editor';
+import { LaundryPriceCard } from '../../../../components/laundry/laundry-price-card';
 import { LaundryWeighingEditor } from '../../../../components/laundry/laundry-weighing-editor';
 import { formatMinorUnits } from '../../../../lib/format-price';
 import { isUuid } from '../../../../lib/laundry-order-list-query';
@@ -22,27 +23,34 @@ import {
   LAUNDRY_ORDER_SECTIONS,
   currentLaundryOrderSection,
   laundryLifecycleVerbs,
-  laundryLineQuantity,
   laundryOrderSectionId,
   laundryWeighingView,
   resolvedInvoiceNodes,
   type LaundryOrderSection,
 } from '../../../../lib/laundry-order-page';
+import {
+  laundryEstimateState,
+  laundryPreviewRows,
+  laundryPriceView,
+  laundrySnapshotRows,
+  type LaundryPriceView,
+} from '../../../../lib/laundry-price-review';
 import { laundryServicesView, type LaundryServicesView } from '../../../../lib/laundry-service-selection';
 import {
   useLaundryServiceSelection,
   type LaundryServiceSelectionState,
 } from '../../../../lib/use-laundry-service-selection';
+import { useConfirmLaundryPrice, type ConfirmLaundryPriceState } from '../../../../lib/use-confirm-laundry-price';
 
 type LaundryOrderDetail = NonNullable<LaundryOrderQuery['laundryOrder']>;
 type Invoice = InvoiceForOrderQuery['invoices']['nodes'][number];
 type Translate = (key: string) => string;
 
 // The order workspace (lifecycle spec §8.4.4, #156). Weighing records a
-// weight (#155). Services chooses the base service and add-ons and
-// previews their units and rates (#158). Price (#162), Invoice (#166) and
-// Actions (#165) still show facts until their issues add controls. The list
-// still opens the drawer until the cutover (#161).
+// weight (#155). Services chooses the base service and add-ons (#158).
+// Price shows the estimate and confirms it, or the final price (#162).
+// Invoice (#166) and Actions (#165) still show facts until their issues add
+// controls. The list still opens the drawer until the cutover (#161).
 export default function LaundryOrderPage() {
   const { id } = useParams<{ id: string }>();
   // A new key per order, so moving between orders starts fresh.
@@ -62,6 +70,13 @@ function LaundryOrderWorkspace({ id }: { id: string }) {
   });
   const { data: adminData } = useCurrentAdminQuery();
   const role = adminData?.currentAdmin.role;
+  // Lives here, above Weighing and Price, so both editors are disabled
+  // while a price is confirmed and its refetch runs (#162 owner decision 6.3).
+  const confirmPrice = useConfirmLaundryPrice({ refetch: () => orderQuery.refetch() });
+  // A weight being saved and reloaded makes the estimate stale before the
+  // order shows the new weight, so Price holds Confirm until both settle
+  // (#162 M7 follow-up).
+  const [weighing, setWeighing] = useState(false);
 
   const backLink = (
     <div>
@@ -154,10 +169,24 @@ function LaundryOrderWorkspace({ id }: { id: string }) {
       </OrderSection>
 
       <OrderSection section="weighing" t={t}>
-        <WeighingBody order={order} verbs={verbs} onRecorded={() => orderQuery.refetch()} t={t} />
+        <WeighingBody
+          disabled={confirmPrice.confirming}
+          order={order}
+          verbs={verbs}
+          onPendingChange={setWeighing}
+          onRecorded={() => orderQuery.refetch()}
+          t={t}
+        />
       </OrderSection>
 
-      <PricingSections order={order} roleResolved={role !== undefined} verbs={verbs} t={t} />
+      <PricingSections
+        confirmPrice={confirmPrice}
+        order={order}
+        roleResolved={role !== undefined}
+        verbs={verbs}
+        weighing={weighing}
+        t={t}
+      />
 
       <OrderSection section="invoice" t={t}>
         <InvoiceBody
@@ -203,7 +232,7 @@ function Fact({ term, children }: { term: string; children: ReactNode }) {
 }
 
 // Before pricing, the existing sentence; afterwards one line that points
-// at Services, which owns the line list (owner decision 1). The count is
+// at Price, which owns the line list (#162 owner decision 1). The count is
 // the saved lines, never the selection or the preview. A partial page has
 // no reliable count (planning decision g).
 function OverviewBody({ order, t }: { order: LaundryOrderDetail; t: Translate }) {
@@ -218,8 +247,8 @@ function OverviewBody({ order, t }: { order: LaundryOrderDetail; t: Translate })
   return (
     <p>
       {summary}{' '}
-      <a href={`#${laundryOrderSectionId('services')}`} className="underline">
-        {t('order.overview.seeServices')}
+      <a href={`#${laundryOrderSectionId('price')}`} className="underline">
+        {t('order.overview.seePrice')}
       </a>
     </p>
   );
@@ -230,11 +259,15 @@ function OverviewBody({ order, t }: { order: LaundryOrderDetail; t: Translate })
 // recorded weight or "Not weighed yet.". The recorded line is the server
 // value, so it changes only after a save's refetch.
 function WeighingBody({
+  disabled,
+  onPendingChange,
   onRecorded,
   order,
   t,
   verbs,
 }: {
+  disabled: boolean;
+  onPendingChange: (pending: boolean) => void;
   onRecorded: () => Promise<unknown>;
   order: LaundryOrderDetail;
   t: Translate;
@@ -257,28 +290,38 @@ function WeighingBody({
   return (
     <div className="flex flex-col gap-3">
       {recorded}
-      <LaundryWeighingEditor onRecorded={onRecorded} orderId={order.id} weightGrams={order.weightGrams} />
+      <LaundryWeighingEditor
+        disabled={disabled}
+        onPendingChange={onPendingChange}
+        onRecorded={onRecorded}
+        orderId={order.id}
+        weightGrams={order.weightGrams}
+      />
     </div>
   );
 }
 
 // Services and Price share the selection and its current preview (#158).
-// The state lives here, above both sections, so price review (#162) reads
-// it instead of starting a second preview. The workspace is keyed by order
-// id, so another order starts with an empty selection.
+// The state lives here, above both sections, so Price reads it instead of
+// starting a second preview (#162). The workspace is keyed by order id, so
+// another order starts with an empty selection.
 function PricingSections({
+  confirmPrice,
   order,
   roleResolved,
   t,
   verbs,
+  weighing,
 }: {
+  confirmPrice: ConfirmLaundryPriceState;
   order: LaundryOrderDetail;
   roleResolved: boolean;
   t: Translate;
   verbs: readonly LaundryOrderVerb[];
+  weighing: boolean;
 }) {
   const view = laundryServicesView({
-    hasLines: order.lines.nodes.length > 0,
+    hasTotal: order.totalMinorUnits !== null,
     roleResolved,
     status: order.status,
     verbs,
@@ -288,31 +331,36 @@ function PricingSections({
     orderId: order.id,
     weightGrams: order.weightGrams,
   });
+  const priceView = laundryPriceView({
+    hasTotal: order.totalMinorUnits !== null,
+    roleResolved,
+    status: order.status,
+    verbs,
+  });
   return (
     <>
       <OrderSection section="services" t={t}>
-        <ServicesBody order={order} selection={selection} t={t} view={view} />
+        <ServicesBody disabled={confirmPrice.confirming} selection={selection} t={t} view={view} />
       </OrderSection>
 
       <OrderSection section="price" t={t}>
-        {order.totalMinorUnits === null ? (
-          <p>{t('order.price.notPriced')}</p>
-        ) : (
-          <Fact term={t('order.price.total')}>{formatMinorUnits(order.totalMinorUnits)}</Fact>
-        )}
+        <PriceBody confirmPrice={confirmPrice} order={order} selection={selection} t={t} view={priceView} weighing={weighing} />
       </OrderSection>
     </>
   );
 }
 
-// Owner decision 4 (#158).
+// Owner decision 4 (#158). Price lists a priced order's lines (#162 owner
+// decision 1). `locked` is keyed on the persisted total, the same signal as
+// Price's Final card, so the two sections never disagree (#162 planning
+// decision a).
 function ServicesBody({
-  order,
+  disabled,
   selection,
   t,
   view,
 }: {
-  order: LaundryOrderDetail;
+  disabled: boolean;
   selection: LaundryServiceSelectionState;
   t: Translate;
   view: LaundryServicesView;
@@ -321,59 +369,74 @@ function ServicesBody({
     case 'hidden':
       return null;
     case 'editor':
-      return <LaundryServicesEditor state={selection} />;
+      return <LaundryServicesEditor disabled={disabled} state={selection} />;
     case 'beforeWeigh':
       return <p>{t('order.services.beforeWeigh')}</p>;
     case 'none':
       return <p>{t('order.services.none')}</p>;
     case 'locked':
-      return (
-        <div className="flex flex-col gap-3">
-          <p>{t('order.services.locked')}</p>
-          <SavedLines order={order} t={t} />
-        </div>
-      );
-    case 'lines':
-      return <SavedLines order={order} t={t} />;
+      return <p>{t('order.services.locked')}</p>;
   }
 }
 
-// The saved lines, by their frozen names (§8.4.2; owner decision 1). After
-// pricing the page shows the snapshot, never a new estimate (§8.4.4).
-function SavedLines({ order, t }: { order: LaundryOrderDetail; t: Translate }) {
-  const { nodes, pageInfo } = order.lines;
+// #162 owner decision 5. A final price comes from the frozen snapshot
+// (§8.4.2, §8.4.4) and never calls the preview. An estimate comes from the
+// current preview only, and Confirm sends that preview's input unchanged
+// (owner decision 6.1).
+function PriceBody({
+  confirmPrice,
+  order,
+  selection,
+  t,
+  view,
+  weighing,
+}: {
+  confirmPrice: ConfirmLaundryPriceState;
+  order: LaundryOrderDetail;
+  selection: LaundryServiceSelectionState;
+  t: Translate;
+  view: LaundryPriceView;
+  // A weight save and its reload are in flight: the estimate is stale.
+  weighing: boolean;
+}) {
+  if (view === 'final' && order.totalMinorUnits !== null) {
+    return (
+      <LaundryPriceCard
+        kind="final"
+        more={order.lines.pageInfo.hasNextPage === true}
+        rows={laundrySnapshotRows(order.lines.nodes)}
+        totalMinorUnits={order.totalMinorUnits}
+      />
+    );
+  }
+  if (view === 'beforePricing') return <p>{t('order.price.beforePricing')}</p>;
+  if (view === 'notPriced') return <p>{t('order.price.notPriced')}</p>;
+  if (view !== 'estimate') return null;
+  const { preview, priceInput } = selection;
+  // A weight being saved counts as a loading preview (owner decision 3).
+  const ready = selection.ready && !weighing;
+  // Only for the selection Confirm used: any edit replaces the object
+  // (planning decision e).
+  const failure = confirmPrice.failure?.selection === selection.selection ? confirmPrice.failure.message : undefined;
   return (
-    <div className="flex flex-col gap-3">
-      <ul className="flex flex-col gap-2">
-        {nodes.map((line) => {
-          const { amountMinorUnits, description, minimumChargeApplied, quantity, unit } = line.pricingSnapshot;
-          const shown = laundryLineQuantity(unit, quantity);
-          return (
-            <li key={line.id} className="rounded-md border border-slate-200 p-3">
-              <p className="font-medium text-slate-900">{description}</p>
-              <dl className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <div>
-                  <dt className="text-slate-500">{t('order.lines.unit')}</dt>
-                  <dd>{t(`order.unit.${unit}`)}</dd>
-                </div>
-                {shown ? (
-                  <div>
-                    <dt className="text-slate-500">{t(`order.lines.${shown.kind}`)}</dt>
-                    <dd>{shown.value}</dd>
-                  </div>
-                ) : null}
-                <div>
-                  <dt className="text-slate-500">{t('order.lines.amount')}</dt>
-                  <dd>{formatMinorUnits(amountMinorUnits)}</dd>
-                </div>
-              </dl>
-              {minimumChargeApplied ? <p className="mt-2 text-slate-600">{t('order.lines.minimumCharge')}</p> : null}
-            </li>
-          );
-        })}
-      </ul>
-      {pageInfo.hasNextPage === true ? <p className="text-slate-600">{t('order.lines.more')}</p> : null}
-    </div>
+    <LaundryPriceCard
+      kind="estimate"
+      confirming={confirmPrice.confirming}
+      failure={failure}
+      rows={preview ? laundryPreviewRows(preview.lines) : []}
+      state={laundryEstimateState({
+        complete: selection.complete,
+        hasBase: selection.selection.base !== null,
+        previewError: selection.previewError !== null,
+        previewLoading: selection.previewLoading || weighing,
+        ready,
+      })}
+      totalMinorUnits={preview?.estimatedTotalMinorUnits ?? null}
+      onConfirm={() => {
+        if (ready && priceInput) void confirmPrice.confirm(priceInput, selection.selection);
+      }}
+      onRetry={selection.retryPreview}
+    />
   );
 }
 
