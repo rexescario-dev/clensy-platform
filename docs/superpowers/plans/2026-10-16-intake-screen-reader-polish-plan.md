@@ -1130,3 +1130,49 @@ git commit -m "docs(181): record the M6 verification"
 - Announcing result counts ("3 customers found"). `t()` has no interpolation, and #160's M5 already deferred it.
 - Form dialogs closable mid-submit: [#180](https://github.com/rexescario-dev/clensy-platform/issues/180).
 - Any change to `FormField`'s error pattern in `@clensy/ui`. Owner decision 1 aligns this dialog with it instead.
+
+## Execution record
+
+### M6 — 2026-10-16
+
+Executed inline (Native), in plan order, on `feat/181-intake-screen-reader-polish` from the M5 acceptance commit `7aad64a`. Every `Expected:` line was compared with the real output. Red-phase counts are the **actual** results; each matched the prediction.
+
+| Task | Commit | Red (actual) | Green (actual) |
+| --- | --- | --- | --- |
+| 1 | `1d9735c` | Static: 2 failed, 2 passed. The radios had no `aria-labelledby`, and the fieldset was still described by the error. jsdom (`-t "server fulfillment error"`): 1 failed, because the fieldset's `aria-describedby` was `laundry-fulfillment-fixed`. | Static 4/4; list page 33/33 |
+| 2 | `863612b` | 3 failed, 31 passed. Each failed at its `document.activeElement` assertion, where focus was still on the dialog element. The fulfillment test failed at its **first** focus assertion (`PICKUP`, line 770), as the plan required. | List page 34/34 |
+| 3 | `e8bf893` | Static: 3 failed, 9 passed. The error line still had `role="alert"`, and the new test found 0 `role="status"`. jsdom: 4 failed, 39 passed. All four failed at the first region lookup (`null` `getAttribute` / `textContent`). | Static 16/16; jsdom 89/89 across the combobox (8), list page (35), customer-picker and services-editor files |
+
+**Characterization tests.** Each passes before the change. Each was shown to fail against a deliberate break made outside the committed change, then reverted:
+- Task 2, the generic failure keeps focus: adding `form.setFocus('customerId')` to the generic branch made `'stays open on failure …'` fail.
+- Task 3, the empty-and-truncated popup still shows both lines: hiding the more line when there are no options made `'shows one line for searching, empty, error and truncation'` fail.
+
+**Rulings (deviations from the plan's text):**
+1. Task 3 Step 2 said the empty-and-truncated characterization assertions "already pass" at red. They come after the first failing assertion in the same test, so the red run could not observe them. The mutation above is their evidence instead.
+
+**M5 execution-time check:**
+- **Mock shape:** `nav.customerQueries` records each options object passed to `useCustomersQuery`, with `variables.filter.fullName.iLike` and `variables.paging.limit` (the mock in `laundry-list-page.interaction.test.tsx`). That is the shape the lifecycle test asserts.
+- **Popup container:** `popup()` is the listbox's parent element, which is the popup `<div>` holding the visible lines in `LaundrySearchCombobox`.
+
+Both confirmed.
+
+### Task 4 — verification (actual results)
+
+| Check | Result |
+| --- | --- |
+| `pnpm --filter web test` | PASS — 48 files, 2184 tests, exit 0 |
+| `pnpm --filter web lint` | PASS — exit 0, no warnings |
+| `pnpm --filter web exec tsc --noEmit` | PASS — exit 0 |
+| `pnpm --filter @clensy/web test` | PASS — 16 files, 418 tests, exit 0 |
+| `pnpm --filter @clensy/web lint` | PASS — exit 0, no warnings |
+| `pnpm --filter @clensy/web build` | PASS — exit 0 |
+| `git diff --stat main...HEAD -- apps/api packages/client packages/ui packages/validation packages/web/src/i18n` | Empty |
+| API suites | **NOT RUN** — no API code changes in this slice; not claimed as covered |
+
+**Browser check: NOT RUN.**
+- **Why:** the local Docker `web` container was built from an image about 10 hours old, so it does not serve this branch.
+- **Why not another port:** the API's CORS origin is `WEB_ORIGIN` (default `http://localhost:3001`), so a dev server on another port cannot sign in.
+- **Why not 3001:** using 3001 would mean stopping or rebuilding the owner's running container, which needs the owner's approval (as in #162).
+- **Covered meanwhile by:** the static tests that pin the unchanged class strings and markup. They are not a substitute for the visual check.
+
+**Screen-reader pass (planning decision (h)): NOT RUN** — no screen reader is available to the implementer. Steps 1–3 of Task 4 Step 3 are for the owner, alone or during #161's keyboard pass, before #181 is closed.
