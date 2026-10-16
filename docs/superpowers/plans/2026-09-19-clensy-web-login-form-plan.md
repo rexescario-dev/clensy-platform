@@ -500,7 +500,7 @@
   - Add `Input`/`Field`(/`Label`, if Task 1 generated it) to the `src/base/` primitive list in the Layout section.
   - Add a short note to the `src/domain/` bullet (or `src/domain/README.md`) marking it legacy: domain-specific composition now belongs in `@clensy/web` (link to this ticket's spec §4.1); `src/domain/` stays scaffolded but receives no new content.
 
-- [ ] **Step 3: Add to `apps/web/README.md`**, near its existing `## UI` section (after the shadcn-boundary bullets, before or after the `cn`/`lucide-react` paragraph) — a short new note: `apps/web` also consumes reusable Clensy domain components (e.g. `LoginForm`) through [`@clensy/web`](../../packages/web/README.md)'s public API, following the same translated-strings-as-props convention as `@clensy/ui`.
+- [ ] **Step 3: Add to `apps/web/README.md`**, near its existing `## UI` section (after the shadcn-boundary bullets, before or after the `cn`/`lucide-react` paragraph) — a short new note: `apps/web` also consumes reusable Clensy domain components (e.g. `LoginForm`) through [`@clensy/web`](../../../packages/web/README.md)'s public API, following the same translated-strings-as-props convention as `@clensy/ui`.
 
 - [ ] **Step 4: Update the root `README.md` monorepo-layout tree** — add a `web:` line under `packages/` (after `ui:`) describing it as the reusable Clensy domain component layer, starting with `auth/LoginForm`; do not restate the `@clensy/ui`/`@clensy/web`/`apps/web` boundary rule itself (link to the spec instead).
 

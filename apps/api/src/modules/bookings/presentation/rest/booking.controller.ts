@@ -22,7 +22,7 @@ import { CreateBookingDto } from './create-booking.dto';
 import { toBookingResponse } from './mappers';
 import { UpdateBookingDto } from './update-booking.dto';
 
-// The REST/GraphQL comparison surface, kept deliberately (README), now uses
+// The REST/GraphQL comparison surface, kept deliberately (apps/api/README.md), now uses
 // the same cookie session, roles, tenant source and audit as GraphQL (RFC
 // §4.5; #85 Slice decisions 3–4): `AuthGuard` at the class level covers
 // every route, `@Roles()` reuses GraphQL's exact `VIEW_ROLES`/`WRITE_ROLES`

@@ -1,142 +1,86 @@
-# docs
+# Clensy documentation
 
-Product and architecture decisions live next to the work they govern.
+Start here. Pages are grouped by what you are trying to do. Current guides describe the system as it is on `main`; design records and history explain how it got there.
 
-| Area | Path |
+## Find what you need
+
+| I want to… | Read |
 | --- | --- |
-| Architecture / product RFCs | [`superpowers/specs/`](superpowers/specs/) |
-| Implementation plans | [`superpowers/plans/`](superpowers/plans/) |
-| Engineering workflow (M1–M10) | [`workflows/`](workflows/) |
+| Run the project on my machine | [Local development](getting-started/local-development.md) |
+| Understand the parts and how they talk | [Architecture overview](architecture/overview.md) |
+| Understand sessions, roles and tenant isolation | [Authentication and tenancy](architecture/auth-and-tenancy.md) |
+| Change the database schema | [Database migrations](development/database-migrations.md) |
+| Run tests, or understand a CI failure | [Testing and CI](development/testing-and-ci.md) |
+| Work on laundry orders | [Laundry orders](features/laundry.md) |
+| Work on the API | [`apps/api` README](../apps/api/README.md) |
+| Work on the web console | [`apps/web` README](../apps/web/README.md), [`@clensy/ui`](../packages/ui/README.md), [`@clensy/web`](../packages/web/README.md), [`@clensy/validation`](../packages/validation/README.md) |
+| Open a pull request | [Contributing](../CONTRIBUTING.md) |
+| Find out why something was designed a certain way | [Design records](superpowers/README.md) |
 
-## Paginated GraphQL collections (#33)
+## Reading paths
 
-Shipped in this slice. Offset connections (default 20 / max 100, clamp), `totalCount` on root Query collections only, nested connections without `totalCount`.
+- **New developer.** [README](../README.md) → [local development](getting-started/local-development.md) → [architecture overview](architecture/overview.md) → [authentication and tenancy](architecture/auth-and-tenancy.md) → [contributing](../CONTRIBUTING.md).
+- **Feature developer.** The Accepted spec for the area ([design records](superpowers/README.md)) → the app or package README → [testing and CI](development/testing-and-ci.md) → [database migrations](development/database-migrations.md) if the schema changes.
+- **Reviewer.** [Authentication and tenancy](architecture/auth-and-tenancy.md) (the rules every change must keep) → the slice's spec and plan → the [M7 code review prompt](workflows/prompts/code-review.md).
+- **Operator.** [Local development](getting-started/local-development.md) (stack, environment, logs) → [database migrations](development/database-migrations.md#migrating-an-existing-database) (pre-checks on existing data) → the [release gate](development/testing-and-ci.md#two-tenant-release-gate). There is no deployment guide: the repository has no deployment configuration beyond the local Docker Compose stack.
 
-- Spec (Accepted): [2026-08-28-paginated-graphql-collections-design.md](superpowers/specs/2026-08-28-paginated-graphql-collections-design.md)
-- Plan (Accepted): [2026-08-28-paginated-graphql-collections-plan.md](superpowers/plans/2026-08-28-paginated-graphql-collections-plan.md)
+## Map
 
-## Tenant identity foundation (#68)
+```text
+docs/
+├── README.md                  this page
+├── getting-started/
+│   └── local-development.md   environment files, Docker stack, seed, URLs, troubleshooting
+├── architecture/
+│   ├── overview.md            system context, containers, packages, modules, repository map
+│   └── auth-and-tenancy.md    request lifecycle, roles, isolation layers, guard suites
+├── development/
+│   ├── database-migrations.md workflow and the hand-written SQL catalogue
+│   └── testing-and-ci.md      commands, CI jobs, required checks, release gate
+├── features/
+│   └── laundry.md             laundry order lifecycle, weighing, preview and pricing
+├── history/
+│   └── shipped-slices.md      one note per API delivery slice (historical)
+├── superpowers/               design records: specs/ and plans/ (see its README)
+├── workflows/                 engineering workflow M1–M10 (installer-managed)
+├── skills/                    UI/UX skill references (installer-managed)
+└── conventions/               JavaScript/TypeScript conventions (installer-managed)
+```
 
-Shipped in this slice (PR [#93](https://github.com/rexescario-dev/clensy-platform/pull/93)). This is the first delivery slice of the multi-tenant architecture. It adds a `Tenant` entity with one migration-created bootstrap tenant, an explicit `AdminScope` (`PLATFORM` | `TENANT`), and the roles `SUPER_ADMIN` and `TENANT_OWNER` (`OWNER` is retired by explicit per-account designation). The DB-authoritative principal is `{ id, role, scope, tenantId }`. Staff create/list/disable are limited to the Tenant Owner's own tenant, and `currentAdmin`/`admins`/`login` expose `scope` and `tenantId`. Business data (customers, bookings, catalog, …) is **not** tenant-scoped yet; that comes in later slices.
+App and package READMEs live next to their code: [`apps/api`](../apps/api/README.md), [`apps/web`](../apps/web/README.md), [`packages/ui`](../packages/ui/README.md), [`packages/web`](../packages/web/README.md), [`packages/validation`](../packages/validation/README.md).
 
-- Spec (Accepted): [2026-09-23-multi-tenant-architecture-design.md](superpowers/specs/2026-09-23-multi-tenant-architecture-design.md)
-- Plan (Accepted): [2026-09-23-tenant-identity-foundation-plan.md](superpowers/plans/2026-09-23-tenant-identity-foundation-plan.md)
-- Migrating an existing database: see "Database migrations" in the [root README](../README.md) (OWNER designation, irreversible)
+## Which document wins
 
-## Customer & Property tenant isolation (#82)
+| Kind | Examples | Authority |
+| --- | --- | --- |
+| **Accepted spec** | `superpowers/specs/*` | Binding contract for the behavior it covers. |
+| **Code-pinned policy** | `apps/api/test/release-gate/role-matrix.ts`, guard tests, the GitHub ruleset | The executable source of truth; docs describe it and link to it. |
+| **Current guide** | `getting-started/`, `architecture/`, `development/`, `features/`, app and package READMEs | Describes `main` today. Must agree with the spec; if not, the guide is wrong. |
+| **Record** | `superpowers/plans/*`, `history/*` | True when written. Never rewritten to match later code. |
+| **Installer-managed** | [`workflows/`](workflows/README.md), [`skills/ui-ux/`](skills/ui-ux/README.md), [`conventions/javascript/`](conventions/javascript/README.md) | Owned by the workflow installer; don't edit for project policy. The JavaScript/TypeScript conventions apply to all code; the UI/UX guidance applies to UI work. |
 
-Shipped in this slice (PR [#95](https://github.com/rexescario-dev/clensy-platform/pull/95)). Customer and Property are now tenant-owned:
-- Both tables have a required `tenantId`.
-- Customer emails are unique per tenant, ignoring case. A duplicate returns `Conflict`.
-- A composite FK makes every property belong to a customer of the same tenant.
+Each subject has one current home, and other pages link to it instead of repeating it:
 
-Every Customer/Property read and write uses the tenant of the logged-in user. That covers the services, the `customers`, `customerProperties`, `customer` and `property` queries, the create and update mutations, and the `customer`/`property` relations on Booking, Invoice and LaundryOrder. Another tenant's row behaves exactly like a missing one: null, NotFound, or an empty connection, never 403. Bookings and Laundry look customers up within the caller's tenant. The unauthenticated REST `POST /bookings` now fails with 404; its GET, PATCH and DELETE are unchanged. Booking, Invoice, LaundryOrder and the catalog are **not** tenant-scoped yet; that comes in later slices (#83–#87).
+| Subject | Current home |
+| --- | --- |
+| Setup, environment variables, local URLs | [Local development](getting-started/local-development.md) |
+| Sessions, roles, tenant isolation, audit | [Authentication and tenancy](architecture/auth-and-tenancy.md) |
+| Role permissions per operation | `apps/api/test/release-gate/role-matrix.ts` |
+| Schema changes and hand-written SQL | [Database migrations](development/database-migrations.md) |
+| CI, tests, required checks, release gate | [Testing and CI](development/testing-and-ci.md) |
+| API layering, HTTP surface, GraphiQL | [`apps/api` README](../apps/api/README.md) |
+| Web routes, page behavior, i18n | [`apps/web` README](../apps/web/README.md) |
+| UI and domain component boundaries | [`@clensy/ui`](../packages/ui/README.md), [`@clensy/web`](../packages/web/README.md) |
+| Laundry lifecycle and pricing | [Laundry orders](features/laundry.md) |
+| Contribution process, where docs go | [Contributing](../CONTRIBUTING.md#documentation) |
 
-**Interim gap resolved:** relation filters on Booking, Invoice and LaundryOrder are tenant-scoped since #85 and #87 (their types carry the tenant read authorizer). See "Tenant-aware audit & security sweep (#90)" below for the current state.
+## Writing conventions
 
-- Spec (Accepted): [2026-09-23-multi-tenant-architecture-design.md](superpowers/specs/2026-09-23-multi-tenant-architecture-design.md)
-- Plan (Accepted): [2026-09-24-customer-property-tenant-isolation-plan.md](superpowers/plans/2026-09-24-customer-property-tenant-isolation-plan.md)
-- Migrating an existing database: see "Database migrations" in the [root README](../README.md). The migration refuses to run if customers share an email.
-
-## Teams & Cleaners tenant isolation (#83)
-
-Shipped in this slice (PR [#96](https://github.com/rexescario-dev/clensy-platform/pull/96)). Team and Cleaner are now tenant-owned:
-- Both tables have a required `tenantId`.
-- Team names and cleaner emails are unique per tenant, case-sensitive. A duplicate returns `Conflict` (409) with the same messages as before.
-- A composite FK keeps a cleaner's team in the same tenant.
-
-Every Team/Cleaner read and write uses the tenant of the logged-in user. That covers the services, the `teams`/`cleaners` lists and counts, the `team`/`cleaner` queries, the four mutations (`createTeam`, `createCleaner`, `updateCleaner`, `assignCleanerToTeam`), and the `Team.cleaners`, `Cleaner.team`, `CleaningJob.team` and `Booking.team` relations. Another tenant's row behaves exactly like a missing one: null, NotFound, or empty, never 403. Bookings and Jobs look teams up within the caller's tenant. The unauthenticated REST `PATCH /bookings/:id` with a `teamId` now fails with 404 (`POST` was already 404 since #82); `GET`/`DELETE` and `PATCH` without a `teamId` are unchanged.
-
-**Interim gap resolved:** `Booking.team` filters are tenant-scoped (#85), and the booking and job team foreign keys are tenant-aware composites (`fk_booking_team_tenant`, `fk_cleaning_job_team_tenant`; #85, #86).
-
-- Spec (Accepted): [2026-09-23-multi-tenant-architecture-design.md](superpowers/specs/2026-09-23-multi-tenant-architecture-design.md)
-- Plan (Accepted): [2026-09-27-teams-cleaners-tenant-isolation-plan.md](superpowers/plans/2026-09-27-teams-cleaners-tenant-isolation-plan.md)
-- Migrating an existing database: see "Database migrations" in the [root README](../README.md). The migration needs no duplicate pre-check: the global uniques it replaces already rule out duplicates within one tenant.
-
-## Catalog tenant isolation (#84)
-
-Shipped in this slice (PR [#97](https://github.com/rexescario-dev/clensy-platform/pull/97)). Service, AddOn and PricingRule are now tenant-owned:
-- All three tables have a required `tenantId`.
-- Service and add-on names are unique per tenant, ignoring case. A duplicate returns `Conflict` (409) with the same messages as before (`Service name is already in use`, `Add-on name is already in use`).
-- Composite FKs keep a pricing rule's service/add-on target in the same tenant as the rule.
-
-Every Catalog read and write uses the tenant of the logged-in user. That covers the services, the `services`/`addOns` lists and counts, the `service` and `activePricing(serviceId)` queries, `Service.activePricing`, the five mutations (`createService`, `updateService`, `createAddOn`, `updateAddOn`, `createPricingRule`), and the `Booking.service` relation. Another tenant's row behaves exactly like a missing one: null, NotFound, or empty, never 403 — laundry pricing and invoice generation keep their existing 400s for a catalog row that can't be resolved in the caller's tenant. Bookings, laundry pricing and invoice generation now look catalog rows up within the caller's tenant.
-
-**Interim gap resolved:** laundry order lines reference services and add-ons through tenant-aware composite foreign keys (`fk_laundry_order_line_service_tenant`, `fk_laundry_order_line_add_on_tenant`), and laundry orders are tenant-scoped (#87), so a tenant can no longer price another tenant's order.
-
-- Spec (Accepted): [2026-09-23-multi-tenant-architecture-design.md](superpowers/specs/2026-09-23-multi-tenant-architecture-design.md)
-- Plan (Accepted): [2026-09-28-catalog-tenant-isolation-plan.md](superpowers/plans/2026-09-28-catalog-tenant-isolation-plan.md)
-- Migrating an existing database: see "Database migrations" in the [root README](../README.md). The migration needs no duplicate pre-check: the global uniques it replaces already rule out duplicates within one tenant.
-
-**Concurrent pricing-rule races ([#138](https://github.com/rexescario-dev/clensy-platform/issues/138)).** `apps/api/test/catalog.service.e2e-spec.ts` proves that two concurrent `createPricingRule` calls for the same target end with one success and one `ConflictException`, and that only one rule remains open ([Laundry catalog foundation spec](superpowers/specs/2026-09-06-laundry-catalog-foundation-design.md) §4.4, §4.7). Since #138 these races are synchronized rather than timed. A test-only save barrier releases the inserts only after it has observed one of two states: both calls at the save, or one call blocked on the predecessor row lock the other holds. If `createPricingRule` changes how it saves a rule, the tests fail with a barrier error until the barrier is updated to match.
-
-- Plan (Accepted, #138): [2026-10-06-deterministic-pricing-rule-race-tests-plan.md](superpowers/plans/2026-10-06-deterministic-pricing-rule-race-tests-plan.md)
-
-## Booking tenant isolation (#85)
-
-Shipped in this slice (PR [#98](https://github.com/rexescario-dev/clensy-platform/pull/98)). Booking is tenant-owned: a required `tenantId`, composite FKs keep a booking's customer, property, service and team (when set) in the booking's tenant, and `uq_booking_id_tenant` is the FK target #86 will use.
-
-Every Booking read and write uses the tenant of the logged-in user. That covers the `bookings` list/count (including relation filters on customer/property/service/team), the `booking(id)` query, the `createBooking`/`updateBooking`/`removeBooking` mutations, `Property.bookings`, `CleaningJob.booking`, and `createJobFromBooking`'s booking lookup. Another tenant's booking behaves exactly like a missing one — the existing not-found error or an empty list — never 403.
-
-REST `/bookings` (kept for the REST/GraphQL comparison) now requires the session cookie and uses the same roles as GraphQL (reads: all tenant roles; writes: Tenant Owner, Ops Manager, Scheduler, Customer Support), takes the tenant from the logged-in user, writes the same audit events as GraphQL, and returns the same response shape as before. Unauthenticated requests get 401; a wrong role, or Super Admin, gets 403; a `tenantId` in the body gets 400. `AuthGuard` and `@CurrentUser()` now support HTTP routes as well as GraphQL.
-
-GraphQL now runs interceptors on field resolvers (`fieldResolverEnhancers: ['interceptors']`) so nestjs-query relation tenant filters always apply — this fixed a cross-tenant read through `job(id) { booking }` and also tightens `Invoice.customer`, `LaundryOrder.customer` and `Property.bookings` when reached from custom queries.
-
-**Interim gap resolved:** cleaning jobs are tenant-scoped (#86), which closes the cross-tenant job listing, the `jobs(filter: { booking: … })` oracle and the shared-authorizer fail-open path. Booking audit events are tenant-tagged since #90.
-
-- Spec (Accepted): [2026-09-23-multi-tenant-architecture-design.md](superpowers/specs/2026-09-23-multi-tenant-architecture-design.md)
-- Plan (Accepted): [2026-09-28-booking-tenant-isolation-plan.md](superpowers/plans/2026-09-28-booking-tenant-isolation-plan.md)
-- Migrating an existing database: see "Database migrations" in the [root README](../README.md).
-
-## Tenant-aware audit & security sweep (#90)
-
-Shipped in this slice (PR [#107](https://github.com/rexescario-dev/clensy-platform/pull/107)). Every audit event now records a scope that matches its principal. `AuditLogEvent` is a union of tenant (`TENANT` + tenant id), platform (`PLATFORM` + no tenant) and anonymous (no actor, scope or tenant; failed login only) events. The TypeScript compiler checks that shape when `tsc --noEmit` runs (CI does not run it yet). The `tenantAuditTags` / `principalAuditTags` helpers validate the values at runtime, and the `ck_audit_event_scope_tenant` CHECK stays as the last safeguard. Booking create/update/remove events, through GraphQL and REST, are now tagged with the caller's tenant like every other module. A login whose stored scope and tenant disagree is refused instead of producing a session.
-
-**No audit backfill.** The feature has not been published and there is no real production data (the repository has no releases or deployments), so events recorded before #90 are left as they are (no scope or tenant) and no migration rewrites audit history.
-
-**Sweep result.** The planning-time sweep identified no additional tenant-filtering gap within the reviewed surfaces: services and query builders, loaders, REST `/bookings`, and every nestjs-query read resolver, relation and custom object field. Two guard suites now check that metadata on every e2e run:
-- `root-operation-authorization` classifies every root query and mutation as public, authenticated-only, or tenant with roles that exclude Super Admin.
-- `tenant-read-authorizers` requires every nestjs-query read resolver, read surface, object field and tenant-owned entity to be tenant-scoped or explicitly allowlisted with a reason.
-
-These suites are metadata checks that complement, not replace, the per-module two-tenant isolation tests. Since [#135](https://github.com/rexescario-dev/clensy-platform/issues/135), CI's **API e2e** job runs them, along with every other API e2e suite except the release gate, on every pull request and push to `main`. Since [#140](https://github.com/rexescario-dev/clensy-platform/issues/140), it is a required check on `main`, as described in the root [README](../README.md#scripts-run-from-the-repo-root-via-turborepo). #135 also classified the two object fields #118 added (`CurrentAdmin.tenantLabelOverrides`, `TenantLabelOverrides.roles`) in the `tenant-read-authorizers` allowlist.
-
-**Relation-field authorization ([#106](https://github.com/rexescario-dev/clensy-platform/issues/106)).** The root operation is the unit of role authorization (RFC §4.2, relation-field rules). A relation field is authorized by the root query or mutation that reaches it, not by the target type's root roles. For example, Finance can read `invoice { customer }` because `invoice` admits Finance, while `customers` stays `Forbidden` to Finance. Every relation still applies the principal's tenant predicate. Relation fields declare no relation-level guards or `@Roles()`. Adding a relation is an authorization-policy review, because it changes what the reaching root operations return. `apps/api/test/relation-field-authorization.e2e-spec.ts` pins this, including a metadata guard against relation-level guards and `@Roles()`. Since #135 the guard reads metadata the way the runtime applies it: on the method, or on the resolver class, including metadata inherited from a base class. It also fails on a typed resolver whose type is not a schema object type, and it never invokes a getter.
-
-- Spec (Accepted): [2026-09-23-multi-tenant-architecture-design.md](superpowers/specs/2026-09-23-multi-tenant-architecture-design.md)
-- Plan (Accepted): [2026-10-01-tenant-aware-audit-security-sweep-plan.md](superpowers/plans/2026-10-01-tenant-aware-audit-security-sweep-plan.md)
-- Plan (Accepted, #135): [2026-10-06-tenant-read-sweep-and-guard-hardening-plan.md](superpowers/plans/2026-10-06-tenant-read-sweep-and-guard-hardening-plan.md)
-- Spec (Accepted, #140): [2026-10-06-required-ci-checks-design.md](superpowers/specs/2026-10-06-required-ci-checks-design.md)
-- Plan (Accepted, #140): [2026-10-06-required-ci-checks-plan.md](superpowers/plans/2026-10-06-required-ci-checks-plan.md)
-
-## Legacy REST & surface cleanup (#91)
-
-REST `/bookings` stays as the REST/GraphQL comparison surface. It is authenticated with the same session cookie, roles and tenant scope as GraphQL (#85), which resolves the RFC §10 "delete or rebuild" question: kept, authenticated, tenant-scoped. A new e2e guard (`apps/api/test/http-route-authorization.e2e-spec.ts`) checks every controller route on each run. The routes Nest declares must match the routes Express serves exactly. Each route must be listed in an exact classification table. Tenant routes must use `AuthGuard` with GraphQL's own view or write role set, which never includes Super Admin. Every tenant route must return 401 without a session. The only public route is GraphiQL, which is dev-only. The guard covers the controller routes `AppModule` registers. The Swagger routes are covered by their own suite. These are metadata and route-table checks; the two-tenant suites remain the runtime proof of isolation. REST cross-tenant references (another tenant's customer, property, service or team) are now pinned as 404 alongside the GraphQL cases.
-
-Swagger (`/docs`, `/docs-json`, `/docs-yaml`) is now mounted only outside production, the same rule as GraphiQL. In production none of the three is served. Elsewhere they are unchanged and document the same REST paths and operations.
-
-Removed: the unimplemented `apps/worker` placeholder and the empty legacy `packages/ui/src/domain/` directory. Domain composition lives in `@clensy/web`.
-
-## Laundry price preview & frozen line description (#159)
-
-Amendment #164 to the [laundry lifecycle spec](superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md) (§8.4.2, §8.4.3, §8.4.5).
-
-**Saved line name.** `priceLaundryOrder` copies the catalog name onto each line as `pricingSnapshot.description`, inside its transaction:
-- a base-service line gets `Service.name`;
-- an add-on line gets `AddOn.name + " (add-on)"`, the same string invoice lines use.
-
-Renaming the service or add-on later does not change it. If a name can't be read in the caller's tenant, pricing fails with a 400 and nothing is written. Lines priced before the migration were filled with the name as it was **when the migration ran**, not when they were priced.
-
-**Price preview.** `previewLaundryOrderPrice(input: PriceLaundryOrderInput!)` is a read-only estimate for TENANT_OWNER, OPS_MANAGER and SCHEDULER, the same roles as pricing.
-- It runs the same checks, quantity rules, amount function and error order as `priceLaundryOrder`. Both go through one private `quote` helper.
-- It works only on a `WEIGHED` order with a recorded weight.
-- It writes nothing: no transaction, lock, line, status, total or audit event.
-- Each line shows the **current** catalog name. After pricing, the saved `description` is what counts.
-- A repeated add-on is quoted as its own line, exactly as pricing treats it.
-
-**Guards.** The query is classified in the root-operation inventory, the release-gate role matrix and probes, the tenant-read authorizer sweep, and the laundry/billing schema guard. The release-gate outcome classifier has one rule limited to `previewLaundryOrderPrice`. That rule reads each line's single `serviceId`/`addOnId` target and never treats the money total as a count.
-
-## Positive laundry weight (#155)
-
-Amendment #164 to the [laundry lifecycle spec](superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md) (§8.4.1).
-
-`weighLaundryOrder` now rejects a zero weight. `WeighLaundryOrderInput.weightGrams` is `@IsInt() @Min(1)`, and `LaundryOrdersService.weigh` throws `BadRequestException('weightGrams must be a positive integer')` for a non-integer or a value below 1, before it opens a transaction. Roles, the `RECEIVED`/`WEIGHED` status rule and the mutation input are unchanged. There is no migration: `ck_laundry_order_weight_non_negative` stays `>= 0`, and orders already stored with `0` grams are not rewritten. The release-gate and tenant-isolation suites were not changed; no probe weighs `0`.
+- **Put the answer first.** Open each page with one or two sentences saying what it covers.
+- **Plain English, short paragraphs.** Numbered steps for procedures, tables for comparisons and reference, code blocks for anything to copy.
+- **Link, don't repeat.** If a subject has a current home (table above), link to it.
+- **Relative links** for anything in the repository. Name files in `lower-kebab-case.md`.
+- **Diagrams in Mermaid**, inside the Markdown they explain, each followed by an italic sentence saying what it shows. Draw only what the code does.
+- **No secrets.** Name environment variables; never copy their values.
+- **Records stay records.** Add a new note or amendment instead of editing a plan or history note to match today's code.
+- **Verify before writing.** Commands come from `package.json`, `docker-compose.yml` and `.github/workflows/ci.yml`; behavior comes from the code or an Accepted spec.
