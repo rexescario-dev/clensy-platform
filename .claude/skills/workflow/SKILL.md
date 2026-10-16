@@ -52,3 +52,12 @@ Determine the current stage from the user request and available Accepted artifac
 5. Do not edit managed `docs/workflows/**` unless the user is intentionally customizing the installed workflow (Update/Replace may overwrite).
 6. Capability providers: for issue tracker / source control / PRs, honor `workflow.providers` in `workflow.yaml`. Availability is never policy; never silent fallback (full rule: prompt-library.md §12).
 7. At M6–M9 handoffs and final acceptance, emit a Slice Completion Report per `docs/workflows/conventions/reporting-conventions.md` (full rule: prompt-library.md §13).
+
+## Merge
+
+When the user asks to merge a delivery slice, check every applicable stage from M1 through M10, in order, before merging. Which stages apply is defined in `docs/workflows/specs/agent-workflow-design.md` §2.12.
+
+- A stage with no recorded outcome is run before the merge. Do not merge in the same turn that discovers the gap.
+- A missing or failed applicable stage blocks the merge.
+- Merging past that stage requires an explicit confirmation that names the stages to skip. The word "merge" alone is not override authorization.
+- Record any confirmed override in the closeout Slice Completion Report, naming each skipped stage.

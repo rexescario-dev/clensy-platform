@@ -2,7 +2,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted |
+| Status | Accepted. [Amendment #180](#8-amendment-180--form-dialog-dismissal-while-submitting) **Draft** — 2026-10-16; on acceptance, where §8.3 qualifies a sentence in §4.4 or §4.6, §8.3 governs. |
+| Amendment #180 | **Draft** — 2026-10-16 (M2). Tracking [#180](https://github.com/rexescario-dev/clensy-platform/issues/180). Slice-local; does not replace this specification. Awaiting Design Review (M3). |
 | Date | 2026-08-17 |
 | Tracking issue | [#24](https://github.com/rexescario-dev/clensy-platform/issues/24) |
 | Milestone | M5 — Dashboard UX Foundation |
@@ -178,6 +179,8 @@ export interface FormDialogProps {
 
 `FormDialog` renders the `<form>` element itself and calls `onSubmit` on the form's native submit event (so pressing Enter in a field submits, not just clicking the button) — callers supply only their `FormField`s as `children` and must not render their own `<form>` wrapper. `FormDialog` owns the submit button's disabled/loading state (from `submitting`) and the Cancel action.
 
+> **Amendment #180 (Draft, 2026-10-16).** While `submitting` is true, a `FormDialog` refuses user-initiated dismissal, including the Escape and backdrop-click closing that `Modal` otherwise provides. See §8.3.1. This sentence and `Modal`'s "Closes on Escape and backdrop click" are otherwise unchanged.
+
 **`ConfirmDialog`** — composes `Modal` for destructive confirmations:
 
 ```ts
@@ -219,6 +222,8 @@ A single rule for this and future milestones, so nothing reinvents its own inter
 ### 4.6 Accessibility invariants
 
 Built into `Modal`/`DetailDrawer` once, not per call site: Escape closes; focus is trapped while open and restored to the triggering element on close; the container has `role="dialog"`, `aria-modal="true"`, and `aria-labelledby` pointing at its title (§4.4 — both `Modal`-based components and `DetailDrawer` use the same role, since both are modal in behavior regardless of screen position); all interactive elements inside primitives have visible focus states; interactive `DataTable` rows are keyboard-reachable and Enter/Space-activatable (§4.4).
+
+> **Amendment #180 (Draft, 2026-10-16).** "Escape closes" has one exception: Escape does not close a `FormDialog` that is submitting, and it does not reach a dialog underneath that one. See §8.3.2.
 
 ### 4.7 Migration scope
 
@@ -275,3 +280,108 @@ This Draft may move to Accepted once Design Review (M3) confirms:
 - No server-side pagination or query-contract redesign — `DataTable`'s `pagination` prop (§4.4) is a presentation contract only; API-side pagination for any future paginated list (e.g. M6 Bookings) is that milestone's own concern.
 - No "log out anyway" override for a failed `logout` call, and no client-side fallback for clearing the `HttpOnly` session cookie if the mutation is unreachable (§4.3) — a failed logout simply fails visibly and can be retried.
 - No browser-automation test suite for `apps/web` (Phase 1 Design §7, unchanged).
+
+---
+
+## 8. Amendment #180 — Form dialog dismissal while submitting
+
+| Field | Value |
+| --- | --- |
+| **Status** | **Draft** — 2026-10-16 (M2). Awaiting Design Review (M3). |
+| **Date** | 2026-10-16 |
+| **Tracking** | [#180](https://github.com/rexescario-dev/clensy-platform/issues/180) "Keep form dialogs open while a submit is in flight". Follow-up from [#160](https://github.com/rexescario-dev/clensy-platform/issues/160) / PR [#179](https://github.com/rexescario-dev/clensy-platform/pull/179): M7 triage T5-a, listed under Deferred in the [Laundry Intake Modal plan](../plans/2026-10-13-laundry-intake-modal-plan.md). |
+| **Kind** | Slice-local amendment of this specification. Not a second specification. |
+| **Depends on** | This specification (Accepted 2026-08-17): §4.4 (`Modal`, `FormDialog`, `ConfirmDialog`, `DetailDrawer`) and §4.6 (accessibility invariants). It **constrains** §4.4 and §4.6 for one state of one primitive, and **relies on** everything else unchanged. |
+| **Owner decisions (brainstorm, 2026-10-16)** | (1) A refused dismissal shows nothing at all: no visual change, no busy message, no extra announcement. (2) The fix lives only in `@clensy/ui`, with no caller edits. (3) Programmatic closing stays available. (4) A submitting `FormDialog` on top swallows Escape. (5) The guard covers every user-initiated close path, present and future. (6) The contract here is behavioral. The mechanism is an M4 decision. |
+
+### 8.1 Question and thesis
+
+**Question:** §4.4 says `Modal` closes on Escape and backdrop click, and that `FormDialog` owns the disabled state of its buttons while `submitting`. Nothing says what happens when a user tries to dismiss a `FormDialog` while its submit is in flight. Today the dialog closes. A failed submit is then silent, because the dialog that would show the error is gone. And the user can reopen the dialog and submit again while the first request is pending. What should a submitting `FormDialog` do with a dismissal request?
+
+**Thesis:** While `submitting` is true, a `FormDialog` refuses every user-initiated dismissal and nothing else changes. Escape does not close it and does not fall through to any dialog underneath. A backdrop click does not close it. Cancel stays disabled, as today. When `submitting` becomes false, after success or failure, dismissal works exactly as before. The caller's control of `open` is never overridden.
+
+### 8.2 Terminology
+
+- **Submitting** — the `FormDialog` `submitting` prop is `true`. It is caller-owned (§4.4), and every current caller passes it.
+- **User-initiated dismissal** — any way a user can ask a dialog to close without the caller deciding it: Escape, a backdrop click, the Cancel action, and any close affordance a primitive adds later. Under this specification each of these reaches the caller as an `onClose` call.
+- **Programmatic close** — the caller setting `open` to `false`, for example after a successful submit. It is not a dismissal request and is never refused.
+- **Topmost dialog** — the most recently opened dialog that is still open, across `Modal`-based components and `DetailDrawer`. Shipped behavior already routes one Escape press to the topmost dialog only. This amendment makes that behavior normative for the case below.
+
+### 8.3 Contract
+
+#### 8.3.1 `FormDialog` while submitting
+
+While a `FormDialog` is open and submitting:
+
+1. **Escape** does not close it (see §8.3.2 for stacking).
+2. **A backdrop click** does not close it.
+3. **Cancel** stays disabled, as §4.4 already requires.
+4. **Any other user-initiated dismissal path**, present or added later, does not close it. The refusal is enforced in one place for the primitive, not separately at each path.
+5. **A refused dismissal has no effect.** It shows no message, changes nothing visually, makes no screen-reader announcement and calls no caller `onClose`. It is discarded, not queued: the dialog does not close later when submitting ends.
+6. **Everything else is unchanged.** The submit button stays disabled, the submit label stays as the caller sets it, the `<form>` and its native submit event behave as before, focus stays trapped inside the dialog and the title and ARIA attributes do not change.
+7. **Programmatic close still works.** If the caller sets `open` to `false` while submitting is still true, the dialog closes, and focus is restored as §4.4 requires.
+
+#### 8.3.2 Escape with stacked dialogs
+
+1. A single Escape press is still handled only by the topmost dialog.
+2. If the topmost dialog is a submitting `FormDialog`, the press is **consumed**. That dialog stays open, and no dialog underneath it closes or receives the press as a close request.
+3. If the topmost dialog is anything else, Escape behaves as before, even when a submitting `FormDialog` is open underneath it.
+
+#### 8.3.3 When submitting is false
+
+When `submitting` is false, which includes after it returns to false following either a successful or a failed submit, a `FormDialog` behaves exactly as before this amendment. Escape, a backdrop click and Cancel each close it through `onClose`. There is no settle delay and no leftover blocked state.
+
+### 8.4 What this amendment changes, and what it does not
+
+On acceptance, §8.3 qualifies these Accepted sentences and nothing else:
+
+- §4.4 `Modal`: "Closes on Escape and backdrop click". This now applies except while the `Modal` backs a submitting `FormDialog`.
+- §4.6: "Escape closes". The same exception applies, and Escape is consumed rather than passed to a lower dialog.
+
+Unchanged, and still Accepted whether or not this amendment is accepted:
+
+- The `FormDialog`, `Modal`, `ConfirmDialog` and `DetailDrawer` prop contracts in §4.4, as they read to callers. M4 may add a non-breaking internal or optional option to support §8.3, but no caller is required to change.
+- `ConfirmDialog` dismissal, including while `confirming`. This amendment makes no decision about it.
+- `DetailDrawer` dismissal, including its URL-based close requirement.
+- Focus trapping, focus moving in on open, focus restoration on close, `role="dialog"`, `aria-modal` and `aria-labelledby` (§4.4, §4.6).
+- Every `FormDialog` caller in `apps/web` and `packages/web`, and its copy, toasts, error display and submit guard.
+- All other sections of this specification, including §6 and its golden path.
+
+### 8.5 Invariants
+
+- A submitting `FormDialog` MUST NOT close because of a user-initiated dismissal.
+- A refused dismissal MUST NOT call the caller's `onClose`, MUST NOT be replayed when submitting ends and MUST NOT produce any visual or announced feedback.
+- An Escape press refused by a topmost submitting `FormDialog` MUST NOT close, or reach as a close request, any dialog beneath it.
+- The guard MUST NOT block, delay or override a programmatic close, meaning the caller setting `open` to `false`.
+- When submitting is false, `FormDialog` dismissal MUST be identical to its behavior before this amendment.
+- `ConfirmDialog` and `DetailDrawer` dismissal MUST NOT change as a side effect of this amendment.
+- The change MUST be confined to `@clensy/ui`. No `FormDialog` caller MAY need an edit to receive it.
+
+### 8.6 Rationale
+
+- **Why refuse instead of close and recover.** The failure cases in #180 (a silent failed submit, a second submit from a reopened dialog, the first success closing the reopened dialog) all need the dialog to be gone while the request is in flight. Keeping it open removes all three. Changing the error path at each caller would not.
+- **Why no feedback (owner decision 1).** The disabled Cancel and submit buttons, and the caller's pending submit label, already tell the user a save is running. A second busy cue would add a UI state and an announcement for something the user can already see.
+- **Why swallow Escape instead of passing it down (owner decision 4).** If the press fell through, Escape on a submitting dialog would close whatever is under it, such as a drawer, while the dialog on top stays. That is a worse surprise than doing nothing.
+- **Why in the primitive (owner decision 2).** All nine current `FormDialog` callers already pass `submitting`, so a fix in `@clensy/ui` reaches every one of them, and future callers get it by default. That is the reason §4.4 put these behaviors in shared primitives.
+- **Why behavioral, not an API (owner decision 6).** The options (a dismissible flag on `Modal`, a guarded `onClose` inside `FormDialog`, or something else) differ only in mechanism. §8.3.2 constrains them all: whichever is chosen must still recognize the topmost dialog when it refuses the dismissal, so that Escape is consumed and does not fall through.
+
+### 8.7 Non-goals and deferrals
+
+- No change to `ConfirmDialog` while `confirming`. If it needs the same guard, that is a separate issue.
+- No change to `DetailDrawer`.
+- No new close affordance, such as an `X` button, on `Modal` or `FormDialog`.
+- No busy indicator, toast, live-region message or copy change.
+- No change to how callers track or set `submitting`, and no new submit-in-flight guard at any caller.
+- No cancellation or abort of an in-flight request.
+
+### 8.8 Acceptance criteria (for this amendment)
+
+Amendment #180 may move from Draft to Accepted once Design Review (M3) confirms:
+
+- §8.3.1 states that, while submitting, Escape, a backdrop click and every other user-initiated dismissal path leave a `FormDialog` open, that Cancel stays disabled, and that a refused dismissal produces no feedback and is not replayed.
+- §8.3.3 states that once submitting is false again, after success or failure, Escape, the backdrop and Cancel close the dialog as before.
+- §8.3.2 keeps topmost-only Escape handling and states that a topmost submitting `FormDialog` consumes the press without closing itself or any dialog beneath.
+- §8.4 and §8.5 preserve the behavior when submitting is false (Cancel, Escape, backdrop), the dismissal behavior of `ConfirmDialog` and `DetailDrawer`, and programmatic close.
+- The amendment names no implementation API and leaves the mechanism to M4.
+- The verification it requires is concrete enough to plan against: `@clensy/ui` tests cover the submitting and the idle states, including stacked Escape, and the existing laundry intake page tests keep passing.
+- The rest of this specification stays Accepted and is not reopened.

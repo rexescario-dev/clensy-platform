@@ -46,6 +46,8 @@ Where they appear to conflict, **stop** and escalate (do not “pick a side” i
    5. Refactor only as needed for the task: refactoring MUST preserve all observable behavior validated by the current tests and MUST NOT broaden the task scope (broader refactoring is M8)
    6. **Characterization tests.** A test that pins existing, already-correct behavior cannot fail first. Label it a **characterization test** (distinct from a regression test, which fails before its fix) in the plan and in the M6 record. Its evidence that it can fail is a failing run against a deliberately broken copy or mutation of the code under test, made **outside the committed change**. The broken copy or mutation MUST NOT be committed as part of the implementation.
 4. **Docs/process-only work.** Follow the plan’s stated verification (checklist, link checks, conformance notes). Do not invent a code TDD ritual.
+
+    **Configuration tasks.** Follow the [configuration-change convention](../conventions/configuration-change.md); configuration verification replaces the code-task TDD requirement for configuration tasks. Record the C5 verification evidence and meet the C9 recording requirements.
 5. **Stay inside ownership boundaries.** Touch only packages/areas the plan authorizes. No drive-by cleanups outside the task.
 6. **No design or plan invention.** Do not introduce new product semantics, APIs, or “while we’re here” features. Planning decisions in the plan (layout, naming) may guide structure but MUST NOT expand meaning beyond the Accepted specification.
 7. **Stop on missing semantics.** If correct implementation requires inventing normative behavior, **stop coding**. Leave the repository in a **coherent, buildable/reviewable state** before escalating—do not leave partially implemented speculative behavior committed as a completed task. Escalate:
@@ -73,6 +75,7 @@ Where they appear to conflict, **stop** and escalate (do not “pick a side” i
 | Repository coherent / buildable / reviewable before escalate or handoff | Stabilize before stop |
 | Every completed task references Accepted plan | Fix attribution before claim done |
 | Reviewable commit/handoff when slice complete | Do not claim done without artifact |
+| Configuration tasks follow the [configuration-change convention](../conventions/configuration-change.md): each outward-facing action confirmed and validated, each applicable layer verified, failures diagnosed before recovery | Stop before the next outward-facing action |
 
 ## Outputs
 
@@ -80,6 +83,7 @@ Where they appear to conflict, **stop** and escalate (do not “pick a side” i
 | --- | --- |
 | Code and/or authorized non-code changes for the Accepted plan slice | Complete for slice |
 | Tests / verification evidence | Green for completed work |
+| Applied configuration and its evidence (configuration tasks; convention C9) | Verified for completed work |
 | Commits and/or PR (per project norms) | Ready for Review |
 | [Slice Completion Report](../conventions/reporting-conventions.md) | Required — Status **Ready for M7** |
 

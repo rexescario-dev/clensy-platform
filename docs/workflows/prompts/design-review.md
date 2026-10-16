@@ -52,6 +52,7 @@ Review a Draft specification produced by M2 and decide **Accepted** or **Returne
 | No planning/implementation content that belongs in M4–M6 | Return (or require removal) |
 | Document acceptance criteria distinct from product tests | Return if confused |
 | M4 would not need to invent normative semantics | Return |
+| A declared live setting outside the repository names its source of truth and undo approach ([configuration-change convention](../conventions/configuration-change.md)) | Return |
 
 ## Outputs
 

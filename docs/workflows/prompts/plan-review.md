@@ -57,6 +57,8 @@ Review a Draft implementation plan produced by M4 and decide **Accepted** or **R
 | Public surfaces not frozen beyond Accepted spec | Return |
 | No hidden redesign / gap-filling of missing semantics | Return |
 | Risks are execution/dependency/scheduling only; do not reopen design | Return |
+| Every outward-facing configuration action, including each authorized correction and rollback, has an exact payload or resolvable spec reference, a confirmation gate and a pre-send validation ([configuration-change convention](../conventions/configuration-change.md) C2–C4, C6) | Return |
+| Configuration verification covers each applicable layer; the undo procedure is stated; a prior-state read exists where a setting is modified or replaced (C5, C7) | Return |
 
 ## Outputs
 

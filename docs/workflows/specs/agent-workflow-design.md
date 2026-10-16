@@ -41,7 +41,7 @@ Define a reusable, tool-agnostic software engineering workflow by standardizing 
 | M3 | Same specification | Accepted / Returned |
 | M4 | Implementation plan | Draft |
 | M5 | Same implementation plan | Accepted / Returned |
-| M6 | Code + tests | Ready for Review |
+| M6 | Code + tests; for configuration tasks, the applied configuration and its evidence | Ready for Review |
 | M7 | Reviewed implementation | Approved / Returned |
 | M8 | Refactored implementation | Complete / N/A / Deferred |
 | M9 | Documentation updates | Complete |
@@ -152,12 +152,37 @@ M5 Plan Review SHOULD emit the same report when Accepting a plan (Status: Ready 
 
 **Closeout** is the final acceptance sequence for a delivery slice, entered once M7 has Approved for merge, M8/M9 are Complete, N/A, or explicitly deferred per §2.7/§2.9, and any M10 in scope for the slice is recorded (§2.6):
 
-1. **Merge** the slice's pull request (§2.8) per human/project norms. No stage prompt in this workflow grants merge authority by itself (§2.6) — closeout does not change that; it is the point at which a human-authorized merge occurs, not a mechanism for authorizing one.
+1. **Merge** the slice's pull request (§2.8) per human/project norms. No stage prompt in this workflow grants merge authority by itself (§2.6) — closeout does not change that; it is the point at which a human-authorized merge occurs, not a mechanism for authorizing one. Before that merge, check every stage that applies to the slice, in order from M1 through M10:
+   - **M1** applies as the installed prompt library. It is passed when that library is present. Do not re-run M1 for a product slice.
+   - **M2** is passed when the specification is drafted.
+   - **M3** is passed when the specification is Accepted.
+   - **M4** is passed when the implementation plan is drafted.
+   - **M5** is passed when the implementation plan is Accepted.
+   - **M6** is passed when implementation is complete and ready for review.
+   - **M7** is passed when the implementation is Approved for merge.
+   - **M8** applies to every delivery slice. It is passed when recorded Complete, N/A, or Deferred.
+   - **M9** is passed when documentation is complete.
+   - **M10** applies only when the slice changes workflow assets. It is passed when the validation report is Accepted. Otherwise M10 does not apply.
+
+   An applicable stage with no recorded outcome is run before the merge. Do not merge in the same action that discovers the gap. A missing or failed applicable stage blocks the merge. Continuing past it requires an explicit human confirmation that names the stages to skip. The word "merge" alone is not that confirmation.
 2. **Verify** the merge succeeded before proceeding — closeout MUST NOT continue past this point on an unconfirmed or failed merge.
 3. **Perform applicable project-defined post-merge cleanup**, if any. This workflow does not itself define what cleanup is available or how it is configured — that is project-specific policy, resolved outside this document. Where no such policy applies, this step is a no-op.
-4. **Produce the final Slice Completion Report** (§2.11) — `Status` is **Slice complete**, `Next Gate` is none.
+4. **Produce the final Slice Completion Report** (§2.11) — `Status` is **Slice complete**, `Next Gate` is none. A confirmed merge override is recorded in that report, naming each skipped stage.
+
+For a configuration-change slice (§2.13), merging does not change live configuration. The final Slice Completion Report states the live configuration state as found at M7, including any correction or rollback carried out.
 
 Closeout is tool-agnostic: a developer working this workflow with no Context Forge dispatch involved performs the same four steps and stops at the completed Slice Completion Report. Any additional dispatch-specific reporting a particular tool or integration layer requires beyond that report is that layer's own concern, not part of this workflow.
+
+### 2.13 Configuration changes *(normative)*
+
+A **configuration task** is a task whose deliverable is a live setting outside the repository. Every implementation-plan task has exactly one type: `code`, `docs/process` or `configuration`. The task type determines the verification regime; `code` and `docs/process` tasks keep their existing rules.
+
+A plan with at least one configuration task makes its slice a **configuration-change slice**. In such a slice:
+
+1. **M6 applies and verifies configuration live**, with an explicit human confirmation immediately before each outward-facing action.
+2. **M7 reviews the already-live result** and records a **live finding** for each configuration task: stays, corrected or rolled back. A live finding is not an M7 outcome; it determines which of M7's two existing outcomes applies. M7 never carries out a correction or rollback; M6 does, under the same rules.
+
+The [configuration-change convention](../conventions/configuration-change.md) owns the detailed rules (C1–C9). This specification establishes the contract and the stage prompts establish stage-specific obligations; neither restates the convention's rules.
 
 ---
 

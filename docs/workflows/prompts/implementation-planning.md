@@ -33,6 +33,7 @@ Produce **exactly one** Draft implementation plan that translates an **Accepted*
 8. **Identify public surfaces that require implementation.** Do not freeze signatures, type shapes, or APIs beyond what the Accepted specification already defines. Export/public-surface decisions are planning aids, not new product contracts.
 9. **Plan for TDD where code is in scope.** For each implementation slice, identify the tests that fail before implementation and the observable behavior they verify. If the work is docs/process-only, state that TDD does not apply and what verification replaces it. Label any test that pins already-correct behavior as a **characterization test** ([M6](implementation-execution.md) step 3).
    **Pre-validation** *(optional)*. If the plan claims pre-validation (its code, fixtures, or edits were run before M5), it MUST run every command its `Expected:` lines name (for example tests, type-check, lint, build) and record which commands ran. A claim that does not cover every named command MUST be labelled **partial** and MUST name the commands not run.
+   **Task types.** Give every task exactly one type: `code`, `docs/process` or `configuration`. The type determines the task's verification. A plan with at least one `configuration` task MUST include a **Configuration Change** section following the [configuration-change convention](../conventions/configuration-change.md): the exact payload or exact spec reference for every outward-facing action (C2), the confirmation gates (C3), pre-send validation (C4), the prior-state read when a setting is modified or replaced (C7), verification for each applicable layer (C5), the authorized correction and rollback actions for verification failure (C6), and the undo procedure (C7).
 10. **List bite-sized tasks** sufficient for M5 to judge executability and for M6 to execute without inventing sequencing. Tasks SHOULD map to Accepted-spec requirements.
 11. **Traceability.** Every major task or slice SHOULD reference the Accepted specification section(s) it implements. Do not add “nice to have” work outside the Accepted spec without an explicit out-of-scope deferral.
 12. **Keep planning decisions non-normative.** File layout, task grouping, sequencing, temporary naming, and implementation order are planning decisions. They MUST NOT be interpreted as product semantics.
@@ -51,6 +52,7 @@ Produce **exactly one** Draft implementation plan that translates an **Accepted*
 | Slice / milestone sequence | Always |
 | Public surfaces requiring implementation | Libraries with explicit export gates |
 | TDD / verification strategy | Always (or explicit N/A for docs-only) |
+| Configuration Change | Any task of type `configuration` ([configuration-change convention](../conventions/configuration-change.md)) |
 | Task breakdown | Always |
 | Traceability to Accepted spec | Always |
 | Execution / dependency / scheduling risks | Only operational risks—not redesign proposals |
@@ -67,6 +69,7 @@ Produce **exactly one** Draft implementation plan that translates an **Accepted*
 | Missing design semantics → stopped and returned to M2/M3 | Do not Draft-gap-fill |
 | A pre-validation claim ran every `Expected:` command, or is labelled **partial** with the gaps named | Fix the claim before Draft handoff |
 | Tests that pin already-correct behavior are labelled characterization tests | Fix before Draft handoff |
+| Every task has a type; a plan with a `configuration` task has a complete Configuration Change section | Fix before Draft handoff |
 
 ## Outputs
 
