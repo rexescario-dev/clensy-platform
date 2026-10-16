@@ -19,7 +19,7 @@ describe('LaundryFulfillmentFieldset', () => {
     expect(html).toContain('The shop returns the finished laundry. This does not schedule a route.');
   });
 
-  it('uses two real radios in one group, each labelled and described', () => {
+  it('uses two real radios in one group, each named by its title and described by its description', () => {
     const html = renderToStaticMarkup(<LaundryFulfillmentFieldset name="fulfillment" value="PICKUP" onChange={noop} />);
     for (const option of ['PICKUP', 'DELIVERY']) {
       const input = new RegExp(`<input[^>]*id="fulfillment-${option}"[^>]*>`).exec(html)?.[0];
@@ -27,23 +27,33 @@ describe('LaundryFulfillmentFieldset', () => {
       expect(input).toContain('type="radio"');
       expect(input).toContain('name="fulfillment"');
       expect(input).toContain(`value="${option}"`);
+      expect(input).toContain(`aria-labelledby="fulfillment-${option}-title"`);
       expect(input).toContain(`aria-describedby="fulfillment-${option}-description"`);
+      expect(input).not.toContain('aria-invalid');
       expect(html).toContain(`for="fulfillment-${option}"`);
+      expect(html).toMatch(new RegExp(`<span id="fulfillment-${option}-title"[^>]*>[^<]+</span>`));
       expect(html).toContain(`id="fulfillment-${option}-description"`);
     }
     expect(html).toMatch(/<fieldset[^>]*aria-describedby="fulfillment-fixed"/);
   });
 
-  it('shows a field error under the radios and describes the group with it', () => {
+  it('shows a field error under the radios, marks both invalid and describes each with it after its description', () => {
+    const message = 'fulfillmentType must be one of the following values: PICKUP, DELIVERY';
     const html = renderToStaticMarkup(
-      <LaundryFulfillmentFieldset name="fulfillment" value="PICKUP" error="fulfillmentType must be one of the following values: PICKUP, DELIVERY" onChange={noop} />,
+      <LaundryFulfillmentFieldset name="fulfillment" value="PICKUP" error={message} onChange={noop} />,
     );
-    expect(html).toMatch(/<fieldset[^>]*aria-describedby="fulfillment-fixed fulfillment-error"/);
-    expect(html).toContain(
-      '<p id="fulfillment-error" class="text-sm text-red-600">fulfillmentType must be one of the following values: PICKUP, DELIVERY</p>',
-    );
+    // The group keeps only the helper, so the error is not read twice.
+    expect(html).toMatch(/<fieldset[^>]*aria-describedby="fulfillment-fixed"/);
+    for (const option of ['PICKUP', 'DELIVERY']) {
+      const input = new RegExp(`<input[^>]*id="fulfillment-${option}"[^>]*>`).exec(html)![0];
+      expect(input).toContain('aria-invalid="true"');
+      expect(input).toContain(`aria-describedby="fulfillment-${option}-description fulfillment-error"`);
+    }
+    expect(html).toContain(`<p id="fulfillment-error" class="text-sm text-red-600">${message}</p>`);
+    expect(html).not.toContain('role="alert"');
     const clean = renderToStaticMarkup(<LaundryFulfillmentFieldset name="fulfillment" value="PICKUP" onChange={noop} />);
     expect(clean).not.toContain('fulfillment-error');
+    expect(clean).not.toContain('aria-invalid');
   });
 
   it('checks the current value and borders the selected row darker', () => {

@@ -261,6 +261,19 @@ function customerOptions(): HTMLElement[] {
   return [...document.querySelectorAll<HTMLElement>('#laundry-customer-listbox [role="option"]')];
 }
 
+// The fulfillment group keeps only its helper. While an error shows, each
+// radio is invalid and described by its description, then the error (#181).
+function expectFulfillmentDescribed(withError: boolean) {
+  expect(document.querySelector('fieldset')!.getAttribute('aria-describedby')).toBe('laundry-fulfillment-fixed');
+  for (const option of ['PICKUP', 'DELIVERY']) {
+    const radio = document.querySelector(`#laundry-fulfillment-${option}`)!;
+    expect(radio.getAttribute('aria-invalid')).toBe(withError ? 'true' : null);
+    expect(radio.getAttribute('aria-describedby')).toBe(
+      withError ? `laundry-fulfillment-${option}-description laundry-fulfillment-error` : `laundry-fulfillment-${option}-description`,
+    );
+  }
+}
+
 // The same native-setter helper as `typeSearch`, on the customer field.
 function typeCustomer(text: string) {
   act(() => {
@@ -742,9 +755,7 @@ describe('/app/laundry intake modal', () => {
     );
     const error = () => document.querySelector('#laundry-fulfillment-error');
     expect(error()!.textContent).toBe('fulfillmentType must be one of the following values: PICKUP, DELIVERY');
-    expect(document.querySelector('fieldset')!.getAttribute('aria-describedby')).toBe(
-      'laundry-fulfillment-fixed laundry-fulfillment-error',
-    );
+    expectFulfillmentDescribed(true);
     expect(dialog()).not.toBeNull();
     expect(dialog()!.querySelector('[role="alert"]')).toBeNull();
     expect(button('Create order').disabled).toBe(false);
@@ -752,6 +763,7 @@ describe('/app/laundry intake modal', () => {
     act(() => document.querySelector<HTMLInputElement>('#laundry-fulfillment-DELIVERY')!.click());
     await act(async () => {}); // react-hook-form re-validates asynchronously
     expect(error()).toBeNull();
+    expectFulfillmentDescribed(false);
     await submitCreate();
     expect(nav.receiveCalls).toEqual([
       { customerId: 'c1', fulfillmentType: 'PICKUP' },
