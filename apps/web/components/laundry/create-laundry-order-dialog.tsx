@@ -87,6 +87,14 @@ export function CreateLaundryOrderDialog({ onClose, onCreated, open, showAddCust
         for (const [field, messages] of Object.entries(fieldErrors)) {
           form.setError(field as keyof CreateLaundryOrderFormValues, { message: messages[0], type: 'server' });
         }
+        // Every error is set before focus moves (#181). Focus goes to the
+        // first field in form order, whatever order the server listed them
+        // in. Landing there reads the field, its invalid state and its
+        // error, once; field errors carry no live role. `fieldErrors` holds
+        // only `API_FIELDS` keys (the normalizer drops unknown fields), and
+        // the search runs over `API_FIELDS`, so only a form field is focused.
+        const first = API_FIELDS.find((field) => field in fieldErrors);
+        if (first) form.setFocus(first);
       } else {
         setFormError(t('create.failure'));
       }
@@ -152,6 +160,7 @@ export function CreateLaundryOrderDialog({ onClose, onCreated, open, showAddCust
         render={({ field, fieldState }) => (
           <LaundryFulfillmentFieldset
             name="laundry-fulfillment"
+            inputRef={field.ref}
             value={field.value}
             error={fieldState.error?.message}
             onChange={field.onChange}

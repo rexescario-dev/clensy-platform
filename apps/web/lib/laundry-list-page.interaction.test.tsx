@@ -309,6 +309,11 @@ async function submitCreate(times = 1) {
   });
 }
 
+// react-hook-form's `setFocus` focuses in a zero-delay timeout (7.88).
+function runFocusTimer() {
+  act(() => vi.advanceTimersByTime(0));
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
   nav.customerQueries = [];
@@ -708,7 +713,10 @@ describe('/app/laundry intake modal', () => {
     chooseCustomer();
     act(() => document.querySelector<HTMLInputElement>('#laundry-fulfillment-DELIVERY')!.click());
     await submitCreate();
+    const focused = document.activeElement;
     await act(async () => nav.rejectReceive(new Error('Network down')));
+    runFocusTimer();
+    expect(document.activeElement).toBe(focused); // a generic failure does not move focus
     expect(dialog()).not.toBeNull();
     expect(dialog()!.querySelector('[role="alert"]')!.textContent).toBe('Unable to create laundry order.');
     expect(customerField().value).toBe('Ana Reyes');
@@ -728,12 +736,17 @@ describe('/app/laundry intake modal', () => {
     chooseCustomer();
     await submitCreate();
     // The Apollo-shaped error normalize.test.ts pins (captured fixture), with customerId as the field.
+    expect(document.activeElement).not.toBe(customerField()); // focus has to move there
     await act(async () =>
       nav.rejectReceive({
         graphQLErrors: [{ extensions: { originalError: { message: ['customerId must be a string'] } } }],
       }),
     );
+    runFocusTimer();
     expect(document.querySelector('#laundry-customer-error')!.textContent).toBe('customerId must be a string');
+    expect(customerField().getAttribute('aria-invalid')).toBe('true');
+    expect(customerField().getAttribute('aria-describedby')).toBe('laundry-customer-error');
+    expect(document.activeElement).toBe(customerField());
     expect(dialog()!.querySelector('[role="alert"]')).toBeNull();
     expect(button('Create order').disabled).toBe(false);
     chooseCustomer();
@@ -741,34 +754,83 @@ describe('/app/laundry intake modal', () => {
     expect(document.querySelector('#laundry-customer-error')).toBeNull();
   });
 
-  it('shows a server fulfillment error on the fulfillment field, and clears it when fulfillment changes', async () => {
+  it('shows a server fulfillment error on the fulfillment field, focuses the checked radio, clears it when fulfillment changes, and shows a later one again', async () => {
+    const rejectFulfillment = (message: string) =>
+      act(async () => nav.rejectReceive({ graphQLErrors: [{ extensions: { originalError: { message: [message] } } }] }));
     start();
     openCreate();
     chooseCustomer();
     await submitCreate();
-    await act(async () =>
-      nav.rejectReceive({
-        graphQLErrors: [
-          { extensions: { originalError: { message: ['fulfillmentType must be one of the following values: PICKUP, DELIVERY'] } } },
-        ],
-      }),
-    );
+    expect(document.activeElement).not.toBe(document.querySelector('#laundry-fulfillment-PICKUP'));
+    await rejectFulfillment('fulfillmentType must be one of the following values: PICKUP, DELIVERY');
+    runFocusTimer();
     const error = () => document.querySelector('#laundry-fulfillment-error');
     expect(error()!.textContent).toBe('fulfillmentType must be one of the following values: PICKUP, DELIVERY');
     expectFulfillmentDescribed(true);
+    expect(document.activeElement).toBe(document.querySelector('#laundry-fulfillment-PICKUP'));
     expect(dialog()).not.toBeNull();
     expect(dialog()!.querySelector('[role="alert"]')).toBeNull();
     expect(button('Create order').disabled).toBe(false);
     // The checked radio fires no change; choosing the other one does.
-    act(() => document.querySelector<HTMLInputElement>('#laundry-fulfillment-DELIVERY')!.click());
+    const pickup = () => document.querySelector<HTMLInputElement>('#laundry-fulfillment-PICKUP')!;
+    const delivery = () => document.querySelector<HTMLInputElement>('#laundry-fulfillment-DELIVERY')!;
+    act(() => delivery().click());
     await act(async () => {}); // react-hook-form re-validates asynchronously
+    // Before the second submit: DELIVERY is the checked radio and the first error is gone.
+    expect(delivery().checked).toBe(true);
+    expect(pickup().checked).toBe(false);
     expect(error()).toBeNull();
     expectFulfillmentDescribed(false);
+    // Focus starts elsewhere, so the assertion below can only pass if focus moves.
+    act(() => customerField().focus());
     await submitCreate();
+    await rejectFulfillment('fulfillmentType should not be empty');
+    runFocusTimer();
+    // The new error is applied, and focus followed the ref to the newly checked radio.
+    expect(error()!.textContent).toBe('fulfillmentType should not be empty');
+    expectFulfillmentDescribed(true);
+    expect(delivery().checked).toBe(true);
+    expect(document.activeElement).toBe(delivery());
+    expect(document.activeElement).not.toBe(pickup());
     expect(nav.receiveCalls).toEqual([
       { customerId: 'c1', fulfillmentType: 'PICKUP' },
       { customerId: 'c1', fulfillmentType: 'DELIVERY' },
     ]);
+  });
+
+  it('focuses the customer field when both fields fail, whatever order the server lists them in, ignoring unknown fields', async () => {
+    start();
+    openCreate();
+    chooseCustomer();
+    await submitCreate();
+    expect(document.activeElement).not.toBe(customerField()); // focus has to move there
+    await act(async () =>
+      nav.rejectReceive({
+        graphQLErrors: [
+          {
+            extensions: {
+              originalError: {
+                // An unknown field first, then fulfillment, then customer: the reverse of form order.
+                message: [
+                  'notes must be a string',
+                  'fulfillmentType must be one of the following values: PICKUP, DELIVERY',
+                  'customerId must be a string',
+                ],
+              },
+            },
+          },
+        ],
+      }),
+    );
+    runFocusTimer();
+    expect(document.querySelector('#laundry-customer-error')!.textContent).toBe('customerId must be a string');
+    expect(document.querySelector('#laundry-fulfillment-error')!.textContent).toBe(
+      'fulfillmentType must be one of the following values: PICKUP, DELIVERY',
+    );
+    expectFulfillmentDescribed(true);
+    expect(document.activeElement).toBe(customerField());
+    expect(dialog()!.textContent).not.toContain('notes must be a string'); // dropped by the normalizer
+    expect(dialog()!.querySelector('[role="alert"]')).toBeNull(); // field errors, not the generic path
   });
 
   it('keeps the dialog open and asks to check the list when the create response names no order', async () => {
