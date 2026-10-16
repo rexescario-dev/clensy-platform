@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 4)** at M5, 2026-10-17. M6 complete ([Execution record](#execution-record)); M7 **Approved for merge** (independent review); M8 N/A; M9 complete; M10 pending (the slice carries the workflow update). PR [#192](https://github.com/rexescario-dev/clensy-platform/pull/192). |
+| Status | **Accepted (revision 4)** at M5, 2026-10-17. M6 complete ([Execution record](#execution-record)); M7 **Approved for merge** (independent review); M8 N/A; M9 complete; M10 **Accepted** (the slice carries the workflow update). Ready for merge (owner). PR [#192](https://github.com/rexescario-dev/clensy-platform/pull/192). |
 | M5 decision | **Accepted** — 2026-10-17, revision 4 (`63f98a8`), by the owner: "The implementation plan is accepted for M6 execution." The execution contract the owner set: preserve the `requestClose` architecture and the `ConfirmDialog` characterization tests; implement only the agreed `@clensy/ui` behavior and the specified web regression test; run the disposable-worktree red proof and record all five results (a failure for any reason other than the expected regression assertion is not proof); record actual verification results, not predicted counts; audit changed paths against `fcd1c6f`, keeping the workflow update distinct from #180; do not merge or skip later gates; M7 requires a fresh, independent reviewer. Execution: **native**, as recommended. The acceptance is not a claim that anything has passed. |
 | M5 history | First pass (2026-10-17, owner, reviewed `af0dd9b`): **Returned for Revision**, required revisions M5-1 to M5-3 and four non-blocking items. All are resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). The owner approved the `requestClose` architecture and the `ConfirmDialog` characterization tests without changes. Second pass (2026-10-17, owner, reviewed `2e9a298`): **Returned for Revision**, one final correction, M5-4. M5-1 to M5-3 and the non-blocking items are recorded as resolved. M5-4 is resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). Third pass (2026-10-17, owner, reviewed `6687d29`): **Returned for Revision**, one remaining M5-4 edge case: `cleanup` ran under `set -e`, so a failed `git worktree remove` could skip the prune and the directory removal. Everything else is recorded as resolved. The fix is in [Revision 4 (M5 review 3)](#revision-4-m5-review-3). |
 | Date | 2026-10-16 |
@@ -457,3 +457,40 @@ Not changed: `packages/ui/README.md`. It documents layout and the export surface
 
 Editorial verification: the new relative links resolve (`../../docs/superpowers/specs/2026-08-17-dashboard-ux-foundation-design.md` from `apps/web/`, and `2026-10-16-form-dialog-submit-guard-plan.md` from `docs/superpowers/plans/`). Heading hierarchy is unchanged. There are no contradictory statements: the intake plan's "Escape … can close the dialog while a create is pending" is now marked resolved. Status is consistent: spec Amendment Accepted, plan Accepted, M7 Approved. Terms follow §8.2 ("user-initiated dismissal", "submitting").
 
+
+### M10 — Workflow Validation: Accepted (2026-10-17)
+
+M10 applies because this slice changes workflow assets: the Context Forge update to generic 1.5.0 / claude 0.3.0 in `3a9c010` (spec §2.12). The implementer performed it before closeout, so the report lands in this PR (§2.6). It is not an independent review. The M10 prompt does not require one.
+
+```text
+Decision: Accepted
+Subject: workflow prompt library (as updated in 3a9c010)
+Governing specification: docs/workflows/specs/agent-workflow-design.md
+
+Asset inventory:
+- M1 conventions/prompt-library.md; conventions/reporting-conventions.md (§2.11); conventions/configuration-change.md (new, C1–C9, §2.13)
+- M2 prompts/specification.md · M3 prompts/design-review.md · M4 prompts/implementation-planning.md · M5 prompts/plan-review.md
+- M6 prompts/implementation-execution.md · M7 prompts/code-review.md · M8 prompts/refactoring.md · M9 prompts/documentation-execution.md
+- M10 prompts/workflow-validation.md · process spec specs/agent-workflow-design.md · entry README.md · skill .claude/skills/workflow/SKILL.md
+
+Checks:
+- Output + owner + asset per stage: every stage M1–M10 maps to one asset (§2.1, README table), and outputs match §2.2.
+- No orphans: docs/workflows holds only README, specs/, conventions/ and prompts/. Every asset is listed in workflow.yaml, and all 27 recorded digests match the files on disk.
+- Single responsibility / no overlap: the configuration additions split cleanly. M2 declares the live setting, M4 types tasks and writes the Configuration Change section, M5 reviews it, M6 applies and verifies, M7 records a live finding but never corrects or rolls back (§2.13), M9 describes without copying the payload, and M10 checks the record.
+- Gates reachable: §2.6 order with M10 before closeout. The §2.12 merge checklist is mirrored by SKILL.md "Merge" (same rules: applicable stages in order, no merge in the turn that finds a gap, an explicit override naming the stages).
+- M6 ← M5: stated in §2.5, prompt-library §8 and the M6 Preconditions.
+- Cross-references: no broken relative links under docs/workflows. Every configuration-change reference resolves to an existing C1–C9 section.
+- Naming/terminology: Gate (not Phase), task types `code` / `docs/process` / `configuration`, and "live finding" are used consistently.
+- Executability: this slice ran M2→M9 with these assets and invented no stage instruction (see the gaps below, both handled by the existing text).
+- Traceability: review and execution prompts require citing the Accepted spec and plan, and this slice's records do so.
+- Configuration-change checklist row: n/a. This slice has no configuration task.
+
+Blocking findings:
+- None
+
+Non-blocking observations:
+- M4 asks plans to label characterization tests, but its self-check doesn't ask the plan to schedule the broken-copy run that M6 step 3.6 requires. This slice met it through an M6 ruling (Execution record, ruling 2). An upstream package change could add it to the M4 self-check. The file is installer-managed, so it isn't edited here.
+- README.md's Layout block lists only conventions/prompt-library.md, not reporting-conventions.md or configuration-change.md. It is illustrative, and both are linked from the process spec. Also installer-managed.
+
+Gate: Workflow validated
+```
