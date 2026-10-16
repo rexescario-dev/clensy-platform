@@ -303,7 +303,7 @@ This Draft may move to Accepted once Design Review (M3) confirms:
 ### 8.2 Terminology
 
 - **Submitting** — the `FormDialog` `submitting` prop is `true`. It is caller-owned (§4.4), and every current caller passes it.
-- **User-initiated dismissal** — any way a user can ask a dialog to close without the caller deciding it: Escape, a backdrop click, the Cancel action, and any close affordance a primitive adds later. Under this specification each of these reaches the caller as an `onClose` call.
+- **User-initiated dismissal** — any action through which a user can request that a dialog close, including Escape, a backdrop click, Cancel, and any close affordance added later. The primitive must decide whether to honor the request before invoking the caller's `onClose` callback.
 - **Programmatic close** — the caller setting `open` to `false`, for example after a successful submit. It is not a dismissal request and is never refused.
 - **Topmost dialog** — the most recently opened dialog that is still open, across `Modal`-based components and `DetailDrawer`. Shipped behavior already routes one Escape press to the topmost dialog only. This amendment makes that behavior normative for the case below.
 
@@ -335,7 +335,7 @@ When `submitting` is false, which includes after it returns to false following e
 
 On acceptance, §8.3 qualifies these Accepted sentences and nothing else:
 
-- §4.4 `Modal`: "Closes on Escape and backdrop click". This now applies except while the `Modal` backs a submitting `FormDialog`.
+- §4.4 `Modal`: "Closes on Escape and backdrop click". The rule that `Modal` closes on Escape and backdrop click continues to apply generally. When `Modal` is used by a submitting `FormDialog`, that dialog's dismissal guard takes precedence.
 - §4.6: "Escape closes". The same exception applies, and Escape is consumed rather than passed to a lower dialog.
 
 Unchanged, and still Accepted whether or not this amendment is accepted:
