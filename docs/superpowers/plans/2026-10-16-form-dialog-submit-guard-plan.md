@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 4)** at M5, 2026-10-17. M6 complete ([Execution record](#execution-record)). Ready for M7 (fresh independent review). PR [#192](https://github.com/rexescario-dev/clensy-platform/pull/192). |
+| Status | **Accepted (revision 4)** at M5, 2026-10-17. M6 complete ([Execution record](#execution-record)); M7 **Approved for merge** (independent review); M8 N/A; M9 complete; M10 pending (the slice carries the workflow update). PR [#192](https://github.com/rexescario-dev/clensy-platform/pull/192). |
 | M5 decision | **Accepted** — 2026-10-17, revision 4 (`63f98a8`), by the owner: "The implementation plan is accepted for M6 execution." The execution contract the owner set: preserve the `requestClose` architecture and the `ConfirmDialog` characterization tests; implement only the agreed `@clensy/ui` behavior and the specified web regression test; run the disposable-worktree red proof and record all five results (a failure for any reason other than the expected regression assertion is not proof); record actual verification results, not predicted counts; audit changed paths against `fcd1c6f`, keeping the workflow update distinct from #180; do not merge or skip later gates; M7 requires a fresh, independent reviewer. Execution: **native**, as recommended. The acceptance is not a claim that anything has passed. |
 | M5 history | First pass (2026-10-17, owner, reviewed `af0dd9b`): **Returned for Revision**, required revisions M5-1 to M5-3 and four non-blocking items. All are resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). The owner approved the `requestClose` architecture and the `ConfirmDialog` characterization tests without changes. Second pass (2026-10-17, owner, reviewed `2e9a298`): **Returned for Revision**, one final correction, M5-4. M5-1 to M5-3 and the non-blocking items are recorded as resolved. M5-4 is resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). Third pass (2026-10-17, owner, reviewed `6687d29`): **Returned for Revision**, one remaining M5-4 edge case: `cleanup` ran under `set -e`, so a failed `git worktree remove` could skip the prune and the directory removal. Everything else is recorded as resolved. The fix is in [Revision 4 (M5 review 3)](#revision-4-m5-review-3). |
 | Date | 2026-10-16 |
@@ -392,3 +392,68 @@ All 10 [C] tests failed under at least one mutation. Afterwards the working tree
 | Scope (Step 2) | PASS. `git diff --name-only fcd1c6f HEAD` lists 20 paths, and each falls in exactly one group. **#180 implementation (6):** `apps/web/lib/laundry-list-page.interaction.test.tsx`, `packages/ui/package.json`, `packages/ui/src/base/dialogs/confirm-dialog.test.tsx`, `packages/ui/src/base/dialogs/form-dialog.test.tsx`, `packages/ui/src/base/dialogs/form-dialog.tsx`, `pnpm-lock.yaml`. **#180 workflow artifacts (2):** the spec (Amendment #180) and this plan. **Authorized workflow update (12):** exactly the twelve listed paths. `git diff --quiet` on `modal.tsx`, `use-dialog-behavior.ts` and `confirm-dialog.tsx` exits 0, and no `FormDialog` caller changed. Only `3a9c010` touched the workflow-update paths. |
 
 Not run: a manual browser check of a `FormDialog` page. It is not required by the plan or by spec §8.8. An owner may do it at M7 or before merge.
+
+## Gate outcomes
+
+### M7 — Code Review (2026-10-17)
+
+**Reviewer:** a fresh, independent, read-only agent on the most capable model (Opus 5.5). It did not write the change and made no changes to the repository. It reviewed `fcd1c6f..6385a0d` against the Accepted spec (Amendment #180), this plan, its Execution record, the ledger rulings and issue #180. **This is not a self-review.** It satisfies the `CLAUDE.md` M7 rule for application-code slices.
+
+```text
+Decision: Approved for merge
+Subject: PR #192, branch feat/180-form-dialog-submit-guard, fcd1c6f..6385a0d
+Accepted specification: docs/superpowers/specs/2026-08-17-dashboard-ux-foundation-design.md §8 (Amendment #180)
+Accepted implementation plan: docs/superpowers/plans/2026-10-16-form-dialog-submit-guard-plan.md (revision 4)
+Live configuration: n/a (application-code slice)
+
+Plan tasks reviewed:
+- Task 1: ✓ (17fd073)
+- Task 2: ✓ (f1ffc65; worktree proof in the Execution record)
+- Task 3: ✓ (656b134, 6385a0d)
+
+Verification evidence (re-run by the reviewer):
+- pnpm install --frozen-lockfile --offline: lockfile up to date
+- pnpm --filter @clensy/ui exec vitest run: 9 files, 96/96
+- pnpm --filter @clensy/ui lint / build: clean
+- pnpm --filter web exec vitest run lib/laundry-list-page.interaction.test.tsx: 36/36
+- pnpm --filter web exec tsc --noEmit: exit 0
+- Scope: modal.tsx, use-dialog-behavior.ts, confirm-dialog.tsx and detail-drawer.tsx are unchanged; only 3a9c010 touches the workflow paths, and it holds no code
+- gh pr checks 192 (run 38936748082): Lint, Test, Release gate and API e2e all pass (API e2e confirmed green after the review)
+- Not re-run: the worktree red proof and the [C] mutation run (Execution record evidence accepted)
+
+Review summary: requestClose (form-dialog.tsx:35-38) is the single guard, passed to Modal's onClose and to Cancel. FormDialogProps is unchanged, no caller was edited, and open stays caller-owned. Every Review Focus item was checked: no stale guard (the keydown effect re-subscribes on onClose identity, as it already did for callers' inline arrows), no replay, field Escape bubbles, stacking consumes, programmatic close restores focus. All 9 callers pass submitting. The lockfile change is minimal. The [C] labels are honest, and all three rulings are sound.
+Blocking findings: None (no merge blockers)
+
+Non-blocking observations:
+- use-dialog-behavior.ts:76-130: the Escape closure refreshes in a passive effect, a theoretical window that predates #180 and is negligible for discrete events. Fixing it would touch the hook (out of plan scope).
+- form-dialog.test.tsx:200 does not combine a refused press with the later close. The full sequence is covered end to end in laundry-list-page.interaction.test.tsx:805-824.
+- §8.3.1 item 6 (focus trap while submitting) has no new ui test, because of the jsdom offsetParent limitation. The hook is unchanged.
+- The hook does not stop Escape propagation to non-dialog document listeners (pre-existing; the spec is satisfied).
+- @clensy/ui uses jsdom 29 like apps/web, while other importers resolve vitest's jsdom 30.1.1 (harmless, per decision (b)).
+
+Gate: Merge per human/project norms. M8/M9 may follow.
+```
+
+**Triage of the non-blocking observations** (implementer, recorded for the owner):
+- **Passive-effect window:** pre-existing hook behavior, outside #180's scope. It would need a hook change and its own issue if the owner wants it.
+- **Combined refused-then-close ui test, and the focus trap while submitting:** both are test-only gaps already covered by other means (the web regression test, and the unchanged hook). Not fixed in this slice, so the Accepted scope is kept.
+- **Propagation, and the jsdom version split:** no action.
+
+### M8 — Refactoring: N/A (2026-10-17)
+
+Scope considered: `packages/ui/src/base/dialogs/form-dialog.tsx` and the two new test files. The production change is one 4-line guard, with nothing to extract or deduplicate. The test helpers are already small and single-purpose. The only refactor-shaped idea from M7, a ref-held latest callback in `use-dialog-behavior.ts`, is outside the plan's ownership boundary. It also changes event-timing behavior, so it is not behavior-preserving M8 work. **N/A**: no worthwhile behavior-preserving improvement in scope.
+
+### M9 — Documentation: Complete (2026-10-17)
+
+Scope (exact paths): `apps/web/README.md`, `docs/superpowers/plans/2026-10-13-laundry-intake-modal-plan.md` and this plan's status and records.
+
+| Change | Kind | Caused by |
+| --- | --- | --- |
+| `apps/web/README.md` § Laundry intake: a new **Pending create** bullet. While the create is in flight, Escape and the backdrop don't close the dialog and Cancel is disabled, so a failure always shows. It links #180 and Amendment #180 §8.3. | Content | Shipped behavior (Task 1, verified by Task 2) |
+| Laundry Intake Modal plan, T5-a follow-up line: "resolved there by PR #192" plus a link to this plan | Content (cross-link) | #180 resolution |
+| This plan's Status row: M7, M8, M9 and M10 positions | Content (status) | Gate outcomes above |
+
+Not changed: `packages/ui/README.md`. It documents layout and the export surface, not primitive behavior, so there is nothing stale there. The spec's Amendment #180 status rows already read Accepted.
+
+Editorial verification: the new relative links resolve (`../../docs/superpowers/specs/2026-08-17-dashboard-ux-foundation-design.md` from `apps/web/`, and `2026-10-16-form-dialog-submit-guard-plan.md` from `docs/superpowers/plans/`). Heading hierarchy is unchanged. There are no contradictory statements: the intake plan's "Escape … can close the dialog while a create is pending" is now marked resolved. Status is consistent: spec Amendment Accepted, plan Accepted, M7 Approved. Terms follow §8.2 ("user-initiated dismissal", "submitting").
+
