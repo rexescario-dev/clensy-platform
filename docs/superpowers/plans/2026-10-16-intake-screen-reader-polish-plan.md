@@ -4,8 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft (revision 2)** (M4). Awaiting Plan Review (M5), second pass. |
-| M5 history | First pass (2026-10-16, owner): **Returned for Revision**, findings M5-1 to M5-4. All four are resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). |
+| Status | **Draft (revision 3)** (M4). Awaiting Plan Review (M5), third pass. |
+| M5 history | First pass (2026-10-16, owner): **Returned for Revision**, findings M5-1 to M5-4, resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). Second pass (2026-10-16, owner, reviewed `e37ca44`): **Returned for Revision**, findings M5-5 to M5-7. The reviewer recorded M5-1 to M5-4 as satisfactory. M5-5 to M5-7 are resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). The owner directs **native** execution once accepted, with the required fresh, independent M7 review. |
 | Date | 2026-10-16 |
 | Tracking issue | [#181](https://github.com/rexescario-dev/clensy-platform/issues/181) "Laundry intake dialog: screen-reader polish for the fulfillment error and customer search status". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Follow-up from [#160](https://github.com/rexescario-dev/clensy-platform/issues/160) / PR [#179](https://github.com/rexescario-dev/clensy-platform/pull/179): M7 triage T2-a, T2-b and the M7 live-region observation, listed under Deferred in the [Laundry Intake Modal plan](2026-10-13-laundry-intake-modal-plan.md#deferred-not-in-this-plan). The manual keyboard pass is [#161](https://github.com/rexescario-dev/clensy-platform/issues/161) (open). |
 | Branch | `feat/181-intake-screen-reader-polish`, from `main` at `8c7a11b`. One PR for this plan, its M5 record and the implementation. |
@@ -87,6 +87,13 @@ Out of scope (owner-confirmed): an M2 amendment, any `FormField` or other `@clen
   - Attaching it to both radios would leave the last one rendered (`DELIVERY`) as the target.
 - **(d) Focus after all errors are set.**
   - `handleValid` first calls `form.setError` for every field `normalizeApiValidationErrors` returned. Only then does it call `form.setFocus(first)`, where `first` is the first entry of `API_FIELDS` (`['customerId', 'fulfillmentType']`, form order) present in the result.
+  - **The `fieldErrors` contract (M5-7).**
+    - `fieldErrors` is the normalized map `normalizeApiValidationErrors(error, API_FIELDS)` returns: `FieldErrors = Record<string, string[]>` (`packages/validation/src/types.ts`).
+    - It is keyed by the leading token of each server constraint message, and **only** tokens in `knownFields` are kept (`packages/validation/src/normalize.ts`: `if (!field || !knownFields.includes(field)) continue`). Every kept key has at least one message.
+    - The dialog passes `API_FIELDS`, whose entries are exactly the form's field names (`keyof CreateLaundryOrderFormValues`). So every key is a form field name, and the existing `field as keyof CreateLaundryOrderFormValues` cast is sound.
+    - Focus selection does not rely on that alone: it iterates `API_FIELDS`, never the map's keys, so a key outside the form could never be chosen.
+    - A server message for an unknown field (for example `notes must be a string`) is therefore dropped by the normalizer and ignored for focus. If only unknown fields come back, `normalizeApiValidationErrors` returns `undefined` and the dialog takes the generic `role="alert"` path, unchanged.
+    - The reverse-order test (Task 2) includes such a message.
   - react-hook-form 7.88's `setFocus` focuses inside `setTimeout(0)` (read in `dist/index.esm.mjs` at planning time). The focus therefore runs after React commits the error markup, so the error id already exists when focus lands.
   - The jsdom suite uses fake timers, so the tests advance `vi.advanceTimersByTime(0)` inside `act` before asserting focus.
   - `setError(..., { shouldFocus: true })` was not used: it focuses synchronously, in the middle of the loop.
@@ -119,6 +126,16 @@ The owner's first M5 pass (2026-10-16) returned the plan for revision, with no r
 | **M5-3** Prove the ref follows the checked radio. | Medium | **Changed.** Task 2's fulfillment test now asserts, before the second submit, that `DELIVERY` is checked, `PICKUP` is not, and the first error and its ids are gone. It moves focus to the customer field so the next assertion can only pass if focus moves. After the second rejection it asserts the new message and ids, that `DELIVERY` is still checked, that focus is on `DELIVERY`, and that focus is not on `PICKUP`. The `customerId`-first test (server lists fulfillment first) is retained. |
 | **M5-4** Predicted red-phase counts are brittle. | Low | **Changed.** A **Red-phase evidence** row in the header makes the counts predictions, not pass criteria. Every red step now names the behavioral failure to expect. The implementer records actual totals and failure messages, and investigates any difference before implementing. |
 
+## Revision 3 (M5 review 2)
+
+The owner's second M5 pass (2026-10-16, `e37ca44`) recorded M5-1 to M5-4 as satisfactory and returned three test-design and contract points:
+
+| Finding | Severity | Resolution |
+| --- | --- | --- |
+| **M5-5** The rendering test mixed interaction state (`type('a')`, `type('al')`) with props-driven changes, and leaned on Harness defaults across `root.render`. | Medium | **Changed.** Task 3's rendering test now does only props → announcement.<br>• **Setup:** it opens the list once, by focus with `openOnFocus`, with no text typed.<br>• **Renders:** a local `renderSearch` passes `openOnFocus`, `options`, `status` and `truncated` explicitly on every render, so nothing falls back to a default. The component type and position never change, so React keeps the component and its `open` state.<br>• **Assertions:** each case asserts `aria-expanded="true"`, the identical region node, the message, one `role="status"` and no `role="alert"`. Idle collapses and a later `loading` re-expands without any user action.<br>• **Typing while loading** moved to the lifecycle test. Opening and closing are tested only in the interaction test. |
+| **M5-6** The lifecycle test checked only the announcement, not that each state came from the intended request and response. | Medium | **Changed.** After each debounce the test asserts the last query: `skip: false`, the exact `iLike` pattern, `limit: 20`. Then it asserts the response-driven UI:<br>• **No match:** no options and the visible no-match line.<br>• **Truncated:** exactly the one node from the `%an%` response (`Ana Reyes555-0101`), the visible more line, and no no-match line.<br>• **Failure:** no options and the visible error line.<br>• **While each debounce runs:** no options are left over from the previous search.<br>• **Final in-flight search:** the error line disappears as soon as the next search starts, typing on keeps the same node and text, the `%anabe%` query is issued, and the popup shows Searching… with no stale error. |
+| **M5-7** The focus-order contract relied on an unstated `fieldErrors` shape. | Low | **Changed.** Planning decision (d) now states the contract:<br>• `fieldErrors` is the normalized `Record<string, string[]>` keyed only by `API_FIELDS` names (the normalizer drops unknown fields).<br>• Focus selection iterates `API_FIELDS`, so only a form field can be focused.<br>• An all-unknown response takes the unchanged generic path.<br>The Task 2 code comment says the same. The reverse-order test now also lists an unknown field first (`notes must be a string`) and asserts that it is not shown and that the generic alert stays absent. |
+
 ## Global constraints
 
 - **SHALL NOT** change any copy, visible class string, layout or row styling. The visible search lines keep their four existing conditions, their order and their classes: `px-3 py-2 text-sm text-slate-500`, or `text-red-600` for the error. The only change to them is the removed `role` attribute.
@@ -137,7 +154,7 @@ The input classes most likely to bite a user that no existing test exercises. Ea
 2. **The server lists the fulfillment error before the customer error.** Focus goes to the customer field (form order), and both errors show. Task 2, new test.
 3. **A second server error replaces a cleared one.** The error id appears once, after the description, the text is the new message, and `aria-invalid` is back. Task 2, `fulfillment` test.
 4. **A failed search, then the user types again.** Through the real search hook, debounce and query mock, the region switches from the error to "Searching…", and no stale error stays announced. Task 3, list-page lifecycle test.
-5. **More typing while a search is still loading.** The same region node keeps the same text, so nothing is re-announced and no second region appears. Task 3, combobox rendering test and list-page lifecycle test.
+5. **More typing while a search is still loading.** The same region node keeps the same text, so nothing is re-announced and no second region appears. Task 3, list-page lifecycle test (`anab` → `anabe`).
 
 ## File map
 
@@ -483,18 +500,24 @@ Replace the whole test `'shows a server fulfillment error on the fulfillment fie
 Add a new test directly after it:
 
 ```tsx
-  it('focuses the customer field when both fields fail, whatever order the server lists them in', async () => {
+  it('focuses the customer field when both fields fail, whatever order the server lists them in, ignoring unknown fields', async () => {
     start();
     openCreate();
     chooseCustomer();
     await submitCreate();
+    expect(document.activeElement).not.toBe(customerField()); // focus has to move there
     await act(async () =>
       nav.rejectReceive({
         graphQLErrors: [
           {
             extensions: {
               originalError: {
-                message: ['fulfillmentType must be one of the following values: PICKUP, DELIVERY', 'customerId must be a string'],
+                // An unknown field first, then fulfillment, then customer: the reverse of form order.
+                message: [
+                  'notes must be a string',
+                  'fulfillmentType must be one of the following values: PICKUP, DELIVERY',
+                  'customerId must be a string',
+                ],
               },
             },
           },
@@ -508,6 +531,8 @@ Add a new test directly after it:
     );
     expectFulfillmentDescribed(true);
     expect(document.activeElement).toBe(customerField());
+    expect(dialog()!.textContent).not.toContain('notes must be a string'); // dropped by the normalizer
+    expect(dialog()!.querySelector('[role="alert"]')).toBeNull(); // field errors, not the generic path
   });
 ```
 
@@ -555,7 +580,9 @@ with:
         // Every error is set before focus moves (#181). Focus goes to the
         // first field in form order, whatever order the server listed them
         // in. Landing there reads the field, its invalid state and its
-        // error, once; field errors carry no live role.
+        // error, once; field errors carry no live role. `fieldErrors` holds
+        // only `API_FIELDS` keys (the normalizer drops unknown fields), and
+        // the search runs over `API_FIELDS`, so only a form field is focused.
         const first = API_FIELDS.find((field) => field in fieldErrors);
         if (first) form.setFocus(first);
       } else {
@@ -613,9 +640,9 @@ Implements Owner decision 3; planning decisions (e)–(g); lock-downs 3 and 4. I
 | Layer | File | What it proves |
 | --- | --- | --- |
 | Static markup | `packages/web` combobox and picker tests | The visible lines are unchanged except for the removed role, including both lines for empty-and-truncated. There is exactly one empty region, placed after the popup. |
-| Rendering (props → announcement) | combobox jsdom, rendering test | The status-to-message mapping and its priority rule, driven by props on an open list. It deliberately does not claim to be user behavior. |
-| Interaction | combobox jsdom, interaction test | With props fixed, typing, Escape, reopening, selection, blur and clearing open and close the list. The same region node fills and empties with it. |
-| Search lifecycle | list-page jsdom, lifecycle test | Through the real `useLaundryCustomerSearch` hook, its 300 ms debounce and the customers-query mock: Searching… → no match → more matches → failure → Searching… for the next search, all in one node. |
+| Rendering (props → announcement) | combobox jsdom, rendering test | The status-to-message mapping and its priority rule. The list is opened once, by focus with `openOnFocus` and no typing. After that only search props change, each render passing every prop explicitly, and the region node is asserted identical throughout. It deliberately does not claim to be user behavior. |
+| Interaction | combobox jsdom, interaction test | With props fixed, typing, Escape, reopening, selection, blur and clearing open and close the list. The same region node fills and empties with it. This is the only layer that tests opening and closing. |
+| Search lifecycle | list-page jsdom, lifecycle test | Through the real `useLaundryCustomerSearch` hook, its 300 ms debounce and the customers-query mock: Searching… → no match → more matches → failure → Searching… for the next search, all in one node. Each settled state is tied to its own request (asserted `iLike` and `limit: 20`) and its own response (the listed options and the visible popup line). The final in-flight search is shown to be issued, with no stale error left. |
 
 - [ ] **Step 1: Write the failing static tests**
 
@@ -730,33 +757,49 @@ function statusRegion(): HTMLElement {
 Add two tests at the end of the `describe` block. The first is the **rendering** layer: it opens the list once, then drives the search state through props.
 
 ```tsx
-  it('maps each search state to one region message while the list is open (rendering)', () => {
-    act(() => root.render(<Harness status="loading" />));
+  it('maps each search state to one region message while the list stays open (rendering: props only)', () => {
+    // Every render passes every search prop and the same `openOnFocus`, so
+    // nothing falls back to a Harness default. The element type and position
+    // never change, so React keeps the same component, and its `open` state,
+    // across `root.render`. The test asserts that the region node is kept too.
+    function renderSearch({ options = OPTIONS, status, truncated = false }: { options?: Option[]; status: LaundrySearchStatus; truncated?: boolean }) {
+      act(() => root.render(<Harness openOnFocus options={options} status={status} truncated={truncated} />));
+    }
+    renderSearch({ status: 'loading' });
     const region = statusRegion();
     expect(region.getAttribute('role')).toBe('status');
     expect(region.closest('[hidden]')).toBeNull();
-    expect(region.textContent).toBe(''); // closed
-    type('a'); // opens the list; from here only props change
-    expect(region.textContent).toBe('Looking…');
-    type('al'); // still loading: the same node keeps the same text, so nothing is re-announced
+    expect(expanded()).toBe('false');
+    expect(region.textContent).toBe(''); // not open yet
+    // Setup: open the list once, by focus (`openOnFocus`), without typing.
+    // Opening and closing by user action belongs to the interaction test.
+    act(() => field().focus());
+    const cases: [Parameters<typeof renderSearch>[0], string][] = [
+      [{ status: 'loading' }, 'Looking…'],
+      [{ options: [], status: 'ready' }, 'Nothing found.'],
+      // Priority rule: an empty page that is also truncated announces only the empty line.
+      [{ options: [], status: 'ready', truncated: true }, 'Nothing found.'],
+      [{ status: 'ready', truncated: true }, 'More.'],
+      [{ status: 'ready' }, ''], // results, nothing more to say
+      [{ status: 'error' }, 'Search failed.'],
+      [{ status: 'loading', truncated: true }, 'Looking…'],
+      [{ status: 'error', truncated: true }, 'Search failed.'],
+    ];
+    for (const [props, message] of cases) {
+      renderSearch(props);
+      expect(expanded()).toBe('true');
+      expect(statusRegion()).toBe(region);
+      expect(region.textContent).toBe(message);
+      expect(container.querySelectorAll('[role="status"]')).toHaveLength(1);
+      expect(container.querySelectorAll('[role="alert"]')).toHaveLength(0);
+    }
+    renderSearch({ status: 'idle' });
+    expect(expanded()).toBe('false'); // idle is never expanded
+    expect(region.textContent).toBe('');
+    renderSearch({ status: 'loading' }); // `open` was never cleared, so only idle collapsed it
+    expect(expanded()).toBe('true');
     expect(statusRegion()).toBe(region);
     expect(region.textContent).toBe('Looking…');
-    act(() => root.render(<Harness options={[]} />));
-    expect(region.textContent).toBe('Nothing found.');
-    // Priority rule: an empty page that is also truncated announces only the empty line.
-    act(() => root.render(<Harness options={[]} truncated />));
-    expect(region.textContent).toBe('Nothing found.');
-    act(() => root.render(<Harness truncated />));
-    expect(region.textContent).toBe('More.');
-    act(() => root.render(<Harness />));
-    expect(region.textContent).toBe(''); // results, nothing more to say
-    act(() => root.render(<Harness status="error" />));
-    expect(region.textContent).toBe('Search failed.');
-    expect(container.querySelectorAll('[role="alert"]')).toHaveLength(0);
-    act(() => root.render(<Harness status="idle" />));
-    expect(region.textContent).toBe(''); // idle is never expanded
-    expect(statusRegion()).toBe(region);
-    expect(container.querySelectorAll('[role="status"]')).toHaveLength(1);
   });
 ```
 
@@ -823,27 +866,61 @@ Add the **search lifecycle** test directly after it:
 
 ```tsx
   it('announces the search lifecycle in one region, and a failed search gives way to Searching… when the next one starts', () => {
-    nav.customerResults['%an%'] = { nodes: [ANA], totalCount: 21 };
+    // Each response is keyed by the exact `iLike` pattern, so a state can only
+    // come from the response for the text being searched.
+    nav.customerResults['%an%'] = { nodes: [ANA], totalCount: 21 }; // 21 matches, 1 on this page
     nav.customerResults['%ana%'] = { error: new Error('down'), nodes: [] };
     start();
     openCreate();
     const region = document.querySelector('#laundry-customer-status')!;
+    const popup = () => dialog()!.querySelector('#laundry-customer-listbox')!.parentElement!;
+    const searched = (pattern: string) =>
+      expect(nav.customerQueries.at(-1)).toMatchObject({
+        skip: false,
+        variables: { filter: { fullName: { iLike: pattern } }, paging: { limit: 20 } },
+      });
     expect(region.textContent).toBe('');
-    typeCustomer('zz'); // preset empty response
+
+    typeCustomer('zz'); // the preset empty response
     expect(region.textContent).toBe('Searching…'); // debouncing
+    expect(customerOptions()).toHaveLength(0);
     act(() => vi.advanceTimersByTime(300));
+    searched('%zz%');
+    expect(customerOptions()).toHaveLength(0);
+    expect(popup().textContent).toContain('No customers match.');
     expect(region.textContent).toBe('No customers match.');
+
     typeCustomer('an');
     expect(region.textContent).toBe('Searching…');
+    expect(customerOptions()).toHaveLength(0); // nothing left over from "zz"
     act(() => vi.advanceTimersByTime(300));
+    searched('%an%');
+    // The truncated state comes from this response: its one node is listed, and totalCount 21 > 1.
+    expect(customerOptions().map((option) => option.textContent)).toEqual(['Ana Reyes555-0101']);
+    expect(popup().textContent).toContain('More customers match. Type more of the name to narrow the search.');
+    expect(popup().textContent).not.toContain('No customers match.');
     expect(region.textContent).toBe('More customers match. Type more of the name to narrow the search.');
+
     typeCustomer('ana');
     expect(region.textContent).toBe('Searching…');
+    expect(customerOptions()).toHaveLength(0);
     act(() => vi.advanceTimersByTime(300));
+    searched('%ana%');
+    expect(customerOptions()).toHaveLength(0);
+    expect(popup().textContent).toContain('Unable to search customers.');
     expect(region.textContent).toBe('Unable to search customers.');
-    typeCustomer('anab'); // the next search starts; no response, so it stays in flight
+
+    typeCustomer('anab'); // the next search starts
+    expect(region.textContent).toBe('Searching…');
+    expect(popup().textContent).not.toContain('Unable to search customers.');
+    typeCustomer('anabe'); // typing on while it loads: same node, same text, nothing re-announced
+    expect(document.querySelector('#laundry-customer-status')).toBe(region);
     expect(region.textContent).toBe('Searching…');
     act(() => vi.advanceTimersByTime(300));
+    searched('%anabe%'); // the next query is issued; it has no response, so it stays in flight
+    expect(customerOptions()).toHaveLength(0);
+    expect(popup().textContent).toContain('Searching…');
+    expect(popup().textContent).not.toContain('Unable to search customers.');
     expect(region.textContent).toBe('Searching…');
     expect(document.querySelector('#laundry-customer-status')).toBe(region);
     expect(dialog()!.querySelectorAll('[role="status"]')).toHaveLength(1);
