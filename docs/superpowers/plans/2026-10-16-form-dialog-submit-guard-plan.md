@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 4)** at M5, 2026-10-17. M6 in progress. |
+| Status | **Accepted (revision 4)** at M5, 2026-10-17. M6 complete ([Execution record](#execution-record)). Ready for M7 (fresh independent review). |
 | M5 decision | **Accepted** — 2026-10-17, revision 4 (`63f98a8`), by the owner: "The implementation plan is accepted for M6 execution." The execution contract the owner set: preserve the `requestClose` architecture and the `ConfirmDialog` characterization tests; implement only the agreed `@clensy/ui` behavior and the specified web regression test; run the disposable-worktree red proof and record all five results (a failure for any reason other than the expected regression assertion is not proof); record actual verification results, not predicted counts; audit changed paths against `fcd1c6f`, keeping the workflow update distinct from #180; do not merge or skip later gates; M7 requires a fresh, independent reviewer. Execution: **native**, as recommended. The acceptance is not a claim that anything has passed. |
 | M5 history | First pass (2026-10-17, owner, reviewed `af0dd9b`): **Returned for Revision**, required revisions M5-1 to M5-3 and four non-blocking items. All are resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). The owner approved the `requestClose` architecture and the `ConfirmDialog` characterization tests without changes. Second pass (2026-10-17, owner, reviewed `2e9a298`): **Returned for Revision**, one final correction, M5-4. M5-1 to M5-3 and the non-blocking items are recorded as resolved. M5-4 is resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). Third pass (2026-10-17, owner, reviewed `6687d29`): **Returned for Revision**, one remaining M5-4 edge case: `cleanup` ran under `set -e`, so a failed `git worktree remove` could skip the prune and the directory removal. Everything else is recorded as resolved. The fix is in [Revision 4 (M5 review 3)](#revision-4-m5-review-3). |
 | Date | 2026-10-16 |
@@ -336,3 +336,59 @@ git commit -m "docs(180): record M6 execution"
 | --- | --- |
 | **M5-4, cleanup edge case** (required): `cleanup` ran under `set -e`, so a failed `git worktree remove --force` could exit before `git worktree prune` and `rm -rf "$proof"`. | `cleanup` is now best-effort. `git worktree remove` and `git worktree prune` each end in `\|\| true`, and `rm -rf "$proof"` always runs. Check 5 is unchanged and still fails the proof if the worktree or its directory remains, so a cleanup failure is not hidden. |
 
+
+## Execution record
+
+### M6 — 2026-10-17
+
+Executed inline (native), in plan order, on `feat/180-form-dialog-submit-guard` from the M5 acceptance commit `5af5094`. Every `Expected:` line was compared with the real output. Red-phase counts are the **actual** results, and each matched the prediction.
+
+| Task | Commit | Red (actual) | Green (actual) |
+| --- | --- | --- | --- |
+| 1 | `17fd073` | `vitest run src/base/dialogs`: 5 failed, 10 passed (15). `form-dialog.test.tsx` 5 failed / 8 passed, `confirm-dialog.test.tsx` 2/2 passed. Four failed with `expected [ 'form' ] to deeply equal []`: `ignores Escape while submitting`, `ignores a backdrop click while submitting`, `does not replay a refused Escape when submitting ends` and `consumes Escape when the submitting FormDialog is on top`. `changes nothing visible when it refuses a dismissal` failed with `TypeError: Cannot read properties of null (reading 'parentElement')`, because the Escape had already closed the dialog. The plan allows this case ("or because the dialog is gone"). | `@clensy/ui` 9 files, 96/96. `lint` clean. `build` (`tsc --noEmit`) clean. |
+| 2 | `f1ffc65` | Passes on arrival (regression test after the Task 1 fix). The worktree proof is below. | `laundry-list-page.interaction.test.tsx` 36/36. `eslint` on the file clean. |
+
+**Task 1 Step 1, the jsdom dependency (actual):**
+- `packages/ui/package.json` gained `"jsdom": "^29.1.1"`.
+- `pnpm-lock.yaml` changed in one importer, `packages/ui`: its new `jsdom` devDependency at `29.1.1`, and its `vitest` peer variant moved from `jsdom@30.1.1` to `jsdom@29.1.1`.
+- No package was added to or removed from `packages:` / `snapshots:`. The diff is 5 lines, +4/−1.
+- `pnpm why jsdom --recursive` before and after differs only in `@clensy/ui`: it now resolves `jsdom@29.1.1` directly and through vitest, where before it came through vitest's `30.1.1` variant. `web`, `@clensy/client`, `@clensy/validation` and `@clensy/web` are unchanged.
+- The install's `unmet peer graphql` warnings are pre-existing and unrelated.
+
+**Task 2 Step 4, the worktree red proof (actual):** the script was extracted verbatim from this plan, run with `bash`, and exited 0.
+1. `CHECK 1 OK`: the baseline `FormDialog` from `fcd1c6f` has no `requestClose`.
+2. `CHECK 2 OK`: vitest reported 1 failed and 35 skipped. The failure was the `#180` test, with `AssertionError: expected null not to be null` at `laundry-list-page.interaction.test.tsx:815:26`. Line 815 is the test's item 2 assertion, `expect(dialog()).not.toBeNull()` right after the first Escape.
+3. `CHECK 3 OK`: the working-tree status is unchanged.
+4. `CHECK 4 OK`: the active `FormDialog` contains `requestClose`.
+5. `CHECK 5 OK`: the temporary worktree has been removed.
+
+`pnpm install --frozen-lockfile --offline` succeeded, so the online fallback was not needed.
+
+**Characterization tests.** M6 ([implementation-execution.md](../../workflows/prompts/implementation-execution.md) step 3.6) requires each characterization test to fail against a deliberate break made outside the committed change. The plan labels the [C] tests but did not plan that run, so it was added (ruling 2). The run used a disposable detached worktree of `17fd073`, with the same `set -euo pipefail`, best-effort cleanup and checks as the Task 2 proof. One mutation was applied at a time, `src/base/dialogs` was run, and the source was reverted before the next mutation.
+
+| Mutation | [C] tests that failed |
+| --- | --- |
+| M1 `requestClose` never calls `onClose` | `closes on Escape when idle`, `closes on a backdrop click when idle`, `closes on Cancel when idle`, `closes on Escape and the backdrop again once submitting is false`, `closes only the top FormDialog when idle and stacked` |
+| M2 Cancel not `disabled` while submitting | `keeps Cancel disabled while submitting` |
+| M3 `Modal open={open \|\| submitting}` | `still closes when the caller sets open to false while submitting, and restores focus` |
+| M4 the hook routes Escape to the bottom dialog | `lets Escape close a dialog on top of a submitting FormDialog`, `closes only the top FormDialog when idle and stacked` (and the non-[C] `consumes Escape…`) |
+| M5 `ConfirmDialog` guards `onClose` while `confirming` | `still closes on Escape while confirming`, `still closes on a backdrop click while confirming` |
+
+All 10 [C] tests failed under at least one mutation. Afterwards the working tree was unchanged and the worktree was removed. No mutation was committed.
+
+**Rulings (deviations from the plan's text):**
+1. Task 1: the first red run had a 6th failure, in the programmatic-close [C] test. The cause was an assertion I had added beyond the plan, that focus lands on the Name field after opening. jsdom always reports `offsetParent === null`, so the hook's focusable filter finds nothing and focuses the dialog container. I removed that one assertion, and the plan's assertions for the test are unchanged. The re-run matched the prediction exactly.
+2. Task 1: the characterization mutation run above was added to satisfy M6 step 3.6. It changes no task, order or semantics.
+3. Task 1: `contextforge/function-order` applies to test files under `packages/ui/src`, so the test file's top-level helpers are declared in name order. This is lint conformance, not a plan change.
+
+### Task 3 — verification (actual results)
+
+| Check | Result |
+| --- | --- |
+| `pnpm install --frozen-lockfile` | PASS. Lockfile up to date. |
+| `pnpm run lint` | PASS. turbo 6/6 tasks. |
+| `pnpm --filter web exec tsc --noEmit` | PASS, exit 0 |
+| `pnpm run test` | PASS. turbo 10/10 tasks: `@clensy/ui` 9 files 96/96; `web` 48 files 2185/2185 (baseline 2184 + 1); `@clensy/web` 16 files 418/418; `@clensy/validation` 6 files 79/79; `@clensy/client` 2 files 13/13; `api` 75 suites 1071/1071. |
+| Scope (Step 2) | PASS. `git diff --name-only fcd1c6f HEAD` lists 20 paths, and each falls in exactly one group. **#180 implementation (6):** `apps/web/lib/laundry-list-page.interaction.test.tsx`, `packages/ui/package.json`, `packages/ui/src/base/dialogs/confirm-dialog.test.tsx`, `packages/ui/src/base/dialogs/form-dialog.test.tsx`, `packages/ui/src/base/dialogs/form-dialog.tsx`, `pnpm-lock.yaml`. **#180 workflow artifacts (2):** the spec (Amendment #180) and this plan. **Authorized workflow update (12):** exactly the twelve listed paths. `git diff --quiet` on `modal.tsx`, `use-dialog-behavior.ts` and `confirm-dialog.tsx` exits 0, and no `FormDialog` caller changed. Only `3a9c010` touched the workflow-update paths. |
+
+Not run: a manual browser check of a `FormDialog` page. It is not required by the plan or by spec §8.8. An owner may do it at M7 or before merge.
