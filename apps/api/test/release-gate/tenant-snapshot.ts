@@ -11,13 +11,13 @@ export interface ChildTable {
 }
 
 export const CHILD_TABLES: readonly ChildTable[] = [
-  // Owned through its checklist (README: "items are owned through their checklist").
+  // Owned through its checklist (docs/development/database-migrations.md: "items are owned through their checklist").
   {
     column: 'checklistId',
     parent: 'checklist_entity',
     table: 'checklist_item_entity',
   },
-  // Owned through its invoice (README: "invoice lines are owned through their invoice").
+  // Owned through its invoice (docs/development/database-migrations.md: "invoice lines are owned through their invoice").
   {
     column: 'invoiceId',
     parent: 'invoice_entity',
