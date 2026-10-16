@@ -38,7 +38,17 @@ let selected: string[];
 const onFocus = vi.fn();
 const onBlur = vi.fn();
 
-function Harness({ openOnFocus, status = 'ready' }: { openOnFocus?: boolean; status?: LaundrySearchStatus }) {
+function Harness({
+  openOnFocus,
+  options = OPTIONS,
+  status = 'ready',
+  truncated,
+}: {
+  openOnFocus?: boolean;
+  options?: Option[];
+  status?: LaundrySearchStatus;
+  truncated?: boolean;
+}) {
   const [query, setQuery] = useState('');
   return (
     <div>
@@ -46,8 +56,9 @@ function Harness({ openOnFocus, status = 'ready' }: { openOnFocus?: boolean; sta
         id="svc"
         copy={COPY}
         query={query}
-        options={OPTIONS}
+        options={options}
         status={status}
+        truncated={truncated}
         openOnFocus={openOnFocus}
         onFocus={onFocus}
         onBlur={onBlur}
@@ -71,6 +82,10 @@ function field(): HTMLInputElement {
 
 function expanded(): string | null {
   return field().getAttribute('aria-expanded');
+}
+
+function statusRegion(): HTMLElement {
+  return container.querySelector<HTMLElement>('#svc-status')!;
 }
 
 function type(text: string, target: () => HTMLInputElement = field) {
@@ -198,5 +213,84 @@ describe('LaundrySearchCombobox interactions', () => {
       expect(customer().getAttribute('aria-expanded')).toBe('true');
       act(() => root.render(<div />));
     }
+  });
+
+  it('maps each search state to one region message while the list stays open (rendering: props only)', () => {
+    // Every render passes every search prop and the same `openOnFocus`, so
+    // nothing falls back to a Harness default. The element type and position
+    // never change, so React keeps the same component, and its `open` state,
+    // across `root.render`. The test asserts that the region node is kept too.
+    function renderSearch({ options = OPTIONS, status, truncated = false }: { options?: Option[]; status: LaundrySearchStatus; truncated?: boolean }) {
+      act(() => root.render(<Harness openOnFocus options={options} status={status} truncated={truncated} />));
+    }
+    renderSearch({ status: 'loading' });
+    const region = statusRegion();
+    expect(region.getAttribute('role')).toBe('status');
+    expect(region.closest('[hidden]')).toBeNull();
+    expect(expanded()).toBe('false');
+    expect(region.textContent).toBe(''); // not open yet
+    // Setup: open the list once, by focus (`openOnFocus`), without typing.
+    // Opening and closing by user action belongs to the interaction test.
+    act(() => field().focus());
+    const cases: [Parameters<typeof renderSearch>[0], string][] = [
+      [{ status: 'loading' }, 'Looking…'],
+      [{ options: [], status: 'ready' }, 'Nothing found.'],
+      // Priority rule: an empty page that is also truncated announces only the empty line.
+      [{ options: [], status: 'ready', truncated: true }, 'Nothing found.'],
+      [{ status: 'ready', truncated: true }, 'More.'],
+      [{ status: 'ready' }, ''], // results, nothing more to say
+      [{ status: 'error' }, 'Search failed.'],
+      [{ status: 'loading', truncated: true }, 'Looking…'],
+      [{ status: 'error', truncated: true }, 'Search failed.'],
+    ];
+    for (const [props, message] of cases) {
+      renderSearch(props);
+      expect(expanded()).toBe('true');
+      expect(statusRegion()).toBe(region);
+      expect(region.textContent).toBe(message);
+      expect(container.querySelectorAll('[role="status"]')).toHaveLength(1);
+      expect(container.querySelectorAll('[role="alert"]')).toHaveLength(0);
+    }
+    renderSearch({ status: 'idle' });
+    expect(expanded()).toBe('false'); // idle is never expanded
+    expect(region.textContent).toBe('');
+    renderSearch({ status: 'loading' }); // `open` was never cleared, so only idle collapsed it
+    expect(expanded()).toBe('true');
+    expect(statusRegion()).toBe(region);
+    expect(region.textContent).toBe('Looking…');
+  });
+
+  it('keeps one region node through typing, closing, reopening and selection, empty whenever the list is closed', () => {
+    act(() => root.render(<Harness truncated />));
+    const region = statusRegion();
+    act(() => field().focus());
+    expect(expanded()).toBe('false'); // this picker opens on typing, not on focus
+    expect(region.textContent).toBe('');
+    type('a');
+    expect(expanded()).toBe('true');
+    expect(region.textContent).toBe('More.');
+    press('Escape'); // dismissal
+    expect(expanded()).toBe('false');
+    expect(region.textContent).toBe('');
+    press('ArrowDown'); // reopens, with the first option active
+    expect(expanded()).toBe('true');
+    expect(region.textContent).toBe('More.');
+    press('Enter'); // selection
+    expect(selected).toEqual(['a']);
+    expect(expanded()).toBe('false');
+    expect(region.textContent).toBe('');
+    type('Alph');
+    expect(region.textContent).toBe('More.');
+    act(() => container.querySelector<HTMLButtonElement>('#elsewhere')!.focus()); // blur
+    expect(expanded()).toBe('false');
+    expect(region.textContent).toBe('');
+    act(() => field().focus());
+    type('Al');
+    expect(region.textContent).toBe('More.');
+    type(''); // a cleared text closes this picker
+    expect(expanded()).toBe('false');
+    expect(region.textContent).toBe('');
+    expect(statusRegion()).toBe(region);
+    expect(container.querySelectorAll('[role="status"]')).toHaveLength(1);
   });
 });

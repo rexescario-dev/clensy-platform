@@ -55,7 +55,10 @@ describe('LaundryCustomerPicker', () => {
   it('shows one line for searching, no matches, a failed search, and more matches than shown', () => {
     expect(render({ status: 'loading' })).toContain('Searching…');
     expect(render({ status: 'ready' })).toContain('No customers match.');
-    expect(render({ status: 'error' })).toMatch(/role="alert"[^>]*>Unable to search customers\./);
+    const failed = render({ status: 'error' });
+    expect(failed).toContain('<p class="px-3 py-2 text-sm text-red-600">Unable to search customers.</p>');
+    expect(failed).not.toContain('role="alert"');
+    expect(failed).toContain('<p id="customer-status" role="status" class="sr-only"></p>');
     expect(render({ options: [ANA], status: 'ready' })).not.toContain('No customers match.');
     expect(render({ options: [ANA], status: 'ready', truncated: true })).toContain(
       'More customers match. Type more of the name to narrow the search.',

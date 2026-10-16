@@ -66,7 +66,13 @@ describe('LaundrySearchCombobox', () => {
   it('shows one line for searching, empty, error and truncation', () => {
     expect(render({ status: 'loading' })).toContain('Looking…');
     expect(render({ status: 'ready' })).toContain('Nothing found.');
-    expect(render({ status: 'error' })).toMatch(/role="alert"[^>]*>Search failed\./);
+    // The lines keep their markup; only the live role goes (#181).
+    expect(render({ status: 'error' })).toContain('<p class="px-3 py-2 text-sm text-red-600">Search failed.</p>');
+    expect(render({ status: 'loading' })).toContain('<p class="px-3 py-2 text-sm text-slate-500">Looking…</p>');
+    // Characterization: an empty page that is also truncated still shows both lines (planning decision (e)).
+    const emptyAndMore = render({ status: 'ready', truncated: true });
+    expect(emptyAndMore).toContain('<p class="px-3 py-2 text-sm text-slate-500">Nothing found.</p>');
+    expect(emptyAndMore).toContain('<p class="px-3 py-2 text-sm text-slate-500">More results exist.</p>');
     const idle = render({ status: 'idle' });
     for (const text of [COPY.searching, COPY.empty, COPY.error, COPY.more]) expect(idle).not.toContain(text);
     const ready = { options: [WASH], status: 'ready' as const };
@@ -76,6 +82,25 @@ describe('LaundrySearchCombobox', () => {
     expect(render({ status: 'loading', truncated: true })).not.toContain('More results exist.');
     expect(render({ status: 'error', truncated: true })).not.toContain('More results exist.');
     expect(render({ ...ready })).not.toContain('Nothing found.');
+  });
+
+  it('keeps one empty polite status region after the popup, and no live role on the popup lines', () => {
+    const cases: Partial<LaundrySearchComboboxProps<Option>>[] = [
+      { status: 'idle' },
+      { status: 'loading' },
+      { status: 'ready' },
+      { status: 'ready', truncated: true },
+      { options: [WASH], status: 'ready', truncated: true },
+      { status: 'error' },
+      { error: 'Pick a service.', status: 'error' },
+    ];
+    for (const props of cases) {
+      const html = render(props);
+      expect((html.match(/role="status"/g) ?? []).length).toBe(1);
+      expect(html).not.toContain('role="alert"');
+      // Outside the `hidden` popup, and empty while the list is closed (static markup is never open).
+      expect(html).toContain('</div><p id="svc-status" role="status" class="sr-only"></p>');
+    }
   });
 
   it('renders no option unless the status is ready', () => {

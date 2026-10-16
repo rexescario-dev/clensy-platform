@@ -622,14 +622,84 @@ describe('/app/laundry intake modal', () => {
     expect(dialog()!.textContent).toContain('No customers match.');
   });
 
-  it('shows a failed search inline', () => {
+  it('shows a failed search inline and announces it politely', () => {
     nav.customerResults['%ana%'] = { error: new Error('down'), nodes: [] };
     start();
     openCreate();
     typeCustomer('ana');
     act(() => vi.advanceTimersByTime(300));
-    expect(dialog()!.querySelector('[role="alert"]')!.textContent).toBe('Unable to search customers.');
+    expect(dialog()!.querySelector('#laundry-customer-listbox')!.parentElement!.textContent).toContain(
+      'Unable to search customers.',
+    );
+    const region = document.querySelector('#laundry-customer-status')!;
+    expect(region.getAttribute('role')).toBe('status');
+    expect(region.textContent).toBe('Unable to search customers.');
+    // A search failure is polite; the dialog's own alert is for create failures.
+    expect(dialog()!.querySelector('[role="alert"]')).toBeNull();
   });
+
+  it('announces the search lifecycle in one region, and a failed search gives way to Searching… when the next one starts', () => {
+    // Each response is keyed by the exact `iLike` pattern, so a state can only
+    // come from the response for the text being searched.
+    nav.customerResults['%an%'] = { nodes: [ANA], totalCount: 21 }; // 21 matches, 1 on this page
+    nav.customerResults['%ana%'] = { error: new Error('down'), nodes: [] };
+    start();
+    openCreate();
+    const region = document.querySelector('#laundry-customer-status')!;
+    const popup = () => dialog()!.querySelector('#laundry-customer-listbox')!.parentElement!;
+    const searched = (pattern: string) =>
+      expect(nav.customerQueries.at(-1)).toMatchObject({
+        skip: false,
+        variables: { filter: { fullName: { iLike: pattern } }, paging: { limit: 20 } },
+      });
+    expect(region.textContent).toBe('');
+
+    typeCustomer('zz'); // the preset empty response
+    expect(region.textContent).toBe('Searching…'); // debouncing
+    expect(customerOptions()).toHaveLength(0);
+    act(() => vi.advanceTimersByTime(300));
+    searched('%zz%');
+    expect(customerOptions()).toHaveLength(0);
+    expect(popup().textContent).toContain('No customers match.');
+    expect(region.textContent).toBe('No customers match.');
+
+    typeCustomer('an');
+    expect(region.textContent).toBe('Searching…');
+    expect(customerOptions()).toHaveLength(0); // nothing left over from "zz"
+    act(() => vi.advanceTimersByTime(300));
+    searched('%an%');
+    // The truncated state comes from this response: its one node is listed, and totalCount 21 > 1.
+    expect(customerOptions().map((option) => option.textContent)).toEqual(['Ana Reyes555-0101']);
+    expect(popup().textContent).toContain('More customers match. Type more of the name to narrow the search.');
+    expect(popup().textContent).not.toContain('No customers match.');
+    expect(region.textContent).toBe('More customers match. Type more of the name to narrow the search.');
+
+    typeCustomer('ana');
+    expect(region.textContent).toBe('Searching…');
+    expect(customerOptions()).toHaveLength(0);
+    act(() => vi.advanceTimersByTime(300));
+    searched('%ana%');
+    expect(customerOptions()).toHaveLength(0);
+    expect(popup().textContent).toContain('Unable to search customers.');
+    expect(region.textContent).toBe('Unable to search customers.');
+
+    typeCustomer('anab'); // the next search starts
+    expect(region.textContent).toBe('Searching…');
+    expect(popup().textContent).not.toContain('Unable to search customers.');
+    typeCustomer('anabe'); // typing on while it loads: same node, same text, nothing re-announced
+    expect(document.querySelector('#laundry-customer-status')).toBe(region);
+    expect(region.textContent).toBe('Searching…');
+    act(() => vi.advanceTimersByTime(300));
+    searched('%anabe%'); // the next query is issued; it has no response, so it stays in flight
+    expect(customerOptions()).toHaveLength(0);
+    expect(popup().textContent).toContain('Searching…');
+    expect(popup().textContent).not.toContain('Unable to search customers.');
+    expect(region.textContent).toBe('Searching…');
+    expect(document.querySelector('#laundry-customer-status')).toBe(region);
+    expect(dialog()!.querySelectorAll('[role="status"]')).toHaveLength(1);
+    expect(dialog()!.querySelector('[role="alert"]')).toBeNull();
+  });
+
 
   it('never lets a result for an earlier text be chosen while the next search runs', async () => {
     start();
