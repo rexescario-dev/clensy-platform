@@ -4,8 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft (revision 2)** (M4), 2026-10-17. Awaiting Plan Review (M5). |
-| M5 history | First pass (2026-10-17, owner, reviewed `af0dd9b`): **Returned for Revision**, required revisions M5-1 to M5-3 and four non-blocking items. All are resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). The owner approved the `requestClose` architecture and the `ConfirmDialog` characterization tests without changes. |
+| Status | **Draft (revision 3)** (M4), 2026-10-17. Awaiting Plan Review (M5). |
+| M5 history | First pass (2026-10-17, owner, reviewed `af0dd9b`): **Returned for Revision**, required revisions M5-1 to M5-3 and four non-blocking items. All are resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). The owner approved the `requestClose` architecture and the `ConfirmDialog` characterization tests without changes. Second pass (2026-10-17, owner, reviewed `2e9a298`): **Returned for Revision**, one final correction, M5-4. M5-1 to M5-3 and the non-blocking items are recorded as resolved. M5-4 is resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). |
 | Date | 2026-10-16 |
 | Tracking issue | [#180](https://github.com/rexescario-dev/clensy-platform/issues/180) "Keep form dialogs open while a submit is in flight". Follow-up from [#160](https://github.com/rexescario-dev/clensy-platform/issues/160) / PR [#179](https://github.com/rexescario-dev/clensy-platform/pull/179), M7 triage T5-a. |
 | Branch | `feat/180-form-dialog-submit-guard`, from `main` at `fcd1c6f`. One PR for the amendment, this plan, its M5 record and the implementation. The branch also carries the Context Forge workflow update (generic 1.5.0), committed in `3a9c010` at the owner's request. |
@@ -176,39 +176,82 @@ git add apps/web/lib/laundry-list-page.interaction.test.tsx
 git commit -m "test(web): intake dialog stays open on dismissal while a create is pending (#180)"
 ```
 
-- [ ] **Step 4: Prove it catches the bug, in a disposable worktree (M5-1)**
+- [ ] **Step 4: Prove it catches the bug, in a disposable worktree (M5-1, M5-4)**
 
-The proof never writes to the working tree. It checks out the committed branch `HEAD` (Tasks 1 and 2) in a temporary detached worktree. There it puts back the original `FormDialog` from the pinned baseline `fcd1c6f`, and runs only the new test. The `trap` removes the worktree whether the commands succeed or fail.
+The proof never writes to the working tree. It checks out the committed branch `HEAD` (Tasks 1 and 2) in a temporary detached worktree. There it puts back the original `FormDialog` from the pinned baseline `fcd1c6f`, and runs only the new test.
+
+The script runs with `set -euo pipefail`, so any failed setup, check or cleanup command stops it with a non-zero exit. The `EXIT` trap removes the worktree on every exit path. The one expected failure, vitest's, is captured explicitly and then verified to be the right failure. Save the script to a scratch file outside the repository and run it with `bash <file>` from the repository root, so `exit` ends the script and not your shell.
 
 ```bash
-set -u
+set -euo pipefail
 before="$(git status --porcelain=v1)"
 proof="$(mktemp -d)"
-cleanup() { git worktree remove --force "$proof/wt" 2>/dev/null; rm -rf "$proof"; git worktree prune; }
+wt="$proof/wt"
+cleanup() {
+  if [ -d "$wt" ]; then git worktree remove --force "$wt"; fi
+  git worktree prune
+  rm -rf "$proof"
+}
 trap cleanup EXIT
-git worktree add --detach "$proof/wt" HEAD
-git -C "$proof/wt" show fcd1c6f:packages/ui/src/base/dialogs/form-dialog.tsx \
-  > "$proof/wt/packages/ui/src/base/dialogs/form-dialog.tsx"
-grep -c requestClose "$proof/wt/packages/ui/src/base/dialogs/form-dialog.tsx" || true   # expect 0
-(cd "$proof/wt" && pnpm install --frozen-lockfile --offline) || { echo "PROOF SETUP FAILED"; exit 1; }
-if (cd "$proof/wt" && pnpm --filter web exec vitest run lib/laundry-list-page.interaction.test.tsx -t "#180"); then
-  echo "UNEXPECTED PASS: the regression test does not catch the bug"
-else
-  echo "EXPECTED FAIL against fcd1c6f FormDialog"
+
+git worktree add --detach "$wt" HEAD
+git -C "$wt" show fcd1c6f:packages/ui/src/base/dialogs/form-dialog.tsx \
+  > "$wt/packages/ui/src/base/dialogs/form-dialog.tsx"
+
+# Check 1: the worktree has the baseline FormDialog, without the guard.
+if grep -q requestClose "$wt/packages/ui/src/base/dialogs/form-dialog.tsx"; then
+  echo "CHECK 1 FAILED: baseline FormDialog contains requestClose"; exit 1
 fi
-cleanup; trap - EXIT
-[ "$(git status --porcelain=v1)" = "$before" ] && echo "WORKING TREE UNCHANGED"
-grep -c requestClose packages/ui/src/base/dialogs/form-dialog.tsx   # expect >= 1
-git worktree list
+echo "CHECK 1 OK: baseline FormDialog has no requestClose"
+
+(cd "$wt" && pnpm install --frozen-lockfile --offline)   # a setup error stops the script here
+
+# Check 2: exactly the new regression test fails, for the expected reason.
+# The non-zero vitest exit is expected, so it is captured instead of stopping the script.
+status=0
+(cd "$wt" && pnpm --filter web exec vitest run lib/laundry-list-page.interaction.test.tsx -t "#180" \
+  --reporter=default --reporter=json --outputFile.json="$proof/result.json") || status=$?
+if [ "$status" -eq 0 ]; then echo "CHECK 2 FAILED: vitest passed; the test does not catch the bug"; exit 1; fi
+[ -s "$proof/result.json" ] || { echo "CHECK 2 FAILED: no JSON result (setup or import error, exit $status)"; exit 1; }
+node -e '
+  const results = require(process.argv[1]).testResults.flatMap((file) => file.assertionResults);
+  const failed = results.filter((test) => test.status === "failed");
+  const passed = results.filter((test) => test.status === "passed");
+  const ok = failed.length === 1 && passed.length === 0 && failed[0].title.includes("#180")
+    && /not to be null/.test(failed[0].failureMessages.join("\n"));
+  if (!ok) { console.error("CHECK 2 FAILED", JSON.stringify(failed.map((test) => [test.title, test.failureMessages[0]]), null, 1)); process.exit(1); }
+  console.log("CHECK 2 OK:", failed[0].title);
+  console.log(failed[0].failureMessages[0].split("\n").slice(0, 8).join("\n"));
+' "$proof/result.json"
+
+cleanup
+trap - EXIT
+
+# Check 3: the working tree is exactly as it was.
+[ "$(git status --porcelain=v1)" = "$before" ] || { echo "CHECK 3 FAILED: working tree changed"; exit 1; }
+echo "CHECK 3 OK: working tree unchanged"
+
+# Check 4: the real implementation still has the guard.
+grep -q requestClose packages/ui/src/base/dialogs/form-dialog.tsx || { echo "CHECK 4 FAILED: requestClose missing"; exit 1; }
+echo "CHECK 4 OK: active FormDialog contains requestClose"
+
+# Check 5: the temporary worktree is gone.
+if [ -e "$proof" ] || git worktree list --porcelain | grep -qF "$wt"; then
+  echo "CHECK 5 FAILED: temporary worktree remains"; exit 1
+fi
+echo "CHECK 5 OK: temporary worktree removed"
 ```
 
-Expected:
-- The `grep` in the worktree prints `0`.
-- vitest reports exactly **1 failed** test, the new `#180` test, failing at the test's item 2 `dialog()` assertion (received `null`), and `EXPECTED FAIL` is printed. A non-zero exit for any other reason, such as no test matching `-t`, a setup or import error, does not count as the proof. Stop and investigate.
-- `WORKING TREE UNCHANGED` is printed. The real `form-dialog.tsx` still contains `requestClose`.
-- `git worktree list` shows only the main worktree.
+Expected: the script exits 0 and prints `CHECK 1 OK` to `CHECK 5 OK`. For check 2, the printed failure message is `expected null not to be null`, and the first stack frame in `laundry-list-page.interaction.test.tsx` is the line of the test's item 2 assertion, the `dialog()` check after the first Escape. Confirm that line number against the file.
 
-Record the failure message and all four results. If `pnpm install --offline` cannot resolve from the local store, rerun that one command without `--offline` and record it. If `UNEXPECTED PASS` prints, stop: the test does not prove the fix.
+Record the failure message and all five verification results:
+1. The baseline file contains no `requestClose`.
+2. Exactly the new regression test fails, for the expected reason, at item 2.
+3. The original working-tree status is unchanged.
+4. The active implementation still contains `requestClose`.
+5. The temporary worktree has been removed.
+
+If `pnpm install --offline` cannot resolve from the local store, the script stops there. Rerun with `--offline` removed from that one line, and record that you did. If any check fails, stop and investigate. A failed check means the test does not yet prove the fix.
 
 ### Task 3: Full verification and execution record (type: `docs/process`)
 
@@ -275,4 +318,10 @@ git commit -m "docs(180): record M6 execution"
 | Non-blocking: fixture isolation. | `beforeEach` resets `state`, `closes` and the root. `afterEach` unmounts, so `openDialogStack` is empty between tests. |
 | Non-blocking: lockfile verification. | Task 1 Step 1 records changed importers, added or removed packages, and a before/after `pnpm why jsdom --recursive` diff, instead of assuming which sections change. |
 | Non-blocking: red-phase reporting and test totals. | Kept as is. Counts stay predictions, not pass criteria. |
+
+## Revision 3 (M5 review 2)
+
+| Finding | Resolution |
+| --- | --- |
+| **M5-4** (required): the worktree proof used `set -u` only, so a failed `git worktree add`, baseline restore or other unguarded command could be followed by later ones. The final instruction also counted four results instead of five. | Task 2 Step 4 now runs as a script under `set -euo pipefail`, with an idempotent `EXIT` trap. The only expected failure, vitest's, is captured into `status`. It counts as proof only if vitest exited non-zero, the JSON result exists, and exactly one test failed (the `#180` test, with `not to be null`, at item 2) and none passed. Each of the five checks prints `CHECK n OK` or exits non-zero, and the record instruction lists all five. |
 
