@@ -57,6 +57,13 @@ const INPUT_CLASSES =
 // Escape closes an open list and stops there, so the surrounding Modal,
 // which listens for Escape on `document`, stays open. With the list closed,
 // Escape reaches the Modal as usual.
+//
+// Search messages are announced by one status region that is always
+// mounted outside the popup (#181). `hidden` takes the popup out of the
+// accessibility tree, and some screen readers announce only changes to a
+// live region that already exists. The region holds one message while the
+// list is open and is empty otherwise. The popup's lines are unchanged but
+// carry no live role, so nothing is read twice.
 export function LaundrySearchCombobox<T extends { id: string }>({
   id,
   copy,
@@ -78,7 +85,9 @@ export function LaundrySearchCombobox<T extends { id: string }>({
   const [activeId, setActiveId] = useState<string | null>(null);
   const listboxId = `${id}-listbox`;
   const errorId = `${id}-error`;
+  const statusId = `${id}-status`;
   const expanded = open && status !== 'idle';
+  const announcement = searchAnnouncement(status, copy, options.length === 0, truncated);
   const rendered = status === 'ready' ? options : [];
   // A stored active id that no longer names a rendered option (the search
   // left `ready`, or that option left the results) is dropped here, so it
@@ -192,27 +201,16 @@ export function LaundrySearchCombobox<T extends { id: string }>({
             );
           })}
         </ul>
-        {status === 'loading' ? (
-          <p role="status" className="px-3 py-2 text-sm text-slate-500">
-            {copy.searching}
-          </p>
-        ) : null}
+        {status === 'loading' ? <p className="px-3 py-2 text-sm text-slate-500">{copy.searching}</p> : null}
         {status === 'ready' && options.length === 0 ? (
-          <p role="status" className="px-3 py-2 text-sm text-slate-500">
-            {copy.empty}
-          </p>
+          <p className="px-3 py-2 text-sm text-slate-500">{copy.empty}</p>
         ) : null}
-        {status === 'ready' && truncated ? (
-          <p role="status" className="px-3 py-2 text-sm text-slate-500">
-            {copy.more}
-          </p>
-        ) : null}
-        {status === 'error' ? (
-          <p role="alert" className="px-3 py-2 text-sm text-red-600">
-            {copy.error}
-          </p>
-        ) : null}
+        {status === 'ready' && truncated ? <p className="px-3 py-2 text-sm text-slate-500">{copy.more}</p> : null}
+        {status === 'error' ? <p className="px-3 py-2 text-sm text-red-600">{copy.error}</p> : null}
       </div>
+      <p id={statusId} role="status" className="sr-only">
+        {expanded ? announcement : ''}
+      </p>
       {error ? (
         <p id={errorId} className="text-sm text-red-600">
           {error}
@@ -220,4 +218,21 @@ export function LaundrySearchCombobox<T extends { id: string }>({
       ) : null}
     </div>
   );
+}
+
+// The one message the status region announces for a search state, or ''.
+// The popup can show both the empty and the more line (a server count above
+// zero with an empty page); the region then announces only the empty line,
+// the one that says there is nothing to pick.
+function searchAnnouncement(
+  status: LaundrySearchStatus,
+  copy: LaundrySearchComboboxCopy,
+  empty: boolean,
+  truncated: boolean,
+): string {
+  if (status === 'loading') return copy.searching;
+  if (status === 'error') return copy.error;
+  if (status !== 'ready') return '';
+  if (empty) return copy.empty;
+  return truncated ? copy.more : '';
 }
