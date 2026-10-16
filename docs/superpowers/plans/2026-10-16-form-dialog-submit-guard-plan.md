@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft** (M4), 2026-10-16. Awaiting Plan Review (M5). |
+| Status | **Draft (revision 2)** (M4), 2026-10-17. Awaiting Plan Review (M5). |
+| M5 history | First pass (2026-10-17, owner, reviewed `af0dd9b`): **Returned for Revision**, required revisions M5-1 to M5-3 and four non-blocking items. All are resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). The owner approved the `requestClose` architecture and the `ConfirmDialog` characterization tests without changes. |
 | Date | 2026-10-16 |
 | Tracking issue | [#180](https://github.com/rexescario-dev/clensy-platform/issues/180) "Keep form dialogs open while a submit is in flight". Follow-up from [#160](https://github.com/rexescario-dev/clensy-platform/issues/160) / PR [#179](https://github.com/rexescario-dev/clensy-platform/pull/179), M7 triage T5-a. |
 | Branch | `feat/180-form-dialog-submit-guard`, from `main` at `fcd1c6f`. One PR for the amendment, this plan, its M5 record and the implementation. The branch also carries the Context Forge workflow update (generic 1.5.0), committed in `3a9c010` at the owner's request. |
@@ -47,7 +48,7 @@
 
 - **Submitting flips back to false after a failure:** Escape must close on the very next press, without a stale guard. Owned by Task 1 (`closes on Escape and the backdrop again once submitting is false`).
 - **A refused Escape followed by the submit settling:** the dialog must not close by itself. Owned by Task 1 (`does not replay a refused Escape when submitting ends`).
-- **Escape pressed inside a focused field, not on `document`:** it bubbles to the hook's `document` listener and must still be refused. Every Task 1 Escape is dispatched from the focused element for this reason.
+- **Escape pressed inside a focused field, not on `document`:** it bubbles to the hook's `document` listener and must still be refused. Every Task 1 `FormDialog` Escape is dispatched by `pressEscapeIn(element)`, which focuses the field, asserts it is `document.activeElement`, and dispatches on it (M5-2).
 - **A drawer or modal underneath a submitting `FormDialog`:** one Escape must close neither. Owned by Task 1 (`consumes Escape when the submitting FormDialog is on top`).
 - **A caller closing its dialog while still submitting** (setting `open` to `false` before clearing `submitting`, as some success paths do): it must close and restore focus. Owned by Task 1 (`still closes when the caller sets open to false while submitting, and restores focus`).
 
@@ -69,8 +70,10 @@ Implements spec §8.3.1, §8.3.2, §8.3.3 and §8.5. Planning decisions (a)–(c
 
 - [ ] **Step 1: Add jsdom to `@clensy/ui`**
 
+Before: `TMPDIR_180="$(mktemp -d)"; pnpm why jsdom --recursive > "$TMPDIR_180/why-before.txt"` (a scratch directory outside the repository; the same shell runs the After command).
 Run: `pnpm --filter @clensy/ui add -D jsdom@^29.1.1`
-Expected: `packages/ui/package.json` lists `"jsdom": "^29.1.1"` under `devDependencies`, and `pnpm-lock.yaml` changes only in the `packages/ui` importer (plus any vitest peer variant line for it). Record the lockfile diff summary. If any other importer's resolution changes, stop and record why.
+After: `pnpm why jsdom --recursive > "$TMPDIR_180/why-after.txt"` and `git diff --stat -- pnpm-lock.yaml`.
+Expected: `packages/ui/package.json` lists `"jsdom": "^29.1.1"` under `devDependencies`. Do not assume which lockfile sections change; read them. Record in the Execution record: (1) every lockfile importer whose entries changed, (2) every package added to or removed from the `packages:` / `snapshots:` sections, and (3) the `diff` of the two `pnpm why` outputs. Expected (predicted): only the `packages/ui` importer changes (its new `jsdom` devDependency and possibly its `vitest` peer variant), no package is added or removed, and every other workspace's jsdom resolution is identical before and after. If any other importer's resolution changes, or a package is added or removed, stop and record why before continuing.
 
 - [ ] **Step 2: Write `form-dialog.test.tsx`**
 
@@ -83,8 +86,11 @@ The fixture is driven by a module-level `state = { formOpen, modalOpen, submitti
 
 Each `onClose` pushes its name (`'modal'` or `'form'`) onto `closes: string[]`, sets its open flag to `false`, and calls `root.render(<Fixture />)` without a nested `act`, because the dispatch is already inside one. The flag change matters: the dialog really closes when `onClose` runs, so "stays open" is observable in the DOM.
 
+`beforeEach` resets `state` to `{ formOpen: false, modalOpen: false, submitting: false }` and `closes` to `[]`, creates a fresh container and root, and then each test arranges its own state. `afterEach` unmounts the root inside `act` and removes the container, so no dialog stays on the module-level `openDialogStack` between tests.
+
 Helpers:
-- `pressEscape()` dispatches `new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })` on `document.activeElement ?? document`, inside `act`.
+- `pressEscapeIn(element: HTMLElement)` calls `element.focus()`, asserts `expect(document.activeElement).toBe(element)`, then dispatches `new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })` **on `element`**, inside `act`. The event reaches the hook only by bubbling to `document` (M5-2).
+- `nameField()` returns the `FormDialog`'s `input[aria-label="Name"]`. `underAction()` returns the `Modal`'s `Under action` button.
 - `formDialog()` returns the `[role="dialog"]` containing a `form`, or `null`.
 - `underDialog()` returns the `[role="dialog"]` without one.
 - `clickBackdrop(dialog)` calls `dialog.parentElement!.click()` inside `act`.
@@ -96,24 +102,24 @@ Tests in `describe('FormDialog dismissal (#180)')`. Each test lists its arrangem
 
 | Test | Arrange | Assert |
 | --- | --- | --- |
-| `closes on Escape when idle` [C] | form open, idle | `pressEscape()` → `closes` is `['form']`, `formDialog()` is `null` |
+| `closes on Escape when idle` [C] | form open, idle | `pressEscapeIn(nameField())` → `closes` is `['form']`, `formDialog()` is `null` |
 | `closes on a backdrop click when idle` [C] | form open, idle | `clickBackdrop(formDialog()!)` → `['form']` |
 | `closes on Cancel when idle` [C] | form open, idle | `act(() => cancel().click())` → `['form']` |
-| `ignores Escape while submitting` | form open, submitting | `pressEscape()` → `closes` is `[]`, `formDialog()` is not `null` |
+| `ignores Escape while submitting` | form open, submitting | `pressEscapeIn(nameField())` → `closes` is `[]`, `formDialog()` is not `null` |
 | `ignores a backdrop click while submitting` | form open, submitting | `clickBackdrop(formDialog()!)` → `[]`, still open |
 | `keeps Cancel disabled while submitting` [C] | form open, submitting | `cancel().disabled` is `true`. `act(() => cancel().click())` → `[]` |
-| `changes nothing visible when it refuses a dismissal` | form open, submitting; `before = document.body.innerHTML` | `pressEscape()` then `clickBackdrop(formDialog()!)` → `document.body.innerHTML` is `before`, `[]` |
+| `changes nothing visible when it refuses a dismissal` | form open, submitting; `before = document.body.innerHTML` | `pressEscapeIn(nameField())` then `clickBackdrop(formDialog()!)` → `document.body.innerHTML` is `before`, `[]` |
 | `still closes when the caller sets open to false while submitting, and restores focus` [C] | focus Trigger, then form open, submitting | `state.formOpen = false; paint()` → `formDialog()` is `null`, `document.activeElement` is Trigger, `closes` is `[]` |
-| `does not replay a refused Escape when submitting ends` | form open, submitting; `pressEscape()` | `state.submitting = false; paint()` → `closes` is `[]`, still open |
-| `closes on Escape and the backdrop again once submitting is false` [C] | form open, submitting, then `submitting = false; paint()` | `pressEscape()` → `['form']`. Reopen (`formOpen = true; paint()`), `clickBackdrop(formDialog()!)` → `['form', 'form']` |
-| `consumes Escape when the submitting FormDialog is on top` | `modalOpen = true; paint()`, then `formOpen = true; submitting = true; paint()` | `pressEscape()` → `[]`, `formDialog()` and `underDialog()` both not `null` |
-| `lets Escape close a dialog on top of a submitting FormDialog` [C] | `formOpen = true; submitting = true; paint()`, then `modalOpen = true; paint()` | `pressEscape()` → `['modal']`, `formDialog()` not `null` |
-| `closes only the top FormDialog when idle and stacked` [C] | `modalOpen = true; paint()`, then `formOpen = true; paint()` | `pressEscape()` → `['form']`, `underDialog()` not `null` |
+| `does not replay a refused Escape when submitting ends` | form open, submitting; `pressEscapeIn(nameField())` | `state.submitting = false; paint()` → `closes` is `[]`, still open |
+| `closes on Escape and the backdrop again once submitting is false` [C] | form open, submitting, then `submitting = false; paint()` | `pressEscapeIn(nameField())` → `['form']`. Reopen (`formOpen = true; paint()`), `clickBackdrop(formDialog()!)` → `['form', 'form']` |
+| `consumes Escape when the submitting FormDialog is on top` | `modalOpen = true; paint()`, then `formOpen = true; submitting = true; paint()` | `pressEscapeIn(nameField())` → `[]`, `formDialog()` and `underDialog()` both not `null` |
+| `lets Escape close a dialog on top of a submitting FormDialog` [C] | `formOpen = true; submitting = true; paint()`, then `modalOpen = true; paint()` | `pressEscapeIn(underAction())` → `['modal']`, `formDialog()` not `null` |
+| `closes only the top FormDialog when idle and stacked` [C] | `modalOpen = true; paint()`, then `formOpen = true; paint()` | `pressEscapeIn(nameField())` → `['form']`, `underDialog()` not `null` |
 
 - [ ] **Step 3: Write `confirm-dialog.test.tsx`** (planning decision (c), all [C])
 
-Same jsdom setup. Render `<ConfirmDialog open title="Delete" description="Sure?" confirmLabel="Delete" confirming onConfirm={() => {}} onClose={onClose} />` with `const onClose = vi.fn()`.
-- `still closes on Escape while confirming` [C]: dispatch Escape on `document` → `onClose` called once.
+Same jsdom setup and reset in `beforeEach` / `afterEach`. Render `<ConfirmDialog open title="Delete" description="Sure?" confirmLabel="Delete" confirming onConfirm={() => {}} onClose={onClose} />` with `const onClose = vi.fn()`.
+- `still closes on Escape while confirming` [C]: dispatch Escape on `document` → `onClose` called once. Both `ConfirmDialog` buttons are disabled while `confirming`, so the hook focuses the dialog container. A field-focus variant does not apply because there is no field.
 - `still closes on a backdrop click while confirming` [C]: click the dialog's `parentElement` → `onClose` called once.
 
 - [ ] **Step 4: Run the new tests to verify the red phase**
@@ -139,7 +145,7 @@ git commit -m "feat(ui): keep a submitting FormDialog open on user dismissal (#1
 
 ### Task 2: Intake regression test for the #180 scenario (type: `code`)
 
-Implements spec §8.8 ("existing laundry intake page tests keep passing") and planning decision (d). This is a regression test. Because Task 1 already fixed the behavior, it passes on arrival, so Step 3 proves it would catch the bug.
+Implements spec §8.8 ("existing laundry intake page tests keep passing") and planning decision (d). This is a regression test. Because Task 1 already fixed the behavior, it passes on arrival, so Step 4 proves it would catch the bug.
 
 **Files:**
 - Modify: `apps/web/lib/laundry-list-page.interaction.test.tsx` (one new `it`, next to `stays open on failure with an alert, the fields intact, and submit re-enabled for a retry`)
@@ -163,17 +169,46 @@ Implements spec §8.8 ("existing laundry intake page tests keep passing") and pl
 Run: `pnpm --filter web exec vitest run lib/laundry-list-page.interaction.test.tsx`
 Expected: 36/36 passed.
 
-- [ ] **Step 3: Prove it catches the bug**
-
-Run: `git show main:packages/ui/src/base/dialogs/form-dialog.tsx > packages/ui/src/base/dialogs/form-dialog.tsx && pnpm --filter web exec vitest run lib/laundry-list-page.interaction.test.tsx -t "#180"; git checkout HEAD -- packages/ui/src/base/dialogs/form-dialog.tsx`
-Expected: the new test fails at step 2's `dialog()` assertion (received `null`). Afterwards `git status --short packages/ui` shows no change. Record both.
-
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
 git add apps/web/lib/laundry-list-page.interaction.test.tsx
 git commit -m "test(web): intake dialog stays open on dismissal while a create is pending (#180)"
 ```
+
+- [ ] **Step 4: Prove it catches the bug, in a disposable worktree (M5-1)**
+
+The proof never writes to the working tree. It checks out the committed branch `HEAD` (Tasks 1 and 2) in a temporary detached worktree. There it puts back the original `FormDialog` from the pinned baseline `fcd1c6f`, and runs only the new test. The `trap` removes the worktree whether the commands succeed or fail.
+
+```bash
+set -u
+before="$(git status --porcelain=v1)"
+proof="$(mktemp -d)"
+cleanup() { git worktree remove --force "$proof/wt" 2>/dev/null; rm -rf "$proof"; git worktree prune; }
+trap cleanup EXIT
+git worktree add --detach "$proof/wt" HEAD
+git -C "$proof/wt" show fcd1c6f:packages/ui/src/base/dialogs/form-dialog.tsx \
+  > "$proof/wt/packages/ui/src/base/dialogs/form-dialog.tsx"
+grep -c requestClose "$proof/wt/packages/ui/src/base/dialogs/form-dialog.tsx" || true   # expect 0
+(cd "$proof/wt" && pnpm install --frozen-lockfile --offline) || { echo "PROOF SETUP FAILED"; exit 1; }
+if (cd "$proof/wt" && pnpm --filter web exec vitest run lib/laundry-list-page.interaction.test.tsx -t "#180"); then
+  echo "UNEXPECTED PASS: the regression test does not catch the bug"
+else
+  echo "EXPECTED FAIL against fcd1c6f FormDialog"
+fi
+cleanup; trap - EXIT
+[ "$(git status --porcelain=v1)" = "$before" ] && echo "WORKING TREE UNCHANGED"
+grep -c requestClose packages/ui/src/base/dialogs/form-dialog.tsx   # expect >= 1
+git worktree list
+```
+
+Expected:
+- The `grep` in the worktree prints `0`.
+- vitest reports exactly **1 failed** test, the new `#180` test, failing at the test's item 2 `dialog()` assertion (received `null`), and `EXPECTED FAIL` is printed. A non-zero exit for any other reason, such as no test matching `-t`, a setup or import error, does not count as the proof. Stop and investigate.
+- `WORKING TREE UNCHANGED` is printed. The real `form-dialog.tsx` still contains `requestClose`.
+- `git worktree list` shows only the main worktree.
+
+Record the failure message and all four results. If `pnpm install --offline` cannot resolve from the local store, rerun that one command without `--offline` and record it. If `UNEXPECTED PASS` prints, stop: the test does not prove the fix.
 
 ### Task 3: Full verification and execution record (type: `docs/process`)
 
@@ -187,10 +222,21 @@ TDD does not apply. The verification below and the Execution record replace it.
 Run: `pnpm install --frozen-lockfile && pnpm run lint && pnpm --filter web exec tsc --noEmit && pnpm run test`
 Expected: all succeed. `@clensy/ui` 96/96. `web` 48 files, 2185/2185 (baseline 2184 + 1). Record each command's actual result and every package's test totals.
 
-- [ ] **Step 2: Confirm the scope**
+- [ ] **Step 2: Account for every changed path (M5-3)**
 
-Run: `git diff --stat main...HEAD -- . ':!docs' ':!.claude' ':!workflow.yaml'`
-Expected: exactly `packages/ui/package.json`, `pnpm-lock.yaml`, `packages/ui/src/base/dialogs/form-dialog.tsx`, the two new `packages/ui` test files and `apps/web/lib/laundry-list-page.interaction.test.tsx`. No caller, no `modal.tsx`, no `use-dialog-behavior.ts`.
+Run: `git diff --name-only fcd1c6f HEAD | sort`
+Every path in the output must belong to exactly one of the three groups below, and every listed path must appear. Record the full output and the group of each path in the Execution record. A path in no group, or a missing path, means stop and investigate. Do not filter paths out of the command.
+
+- **#180 implementation** (Tasks 1 and 2), exactly:
+  `apps/web/lib/laundry-list-page.interaction.test.tsx`, `packages/ui/package.json`, `packages/ui/src/base/dialogs/confirm-dialog.test.tsx`, `packages/ui/src/base/dialogs/form-dialog.test.tsx`, `packages/ui/src/base/dialogs/form-dialog.tsx`, `pnpm-lock.yaml`.
+- **#180 workflow artifacts**, exactly:
+  `docs/superpowers/specs/2026-08-17-dashboard-ux-foundation-design.md` (Amendment #180) and `docs/superpowers/plans/2026-10-16-form-dialog-submit-guard-plan.md` (this plan and its records).
+- **Authorized workflow update** (owner request, commit `3a9c010`), exactly:
+  `.claude/skills/workflow/SKILL.md`, `docs/workflows/conventions/configuration-change.md`, `docs/workflows/prompts/code-review.md`, `docs/workflows/prompts/design-review.md`, `docs/workflows/prompts/documentation-execution.md`, `docs/workflows/prompts/implementation-execution.md`, `docs/workflows/prompts/implementation-planning.md`, `docs/workflows/prompts/plan-review.md`, `docs/workflows/prompts/specification.md`, `docs/workflows/prompts/workflow-validation.md`, `docs/workflows/specs/agent-workflow-design.md`, `workflow.yaml`.
+
+Then verify the groups separately:
+- Implementation: `git diff --stat fcd1c6f HEAD -- packages apps pnpm-lock.yaml` lists only the six implementation paths. `git diff --quiet fcd1c6f HEAD -- packages/ui/src/base/modal.tsx packages/ui/src/internal/use-dialog-behavior.ts packages/ui/src/base/dialogs/confirm-dialog.tsx` exits 0, and no `FormDialog` caller appears.
+- Workflow update: `git diff --name-only fcd1c6f HEAD -- .claude docs/workflows workflow.yaml` lists exactly the twelve paths above, and `git log --format=%h fcd1c6f..HEAD -- .claude docs/workflows workflow.yaml` prints only `3a9c010`, so no later commit touched them.
 
 - [ ] **Step 3: Write the Execution record and the M6 Slice Completion Report, then commit**
 
@@ -218,3 +264,15 @@ git commit -m "docs(180): record M6 execution"
 
 - `ConfirmDialog` refusing dismissal while `confirming` (spec §8.7). It needs a separate issue if it is wanted.
 - Any docs change. M9 decides.
+
+## Revision 2 (M5 review 1)
+
+| Finding | Resolution |
+| --- | --- |
+| **M5-1** (required): the Task 2 proof overwrote a tracked file and restored it with `git checkout`, against the mutable `main` ref. | Task 2 now commits first (Step 3). The proof (Step 4) runs in a disposable detached worktree of `HEAD`, restores `FormDialog` from the pinned `fcd1c6f`, cleans up through a `trap` on any exit, and checks that the working tree and `requestClose` are unchanged afterwards. |
+| **M5-2** (required): `pressEscape()` used whatever was focused, often `body`. | Replaced by `pressEscapeIn(element)`, which focuses the element, asserts it is active, and dispatches on it. Every `FormDialog` Escape uses `nameField()`. The stacked "dialog on top" test uses the top `Modal`'s button. Review Focus updated. |
+| **M5-3** (required): the scope audit excluded `docs`, `.claude` and `workflow.yaml`, so it could not account for the whole branch. | Task 3 Step 2 lists every changed path against `fcd1c6f` with no filtering. It sorts each into #180 implementation, #180 workflow artifacts or the authorized workflow update (`3a9c010`), then verifies each group separately. |
+| Non-blocking: fixture isolation. | `beforeEach` resets `state`, `closes` and the root. `afterEach` unmounts, so `openDialogStack` is empty between tests. |
+| Non-blocking: lockfile verification. | Task 1 Step 1 records changed importers, added or removed packages, and a before/after `pnpm why jsdom --recursive` diff, instead of assuming which sections change. |
+| Non-blocking: red-phase reporting and test totals. | Kept as is. Counts stay predictions, not pass criteria. |
+
