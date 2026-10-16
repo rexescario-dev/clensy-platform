@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 3)** at M5, 2026-10-16. M6 in progress (native execution). |
+| Status | **Accepted (revision 3)** at M5, 2026-10-16. M6 complete ([Execution record](#execution-record)); M7 **Approved for merge** (independent review); M8 N/A; M9 complete. Browser check and screen-reader pass **NOT RUN** (owner action before #181 closes). Not pushed; no PR yet. |
 | M5 decision | **Accepted** — 2026-10-16, revision 3 (`9d43bea`), by the owner, after a third pass: "M5: Accept. The plan is ready to proceed to M6 native execution." M5-5, M5-6 and M5-7 are resolved. One execution-time check, not a blocker: verify that the query-recording mock exposes the asserted variables in the documented shape, and that the popup assertions target the actual visible result container. Conditions: record actual test results rather than treating predicted red-phase counts as pass criteria; investigate unexpected failures; do not broaden scope. M7 MUST be a fresh, independent review. The acceptance does not authorize a push or any other external action. |
 | M5 history | First pass (2026-10-16, owner): **Returned for Revision**, findings M5-1 to M5-4, resolved in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). Second pass (2026-10-16, owner, reviewed `e37ca44`): **Returned for Revision**, findings M5-5 to M5-7. The reviewer recorded M5-1 to M5-4 as satisfactory. M5-5 to M5-7 are resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). The owner directs **native** execution once accepted, with the required fresh, independent M7 review. |
 | Date | 2026-10-16 |
@@ -1176,3 +1176,50 @@ Both confirmed.
 - **Covered meanwhile by:** the static tests that pin the unchanged class strings and markup. They are not a substitute for the visual check.
 
 **Screen-reader pass (planning decision (h)): NOT RUN** — no screen reader is available to the implementer. Steps 1–3 of Task 4 Step 3 are for the owner, alone or during #161's keyboard pass, before #181 is closed.
+
+### M7 — Approved for merge (2026-10-16)
+
+**Reviewer:** a fresh, independent agent on the most capable model (Opus 5.5) reviewed `8c7a11b..6db8d85` against the Accepted spec, this plan and issue #181. It did not write the change and made no changes to the repository. **This is not a self-review.**
+
+**Re-ran:**
+- `pnpm --filter web test`: 48 files, 2184 passed.
+- `pnpm --filter web lint`, `pnpm --filter web exec tsc --noEmit`, `pnpm --filter @clensy/web lint` and `pnpm --filter @clensy/web build`: exit 0.
+- `pnpm --filter @clensy/web test`: 16 files, 418 passed.
+- The unchanged-paths diff, including `docs/workflows/**`: empty.
+- Commit trailers: none.
+
+**Conformance:** Tasks 1–4 match the plan's text, with no undeclared extras and no copy, class, API, `@clensy/ui` or i18n change. All five Review focus items are covered by tests that would fail on a regression. The reviewer also judged the following sound:
+- the `aria-labelledby` precedence over the wrapping `<label>`;
+- `setFocus`'s deferred focus, which has no stale target because the dialog remounts on each opening;
+- the region's placement (absolute `sr-only`, no flex gap, and `sr-only` is generated through `@source`);
+- the services editor's unique ids and unchanged visible lines;
+- the M6 ruling and characterization evidence.
+
+**Blocking findings:** none.
+
+**Non-blocking (Low):**
+1. The plan's Status row was stale ("M6 in progress"). Fixed in M9.
+2. A successful search with untruncated results leaves the region empty, so no result count is announced. This is by design (planning decision (g); counts deferred).
+3. Reopening the list re-announces the same message. This is by design (g); worth noting in the owner's screen-reader pass.
+
+**Declined to judge:** real screen-reader output; visual appearance (browser check NOT RUN); re-running the M6 mutations; #180; API suites.
+
+### M8 — N/A (2026-10-16)
+
+No maintainability improvement worth its risk. The diff is three small source changes that match the plan's text, with one private helper (`searchAnnouncement`) already extracted, and M7 found no duplication or structure issue. No refactor commit.
+
+### M9 — Complete (2026-10-16)
+
+**Scope:** `packages/web/README.md`, `apps/web/README.md`, and this plan's Status and records. All are content updates, caused by the M6 implementation and M7 approval:
+- **`packages/web/README.md`:**
+  - `<LaundrySearchCombobox>` gains an **Announcements** bullet: the persistent polite region, when it is empty, and the priority for an empty page that is also truncated.
+  - `<LaundryFulfillmentFieldset>` now describes the radio name and description, the error on each radio with `aria-invalid`, the helper-only fieldset, and `inputRef`.
+- **`apps/web/README.md`**, Laundry intake **Form**: server field errors mark the field invalid, and focus moves to the first field with an error in form order; no live role.
+
+**Editorial verification:**
+- The new relative links (`../../docs/superpowers/plans/2026-10-16-intake-screen-reader-polish-plan.md`) resolve.
+- No heading changed.
+- No contradiction remains: the old "joins the group's `aria-describedby`" sentence was replaced.
+- Terminology follows the plan and spec.
+- No `docs/workflows/**` change.
+
