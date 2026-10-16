@@ -450,7 +450,7 @@ Scope (exact paths): `apps/web/README.md`, `docs/superpowers/plans/2026-10-13-la
 | Change | Kind | Caused by |
 | --- | --- | --- |
 | `apps/web/README.md` § Laundry intake: a new **Pending create** bullet. While the create is in flight, Escape and the backdrop don't close the dialog and Cancel is disabled, so a failure always shows. It links #180 and Amendment #180 §8.3. | Content | Shipped behavior (Task 1, verified by Task 2) |
-| Laundry Intake Modal plan, T5-a follow-up line: "resolved there by PR #192" plus a link to this plan | Content (cross-link) | #180 resolution |
+| Laundry Intake Modal plan, T5-a follow-up bullet: restated as resolved. It now leads with "resolved by #180 / PR #192" and a link to this plan, and describes the original problem in the past tense. Before, it read as still open, with the resolution only in its last clause (owner PR review, 2026-10-17). | Content (status, cross-link) | #180 resolution |
 | This plan's Status row: M7, M8, M9 and M10 positions | Content (status) | Gate outcomes above |
 
 Not changed: `packages/ui/README.md`. It documents layout and the export surface, not primitive behavior, so there is nothing stale there. The spec's Amendment #180 status rows already read Accepted.
