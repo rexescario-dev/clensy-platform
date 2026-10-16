@@ -2,8 +2,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted. [Amendment #180](#8-amendment-180--form-dialog-dismissal-while-submitting) **Draft** — 2026-10-16; on acceptance, where §8.3 qualifies a sentence in §4.4 or §4.6, §8.3 governs. |
-| Amendment #180 | **Draft** — 2026-10-16 (M2). Tracking [#180](https://github.com/rexescario-dev/clensy-platform/issues/180). Slice-local; does not replace this specification. Awaiting Design Review (M3). |
+| Status | Accepted. [Amendment #180](#8-amendment-180--form-dialog-dismissal-while-submitting) **Accepted** — 2026-10-16; where §8.3 qualifies a sentence in §4.4 or §4.6, §8.3 governs. |
+| Amendment #180 | **Accepted** — 2026-10-16 (M3), by the owner, reviewing `7a18433`. Tracking [#180](https://github.com/rexescario-dev/clensy-platform/issues/180). Slice-local; does not replace this specification. M2 review applied two wording corrections (§8.2 user-initiated dismissal; §8.4 `Modal` exception tied to the `FormDialog` guard). M3 findings: compatibility with §4.4 and §4.6, submission lifecycle, scope boundaries, and acceptance criteria all pass; no design blocker; no further spec edits. Ready for M4. |
 | Date | 2026-08-17 |
 | Tracking issue | [#24](https://github.com/rexescario-dev/clensy-platform/issues/24) |
 | Milestone | M5 — Dashboard UX Foundation |
@@ -179,7 +179,7 @@ export interface FormDialogProps {
 
 `FormDialog` renders the `<form>` element itself and calls `onSubmit` on the form's native submit event (so pressing Enter in a field submits, not just clicking the button) — callers supply only their `FormField`s as `children` and must not render their own `<form>` wrapper. `FormDialog` owns the submit button's disabled/loading state (from `submitting`) and the Cancel action.
 
-> **Amendment #180 (Draft, 2026-10-16).** While `submitting` is true, a `FormDialog` refuses user-initiated dismissal, including the Escape and backdrop-click closing that `Modal` otherwise provides. See §8.3.1. This sentence and `Modal`'s "Closes on Escape and backdrop click" are otherwise unchanged.
+> **Amendment #180 (Accepted, 2026-10-16).** While `submitting` is true, a `FormDialog` refuses user-initiated dismissal, including the Escape and backdrop-click closing that `Modal` otherwise provides. See §8.3.1. This sentence and `Modal`'s "Closes on Escape and backdrop click" are otherwise unchanged.
 
 **`ConfirmDialog`** — composes `Modal` for destructive confirmations:
 
@@ -223,7 +223,7 @@ A single rule for this and future milestones, so nothing reinvents its own inter
 
 Built into `Modal`/`DetailDrawer` once, not per call site: Escape closes; focus is trapped while open and restored to the triggering element on close; the container has `role="dialog"`, `aria-modal="true"`, and `aria-labelledby` pointing at its title (§4.4 — both `Modal`-based components and `DetailDrawer` use the same role, since both are modal in behavior regardless of screen position); all interactive elements inside primitives have visible focus states; interactive `DataTable` rows are keyboard-reachable and Enter/Space-activatable (§4.4).
 
-> **Amendment #180 (Draft, 2026-10-16).** "Escape closes" has one exception: Escape does not close a `FormDialog` that is submitting, and it does not reach a dialog underneath that one. See §8.3.2.
+> **Amendment #180 (Accepted, 2026-10-16).** "Escape closes" has one exception: Escape does not close a `FormDialog` that is submitting, and it does not reach a dialog underneath that one. See §8.3.2.
 
 ### 4.7 Migration scope
 
@@ -287,7 +287,7 @@ This Draft may move to Accepted once Design Review (M3) confirms:
 
 | Field | Value |
 | --- | --- |
-| **Status** | **Draft** — 2026-10-16 (M2). Awaiting Design Review (M3). |
+| **Status** | **Accepted** — 2026-10-16 (M3). |
 | **Date** | 2026-10-16 |
 | **Tracking** | [#180](https://github.com/rexescario-dev/clensy-platform/issues/180) "Keep form dialogs open while a submit is in flight". Follow-up from [#160](https://github.com/rexescario-dev/clensy-platform/issues/160) / PR [#179](https://github.com/rexescario-dev/clensy-platform/pull/179): M7 triage T5-a, listed under Deferred in the [Laundry Intake Modal plan](../plans/2026-10-13-laundry-intake-modal-plan.md). |
 | **Kind** | Slice-local amendment of this specification. Not a second specification. |
