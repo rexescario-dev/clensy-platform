@@ -800,6 +800,29 @@ describe('/app/laundry intake modal', () => {
     ]);
   });
 
+  // Regression (#180, from #160 M7 T5-a): Escape or a backdrop click during a
+  // pending create used to close the dialog, so a failure was silent.
+  it('keeps the dialog open on Escape and a backdrop click while the create is pending, then shows the failure in it (#180)', async () => {
+    const pressEscape = () =>
+      act(() => {
+        document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape' }));
+      });
+    start();
+    openCreate();
+    chooseCustomer();
+    await submitCreate();
+    pressEscape();
+    expect(dialog()).not.toBeNull();
+    act(() => dialog()!.parentElement!.click());
+    expect(dialog()).not.toBeNull();
+    await act(async () => nav.rejectReceive(new Error('Network down')));
+    runFocusTimer();
+    expect(dialog()!.querySelector('[role="alert"]')!.textContent).toBe('Unable to create laundry order.');
+    pressEscape();
+    expect(dialog()).toBeNull();
+    expect(nav.receiveCalls).toHaveLength(1);
+  });
+
   it('shows a server field error on the customer field, re-enables submit, and clears it when a customer is chosen again', async () => {
     start();
     openCreate();
