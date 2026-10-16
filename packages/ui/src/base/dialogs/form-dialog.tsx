@@ -27,12 +27,22 @@ export function FormDialog({
     void onSubmit();
   }
 
+  // The single user-dismissal guard (#180, Dashboard UX Foundation §8.3):
+  // Escape and the backdrop (through `Modal`'s `onClose`) and Cancel all
+  // come through here, and none of them closes the dialog while a submit is
+  // in flight. The request is dropped, not queued. `open` stays caller-owned,
+  // so a caller can still close the dialog itself at any time.
+  function requestClose() {
+    if (submitting) return;
+    onClose();
+  }
+
   return (
-    <Modal open={open} onClose={onClose} title={title}>
+    <Modal open={open} onClose={requestClose} title={title}>
       <form onSubmit={handleSubmit}>
         <div className="flex flex-col gap-4">{children}</div>
         <div className="mt-6 flex justify-end gap-3">
-          <Button type="button" variant="secondary" onClick={onClose} disabled={submitting}>
+          <Button type="button" variant="secondary" onClick={requestClose} disabled={submitting}>
             Cancel
           </Button>
           <Button type="submit" disabled={submitting}>
