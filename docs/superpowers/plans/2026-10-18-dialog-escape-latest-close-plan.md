@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft** (M4), 2026-10-18. Ready for M5 Plan Review. |
+| Status | **Draft, revision 2** (M4), 2026-10-18. Ready for M5 Plan Review (second pass). |
+| M5 history | First pass (2026-10-18, owner, reviewed `8c9b613`): **Returned for Revision** ("Request changes"), findings M5-1 to M5-6 and one execution guard. All are addressed in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). The owner asked to preserve: the #196 prerequisite, no spec amendment, the layout-effect probe (with its claim narrowed), the split between characterization and regression tests, the hook-and-tests-only scope, and the fresh independent M7 reviewer. |
 | Date | 2026-10-18 |
 | Tracking issue | [#193](https://github.com/rexescario-dev/clensy-platform/issues/193) "Dialog Escape handler should read the latest dismissal policy without relying on effect timing". Deferred from [#180](https://github.com/rexescario-dev/clensy-platform/issues/180) / PR [#192](https://github.com/rexescario-dev/clensy-platform/pull/192), M7 non-blocking observation. Implementation guidance: the owner's `useEffect` audit comment on #193 (2026-10-18, at `d5d845e`, finding 3). |
 | Branch | `feat/193-dialog-escape-latest-close`, from `main` at `d5d845e`. One PR for this plan, its M5 record and the implementation. The branch also carries the Context Forge workflow update (generic 1.5.0 → 1.6.0), committed in `ffcf7a6` at the owner's request, before M5. Before Task 1 starts, the branch is rebased onto the `main` that contains #196's merge (see Hard prerequisite). |
@@ -20,7 +21,7 @@
 | M10 | **Applies**: the slice changes workflow assets (`ffcf7a6`). The validation report goes in this plan's Gate outcomes, before closeout. |
 | Workflow version | Planned under generic **1.6.0**, including its characterization-test rule (M4 step 9): each labelled characterization test records the behavior broken, the tests that break covers, and an outside-the-commit run. See [Characterization breaks](#characterization-breaks-task-1). |
 
-**Goal:** The shared Escape handler in `useDialogBehavior` always calls the `onClose` from the latest commit, so Escape can never dismiss a `FormDialog` once its submit has started (and never stays refused once it has ended), however React schedules the `submitting` update.
+**Goal:** The shared Escape handler in `useDialogBehavior` calls the `onClose` from the latest commit, so an Escape that lands in the commit changing `submitting` sees the new dismissal policy: it cannot dismiss a `FormDialog` whose submit has just started, and it is not refused once the submit has ended.
 
 **Architecture:** Today the `document` `keydown` listener is registered in a passive `useEffect` keyed on `[open, onClose]`. A new `onClose` reaches the listener only when that effect re-runs. Until then, an Escape press calls the previous `onClose`. `FormDialog`'s `requestClose` is a new function on every render, so the listener is also removed and re-added on every render. The fix wraps the Escape call in React 19.2's `useEffectEvent` and keys the effect on `[open]` only. React swaps in an effect event's latest function during the commit's before-mutation phase, before any layout or passive effect runs. So the listener reads the current callback from the moment a commit lands, and it is registered once per `open`. `FormDialog`'s `requestClose` guard, the `openDialogStack` topmost check, the backdrop handler and both focus effects are unchanged.
 
@@ -31,6 +32,7 @@
 ## Hard prerequisite
 
 - **#196 is merged.** The owner's sequencing (#193 audit comment): adopt `useEffectEvent` only after #196 enables `react-hooks/rules-of-hooks` and `react-hooks/exhaustive-deps`, so that its usage rules are enforced. Before Task 1: `gh issue view 196 --json state -q .state` prints `CLOSED`, the merge commit is on `origin/main`, and `grep -n "react-hooks/exhaustive-deps" packages/ui/eslint.config.mjs` matches. Then `git fetch && git rebase origin/main` on this branch. If #196 is not merged, stop. Do not install or configure the plugin in this slice.
+- If, after #196, `react-hooks/rules-of-hooks` or `react-hooks/exhaustive-deps` flags the Task 2 `useEffectEvent` usage itself, stop and reassess the mechanism with the owner (M5-guard). Do not suppress the rule, change its configuration or widen this issue's scope.
 - If #196 lands and its lint run reports a finding in `use-dialog-behavior.ts` that it deferred to a separate issue, stop and ask the owner whether that issue is folded into this slice. Do not fix it silently.
 
 ## Global Constraints
@@ -48,7 +50,8 @@
 
 - **(a) Mechanism: `useEffectEvent`.** The owner's audit comment names it as the approach to evaluate first, and it holds up. It is exported by React 19.2.8, and react-dom 19.2.8 assigns an effect event's new function in `commitBeforeMutationEffects`, so it is current before any layout effect of the same commit. The alternative in the issue's Scope, a ref updated in a layout effect, fails the strictest form of the timing test (decision c). A layout effect elsewhere in the tree that runs before the hook's own layout effect would still see the stale ref, so its freshness depends on where the dialog sits in the tree. `useEffectEvent` does not have that dependency. Only the Escape call moves into the effect event. The Tab focus trap reads refs and the DOM, not props, so it stays in the listener as it is.
 - **(b) Listener lifecycle.** The `keydown` effect is keyed on `[open]` only: one registration when `open` becomes true, one removal when it becomes false or the component unmounts. This follows from (a), and the owner's comment asks for it. Test `registers one keydown listener per open and removes it on close` pins it.
-- **(c) How the tests hit the timing window.** A passive-effect window cannot be hit reliably with real timers in jsdom. Instead, a test-only probe component calls `useLayoutEffect` and presses Escape when its `fire` prop turns true. Layout effects run after the DOM commit and before that commit's passive effects, however the update was scheduled (discrete, default, transition or timer). So an Escape press from a layout effect lands exactly in the window #193 describes, every time. The probe is rendered **before** the dialog in the tree, so its layout effect also runs before any layout effect inside the dialog. This makes the test independent of the mechanism's tree position. Pre-validation probe (1) shows the pattern reproduces the defect on `main`.
+- **(c) How the tests hit the timing window (narrowed, M5-1).** A test-only probe component calls `useLayoutEffect` and presses Escape when its `fire` prop turns true, so the press lands after that commit's DOM changes and before its passive effects. That is the window #193 describes. The probe is rendered **before** the dialog in the tree, so its layout effect also runs before any layout effect inside the dialog, which keeps the test independent of where the mechanism sits in the tree. Pre-validation probe (1) shows the pattern reproduces the defect on `main`.
+  **What the tests establish:** an Escape dispatched during the commit that changes `submitting` (or `onClose`) observes the new dismissal policy, for the commits those tests produce. They run updates through `act`, plus one variant whose update is scheduled with `startTransition`. They do **not** exercise every scheduling mode, and this plan does not claim they do. No timer-scheduled variant is added. The general claim, that the fix holds however the update is scheduled (#193 criterion 1), rests on the mechanism in (a): React assigns an effect event's new function during every commit, before that commit's layout and passive effects, whatever lane produced it. That is a design argument for M7 to check, not a test result.
 - **(d) Coverage in `@clensy/ui` only.** The issue requires `@clensy/ui` regression tests for the timing case and stacked dialogs. No new `web` test. `apps/web/lib/use-detail-drawer.test.tsx` (including `goes Back once for a double Escape…`) and the laundry interaction suites already exercise the hook through real callers, and Task 3 runs them unedited.
 - **(e) `DetailDrawer` characterization tests.** Unlike #180, this slice edits the hook `DetailDrawer` uses, and `@clensy/ui` has no `DetailDrawer` test today. A new `detail-drawer.test.tsx` pins its Escape, backdrop and × dismissal and its stacking under a `ConfirmDialog` before the hook changes (§8.5, issue criterion 4). These are characterization tests. `ConfirmDialog` is already pinned by `confirm-dialog.test.tsx`, which stays unedited.
 - **(f) Focus and Strict Mode characterization tests.** The owner's comment asks that focus capture on open, focus restoration on close or unmount, and correct behavior under Strict Mode's mount, unmount, remount sequence be preserved. Task 1 pins each one before the change.
@@ -59,7 +62,7 @@
 - **The submit ending, not starting:** an Escape in the commit that sets `submitting` back to false must close the dialog. A stale guard that still refuses it is the mirror image of #193 (§8.3.3, "no leftover blocked state"). Owned by Task 2 `closes on an Escape pressed in the commit that ends a submit`.
 - **A dialog reopened after closing:** reopening must register exactly one new listener, and an Escape after close must call nothing. Owned by Task 2 `registers one keydown listener per open and removes it on close`.
 - **Unmount while open (the `DetailDrawer` `?detail=` pattern):** the listener must be removed and focus restored, and a later Escape must call nothing. Owned by Task 1 `restores focus to the trigger and stops handling Escape when the dialog unmounts while open`.
-- **Strict Mode's double mount:** this must not leave two listeners (Escape would call `onClose` twice) or a duplicate stack entry (topmost would be wrong). Owned by Task 1 `closes once per Escape under Strict Mode and restores focus`, Task 1 `keeps topmost-only Escape under Strict Mode`, and Task 2 `refuses the start-of-submit Escape under Strict Mode too`.
+- **Strict Mode's double mount:** this must not leave two active listeners (Escape would call `onClose` twice), a listener after close, or a duplicate stack entry (topmost would be wrong). Owned by Task 1 `closes once per Escape under Strict Mode, cleans up on close and restores focus`, Task 1 `keeps topmost-only Escape under Strict Mode`, and Task 2 `refuses the start-of-submit Escape under Strict Mode too`.
 - **A caller-supplied `onClose` that changes identity without any submit** (an inline arrow, as most callers pass): Escape must call the newest one. Owned by Task 2 `calls the onClose from the commit the Escape lands in, not an earlier one`.
 
 ---
@@ -95,11 +98,14 @@ File header: `// @vitest-environment jsdom`, `IS_REACT_ACT_ENVIRONMENT = true`, 
 
 - [ ] **Step 2: Write the focus and Strict Mode characterization tests**
 
-In `use-dialog-behavior.test.tsx`, `describe('useDialogBehavior focus and Strict Mode (#193) [C]')`:
-- `moves focus into the dialog on open and restores it to the trigger on close`: focus Trigger, open a `Modal` containing `<button>First</button>` → `document.activeElement` is First; set `open` false → active element is Trigger.
-- `restores focus to the trigger and stops handling Escape when the dialog unmounts while open`: focus Trigger, mount `<DetailDrawer open onClose={spy}>`, then rerender without it → active element is Trigger; `pressEscape()` → `spy` not called.
-- `closes once per Escape under Strict Mode and restores focus`: same as the first test with the tree wrapped in `<StrictMode>` and `onClose` a `vi.fn()` that sets `open` false → after one Escape, `onClose` called exactly once and focus is on Trigger.
-- `keeps topmost-only Escape under Strict Mode`: in `<StrictMode>`, open a `Modal` titled `Under`, then a `FormDialog` with `submitting` true on top → Escape → neither `onClose` is called and both dialogs are present; set `submitting` false → Escape → only the `FormDialog`'s `onClose` is called.
+In `use-dialog-behavior.test.tsx`, `describe('useDialogBehavior focus and Strict Mode (#193) [C]')`. These tests check the §4.4/§4.6 contract only through the DOM: which element is `document.activeElement`, which dialogs are present and which `onClose` spies were called. They do not read the hook's refs or the dialog stack (M5-2).
+
+Shared fixture rules: every tree renders a real `<button type="button">Trigger</button>` in the same root as the dialog, **before** it. Each test first mounts the tree with the dialog closed or absent, focuses Trigger with `act(() => trigger.focus())` and asserts `document.activeElement` is Trigger. Only then does it open the dialog, by a `rerender`. Every open, close and unmount is a `rerender` inside `act`, so its effects have flushed before the next assertion. **Close** means rerendering the same mounted dialog with `open={false}`. **Unmount** means rerendering the tree without the dialog element.
+
+- `moves focus into the dialog on open and restores it to the trigger on close`: a `Modal` (title `Focus`) containing `<button type="button">First</button>`. Open → active element is First. Close → active element is Trigger.
+- `restores focus to the trigger and stops handling Escape when the dialog unmounts while open`: a `DetailDrawer` (title `Details`, `onClose` = `spy`) that appears in the tree already `open`, the `?detail=` pattern. After the rerender that adds it, the active element is inside the drawer. Unmount → active element is Trigger, and `dialogTitled('Details')` is null. Then `pressEscape()` → `spy` not called.
+- `closes once per Escape under Strict Mode, cleans up on close and restores focus`: the first test's tree inside `<StrictMode>`. The `Modal`'s `onClose` is a `vi.fn()` that closes it. Spies on `document.addEventListener` and `removeEventListener` (calling through) keep a set of the **currently active** `'keydown'` handlers: add on add, delete on remove. The test asserts the active set, never the number of add or remove calls, because Strict Mode's extra development setup and cleanup are not the product contract (M5-3, M5-4). While open: active set size 1; one Escape → `onClose` called exactly once and the dialog is gone; active set size 0; active element is Trigger. Then one more `pressEscape()` → `onClose` still called once. Reopen: active set size 1; one Escape → `onClose` called twice in total. Restore the spies.
+- `keeps topmost-only Escape under Strict Mode`: in `<StrictMode>`, open a `Modal` titled `Under`, then a `FormDialog` (title `Edit`) with `submitting` true on top. Escape → neither `onClose` is called, and `dialogTitled('Edit')` and `dialogTitled('Under')` are both present (M5-5). Set `submitting` false, then Escape → only the `FormDialog`'s `onClose` is called, and `Under` is still present.
 
 #### Characterization breaks (Task 1)
 
@@ -113,8 +119,8 @@ Each row is one behavior deliberately broken in the code under test. Every test 
 | B4 | A click anywhere inside the overlay, including inside the panel, closes the dialog as a backdrop click would. | `does not close on a click inside the panel` |
 | B5 | The `DetailDrawer` × button does not close the drawer. | `closes on ×` |
 | B6 | Focus does not move into the dialog when it opens. | `moves focus into the dialog on open and restores it to the trigger on close` |
-| B7 | Focus is not restored to the trigger when the dialog closes or unmounts. | `moves focus into the dialog on open and restores it to the trigger on close`; `restores focus to the trigger and stops handling Escape when the dialog unmounts while open`; `closes once per Escape under Strict Mode and restores focus` |
-| B8 | A dialog keeps handling Escape after its effects are cleaned up (on close, on unmount, and on Strict Mode's simulated unmount). | `restores focus to the trigger and stops handling Escape when the dialog unmounts while open`; `closes once per Escape under Strict Mode and restores focus` |
+| B7 | Focus is not restored to the trigger when the dialog closes or unmounts. | `moves focus into the dialog on open and restores it to the trigger on close`; `restores focus to the trigger and stops handling Escape when the dialog unmounts while open`; `closes once per Escape under Strict Mode, cleans up on close and restores focus` |
+| B8 | A dialog keeps handling Escape after its effects are cleaned up (on close, on unmount, and on Strict Mode's simulated unmount). | `restores focus to the trigger and stops handling Escape when the dialog unmounts while open`; `closes once per Escape under Strict Mode, cleans up on close and restores focus` |
 
 All nine Task 1 tests appear in at least one row.
 
@@ -138,14 +144,14 @@ A row is evidence only when **every** test assigned to it fails because of that 
 
 ### Task 2: Escape always calls the latest `onClose` (type: `code`)
 
-Implements spec §8.3.1 items 1 and 5, §8.3.2, §8.3.3 and §8.5 under every update schedule (#193 acceptance criteria 1–3). Planning decisions (a)–(c).
+Implements spec §8.3.1 items 1 and 5, §8.3.2, §8.3.3 and §8.5 for an Escape that lands in the commit changing `submitting` (#193 acceptance criteria 1–3, with criterion 1's scope as narrowed in decision (c)). Planning decisions (a)–(c).
 
 **Files:**
 - Modify: `packages/ui/src/internal/use-dialog-behavior.ts` (import line 2; the `keydown` effect, lines 76–130; comments that describe it)
 - Test: `packages/ui/src/internal/use-dialog-behavior.test.tsx` (second `describe` block)
 
 **Interfaces:**
-- Consumes: Task 1's `mount`, `rerender`, `pressEscape`, `dialogTitled`.
+- Consumes: Task 1's `mount`, `rerender`, `pressEscape`, `dialogTitled`; `startTransition` and `useLayoutEffect` from `react`.
 - Produces: no new export. `useDialogBehavior`'s signature and return value are unchanged.
 
 - [ ] **Step 1: Write the failing tests**
@@ -169,18 +175,19 @@ function EscapeInCommit({ fire }: { fire: boolean }) {
 
 In every test below, `<EscapeInCommit fire={…} />` is the first child of the rendered tree, and `fire` changes in the same `rerender` as the prop under test.
 
-`describe('Escape uses the latest close callback (#193)')`:
-- `calls the onClose from the commit the Escape lands in, not an earlier one`: mount `<Modal open onClose={a}>`; rerender with `onClose={b}` and `fire` true → `b` called once, `a` not called.
-- `refuses an Escape pressed in the commit that starts a submit`: mount an open `FormDialog` (`submitting` false) whose `onClose` increments `closes`; rerender with `submitting` true and `fire` true → `closes` is 0 and the dialog is present.
-- `closes on an Escape pressed in the commit that ends a submit`: mount with `submitting` true; rerender with `submitting` false and `fire` true → `closes` is 1.
-- `refuses an Escape in the commit that starts a submit when the FormDialog is stacked on top`: open `Modal` `Under`, then an idle `FormDialog` on top; rerender with `submitting` true and `fire` true → neither `onClose` is called; both dialogs present.
-- `refuses the start-of-submit Escape under Strict Mode too`: the second test with the tree in `<StrictMode>` → `closes` is 0.
-- `registers one keydown listener per open and removes it on close`: `vi.spyOn(document, 'addEventListener')` and `removeEventListener`, counting only `'keydown'` calls. Mount an open `Modal`, then rerender it three times, each with a new inline `onClose` → 1 add, 0 removes. Set `open` false → 1 remove, of the same handler that was added; `pressEscape()` → no `onClose` called. Set `open` true again → 2 adds in total. Restore the spies.
+`describe('Escape uses the latest close callback (#193)')`. Wherever Escape must be refused, the test asserts the refused dialog is still present and, when stacked, that the dialog underneath is still present. Callback counts alone are not enough (M5-5).
+- `calls the onClose from the commit the Escape lands in, not an earlier one`: mount `<Modal open onClose={a} title="Plain">`; rerender with `onClose={b}` and `fire` true → `b` called once, `a` not called.
+- `refuses an Escape pressed in the commit that starts a submit`: mount an open `FormDialog` (title `Edit`, `submitting` false) whose `onClose` increments `closes`; rerender with `submitting` true and `fire` true → `closes` is 0 and `dialogTitled('Edit')` is present.
+- `refuses an Escape pressed in the commit that starts a submit scheduled as a transition`: as the previous test, but the rerender runs inside `act(() => startTransition(() => root.render(…)))` → `closes` is 0 and `Edit` is present.
+- `closes on an Escape pressed in the commit that ends a submit`: mount with `submitting` true; rerender with `submitting` false and `fire` true → `closes` is 1 and `Edit` is gone.
+- `refuses an Escape in the commit that starts a submit when the FormDialog is stacked on top`: open `Modal` `Under`, then an idle `FormDialog` `Edit` on top; rerender with `submitting` true and `fire` true → neither `onClose` is called; `Edit` and `Under` are both present.
+- `refuses the start-of-submit Escape under Strict Mode too`: the second test with the tree in `<StrictMode>` → `closes` is 0 and `Edit` is present.
+- `registers one keydown listener per open and removes it on close`: **not** under Strict Mode. Its exact call counts describe a normal (non–Strict Mode) render only; Strict Mode's lifecycle is covered by the active-set assertions in Task 1 (M5-3). `vi.spyOn(document, 'addEventListener')` and `removeEventListener`, counting only `'keydown'` calls. Mount an open `Modal`, then rerender it three times, each with a new inline `onClose` → 1 add, 0 removes. Set `open` false → 1 remove, of the same handler that was added; `pressEscape()` → no `onClose` called. Set `open` true again → 2 adds in total. Restore the spies.
 
 - [ ] **Step 2: Run them to verify they fail**
 
 Run: `pnpm --filter @clensy/ui exec vitest run src/internal/use-dialog-behavior.test.tsx`
-Expected (predicted): 6 failed, 4 passed (Task 1's). The first five fail because the stale `onClose` runs: `a` called instead of `b`; `closes` 1 instead of 0; 0 instead of 1; the `FormDialog` closes; 1 instead of 0. The listener test fails on its add count: 4 instead of 1. Record actual names and first messages.
+Expected (predicted): 7 failed, 4 passed (Task 1's). The first six fail because the stale `onClose` runs: `a` called instead of `b`; `closes` 1 instead of 0 (`act` and transition variants); 0 instead of 1; the `FormDialog` closes; 1 instead of 0. The listener test fails on its add count: 4 instead of 1. The transition variant's failure is the least certain prediction: if it passes on `main`, stop and record why before Step 3. Record actual names and first messages.
 
 - [ ] **Step 3: Call the latest `onClose` through an effect event in `use-dialog-behavior.ts`**
 
@@ -189,7 +196,7 @@ Import `useEffectEvent` from `react`. In `useDialogBehavior`, before the `keydow
 - [ ] **Step 4: Run the tests and lint**
 
 Run: `pnpm --filter @clensy/ui exec vitest run && pnpm --filter @clensy/ui lint && pnpm --filter @clensy/ui build`
-Expected: 11 files, 111/111 passed (96 + 9 + 6, on the `d5d845e` baseline; adjust by Step 0's recorded baseline); lint passes with no `react-hooks/*` finding and no `eslint-disable`; `tsc --noEmit` passes.
+Expected: 11 files, 112/112 passed (96 + 9 + 7, on the `d5d845e` baseline; adjust by Step 0's recorded baseline); lint passes with no `react-hooks/*` finding and no `eslint-disable`; `build` passes. `@clensy/ui`'s `build` script is `tsc --noEmit` (`packages/ui/package.json`), so this command is the package's type check. Record it as `pnpm --filter @clensy/ui build` (`tsc --noEmit`) with its actual exit status. If the script has changed by M6, record what it ran instead, and do not report a type check that did not run (M5-6). A `react-hooks/*` finding on the `useEffectEvent` usage → stop (Hard prerequisite, M5-guard).
 
 - [ ] **Step 5: Commit**
 
@@ -208,7 +215,7 @@ TDD does not apply. The verification below and the Execution record replace it.
 - [ ] **Step 1: Run the CI-equivalent checks**
 
 Run: `pnpm install --frozen-lockfile && pnpm run lint && pnpm --filter web exec tsc --noEmit && pnpm run test`
-Expected: all succeed. `@clensy/ui` 111/111. `web` 48 files, 2185/2185, unchanged from the baseline (or Step 0's recorded post-#196 count). Record each command's actual result and every package's test totals.
+Expected: all succeed. `@clensy/ui` 112/112. `web` 48 files, 2185/2185, unchanged from the baseline (or Step 0's recorded post-#196 count). Record each command's actual result and every package's test totals.
 
 - [ ] **Step 2: Account for every changed path**
 
@@ -232,7 +239,7 @@ git commit -m "docs(193): record M6 execution"
 
 | Requirement | Task |
 | --- | --- |
-| #193 criterion 1; §8.3.1 item 1, §8.5 (submitting `FormDialog` never closes on Escape, however scheduled) | Task 2 `refuses an Escape pressed in the commit that starts a submit`, `…under Strict Mode too`; Step 3 |
+| #193 criterion 1; §8.3.1 item 1, §8.5 (submitting `FormDialog` never closes on Escape) | Task 2 `refuses an Escape pressed in the commit that starts a submit`, `…scheduled as a transition`, `…under Strict Mode too`; Step 3. Scheduling modes beyond those tested rest on decision (a) (decision (c)) |
 | §8.3.3 (no leftover blocked state once submitting is false) | Task 2 `closes on an Escape pressed in the commit that ends a submit` |
 | #193 criterion 2; §8.3.2 (topmost-only, stacked, submitting on top) | Task 1 `keeps topmost-only Escape under Strict Mode`, `closes only a ConfirmDialog opened on top of it…`; Task 2 `…stacked on top`; existing `form-dialog.test.tsx` stacking tests, unedited |
 | #193 criterion 3 (regression tests in `@clensy/ui` for timing and stacking) | Task 2 Step 1 |
@@ -248,3 +255,20 @@ git commit -m "docs(193): record M6 execution"
 - The AppSidebar `useEffectEvent` follow-up named in #196. It is a separate issue.
 - `ConfirmDialog` refusing dismissal while `confirming` (spec §8.7). It needs a separate issue if it is wanted.
 - Any docs change. M9 decides.
+
+## Revision 2 (M5 review 1)
+
+M5 first pass (owner, 2026-10-18, reviewed `8c9b613`): **Request changes**. Each finding and how this revision resolves it:
+
+| Finding | Resolution |
+| --- | --- |
+| M5-1 (P1) The probe does not prove every scheduling mode | Decision (c) and the Goal are narrowed to what the tests establish: an Escape in the commit that changes `submitting` sees the new policy. Added one `startTransition` variant; no timer variant. The wider claim is stated as a design argument resting on decision (a), for M7 to check. Task 2 preamble and Traceability updated. |
+| M5-2 (P1) Focus tests need a reliable trigger and restoration contract | Task 1 Step 2 now has shared fixture rules: a real Trigger in the same root, focused and asserted before the dialog opens; every open, close and unmount flushed by an `act` rerender; close and unmount defined separately. Assertions use the DOM only. The unmount test asserts restoration to Trigger, that the drawer is gone, and that a later Escape does not call its `onClose`. |
+| M5-3 (P1) Listener counts could pin Strict Mode's development lifecycle | The exact-count test is explicitly non–Strict Mode. Strict Mode is checked through the set of active `keydown` handlers, never through call counts. |
+| M5-4 (P2) Strict Mode does not cover the listener lifecycle | Task 1's Strict Mode test now asserts one active listener while open, one `onClose` per Escape, no active listener and no call after close, and one active listener again after reopening. It is renamed `closes once per Escape under Strict Mode, cleans up on close and restores focus`. Its characterization breaks (B7, B8) still cover it. |
+| M5-5 (P2) Refusal tests should assert the dialogs stay open | Every Task 1 and Task 2 test where Escape is refused now asserts the refused dialog, and any dialog underneath, by title. |
+| M5-6 (P2) The type check is not clearly identified | Task 2 Step 4 names `@clensy/ui build` as `tsc --noEmit` from `packages/ui/package.json` and records it under that name. It must not report a type check that did not run. |
+| Guard: hooks lint flags `useEffectEvent` | Added to Hard prerequisite and Task 2 Step 4: stop and reassess with the owner; no suppression, no rule change, no scope growth. |
+
+Counts change: Task 2 has 7 tests (was 6); predicted red is 7 failed, 4 passed; the `@clensy/ui` total is 112 (was 111). Task 1 is still 9 tests, and the B1–B8 rows are unchanged apart from the renamed test.
+
