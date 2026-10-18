@@ -180,8 +180,12 @@ describe('useDialogBehavior focus and Strict Mode (#193) [C]', () => {
     expect.soft(dialogTitled('Focus')).toBeNull();
     expect.soft(active.size).toBe(0);
     expect.soft(document.activeElement).toBe(button('Trigger'));
+    // The delta isolates what this Escape did: the cumulative count above
+    // cannot, once an earlier Escape has already raised the total.
+    const callsBeforeClosedEscape = onClose.mock.calls.length;
     pressEscape();
     expect.soft(onClose).toHaveBeenCalledTimes(1);
+    expect.soft(onClose.mock.calls.length).toBe(callsBeforeClosedEscape);
     open = true;
     rerender(tree());
     expect.soft(active.size).toBe(1);
