@@ -4,12 +4,12 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 8)** at M5, 2026-10-19. M6 in progress: it resumes by editing C3, then reruns Task 1 Steps 3–5 ([Revision 8](#revision-8-m6-return-from-task-1-step-5-revision-7-run)). |
+| Status | **Accepted (revision 8)** at M5, 2026-10-19. M6 complete ([Execution record](#execution-record)). M7 **Approved for merge** (fresh independent review). M8 N/A. M9 complete. M10 **Accepted**. Draft PR [#200](https://github.com/rexescario-dev/clensy-platform/pull/200). Not merged; closeout awaits the owner's authorization. |
 | M5 decision | **Accepted** — 2026-10-19, revision 8 (`ecc322b`), by the owner, reviewing the complete plan diff from `9c99955`: "Accepted — revision 8. This accepts the plan revision, not the predicted break signatures or implementation results." Earlier: **Accepted** — 2026-10-19, revision 7 (`33d33d1`), by the owner: "Accepted — revision 7. This accepts the plan revision, not the unrun predictions or the implementation." The owner's qualification: the review was of the change summary, not the 100-line diff itself, so it does not certify every changed line. Earlier: **Accepted** — 2026-10-19, revision 6 (`52372ae`), by the owner, reviewing the complete diff from revision 5 (`d825d84`): "Accepted — revision 6. This accepts the plan revision; it does not mean Step 3 has passed or authorize implementation beyond the plan's gates." Earlier: **Accepted** — 2026-10-18, revision 5 (`11e0d37`), by the owner, reviewing the complete committed file: "Accepted. No further plan revision is required." The owner's caveats: the acceptance validates the plan's design and review criteria; it does not mean the characterization breaks have been run or the implementation verified. M6 stays blocked until #196 is merged; then run the Task 1 Step 0 prerequisite checks and rebase first, and record actual results, not the predicted counts or planned break signatures. Execution method: **native** (owner decision, 2026-10-18), followed by a fresh independent M7 reviewer that does not rely only on the implementing session's reasoning or test report. |
 | M5 history | First pass (2026-10-18, owner, reviewed `8c9b613`): **Returned for Revision** ("Request changes"), findings M5-1 to M5-6 and one execution guard. All are addressed in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). Second pass (2026-10-18, owner, reviewed `e9bfc3e`): **Returned for Revision**, findings M5-7 (P1) and M5-8 (P2). The six earlier findings are recorded as addressed. Both are resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). Third pass (2026-10-18, owner, reviewed `6fe0f29`): **Returned for Revision**, findings M5-9 and M5-10 (P1) and M5-11 (P2), plus five non-blocking observations. All are resolved in [Revision 4 (M5 review 3)](#revision-4-m5-review-3). Fourth pass (2026-10-18, owner, reviewed the Revision 4 text as quoted from `fb5f8ed`): **Returned for Revision**. M5-9 to M5-11 are recorded as addressed. One wording correction, M5-12, is resolved in [Revision 5 (M5 review 4)](#revision-5-m5-review-4). Fifth pass (2026-10-18, owner, reviewed the full `11e0d37` file): **Accepted**. M5-9 to M5-12 and the earlier safeguards are recorded as resolved. M6 return (2026-10-19): Task 1 Step 3 found C1's open assertion false on unmodified code. The owner chose Option A, and [Revision 6](#revision-6-m6-return-from-task-1-step-3) went to M5 for a sixth pass. Sixth pass (2026-10-19, owner, reviewed the `d825d84`..`52372ae` diff): **Accepted**. M6 return (2026-10-19): the Task 1 Step 5 break runs showed that C3 and C4 never exercise Strict Mode's simulated unmount and remount on an open dialog. The owner did not count B8 and B9 as evidence, and [Revision 7](#revision-7-m6-return-from-task-1-step-5) went to M5 for a seventh pass. Seventh pass (2026-10-19, owner, reviewed the change summary for `33d33d1`): **Accepted**, with the qualification in the M5 decision row. M6 return (2026-10-19): B9's revision 7 distinguishing assertion failed, so B9 is not evidence. [Revision 8](#revision-8-m6-return-from-task-1-step-5-revision-7-run) went to M5 for an eighth pass. Eighth pass (2026-10-19, owner, reviewed the complete `9c99955`..`ecc322b` plan diff): **Accepted**. The owner asked to preserve: the #196 prerequisite, no spec amendment, the layout-effect probe (with its claim narrowed), the split between characterization and regression tests, the hook-and-tests-only scope, and the fresh independent M7 reviewer. |
 | Date | 2026-10-18 |
 | Tracking issue | [#193](https://github.com/rexescario-dev/clensy-platform/issues/193) "Dialog Escape handler should read the latest dismissal policy without relying on effect timing". Deferred from [#180](https://github.com/rexescario-dev/clensy-platform/issues/180) / PR [#192](https://github.com/rexescario-dev/clensy-platform/pull/192), M7 non-blocking observation. Implementation guidance: the owner's `useEffect` audit comment on #193 (2026-10-18, at `d5d845e`, finding 3). |
-| Branch | `feat/193-dialog-escape-latest-close`, from `main` at `d5d845e`. One PR for this plan, its M5 record and the implementation. The branch also carries the Context Forge workflow update (generic 1.5.0 → 1.6.0), committed in `ffcf7a6` at the owner's request, before M5. Before Task 1 starts, the branch is rebased onto the `main` that contains #196's merge (see Hard prerequisite). |
+| Branch | `feat/193-dialog-escape-latest-close`, from `main` at `d5d845e`. One PR for this plan, its M5 record and the implementation. The branch also carries the Context Forge workflow update (generic 1.5.0 → 1.6.0), committed in `ffcf7a6` at the owner's request, before M5. After the M6 rebase onto `66b55f9` that commit is `086941e`. Before Task 1 starts, the branch is rebased onto the `main` that contains #196's merge (see Hard prerequisite). |
 | Implements (Accepted) | [Dashboard UX Foundation](../specs/2026-08-17-dashboard-ux-foundation-design.md), Status **Accepted** (2026-08-17), with [Amendment #180](../specs/2026-08-17-dashboard-ux-foundation-design.md#8-amendment-180--form-dialog-dismissal-while-submitting) **Accepted** (2026-10-16). Governing text: §8.3.1 (items 1, 5, 7), §8.3.2, §8.3.3, §8.5; §4.4 (`Modal`, `ConfirmDialog`, `DetailDrawer`) and §4.6 (focus in on open, restore on close). |
 | No spec amendment | Owner decision, 2026-10-18 (brainstorm): #193 is an internal hook fix under the existing §8.3. No amendment and no M3 by default. §8.5 already states the guarantee unconditionally ("A submitting `FormDialog` MUST NOT close because of a user-initiated dismissal"), so making it hold however the `submitting` update is scheduled adds no product semantics. If planning or execution finds §8.3 ambiguous or insufficient, or that #193 needs a specified behavior to change, stop and return to M2/M3. |
 | Authority | Where this plan and the Accepted spec disagree, the **spec wins** and this plan must be revised. File names, test names, helper names and task order are planning decisions, not product semantics. |
@@ -353,6 +353,8 @@ The acceptance does not claim that any characterization break has run or that th
 
 ## Slice Completion Report
 
+*Superseded.* This is the M5-time report, recorded before #196 merged. For the current position see the Status row and [Gate outcomes (M7–M10)](#gate-outcomes-m7m10).
+
 | Field | Result |
 | --- | --- |
 | Slice | #193 Dialog Escape latest-close |
@@ -481,3 +483,103 @@ M6, native, under revision 8 (Accepted 2026-10-19). Rebased base: `66b55f9` (PR 
 | 2 Paths | `git diff --name-only 66b55f9 HEAD`: exactly the ten paths. #193 group: the plan, `detail-drawer.test.tsx`, `use-dialog-behavior.test.tsx`, `use-dialog-behavior.ts`. Workflow update group: `docs/workflows/README.md`, the `code-review`, `implementation-execution`, `implementation-planning` and `plan-review` prompts, `workflow.yaml`. `git log 66b55f9..HEAD -- docs/workflows workflow.yaml` prints only `086941e`. The untouched-paths `git diff --quiet` exit 0. |
 
 The M6 Slice Completion Report is emitted with this record. Next Gate: M7, a fresh independent reviewer (`CLAUDE.md`).
+
+## Gate outcomes (M7–M10)
+
+### M7 — Code Review: Approved for merge (fresh independent review, 2026-10-19)
+
+**Reviewer:** a fresh, independent, read-only agent on the most capable model (Opus 5.5), dispatched under `CLAUDE.md`'s standing M7 rule for application-code slices. It did not implement the change and made no repository changes. It used one disposable worktree, which it removed, and the main checkout was left clean. It reviewed `66b55f9..91c16dc` (PR #200) against the Accepted spec and the Accepted revision 8 plan. This record is written by the implementer and cites that review.
+
+```text
+Decision: Approved for merge
+Subject: PR #200 (draft), feat/193-dialog-escape-latest-close, head 91c16dc; change set 66b55f9..HEAD
+Accepted specification: docs/superpowers/specs/2026-08-17-dashboard-ux-foundation-design.md (§4.4, §4.6, §8 / Amendment #180). No amendment (owner decision).
+Accepted implementation plan: docs/superpowers/plans/2026-10-18-dialog-escape-latest-close-plan.md (revision 8, ecc322b; M5 record a4b3a95)
+
+Plan tasks reviewed:
+- Task 1 (characterization tests D1–D5, C1–C4; B1–B10 evidence): ✓
+- Task 2 (7 regression tests + useEffectEvent fix): ✓
+- Task 3 (CI-equivalent run, path accounting, Execution record): ✓
+
+Verification evidence (verified by the reviewer):
+- Scope: exactly the 10 authorized paths; only 086941e touches docs/workflows and workflow.yaml; no change to Modal, FormDialog, ConfirmDialog or DetailDrawer source, callers, package.json or the lockfile.
+- The implementation matches Task 2 Step 3 exactly (use-dialog-behavior.ts:2, :76-82, :95, :138). The stack effect, focus effect, Tab branch, backdropProps and getFocusableElements are untouched.
+- M6 gate: each M5 acceptance commit (d825d84, 248a396, 9c99955, a4b3a95) precedes the M6 commits it governs.
+- Mechanism (decision (a)/(c)): in the installed react-dom 19.2.8, the only `ref.impl = nextImpl` assignment is inside commitBeforeMutationEffects (react-dom-client.development.js:13888), which runs before the mutation and layout phases (:17945-17954); the production build has the same structure. Not verified: other React versions.
+- @clensy/ui vitest: 11 files, 112/112.
+- Red run (disposable worktree, hook reverted to 66b55f9): all 7 Task 2 tests fail with the recorded messages; all 9 [C] tests pass. A ref-in-layout-effect alternative fails 6 of the 7, so the EscapeInCommit probe really exercises the before-layout-effect window.
+- Characterization spot-checks: B8, B9 and B10 reproduced with their distinguishing signatures (C2 size/spy; C3 initial size and delta; C4/D5 final Escape).
+- Lint exit 0, with react-hooks rules-of-hooks/exhaustive-deps active and silent; no eslint-disable; build (tsc --noEmit) exit 0.
+- CI on 91c16dc: run 39149129417 (pull_request): Lint, Test, Release gate and API e2e all SUCCESS.
+Taken from the Execution record (not rerun by the reviewer): Task 1 Step 0, the Step 3 name reconciliation, rows B1–B7, and Task 3 Step 1's full-repository totals (corroborated by CI Test SUCCESS).
+
+Review summary: The hook change is the minimal authorized change, confined to @clensy/ui with the signature unchanged. The mechanism holds against the installed react-dom. The regression tests hit the #193 window. Spec §8.3.1–§8.3.3 and §8.5 behavior is preserved and pinned. ConfirmDialog and DetailDrawer dismissal and focus in/out are unchanged. No hidden scope expansion.
+
+Blocking findings: None (no merge blockers)
+
+Non-blocking observations:
+- react-dom 19.2.8 swaps effect-event impls only for plain function components (fiber tag 0), not for memo or forwardRef. Modal and DetailDrawer are plain functions today; wrapping them later could freeze the effect event, and the Task 2 tests would catch it.
+- The plan header was stale after M6 (Status row, the M5-time Slice Completion Report, ffcf7a6 vs 086941e). Fixed in M9.
+- The stacked Task 2 test mounts Under and Edit in one render; passive-effect sibling order still makes Edit topmost, so it is sound.
+- The new hook comment narrates the old behavior in the past tense; optional M8 tidy.
+
+Gate: Merge per human/project norms. M8/M9 may follow. M10 (086941e) still applies before closeout.
+```
+
+### M8 — Refactoring: N/A (2026-10-19)
+
+The production change is four lines and one comment. The reviewer's optional comment tidy is cosmetic, and editing `use-dialog-behavior.ts` after M7 approval would put an unreviewed production edit into the merge, so it is not done. The memo/forwardRef observation is a constraint on future changes to `Modal` and `DetailDrawer`, not a refactoring of this slice. It is recorded above, and the Task 2 tests guard it.
+
+### M9 — Documentation: Complete (2026-10-19)
+
+Scope, exactly: this plan's header (Status row, Branch row, the superseded M5-time report) and `docs/superpowers/README.md`. `apps/web/README.md:60` ("Pending create: … Escape and a backdrop click do not close the dialog") is still accurate and needs no edit. #193 strengthens that statement without changing it. No spec change (owner decision: no amendment).
+
+| Path | Change | Kind | Caused by |
+| --- | --- | --- | --- |
+| This plan, Status row | M6 complete; M7 approved; M8 N/A; M9 complete; M10 Accepted; PR #200; not merged | Content | Gate outcomes |
+| This plan, Branch row | `ffcf7a6` is `086941e` after the rebase | Content | M6 rebase (M7 observation) |
+| This plan, M5-time Slice Completion Report | Marked *Superseded*, with a link to the current position | Content | M7 observation |
+| `docs/superpowers/README.md` | Plan count "68 so far" → "69 so far" (`ls docs/superpowers/plans \| wc -l` = 69 on this branch) | Content | This slice's plan |
+
+Editorial verification: the new anchor links resolve to existing headings in this file. Heading hierarchy is unchanged. No duplicate or contradictory current-status text remains: the old report is explicitly superseded. Terminology matches the spec.
+
+### M10 — Workflow Validation: Accepted (2026-10-19)
+
+M10 applies because this slice carries the workflow update, generic 1.5.0 → 1.6.0, in `086941e` (`ffcf7a6` before the rebase), per process spec §2.12. The implementer performed it. It is not an independent review, and the M10 prompt does not require one. The evidence follows the [M10 validation](#m10-validation-record-location-and-evidence) section.
+
+```text
+Decision: Accepted
+Subject: workflow prompt library (as updated in ffcf7a6 / 086941e, generic 1.6.0)
+Governing specification: docs/workflows/specs/agent-workflow-design.md
+
+Asset inventory:
+- M1 conventions/prompt-library.md; conventions/reporting-conventions.md; conventions/configuration-change.md
+- M2 prompts/specification.md · M3 prompts/design-review.md · M4 prompts/implementation-planning.md · M5 prompts/plan-review.md
+- M6 prompts/implementation-execution.md · M7 prompts/code-review.md · M8 prompts/refactoring.md · M9 prompts/documentation-execution.md · M10 prompts/workflow-validation.md
+- Process spec specs/agent-workflow-design.md; README.md; workflow.yaml (27 managed assets)
+
+Evidence:
+1. Manifest: awk … workflow.yaml | sha256sum -c → 27 assets, all OK. 14 `version: 1.6.0` lines = 14 generic assets.
+2. Single update commit: git log 66b55f9..HEAD -- docs/workflows workflow.yaml .claude → only 086941e. The Task 3 Step 2 workflow-update group is exactly its six paths.
+3. Checklist (workflow-validation.md):
+   - Every stage M1–M10 has an output, owner and asset: pass (the inventory above; no prompt removed or added).
+   - No orphan assets: pass (conventions/ and prompts/ contents match the inventory; README layout lists all three conventions files).
+   - No overlapping responsibilities: pass (1.6.0 adds the characterization rule to M4 authoring, M5 checking, M6 executing and M7 verifying; each role is distinct).
+   - Every gate reachable: pass (unchanged stage sequence).
+   - M6 MUST NOT begin before M5 Accept: pass (still stated in the process spec §2.5 and in M6).
+   - Cross-references correct: pass. The characterization rule reads consistently in M4 step 9 and its self-check, M5 step 6 and its checklist, M6 step 3.6 and its checklist, and M7 step 7. All four require the named broken behavior, the assigned tests failing because of that break, and an outside-the-commit run, and they route an unsuccessful run back to M4/M5.
+   - Naming and terminology: pass.
+   - Executable without invented instructions: pass (item 4).
+   - Traceability: pass.
+   - Configuration-change slice: n/a (no configuration task).
+4. Executability (worked case: this slice): the rule was followed as written. It returned the plan to M4/M5 three times (revisions 6–8), each time on a genuine evidence defect: an environment assumption (jsdom focus), a setup that never ran Strict Mode's mount sequence, and a cumulative assertion that could not distinguish B8 from B9. Each return improved the tests. No instruction had to be invented.
+
+Blocking findings:
+- None
+
+Non-blocking observations:
+- Break signatures are predictions at M4. This slice's cost came from three mispredictions found only at M6. A future workflow version could suggest, optionally, probing each planned break at M4 as partial pre-validation. Not a defect in 1.6.0.
+
+Gate: Workflow validated
+```
+
