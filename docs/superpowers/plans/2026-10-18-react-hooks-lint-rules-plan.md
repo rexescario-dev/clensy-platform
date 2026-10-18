@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft** (M4), 2026-10-18. Ready for M5 Plan Review. |
+| Status | **Draft, revision 2** (M4), 2026-10-19. Ready for M5 Plan Review (second pass). |
+| M5 history | First pass (2026-10-19, owner, reviewed `e82fe07` verbatim): **Returned for Revision**, findings M5-1 to M5-3 (P1) and M5-4 (P2). All are addressed in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). The owner confirmed as sound: `^7.1.1` (confirmed 7.1.x and passing the compatibility cases), one unscoped config object after the managed spread, the inventory re-run on the branch before the configuration commit with the owner gate, red/green through the real lint scripts, exact rule IDs and lines for cases A–C, a labelled M7 self-review, and an authorized draft PR with no merge. |
 | Date | 2026-10-18 |
 | Tracking issue | [#196](https://github.com/rexescario-dev/clensy-platform/issues/196) "Enforce React Hooks lint rules in the React workspaces" |
 | Spec | [React Hooks Lint Rules](../specs/2026-10-18-react-hooks-lint-rules-design.md), Status **Accepted** (M3, 2026-10-18, revision 2, recorded at `2ed3b9f`). The M3 constraints are carried here: the finding inventory is completed before any lint configuration is committed (Task 1 Step 4, before Step 9), and every acceptance claim comes from an actual run. |
@@ -38,7 +39,7 @@
 - **(b) One unscoped config object per workspace**, placed after the managed spread. Without `files`, it covers exactly what each `lint` script lints (`apps/web`: `.`; the packages: `src`). That includes the `.ts` hook files and the test files, so invariant 1 holds for test files without a second block.
 - **(c) The inventory runs in M6, on the branch, before the configuration commit** (spec §8 left this to M4). The planning probe already found 0 findings at `d5d845e`. Task 1 Step 4 re-takes the inventory against the branch's actual base, in case `main` has moved. That is the authoritative inventory.
 - **(d) Red then green through the real `lint` scripts.** Before the configuration, a throwaway violation of each rule passes `pnpm --filter <ws> lint`, which shows the rules are not yet active. After it, the same files fail with each rule's ID (invariant 5).
-- **(e) CI evidence is part of M6.** Invariant 9 (`Lint` passes on the PR head) needs a pushed branch and an open PR. The owner authorized opening the PR for #196 (2026-10-18). Task 3 pushes and opens it as a draft and records the required checks. It does not merge it.
+- **(e) CI evidence is part of M6, verified on the final head (M5-1, M5-3).** Invariant 9 (`Lint` passes on the PR head) needs a pushed branch and an open PR. The owner authorized opening the PR for #196 (2026-10-18). Task 3 pushes, opens it as a draft and verifies the required checks. Any commit changes the head SHA, so evidence is tied to a SHA: the checks on the first pushed head `H1` are recorded in one commit `H2`, and then the required checks are verified again on `H2` itself, the final M6 head. The M6 Slice Completion Report is **emitted in the conversation, not committed**, and only after `H2` passes. No committed text claims a result that was not yet observed. The M7 record later cites `H2`'s checks. Task 3 does not merge.
 
 ## Review Focus
 
@@ -188,32 +189,46 @@ Expected: all exit 0. Record each command's actual result and every package's te
 
 - [ ] **Step 2: Changed paths (invariant 8) and no suppression (invariant 6)**
 
-Run: `git diff --name-only "$BASE" HEAD | sort`
-Expected: exactly `apps/web/eslint.config.mjs`, `apps/web/package.json`, `docs/superpowers/plans/2026-10-18-react-hooks-lint-rules-plan.md`, `docs/superpowers/specs/2026-10-18-react-hooks-lint-rules-design.md`, `packages/ui/eslint.config.mjs`, `packages/ui/package.json`, `packages/web/eslint.config.mjs`, `packages/web/package.json`, `pnpm-lock.yaml`. Any other path: stop.
-Then: `git diff "$BASE" HEAD -- '*.mjs' '*.ts' '*.tsx' | grep -nE "^\+.*(eslint-disable|'off'|'warn'|ignores:|files:)"` prints nothing.
-And `git diff "$BASE" HEAD -- '*.mjs' | grep -n 'configs'` prints nothing (no preset).
+Four checks; all must pass before the Execution record may say the file boundary held (M5-4).
 
-- [ ] **Step 3: Write the Execution record and the M6 Slice Completion Report, then commit**
+1. **Working tree clean, nothing untracked:** `git status --porcelain --untracked-files=all` prints nothing. `test ! -e apps/web/lib/zz-hooks-probe.tsx && test ! -e packages/ui/src/zz-hooks-probe.tsx && test ! -e packages/web/src/zz-hooks-probe.tsx` exits 0. This catches leftover probe files and staged or unstaged edits that the committed diff alone would miss.
+2. **Committed diff against the base:** `git diff --name-only "$BASE" HEAD | sort`. Expected: exactly `apps/web/eslint.config.mjs`, `apps/web/package.json`, `docs/superpowers/plans/2026-10-18-react-hooks-lint-rules-plan.md`, `docs/superpowers/specs/2026-10-18-react-hooks-lint-rules-design.md`, `packages/ui/eslint.config.mjs`, `packages/ui/package.json`, `packages/web/eslint.config.mjs`, `packages/web/package.json`, `pnpm-lock.yaml`. Any other path: stop.
+3. **No suppression and no preset:** `git diff "$BASE" HEAD -- '*.mjs' '*.ts' '*.tsx' | grep -nE "^\+.*(eslint-disable|'off'|'warn'|ignores:|files:)"` prints nothing, and `git diff "$BASE" HEAD -- '*.mjs' | grep -n 'configs'` prints nothing.
+4. **Managed fragment, independently:** `git diff --quiet "$BASE" HEAD -- tooling/eslint.contextforge.mjs` exits 0, and the Task 1 Step 8 digest command reports `tooling/eslint.contextforge.mjs: OK` on the committed tree.
 
-Append `## Execution record` with the actual output of Task 1 Steps 1–8 and Task 2 Steps 1–2. Emit the M6 Slice Completion Report per `docs/workflows/conventions/reporting-conventions.md`, with Next Gate M7 (labelled self-review permitted).
+- [ ] **Step 3: Write the Execution record, then commit (no completion report yet)**
+
+Append `## Execution record` with the actual output of Task 1 Steps 1–8 and Task 2 Steps 1–2. Mark each check as passed, failed or **not yet run**. Invariant 9 is recorded as not yet run. Do **not** emit the M6 Slice Completion Report here (M5-1): M6 is not complete until Task 3 Step 3.
 
 ```bash
 git add docs/superpowers/plans/2026-10-18-react-hooks-lint-rules-plan.md
 git commit -m "docs(196): record M6 execution"
 ```
 
-### Task 3: Draft PR and required checks (type: `docs/process`)
+### Task 3: Draft PR, required checks on the final head, M6 report (type: `docs/process`)
 
-Implements spec §5 invariant 9. Planning decision (e). Outward-facing, authorized by the owner on 2026-10-18 ("Open the PR and wait for #196 to merge through the normal process").
+Implements spec §5 invariant 9. Planning decision (e). Outward-facing, authorized by the owner on 2026-10-18 ("Open the PR and wait for #196 to merge through the normal process"). Not authorized: merging, marking the PR ready, or any change to repository settings.
 
-- [ ] **Step 1: Push and open a draft PR**
+**Required checks:** `Lint`, `Test`, `Release gate`, `API e2e` ([Required CI Checks](../specs/2026-10-06-required-ci-checks-design.md)).
 
-Run: `git push -u origin feat/196-react-hooks-lint-rules`, then `gh pr create --draft --base main` with a body that links #196 and the spec and plan, and lists the evidence locations. Per the user's global instructions, the body and commits carry no Claude attribution trailer.
+**Failure path (applies to Steps 2 and 3, M5-2).** If any required check is failed, missing, pending past its normal run time, or cannot be tied to the SHA being verified, record its actual state and the observed `headRefOid`. Then stop and report the blocker to the owner. Do not claim M6 complete, do not emit the M6 Slice Completion Report or an M7 hand-off, and do not merge. Resume only after the blocker is resolved, and then verify the required checks again on the resulting head.
 
-- [ ] **Step 2: Record the required checks on the PR head**
+- [ ] **Step 1: Push and open a draft PR (head `H1`)**
 
-Run: `gh pr checks <pr> --required` after the checks complete, and `gh pr view <pr> --json headRefOid,mergeStateStatus,statusCheckRollup`.
-Expected: `Lint`, `Test`, `Release gate` and `API e2e` all `SUCCESS` on the recorded head SHA. Record them in the Execution record and commit with `docs(196): record the PR checks`. Do not merge: merging belongs to closeout, after M7–M9.
+Run: `git push -u origin feat/196-react-hooks-lint-rules`, then `gh pr create --draft --base main`. The body links #196 and the spec and plan, says the PR is a draft with M6 in progress, and makes no claim about checks. Per the user's global instructions, the body and commits carry no Claude attribution trailer. Record `H1=$(git rev-parse HEAD)` and the PR URL.
+
+- [ ] **Step 2: Verify the checks on `H1`, then record them in one commit (`H2`)**
+
+After the checks finish, run `gh pr view <pr> --json headRefOid,mergeStateStatus,statusCheckRollup` and `gh pr checks <pr> --required`.
+Acceptance on `H1`: `headRefOid` equals `H1`, and all four required checks are `SUCCESS`, each with its check-run name and conclusion recorded. Otherwise, take the failure path.
+Then append the `H1` results, with the SHA, to the Execution record. That is the only edit. Commit with `docs(196): record the PR checks on H1` and push. Record `H2=$(git rev-parse HEAD)`. The Execution record states that `H1`'s results do not cover `H2`.
+
+- [ ] **Step 3: Verify the checks on the final head `H2`, then emit the M6 report (not committed)**
+
+After the checks for `H2` finish, run the same two commands.
+Acceptance on `H2`: `headRefOid` equals `H2`, all four required checks are `SUCCESS`, and `git diff --name-only "$BASE" H2` still lists exactly the Task 2 Step 2 allowlist. Otherwise, take the failure path.
+Only then emit the **M6 Slice Completion Report** in the conversation, per `docs/workflows/conventions/reporting-conventions.md`. It cites `H2`, the PR URL and each required check's conclusion on `H2`, with Next Gate M7 (labelled self-review permitted). It is **not** committed, because any commit would create a head that `H2`'s checks do not cover. The M7 record, the next commit on this branch, carries `H2`'s check results into the plan. The `main` ruleset's strict up-to-date policy re-verifies the eventual merge head in any case.
+Do not merge. Merging belongs to closeout, after M7–M9.
 
 ## Traceability
 
@@ -225,11 +240,23 @@ Expected: `Lint`, `Test`, `Release gate` and `API e2e` all `SUCCESS` on the reco
 | Invariant 5 (rules demonstrably active) | Task 1 Steps 1, 5 |
 | Invariant 6 (inventory, classification, owner gate, no suppression) | Task 1 Step 4; Task 2 Step 2 |
 | Invariant 7 (`useEffectEvent` A/B/C on the installed version) | Task 1 Steps 2, 7 |
-| Invariant 8 (only the listed files change) | Task 2 Step 2 |
-| Invariant 9 (`Lint` passes in CI) | Task 3 |
+| Invariant 8 (only the listed files change) | Task 2 Step 2 (working tree, untracked files, committed diff, managed fragment); Task 3 Step 3 (diff at `H2`) |
+| Invariant 9 (`Lint` passes in CI) | Task 3 Steps 2–3, verified on the final head `H2`, with the failure path |
 | M3 constraints (inventory before the configuration commit; evidence from actual runs) | Task 1 Steps 4 and 9; every Execution record entry |
 
 ## Deferred
 
 - React Compiler–derived rules (spec §8).
 - `useEffectEvent` adoption: #193, which resumes after this PR merges, and the AppSidebar follow-up.
+
+## Revision 2 (M5 review 1)
+
+M5 first pass (owner, 2026-10-19, reviewed `e82fe07` verbatim): **Request changes**.
+
+| Finding | Resolution |
+| --- | --- |
+| M5-1 (P1) The M6 report precedes the CI evidence | Task 2 Step 3 now writes and commits only the Execution record, with invariant 9 marked not yet run. The M6 Slice Completion Report moves to Task 3 Step 3, after the checks pass on the final head. |
+| M5-2 (P1) No stop path for failed or missing checks | Task 3 has an explicit failure path for Steps 2 and 3. A check that is failed, missing, pending or not tied to the SHA leads to recording its actual state and the observed SHA, then stopping and reporting the blocker. No M6-complete claim, no report or M7 hand-off, no merge. Checks are verified again on the resulting head after any fix. |
+| M5-3 (P1) The check-recording commit invalidates the evidence | The evidence is tied to SHAs. `H1`'s checks are recorded in one commit, `H2`. The checks are then verified again on `H2` itself, with `headRefOid` matched. The M6 report is emitted in the conversation and not committed, so no commit follows the verified head inside M6. The M7 record carries `H2`'s results. |
+| M5-4 (P2) The file-boundary check misses uncommitted and untracked files | Task 2 Step 2 now has four checks: the working tree is clean including untracked files, with explicit `test ! -e` checks for the three probe files; the committed diff matches the allowlist; there is no suppression or preset; and the managed fragment is unchanged against the base, with its digest re-checked. Task 3 Step 3 re-checks the diff at `H2`. The Execution record distinguishes passed checks from those not yet run. |
+
