@@ -4,8 +4,9 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft, revision 5** (M4), 2026-10-18. Ready for M5 Plan Review (fifth pass). |
-| M5 history | First pass (2026-10-18, owner, reviewed `8c9b613`): **Returned for Revision** ("Request changes"), findings M5-1 to M5-6 and one execution guard. All are addressed in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). Second pass (2026-10-18, owner, reviewed `e9bfc3e`): **Returned for Revision**, findings M5-7 (P1) and M5-8 (P2). The six earlier findings are recorded as addressed. Both are resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). Third pass (2026-10-18, owner, reviewed `6fe0f29`): **Returned for Revision**, findings M5-9 and M5-10 (P1) and M5-11 (P2), plus five non-blocking observations. All are resolved in [Revision 4 (M5 review 3)](#revision-4-m5-review-3). Fourth pass (2026-10-18, owner, reviewed the Revision 4 text as quoted from `fb5f8ed`): **Returned for Revision**. M5-9 to M5-11 are recorded as addressed. One wording correction, M5-12, is resolved in [Revision 5 (M5 review 4)](#revision-5-m5-review-4). The owner asked to preserve: the #196 prerequisite, no spec amendment, the layout-effect probe (with its claim narrowed), the split between characterization and regression tests, the hook-and-tests-only scope, and the fresh independent M7 reviewer. |
+| Status | **Accepted (revision 5)** at M5, 2026-10-18. M6 is blocked until #196 is merged to `main` (see [Hard prerequisite](#hard-prerequisite)). |
+| M5 decision | **Accepted** — 2026-10-18, revision 5 (`11e0d37`), by the owner, reviewing the complete committed file: "Accepted. No further plan revision is required." The owner's caveats: the acceptance validates the plan's design and review criteria; it does not mean the characterization breaks have been run or the implementation verified. M6 stays blocked until #196 is merged; then run the Task 1 Step 0 prerequisite checks and rebase first, and record actual results, not the predicted counts or planned break signatures. Execution method: not yet chosen. |
+| M5 history | First pass (2026-10-18, owner, reviewed `8c9b613`): **Returned for Revision** ("Request changes"), findings M5-1 to M5-6 and one execution guard. All are addressed in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). Second pass (2026-10-18, owner, reviewed `e9bfc3e`): **Returned for Revision**, findings M5-7 (P1) and M5-8 (P2). The six earlier findings are recorded as addressed. Both are resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). Third pass (2026-10-18, owner, reviewed `6fe0f29`): **Returned for Revision**, findings M5-9 and M5-10 (P1) and M5-11 (P2), plus five non-blocking observations. All are resolved in [Revision 4 (M5 review 3)](#revision-4-m5-review-3). Fourth pass (2026-10-18, owner, reviewed the Revision 4 text as quoted from `fb5f8ed`): **Returned for Revision**. M5-9 to M5-11 are recorded as addressed. One wording correction, M5-12, is resolved in [Revision 5 (M5 review 4)](#revision-5-m5-review-4). Fifth pass (2026-10-18, owner, reviewed the full `11e0d37` file): **Accepted**. M5-9 to M5-12 and the earlier safeguards are recorded as resolved. The owner asked to preserve: the #196 prerequisite, no spec amendment, the layout-effect probe (with its claim narrowed), the split between characterization and regression tests, the hook-and-tests-only scope, and the fresh independent M7 reviewer. |
 | Date | 2026-10-18 |
 | Tracking issue | [#193](https://github.com/rexescario-dev/clensy-platform/issues/193) "Dialog Escape handler should read the latest dismissal policy without relying on effect timing". Deferred from [#180](https://github.com/rexescario-dev/clensy-platform/issues/180) / PR [#192](https://github.com/rexescario-dev/clensy-platform/pull/192), M7 non-blocking observation. Implementation guidance: the owner's `useEffect` audit comment on #193 (2026-10-18, at `d5d845e`, finding 3). |
 | Branch | `feat/193-dialog-escape-latest-close`, from `main` at `d5d845e`. One PR for this plan, its M5 record and the implementation. The branch also carries the Context Forge workflow update (generic 1.5.0 → 1.6.0), committed in `ffcf7a6` at the owner's request, before M5. Before Task 1 starts, the branch is rebased onto the `main` that contains #196's merge (see Hard prerequisite). |
@@ -341,4 +342,47 @@ M5 fourth pass (owner, 2026-10-18, reviewed the Revision 4 text as quoted from `
 | Finding | Resolution |
 | --- | --- |
 | M5-12 C4's explanation claims more than the test proves | C4's last sentence claimed that no duplicate entry was left "for either dialog". The final Escape proves only that no stale `Edit` entry blocks `Under`. A duplicate `Under` entry would still let `Under` close. The sentence is replaced with the owner's wording: it checks for a stale topmost entry for the closed `FormDialog`, and it states that the test neither inspects the private stack nor proves that `Under` has no duplicate entries. The same narrowing is applied to the Strict Mode line in Review Focus, which cited C4 for "a duplicate stack entry" without saying whose. No test, break assignment or count changes. B10's assigned failure signature is unaffected. |
+
+## Gate outcomes
+
+### M5 — Plan Review: Accepted (2026-10-18)
+
+Five passes by the owner. Passes 1–4 returned the plan (M5-1 to M5-12, and one execution guard), and pass 5 accepted revision 5 (`11e0d37`), reviewing the complete committed file. Accepted findings, rechecked on that pass: M5-9 (C4 and D5 check the stale entry through public behavior), M5-10 (B8, B9 and B10 have separate definitions, signatures and rejection rules), M5-11 (a fixed D1–D5/C1–C4 inventory with verbose-reporter reconciliation), and M5-12 (the narrowed duplicate-entry claim, in both places). The safeguards are kept: the #196 prerequisite, the scoped timing claim with the mechanism argument left for M7, the hook-and-tests scope, and separate M10 evidence.
+
+The acceptance does not claim that any characterization break has run or that the implementation is verified.
+
+## Slice Completion Report
+
+| Field | Result |
+| --- | --- |
+| Slice | #193 Dialog Escape latest-close |
+| Tracking | https://github.com/rexescario-dev/clensy-platform/issues/193 |
+| M4 | Plan **Accepted** (revision 5) |
+| M5 | Review **Accepted** |
+| M6 | Blocked — hard prerequisite #196 not merged |
+| M7 | Pending |
+| M8 | Pending |
+| M9 | Pending |
+| Branch | `feat/193-dialog-escape-latest-close` (local, not pushed) |
+| PR | None yet |
+| Status | **Blocked on #196**, then Ready for M6 |
+
+### Shipped
+
+- The accepted implementation plan for #193 (no implementation yet).
+- The Context Forge workflow update to generic 1.6.0 (`ffcf7a6`), which M10 still has to validate.
+
+### Validation
+
+| Check | Result |
+| --- | --- |
+| Tests | N/A — no code changed. Baseline at `d5d845e`: `@clensy/ui` 96/96, `web` 2185/2185 |
+| Typecheck | N/A |
+| Lint | N/A |
+| Build | N/A |
+| Package validation | Workflow manifest digests: 27/27 OK (`sha256sum -c`) |
+
+### Next Gate
+
+**M6 — Implementation**, once #196 is merged to `main`.
 
