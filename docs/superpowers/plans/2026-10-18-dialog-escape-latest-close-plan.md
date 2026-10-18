@@ -4,8 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft, revision 3** (M4), 2026-10-18. Ready for M5 Plan Review (third pass). |
-| M5 history | First pass (2026-10-18, owner, reviewed `8c9b613`): **Returned for Revision** ("Request changes"), findings M5-1 to M5-6 and one execution guard. All are addressed in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). Second pass (2026-10-18, owner, reviewed `e9bfc3e`): **Returned for Revision**, findings M5-7 (P1) and M5-8 (P2). The six earlier findings are recorded as addressed. Both are resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). The owner asked to preserve: the #196 prerequisite, no spec amendment, the layout-effect probe (with its claim narrowed), the split between characterization and regression tests, the hook-and-tests-only scope, and the fresh independent M7 reviewer. |
+| Status | **Draft, revision 4** (M4), 2026-10-18. Ready for M5 Plan Review (fourth pass). |
+| M5 history | First pass (2026-10-18, owner, reviewed `8c9b613`): **Returned for Revision** ("Request changes"), findings M5-1 to M5-6 and one execution guard. All are addressed in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). Second pass (2026-10-18, owner, reviewed `e9bfc3e`): **Returned for Revision**, findings M5-7 (P1) and M5-8 (P2). The six earlier findings are recorded as addressed. Both are resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). Third pass (2026-10-18, owner, reviewed `6fe0f29`): **Returned for Revision**, findings M5-9 and M5-10 (P1) and M5-11 (P2), plus five non-blocking observations. All are resolved in [Revision 4 (M5 review 3)](#revision-4-m5-review-3). The owner asked to preserve: the #196 prerequisite, no spec amendment, the layout-effect probe (with its claim narrowed), the split between characterization and regression tests, the hook-and-tests-only scope, and the fresh independent M7 reviewer. |
 | Date | 2026-10-18 |
 | Tracking issue | [#193](https://github.com/rexescario-dev/clensy-platform/issues/193) "Dialog Escape handler should read the latest dismissal policy without relying on effect timing". Deferred from [#180](https://github.com/rexescario-dev/clensy-platform/issues/180) / PR [#192](https://github.com/rexescario-dev/clensy-platform/pull/192), M7 non-blocking observation. Implementation guidance: the owner's `useEffect` audit comment on #193 (2026-10-18, at `d5d845e`, finding 3). |
 | Branch | `feat/193-dialog-escape-latest-close`, from `main` at `d5d845e`. One PR for this plan, its M5 record and the implementation. The branch also carries the Context Forge workflow update (generic 1.5.0 → 1.6.0), committed in `ffcf7a6` at the owner's request, before M5. Before Task 1 starts, the branch is rebased onto the `main` that contains #196's merge (see Hard prerequisite). |
@@ -62,7 +62,7 @@
 - **The submit ending, not starting:** an Escape in the commit that sets `submitting` back to false must close the dialog. A stale guard that still refuses it is the mirror image of #193 (§8.3.3, "no leftover blocked state"). Owned by Task 2 `closes on an Escape pressed in the commit that ends a submit`.
 - **A dialog reopened after closing:** reopening must register exactly one new listener, and an Escape after close must call nothing. Owned by Task 2 `registers one keydown listener per open and removes it on close`.
 - **Unmount while open (the `DetailDrawer` `?detail=` pattern):** the listener must be removed and focus restored, and a later Escape must call nothing. Owned by Task 1 `restores focus to the trigger and stops handling Escape when the dialog unmounts while open`.
-- **Strict Mode's double mount:** this must not leave two active listeners (Escape would call `onClose` twice), a listener after close, or a duplicate stack entry (topmost would be wrong). Owned by Task 1 `closes once per Escape under Strict Mode, cleans up on close and restores focus`, Task 1 `keeps topmost-only Escape under Strict Mode`, and Task 2 `refuses the start-of-submit Escape under Strict Mode too`.
+- **Strict Mode's double mount:** this must not leave two active listeners (Escape would call `onClose` twice), a listener after close, or a duplicate stack entry (the dialog beneath would never become topmost). Owned by Task 1 `closes once per Escape under Strict Mode, cleans up on close and restores focus`, Task 1 `keeps topmost-only Escape under Strict Mode, and closes the dialog beneath next`, and Task 2 `refuses the start-of-submit Escape under Strict Mode too`.
 - **A caller-supplied `onClose` that changes identity without any submit** (an inline arrow, as most callers pass): Escape must call the newest one. Owned by Task 2 `calls the onClose from the commit the Escape lands in, not an earlier one`.
 
 ---
@@ -103,32 +103,43 @@ In `use-dialog-behavior.test.tsx`, `describe('useDialogBehavior focus and Strict
 Shared fixture rules: every tree renders a real `<button type="button">Trigger</button>` in the same root as the dialog, **before** it. Each test first mounts the tree with the dialog closed or absent, focuses Trigger with `act(() => trigger.focus())` and asserts `document.activeElement` is Trigger. Only then does it open the dialog, by a `rerender`. Every open, close and unmount is a `rerender` inside `act`, so its effects have flushed before the next assertion. **Close** means rerendering the same mounted dialog with `open={false}`. **Unmount** means rerendering the tree without the dialog element.
 
 - `moves focus into the dialog on open and restores it to the trigger on close`: a `Modal` (title `Focus`) containing `<button type="button">First</button>`. Open → active element is First. Close → active element is Trigger.
-- `restores focus to the trigger and stops handling Escape when the dialog unmounts while open`: a `DetailDrawer` (title `Details`, `onClose` = `spy`) that appears in the tree already `open`, the `?detail=` pattern. Before the rerender that adds it, install the same calling-through `addEventListener`/`removeEventListener` spies as the Strict Mode test, keeping the set of active `'keydown'` handlers, and record the set's size as `before`. After the rerender that adds the drawer, the active element is inside the drawer and the set's size is `before + 1`. Unmount → the set's size is back to `before`, the active element is Trigger, and `dialogTitled('Details')` is null. Then `pressEscape()` → `spy` not called. Restore the spies in a `finally` (or `afterEach`), so a failing assertion does not leak them into later tests (M5-7). The size check is what proves cleanup: the Escape check alone would pass with a leaked listener, because the unmounted drawer is no longer topmost.
-- `closes once per Escape under Strict Mode, cleans up on close and restores focus`: the first test's tree inside `<StrictMode>`. The `Modal`'s `onClose` is a `vi.fn()` that closes it. Spies on `document.addEventListener` and `removeEventListener` (calling through) keep a set of the **currently active** `'keydown'` handlers: add on add, delete on remove. The test asserts the active set, never the number of add or remove calls, because Strict Mode's extra development setup and cleanup are not the product contract (M5-3, M5-4). While open: active set size 1; one Escape → `onClose` called exactly once and the dialog is gone; active set size 0; active element is Trigger. Then one more `pressEscape()` → `onClose` still called once. Reopen: active set size 1; one Escape → `onClose` called twice in total. Restore the spies.
-- `keeps topmost-only Escape under Strict Mode`: in `<StrictMode>`, open a `Modal` titled `Under`, then a `FormDialog` (title `Edit`) with `submitting` true on top. Escape → neither `onClose` is called, and `dialogTitled('Edit')` and `dialogTitled('Under')` are both present (M5-5). Set `submitting` false, then Escape → only the `FormDialog`'s `onClose` is called, and `Under` is still present.
+- `restores focus to the trigger and stops handling Escape when the dialog unmounts while open`: a `DetailDrawer` (title `Details`, `onClose` = `spy`) that appears in the tree already `open`, the `?detail=` pattern. Before the rerender that adds it, install the same calling-through `addEventListener`/`removeEventListener` spies as the Strict Mode test, keeping the set of active `'keydown'` handlers, and record the set's size as `before`. After the rerender that adds the drawer, the active element is inside the drawer and the set's size is `before + 1`. Unmount → the set's size is back to `before`, the active element is Trigger, and `dialogTitled('Details')` is null. Then `pressEscape()` → `spy` not called. Every assertion after the drawer mounts uses `expect.soft`, so a break run reports **each** failed assertion, not only the first (needed to tell B8 from B9). Restore the spies in a `finally` (or `afterEach`), so a failing assertion does not leak them into later tests (M5-7). The size check is what proves cleanup: the Escape check alone would pass with a leaked listener, because the unmounted drawer is no longer topmost.
+- `closes once per Escape under Strict Mode, cleans up on close and restores focus`: the first test's tree inside `<StrictMode>`. The `Modal`'s `onClose` is a `vi.fn()` that closes it. Spies on `document.addEventListener` and `removeEventListener` (calling through) keep a set of the **currently active** `'keydown'` handlers: add on add, delete on remove. The test asserts the active set, never the number of add or remove calls, because Strict Mode's extra development setup and cleanup are not the product contract (M5-3, M5-4). While open: active set size 1; one Escape → `onClose` called exactly once and the dialog is gone; active set size 0; active element is Trigger. Then one more `pressEscape()` → `onClose` still called once. Reopen: active set size 1; one Escape → `onClose` called twice in total. Every assertion after the first open uses `expect.soft`, for the same reason as the unmount test. Restore the spies in a `finally` (or `afterEach`).
+- `keeps topmost-only Escape under Strict Mode, and closes the dialog beneath next`: in `<StrictMode>`, open a `Modal` titled `Under`, then a `FormDialog` (title `Edit`) with `submitting` true on top. Escape → neither `onClose` is called, and `dialogTitled('Edit')` and `dialogTitled('Under')` are both present (M5-5). Set `submitting` false, then Escape → only the `FormDialog`'s `onClose` is called, `Edit` is gone and `Under` is still present. Then one more Escape → `Under`'s `onClose` is called once and `Under` is gone (M5-9). This last step is how the test shows, without reading the private stack, that Strict Mode's simulated cleanup left no duplicate entry for either dialog: a leftover entry for `Edit` would still be topmost and would keep `Under` from closing.
 
 #### Characterization breaks (Task 1)
 
 Each row is one behavior deliberately broken in the code under test. Every test listed in the row must fail **because of that break** (its failure message shows the broken behavior, not a fixture or import error). The edit that produces the break is M6's choice; this plan names only the behavior. Each run is made outside the committed change (Step 4) and nothing from it is committed. A test may sit in more than one row.
 
-| Break | Behavior deliberately broken | Tests expected to fail because of it |
-| --- | --- | --- |
-| B1 | Escape never closes any dialog. | `closes on Escape`; `closes only a ConfirmDialog opened on top of it, then itself on the next Escape` |
-| B2 | One Escape press closes every open dialog, not only the topmost. | `closes only a ConfirmDialog opened on top of it, then itself on the next Escape`; `keeps topmost-only Escape under Strict Mode` |
-| B3 | A click on the backdrop does not close the dialog. | `closes on a backdrop click` |
-| B4 | A click anywhere inside the overlay, including inside the panel, closes the dialog as a backdrop click would. | `does not close on a click inside the panel` |
-| B5 | The `DetailDrawer` × button does not close the drawer. | `closes on ×` |
-| B6 | Focus does not move into the dialog when it opens. | `moves focus into the dialog on open and restores it to the trigger on close` |
-| B7 | Focus is not restored to the trigger when the dialog closes or unmounts. | `moves focus into the dialog on open and restores it to the trigger on close`; `restores focus to the trigger and stops handling Escape when the dialog unmounts while open`; `closes once per Escape under Strict Mode, cleans up on close and restores focus` |
-| B8 | A dialog keeps handling Escape after its effects are cleaned up (on close, on unmount, and on Strict Mode's simulated unmount). | `restores focus to the trigger and stops handling Escape when the dialog unmounts while open`; `closes once per Escape under Strict Mode, cleans up on close and restores focus` |
-| B9 | The dialog's `keydown` listener stays registered on `document` after its effects are cleaned up, while the dialog still leaves the topmost order normally (so a later Escape does not reach it). | `restores focus to the trigger and stops handling Escape when the dialog unmounts while open`; `closes once per Escape under Strict Mode, cleans up on close and restores focus` |
+Short names used below: **D1** `closes on Escape`, **D2** `closes on a backdrop click`, **D3** `closes on ×`, **D4** `does not close on a click inside the panel`, **D5** `closes only a ConfirmDialog opened on top of it, then itself on the next Escape`, **C1** `moves focus into the dialog on open and restores it to the trigger on close`, **C2** `restores focus to the trigger and stops handling Escape when the dialog unmounts while open`, **C3** `closes once per Escape under Strict Mode, cleans up on close and restores focus`, **C4** `keeps topmost-only Escape under Strict Mode, and closes the dialog beneath next`.
 
-All nine Task 1 tests appear in at least one row.
+| Break | Behavior deliberately broken | Assigned test → the assertion that must fail because of it |
+| --- | --- | --- |
+| B1 | Escape never closes any dialog. | D1 → `closes` is `['drawer']` (gets `[]`). D5 → first Escape gives `['confirm']` (gets `[]`). |
+| B2 | One Escape press closes every open dialog, not only the topmost. | D5 → first Escape gives `['confirm']` (the drawer closes too). C4 → first Escape calls neither `onClose` (`Under`'s is called). |
+| B3 | A click on the backdrop does not close the dialog. | D2 → `closes` is `['drawer']` (gets `[]`). |
+| B4 | A click anywhere inside the overlay, including inside the panel, closes the dialog as a backdrop click would. | D4 → `closes` is `[]` (gets `['drawer']`). |
+| B5 | The `DetailDrawer` × button does not close the drawer. | D3 → `closes` is `['drawer']` (gets `[]`). |
+| B6 | Focus does not move into the dialog when it opens. | C1 → active element is First after open (still Trigger). |
+| B7 | Focus is not restored to the trigger when the dialog closes or unmounts. | C1 → active element is Trigger after close. C2 → active element is Trigger after unmount. C3 → active element is Trigger after the first Escape. |
+| B8 | Cleanup leaves **both** the dialog's `keydown` listener and its topmost-order entry in place, so a cleaned-up dialog still answers Escape. | C2 → after unmount, `pressEscape()` calls `spy` (and the active set does not return to `before`). C3 → one Escape calls `onClose` twice. |
+| B9 | Cleanup leaves the `keydown` listener registered but removes the dialog's topmost-order entry normally, so the leaked listener never acts. | C2 → after unmount the active set's size is not back to `before`, **while `spy` is still not called**. C3 → the active set has size 2 while open. |
+| B10 | Cleanup removes the `keydown` listener normally but leaves the dialog's topmost-order entry in place (so after Strict Mode's simulated cleanup, a dialog has two entries). | C4 → the final Escape does not close `Under`. D5 → the second Escape does not close the drawer (`closes` stays `['confirm']`). |
+
+**Telling B8, B9 and B10 apart (M5-10).** The three rows break the same cleanup in different ways, and a row is evidence only if its run shows **its** failure:
+
+- **C2 is the test that tells B8 and B9 apart.** Under B8 the run must show the `spy` assertion failing. Under B9 it must show the size assertion failing **and** the `spy` assertion passing. A B9 run in which `spy` is called is not B9 (the edit also kept the topmost entry), so the row is **unsuccessful**. A B8 run in which `spy` is not called is also unsuccessful. `expect.soft` makes both assertions visible in one run.
+- **C3 cannot tell B8 from B9, and this plan does not claim it can.** The dialog keeps the same identity through Strict Mode's simulated unmount and remount. So under either break, the leaked first listener still finds the dialog topmost, and `onClose` runs twice. Each row records C3's actual output, and must show its own assigned assertion failing (B8: the call count; B9: the active-set size).
+- **B10 changes no listener.** Its run must show C3 passing, and C4 and D5 failing at the steps named above. A B10 run in which C3 fails means the edit also touched the listener, so the row is unsuccessful.
+
+All nine Task 1 tests appear in at least one row. B1–B10 assign D1–D5 and C1–C4, and no other test.
 
 - [ ] **Step 3: Run them on unmodified code**
 
 Run: `pnpm --filter @clensy/ui exec vitest run src/base/detail-drawer.test.tsx src/internal/use-dialog-behavior.test.tsx`
 Expected: 2 files, 9/9 passed. Any failure → stop (see the Task 1 preamble).
+
+Then reconcile the names (M5-11). Run the same command with `--reporter=verbose` and copy the nine reported test names into the Execution record. They must match the nine short names D1–D5 and C1–C4 in [Characterization breaks](#characterization-breaks-task-1) exactly, one to one: same text, and no extra, missing or renamed test. Every name must also appear in at least one B1–B10 row. If anything differs, fix the test name, or stop and return the plan to M4/M5 if the difference is in coverage, not spelling. Resolve it before Step 4. Task 2 does not start with an unreconciled name.
 
 - [ ] **Step 4: Commit**
 
@@ -139,9 +150,22 @@ git commit -m "test(193): pin dialog dismissal, focus and Strict Mode behavior"
 
 - [ ] **Step 5: Record the characterization evidence outside the commit**
 
-For each of B1–B9 in turn: create a disposable worktree at the Step 4 commit, outside the repository (`git worktree add --detach "$(mktemp -d)" HEAD`, then `pnpm install --frozen-lockfile --offline` in it). Make an edit to the code under test that produces that row's behavior, and run `pnpm --filter @clensy/ui exec vitest run src/base/detail-drawer.test.tsx src/internal/use-dialog-behavior.test.tsx` there. Record, per row: the edit made (a one-line description), each assigned test's result and first failure message, and the totals. Then remove the worktree (`git worktree remove --force` it, then `git worktree prune`), even when the run fails. Confirm `git status --short` in the main checkout is empty after each row. Nothing from these runs is committed. The results go in the Execution record (Task 3 Step 3).
+For each of B1–B10 in turn: create a disposable worktree at the Step 4 commit, outside the repository (`git worktree add --detach "$(mktemp -d)" HEAD`, then `pnpm install --frozen-lockfile --offline` in it). Make an edit to the code under test that produces that row's behavior, and run `pnpm --filter @clensy/ui exec vitest run src/base/detail-drawer.test.tsx src/internal/use-dialog-behavior.test.tsx` there. Record, per row: the edit made (a one-line description), and for each assigned test its result and every failed assertion with its message (from `expect.soft`, where used), followed by the totals. Each row is then judged against its named assertion and, for B8–B10, the distinguishing conditions above. Then remove the worktree (`git worktree remove --force` it, then `git worktree prune`), even when the run fails. Confirm `git status --short` in the main checkout is empty after each row. Nothing from these runs is committed. The results go in the Execution record (Task 3 Step 3).
 
 A row is evidence only when **every** test assigned to it fails because of that break. If any assigned test passes, or fails for another reason, record that row as **unsuccessful** with the planned behavior, each assigned test and what the run showed. Do not invent a different break and continue. Stop and return the plan to M4/M5 for a replacement break (M6 step 3.6). Task 2 does not start until every row is evidence.
+
+#### Test inventory (predicted totals reconciled)
+
+| Group | Tests | Count |
+| --- | --- | --- |
+| Task 1, `detail-drawer.test.tsx` | D1–D5 | 5 |
+| Task 1, `use-dialog-behavior.test.tsx`, first `describe` | C1–C4 | 4 |
+| Task 2, `use-dialog-behavior.test.tsx`, second `describe` | the seven tests in Task 2 Step 1 | 7 |
+| New in this slice | | **16** |
+| `@clensy/ui` baseline at `d5d845e` | existing, unedited | 96 |
+| `@clensy/ui` after Task 2 | | **112**, in 11 files (9 + 2) |
+
+Task 1 Step 3 predicts 9 passed. Task 2 Step 2 predicts 11 in the file: 7 failing, 4 passing. Task 2 Step 4 and Task 3 Step 1 predict 112. If Step 0's post-#196 baseline differs from 96, every total shifts by the same amount. Record the shift, not a new prediction.
 
 ### Task 2: Escape always calls the latest `onClose` (type: `code`)
 
@@ -229,7 +253,7 @@ Expected: exactly the ten paths below, in two groups, with none missing and no o
 
 - [ ] **Step 3: Write the Execution record and the M6 Slice Completion Report, then commit**
 
-Append `## Execution record` with each task's red and green results as actual output, Task 1 Step 5's B1–B9 rows (edit, per-test result, evidence or unsuccessful), and the Step 1 and Step 2 results. Then emit the M6 Slice Completion Report per `docs/workflows/conventions/reporting-conventions.md`, with Next Gate M7 (a fresh independent reviewer). The Execution record holds M6 evidence only. It is not the M10 report, and passing M6 tests do not validate the workflow update ([M10 validation](#m10-validation-record-location-and-evidence)).
+Append `## Execution record` with each task's red and green results as actual output, Task 1 Step 5's B1–B10 rows (edit, per-test result, evidence or unsuccessful), and the Step 1 and Step 2 results. Then emit the M6 Slice Completion Report per `docs/workflows/conventions/reporting-conventions.md`, with Next Gate M7 (a fresh independent reviewer). The Execution record holds M6 evidence only. It is not the M10 report, and passing M6 tests do not validate the workflow update ([M10 validation](#m10-validation-record-location-and-evidence)).
 
 ```bash
 git add docs/superpowers/plans/2026-10-18-dialog-escape-latest-close-plan.md
@@ -246,7 +270,7 @@ M10 is not an M6 task. It runs after M9 and before closeout (process spec §2.6,
   1. **Installed files match the manifest:** `awk '/- path:/{p=$3} /digest:/{print substr($2,8)"  "p}' workflow.yaml | sha256sum -c` reports `OK` for every asset (27 at planning time, all OK on `8c9b613`'s tree), and `grep -c 'version: 1.6.0' workflow.yaml` matches the number of `generic` assets.
   2. **Only the update commit touched them:** Task 3 Step 2's workflow-update group, with `git log` showing a single commit.
   3. **The M10 checklist** in `docs/workflows/prompts/workflow-validation.md`, each row marked pass or fail with the reason. At minimum, for the 1.6.0 delta: the characterization-test rule reads consistently across the M4 prompt (step 9 and its self-check), M5 (step 6 and its checklist), M6 (step 3.6 and its checklist) and M7 (step 7); and the `README.md` layout lists every file under `conventions/`.
-  4. **Executability observation:** whether this slice could follow the 1.6.0 characterization rule without inventing instructions, citing Task 1 Step 5's B1–B9 results in the Execution record as the worked case.
+  4. **Executability observation:** whether this slice could follow the 1.6.0 characterization rule without inventing instructions, citing Task 1 Step 5's B1–B10 results in the Execution record as the worked case.
 - **Decision rule.** M10 is **Accepted** only with no blocking finding. A failing digest, an unexplained extra commit on the workflow paths, or a failing checklist row is blocking. M6, M7 and test results never stand in for any item above.
 - The implementer may perform M10. It is not an independent review, and the M10 prompt does not require one.
 
@@ -256,7 +280,7 @@ M10 is not an M6 task. It runs after M9 and before closeout (process spec §2.6,
 | --- | --- |
 | #193 criterion 1; §8.3.1 item 1, §8.5 (submitting `FormDialog` never closes on Escape) | Task 2 `refuses an Escape pressed in the commit that starts a submit`, `…scheduled as a transition`, `…under Strict Mode too`; Step 3. Scheduling modes beyond those tested rest on decision (a) (decision (c)) |
 | §8.3.3 (no leftover blocked state once submitting is false) | Task 2 `closes on an Escape pressed in the commit that ends a submit` |
-| #193 criterion 2; §8.3.2 (topmost-only, stacked, submitting on top) | Task 1 `keeps topmost-only Escape under Strict Mode`, `closes only a ConfirmDialog opened on top of it…`; Task 2 `…stacked on top`; existing `form-dialog.test.tsx` stacking tests, unedited |
+| #193 criterion 2; §8.3.2 (topmost-only, stacked, submitting on top) | Task 1 `keeps topmost-only Escape under Strict Mode, and closes the dialog beneath next`, `closes only a ConfirmDialog opened on top of it…`; Task 2 `…stacked on top`; existing `form-dialog.test.tsx` stacking tests, unedited |
 | #193 criterion 3 (regression tests in `@clensy/ui` for timing and stacking) | Task 2 Step 1 |
 | #193 criterion 4; §8.5 (`ConfirmDialog`, `DetailDrawer` unchanged) | Task 1 `detail-drawer.test.tsx`; existing `confirm-dialog.test.tsx`, unedited; Task 3 Step 2 |
 | §4.4, §4.6 (focus in on open, restored on close and unmount); owner comment (Strict Mode) | Task 1 Step 2 |
@@ -298,4 +322,15 @@ M5 second pass (owner, 2026-10-18, reviewed `e9bfc3e`): **Request changes**. The
 | M5-8 (P2) Where the M10 report and its evidence go is unclear | New section [M10 validation](#m10-validation-record-location-and-evidence): the record lives only in `## Gate outcomes` → `### M10 — Workflow Validation`, not in the Execution record. It names the template, four required evidence items (manifest digests, single update commit, the M10 checklist with the 1.6.0 cross-prompt consistency check, the executability observation) and the decision rule. Task 3 Step 3 states that the Execution record is M6 evidence only. |
 
 Counts: Task 1 is still 9 tests. Its breaks are now B1–B9. Task 2 and the totals (112) are unchanged.
+
+## Revision 4 (M5 review 3)
+
+M5 third pass (owner, 2026-10-18, reviewed `6fe0f29`): **Request changes**. Resolutions:
+
+| Finding | Resolution |
+| --- | --- |
+| M5-9 (P1) Strict Mode does not establish that no duplicate stack entry is left | C4 gains a final step: after the top `FormDialog` closes, one more Escape must close `Under`. A leftover entry from Strict Mode's simulated cleanup would stay topmost and block it. This is observable through the DOM and `onClose` only, not the private stack. C4 is renamed `keeps topmost-only Escape under Strict Mode, and closes the dialog beneath next`. New break **B10** (the topmost entry stays after cleanup; the listener is removed normally) is assigned to C4 and D5. |
+| M5-10 (P1) B8 and B9 are not distinguished | B8, B9 and B10 are now defined as three separate cleanup defects: both kept, listener only, entry only. Each assigned test names the exact assertion that must fail. C2 is the test that tells B8 from B9 (B8: `spy` called; B9: size not restored **and** `spy` not called). The plan states that C3 cannot tell them apart and why. A run that shows another row's signature is **unsuccessful**. C2 and C3 use `expect.soft` after setup, so one run shows every failed assertion. The evidence rule is not weakened. |
+| M5-11 (P2) Test names and break assignments need reconciling | Short names D1–D5 and C1–C4 are now defined once. Task 1 Step 3 adds a reconciliation: the verbose reporter's nine names must match them one to one and appear in a B row, before Step 4. A new Test inventory reconciles every predicted total (9, 7 failing and 4 passing, 16 new, 112). |
+| Non-blocking observations | Kept as written: the narrowed effect-event rationale (M7 to verify), the submit-ending regression test, the #196 gate and lint-reject stop, separate M10 evidence, and post-rebase actual results replacing the historical baseline (Task 1 Step 0). |
 
