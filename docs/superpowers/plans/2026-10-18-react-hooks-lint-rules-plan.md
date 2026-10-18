@@ -348,3 +348,55 @@ M6, native, 2026-10-19, on `feat/196-react-hooks-lint-rules`. `BASE` = `d5d845e`
   - Part 7: local `HEAD` and remote branch both `H1`.
   - Part 8: `mergeStateStatus` `CLEAN` (information only).
 - These `H1` results do **not** cover `H2`, the commit that records them. `V(H2)` and Step 3's gates are still to run.
+- **Step 3: passed**, all three gates, after every CI run for `H2` had completed. Recorded here by the M7 record below, as Step 3 requires. It was not committed at `H2`.
+  - Gate 1, `V(H2)`, `H2` = `3571818610ccc9ac53cc3c6ea560a1ab3b2ffa6f`, parts 0–8: identity `{"id":356997703,"path":".github/workflows/ci.yml","state":"active"}`; `headRefOid` = `H2` before and after; one CI run, `W` = `39144822428` (`workflow_id` 356997703, `.github/workflows/ci.yml`, `pull_request`, attempt 1, `completed`/`success`, `check_suite_id` 106077696246); jobs of attempt 1, each once, `completed`/`success` on `H2`: `Test` 117726421486, `Lint` 117726421644, `Release gate` 117726421689, `API e2e` 117726421726; the check runs with those ids are in suite 106077696246, on `H2`, `success`, with none newer pending; the re-read of `W` was unchanged and the re-list showed only `39144822428`; local `HEAD` and remote both `H2`; `mergeStateStatus` `CLEAN`.
+  - Gate 2: `git diff --name-only d5d845e H2` listed exactly the nine allowlisted paths.
+  - Gate 3: `git status --porcelain --untracked-files=all` produced 0 lines, and the three probe `test ! -e` checks exited 0.
+  - The M6 Slice Completion Report was emitted in the conversation on 2026-10-19, citing `H2`, PR #199 and the ids above (Status: Ready for M7).
+- **Correction to that M6 report:** it attributed the CI typecheck to the `Test` job. In `.github/workflows/ci.yml`, `Type-check apps/api` and `Type-check apps/web` are steps of the **`Lint`** job (`117726421644` on `H2`). `packages/ui` and `packages/web` have no CI typecheck. This slice changes only `.mjs` and `package.json` files, which no `tsc` step checks, so the correction changes no result.
+
+## Gate outcomes
+
+### M7 — Code Review: Approved for merge (self-review, 2026-10-19)
+
+**Self-review.** The M6 implementer wrote this record. `CLAUDE.md` permits a self-review for a configuration-only slice, and the owner did not ask for a fresh reviewer ("m7-m10"). The owner also reviewed PR #199's diff independently on 2026-10-19 and found no code-level blocker. That review's only blocker was the `V(H2)` record, which is resolved above.
+
+```text
+Decision: Approved for merge
+Subject: PR #199, feat/196-react-hooks-lint-rules, reviewed at H2 = 3571818610ccc9ac53cc3c6ea560a1ab3b2ffa6f
+Accepted specification: docs/superpowers/specs/2026-10-18-react-hooks-lint-rules-design.md (Accepted, revision 2)
+Accepted implementation plan: docs/superpowers/plans/2026-10-18-react-hooks-lint-rules-plan.md (Accepted, revision 5)
+Live configuration: n/a (no live setting outside the repository)
+
+Plan tasks reviewed:
+- Task 1 (enable the two rules): ✓ Steps 1–9 executed in order. The inventory (Step 4) ran before the configuration commit 5acc376, and M6 began after the M5 acceptance (c225e5b precedes 5acc376).
+- Task 2 (full verification, Execution record): ✓
+- Task 3 (draft PR, V(H1), V(H2), gates, M6 report): ✓
+
+Verification evidence:
+- CI on H2: workflow 356997703, run 39144822428 (attempt 1): Lint 117726421644, Test 117726421486, Release gate 117726421689, API e2e 117726421726, all success, verified by V(H2).
+- Local: pnpm install --frozen-lockfile exit 0; pnpm run lint exit 0 (6/6); pnpm run test exit 0 (10/10; ui 96, @clensy/web 418, web 2185 executed; api 1071, client 13, validation 79 replayed from the Turbo cache with unchanged inputs).
+- Rules active: red (lint exit 0 with the probes) then green (exit 1, rules-of-hooks 5:5 and exhaustive-deps 10:6) in all three workspaces.
+- Effective rules: exactly {"react-hooks/rules-of-hooks":[2],"react-hooks/exhaustive-deps":[2]} on six files (one .tsx and one test file per workspace).
+- useEffectEvent on installed 7.1.1: A silent, B rules-of-hooks on line 14, C exhaustive-deps on line 22, in all three workspaces.
+- Inventory: 0 findings (195 files linted, including the git-ignored apps/web/next-env.d.ts).
+- Boundary: nine allowlisted paths; no suppression, no preset; managed fragment unchanged with its digest OK; clean working tree.
+
+Review summary: The diff adds one import and one config object, exactly the two rules at 'error', to each of the three project-owned ESLint configs, right after the managed spread. It adds eslint-plugin-react-hooks ^7.1.1 to the three package.json files, and the lockfile adds only the plugin and its dependencies (+48/-0). It conforms to spec §2 and invariants 1–9. No production or test source, CI, lint script or managed file changed. The rules found nothing on existing code, so there was no invariant 6 gate decision and no deferred issue.
+
+Blocking findings: None (no merge blockers)
+
+Non-blocking observations:
+- pnpm prints an existing `unmet peer graphql@"^15.0.0 || ^16.0.0": found 17.0.2` warning. It is unrelated to this slice (the plugin has no graphql dependency, and the lockfile diff touches no graphql entry).
+- packages/ui and packages/web have no CI typecheck step. That gap predates this slice, and this slice does not touch it.
+
+Gate: Merge per human/project norms. M8/M9 may follow when appropriate.
+```
+
+### M8 — Refactoring: N/A (2026-10-19)
+
+The change is two declarative config blocks per workspace and three dependency entries, with nothing to restructure. The repeated config object follows the existing per-package pattern that the managed fragment's header requires. Factoring it into a shared module would add a project-owned shared ESLint file, which neither the spec nor the plan authorizes.
+
+### M10 — Workflow Validation: N/A
+
+This slice changes no workflow asset (`git diff --name-only d5d845e HEAD -- docs/workflows .claude workflow.yaml` is empty), so M10 does not apply (process spec §2.12).
