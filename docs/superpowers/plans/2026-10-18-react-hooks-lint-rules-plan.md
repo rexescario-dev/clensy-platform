@@ -4,8 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft, revision 3** (M4), 2026-10-19. Ready for M5 Plan Review (third pass). |
-| M5 history | First pass (2026-10-19, owner, reviewed `e82fe07` verbatim): **Returned for Revision**, findings M5-1 to M5-3 (P1) and M5-4 (P2). All are addressed in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). Second pass (2026-10-19, owner, reviewed the `081a660` text): **Returned for Revision**, findings M5-5 (P1) and M5-6 (P2). M5-1 to M5-4 are recorded as accepted. Both are resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). The owner confirmed as sound: `^7.1.1` (confirmed 7.1.x and passing the compatibility cases), one unscoped config object after the managed spread, the inventory re-run on the branch before the configuration commit with the owner gate, red/green through the real lint scripts, exact rule IDs and lines for cases A–C, a labelled M7 self-review, and an authorized draft PR with no merge. |
+| Status | **Draft, revision 4** (M4), 2026-10-19. Ready for M5 Plan Review (fourth pass). |
+| M5 history | First pass (2026-10-19, owner, reviewed `e82fe07` verbatim): **Returned for Revision**, findings M5-1 to M5-3 (P1) and M5-4 (P2). All are addressed in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). Second pass (2026-10-19, owner, reviewed the `081a660` text): **Returned for Revision**, findings M5-5 (P1) and M5-6 (P2). M5-1 to M5-4 are recorded as accepted. Both are resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). Third pass (2026-10-19, owner, reviewed the `449a79f` text): **Returned for Revision**, finding M5-7 (P1). M5-1 to M5-6 are recorded as resolved. It is resolved in [Revision 4 (M5 review 3)](#revision-4-m5-review-3). The owner confirmed as sound: `^7.1.1` (confirmed 7.1.x and passing the compatibility cases), one unscoped config object after the managed spread, the inventory re-run on the branch before the configuration commit with the owner gate, red/green through the real lint scripts, exact rule IDs and lines for cases A–C, a labelled M7 self-review, and an authorized draft PR with no merge. |
 | Date | 2026-10-18 |
 | Tracking issue | [#196](https://github.com/rexescario-dev/clensy-platform/issues/196) "Enforce React Hooks lint rules in the React workspaces" |
 | Spec | [React Hooks Lint Rules](../specs/2026-10-18-react-hooks-lint-rules-design.md), Status **Accepted** (M3, 2026-10-18, revision 2, recorded at `2ed3b9f`). The M3 constraints are carried here: the finding inventory is completed before any lint configuration is committed (Task 1 Step 4, before Step 9), and every acceptance claim comes from an actual run. |
@@ -211,15 +211,20 @@ Implements spec §5 invariant 9. Planning decision (e). Outward-facing, authoriz
 
 **Required checks:** `Lint`, `Test`, `Release gate`, `API e2e` ([Required CI Checks](../specs/2026-10-06-required-ci-checks-design.md)).
 
-**Head-pinned check verification `V(sha)` (M5-5), used in Steps 2 and 3.** Run it only after the checks for `sha` have finished. All five parts must hold, in this order:
+**Head-pinned check verification `V(sha)` (M5-5, M5-7), used in Steps 2 and 3.** `R=rexescario-dev/clensy-platform`. The CI **workflow run** for `sha` is the source of truth. Its latest attempt must have finished, and the four required checks must be that attempt's jobs. A successful check-run name alone is not enough, because a rerun that has not yet created its new check runs leaves the previous successful run visible. Every API call that errors, returns nothing or returns output that cannot be parsed fails closed. All eight parts must hold, in this order:
 
 1. **Head before.** `gh pr view <pr> --json headRefOid -q .headRefOid` equals `sha`. Record it.
-2. **Results tied to the SHA.** `gh api repos/rexescario-dev/clensy-platform/commits/<sha>/check-runs --paginate --jq '.check_runs[] | {id, name, status, conclusion, head_sha}'`. This queries check runs **by commit**, so every result carries its own `head_sha`. For each required name, take the run with the highest `id`, which is the latest re-run. It must have `head_sha` equal to `sha`, `status` `completed` and `conclusion` `success`. Record each one's name, id, `head_sha` and conclusion. `gh pr checks` reports only the PR's current head and cannot tie a result to a SHA, so it is not used as evidence.
-3. **Head after.** Read `headRefOid` again. It still equals `sha`.
-4. **No advance, local or remote.** `git rev-parse HEAD` and `git ls-remote origin refs/heads/feat/196-react-hooks-lint-rules` both give `sha`.
-5. **State recorded.** `gh pr view <pr> --json mergeStateStatus` is recorded for information. It is not an acceptance criterion: the PR is a draft.
+2. **CI workflow runs for the SHA.** `gh api "repos/$R/actions/runs?head_sha=<sha>&per_page=100" --paginate --jq '.workflow_runs[] | select(.name == "CI") | {id, run_attempt, status, conclusion, event, head_sha, check_suite_id}'`. Require at least one run. **Every** CI run for `sha` has `status` `completed`. Any other status (`queued`, `in_progress`, `waiting`, `requested`, `pending`, or one not listed) fails closed, because a newer execution may be underway. Let `W` be the run with the highest `id`. `W` has `head_sha` = `sha`, `event` `pull_request` and `conclusion` `success`. Record `W.id`, `W.run_attempt`, `W.status`, `W.conclusion` and `W.check_suite_id`.
+3. **Jobs of `W`'s latest attempt.** `gh api "repos/$R/actions/runs/<W.id>/attempts/<W.run_attempt>/jobs" --paginate --jq '.jobs[] | {id, name, status, conclusion, head_sha, run_attempt}'`. Each required name (`Lint`, `Test`, `Release gate`, `API e2e`) appears **exactly once**, with `status` `completed`, `conclusion` `success`, `head_sha` = `sha` and `run_attempt` = `W.run_attempt`. Record each job's `id`.
+4. **Check runs tied to those jobs.** `gh api "repos/$R/commits/<sha>/check-runs" --paginate --jq '.check_runs[] | {id, name, status, conclusion, head_sha, check_suite: .check_suite.id}'`. For each required name, the check run whose `id` equals that name's job `id` from part 3 exists. It has `check_suite` = `W.check_suite_id`, `head_sha` = `sha` and `conclusion` `success`. No check run for a required name has an `id` greater than that job's `id` while not yet `completed`. A GitHub Actions job's id is its check run's id; this was confirmed on `d5d845e` at planning time (CI run `38943527715`, check suite `105542006302`).
+5. **No rerun started during collection.** Re-read `gh api "repos/$R/actions/runs/<W.id>" --jq '{run_attempt, status, conclusion}'`. `run_attempt` is unchanged, `status` is `completed` and `conclusion` is `success`. Re-run part 2's list: no CI run for `sha` has an `id` greater than `W.id`.
+6. **Head after.** Read `headRefOid` again. It still equals `sha`.
+7. **No advance, local or remote.** `git rev-parse HEAD` and `git ls-remote origin refs/heads/feat/196-react-hooks-lint-rules` both give `sha`.
+8. **State recorded.** `gh pr view <pr> --json mergeStateStatus` is recorded for information. It is not an acceptance criterion, because the PR is a draft.
 
-**Failure path (applies to Steps 2 and 3, M5-2).** Any part of `V(sha)` that does not hold counts as a failure, as does a required check that is failed, missing, pending past its normal run time, or not tied to the SHA being verified. Record the actual state and every observed `headRefOid` and `git` SHA. Then stop and report the blocker to the owner. Do not claim M6 complete, do not emit the M6 Slice Completion Report or an M7 hand-off, and do not merge. Resume only after the blocker is resolved, and then run `V` again on the resulting head. If the head moved, run `V` on the new head; never accept results observed for an earlier one.
+`gh pr checks` reports only the PR's current head and cannot tie a result to a SHA or a run attempt, so it is not used as evidence.
+
+**Failure path (applies to Steps 2 and 3, M5-2).** Any part of `V(sha)` that does not hold counts as a failure, as does a required check that is failed, missing, pending past its normal run time, or not tied to the SHA being verified. Record the actual state: every observed `headRefOid` and `git` SHA, each CI workflow run's `id`, `run_attempt`, `status` and `conclusion`, and each required job and check run's `id`, `status` and `conclusion` as far as they could be read. Then stop and report the blocker to the owner. Do not claim M6 complete, do not emit the M6 Slice Completion Report or an M7 hand-off, and do not merge. Resume only after the blocker is resolved, and then run `V` again on the resulting head. If the head moved, run `V` on the new head; never accept results observed for an earlier one.
 
 - [ ] **Step 1: Push and open a draft PR (head `H1`)**
 
@@ -238,7 +243,7 @@ Three gates, all required:
 2. **Committed boundary at `H2`:** `git diff --name-only "$BASE" H2 | sort` lists exactly the Task 2 Step 2 allowlist.
 3. **Working tree at completion (M5-6):** `git status --porcelain --untracked-files=all` prints nothing, and the three `test ! -e …/zz-hooks-probe.tsx` checks from Task 2 Step 2 exit 0. This is a separate assertion from gate 2: gate 2 proves what was committed, and gate 3 proves nothing uncommitted or untracked was left behind.
 
-If any gate fails, take the failure path. Only then emit the **M6 Slice Completion Report** in the conversation, per `docs/workflows/conventions/reporting-conventions.md`. It cites `H2`, the PR URL, each required check's run id and conclusion from `V(H2)`, and the three gate results, with Next Gate M7 (labelled self-review permitted). It is **not** committed, because any commit would create a head that `H2`'s checks do not cover. The M7 record, the next commit on this branch, carries `H2`'s check results into the plan. The `main` ruleset's strict up-to-date policy re-verifies the eventual merge head in any case.
+If any gate fails, take the failure path. Only then emit the **M6 Slice Completion Report** in the conversation, per `docs/workflows/conventions/reporting-conventions.md`. It cites `H2`, the PR URL, the CI workflow run `W` (`id`, `run_attempt`, conclusion), each required job and check-run `id` with its conclusion from `V(H2)`, and the three gate results, with Next Gate M7 (labelled self-review permitted). It is **not** committed, because any commit would create a head that `H2`'s checks do not cover. The M7 record, the next commit on this branch, carries `H2`'s check results into the plan. The `main` ruleset's strict up-to-date policy re-verifies the eventual merge head in any case.
 Do not merge. Merging belongs to closeout, after M7–M9.
 
 ## Traceability
@@ -252,7 +257,7 @@ Do not merge. Merging belongs to closeout, after M7–M9.
 | Invariant 6 (inventory, classification, owner gate, no suppression) | Task 1 Step 4; Task 2 Step 2 |
 | Invariant 7 (`useEffectEvent` A/B/C on the installed version) | Task 1 Steps 2, 7 |
 | Invariant 8 (only the listed files change) | Task 2 Step 2 (working tree, untracked files, committed diff, managed fragment); Task 3 Step 3 gates 2–3 (committed diff at `H2`, working tree at completion) |
-| Invariant 9 (`Lint` passes in CI) | Task 3 Steps 2–3: `V(H1)` and `V(H2)`, head-pinned and queried by commit, with the failure path |
+| Invariant 9 (`Lint` passes in CI) | Task 3 Steps 2–3: `V(H1)` and `V(H2)`. Each is head-pinned, with the workflow run's latest attempt completed, the jobs tied to check runs, a guard against a rerun starting during collection, and the failure path. |
 | M3 constraints (inventory before the configuration commit; evidence from actual runs) | Task 1 Steps 4 and 9; every Execution record entry |
 
 ## Deferred
@@ -279,4 +284,12 @@ M5 second pass (owner, 2026-10-19, reviewed the `081a660` text): **Request chang
 | --- | --- |
 | M5-5 (P1) Race in verifying the final head's SHA | A single head-pinned procedure, `V(sha)`, is used for both `H1` and `H2`. Read `headRefOid` and require `sha`. Query the check runs **by commit** (`commits/<sha>/check-runs`), so each result carries its own `head_sha`, and take the latest run of each required name. Read `headRefOid` again and require `sha`. Require local `HEAD` and the remote branch to equal `sha`. `gh pr checks` is no longer used as evidence. Any failure, or a moved head, takes the failure path, and `V` re-runs on the new head. |
 | M5-6 (P2) The working tree is not rechecked at completion | Task 3 Step 3 now has three gates before the M6 report: `V(H2)`; the committed allowlist at `H2`; and a separate working-tree check (`git status --porcelain --untracked-files=all` empty, plus the three probe `test ! -e` checks). |
+
+## Revision 4 (M5 review 3)
+
+M5 third pass (owner, 2026-10-19, reviewed the `449a79f` text): **Request changes**. M5-1 to M5-6 are resolved.
+
+| Finding | Resolution |
+| --- | --- |
+| M5-7 (P1) `V(sha)` can accept stale successful checks during a rerun | `V(sha)` now treats the CI workflow run as the source of truth (parts 2–5). Every CI run for `sha` must be `completed`, and any other or unknown status fails closed. The latest run `W` must be `pull_request` and `success`. Its latest attempt's jobs must include each required name exactly once, completed and successful on `sha`. Each job is tied to its check run by id and check suite (job id = check-run id, confirmed on `d5d845e`). No newer check run for a required name may be pending. After collection, `W`'s `run_attempt` and status are re-read, and the run list is re-checked for a newer run, to catch a rerun that started mid-verification. Any API error or empty result fails closed. The head-before, head-after and local/remote checks are kept (parts 1, 6, 7). The failure path now also records the workflow run's identity, attempt and status, and each job and check-run id. |
 
