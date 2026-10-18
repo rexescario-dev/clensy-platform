@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useEffectEvent, useRef } from 'react';
 import type { MouseEvent } from 'react';
 
 // Selector for elements a keyboard user can reach. Matches the common
@@ -73,6 +73,14 @@ export function useDialogBehavior(open: boolean, onClose: () => void) {
     };
   }, [open]);
 
+  // The Escape handler below is registered once per `open`, so it must not
+  // capture `onClose`. An effect event always calls the `onClose` of the
+  // latest commit: React swaps it in before any effect of that commit runs.
+  // Without it, an Escape landing between a commit and the listener's
+  // re-registration called the previous `onClose` — for example
+  // `FormDialog`'s guard from before `submitting` became true (#193).
+  const closeOnEscape = useEffectEvent(() => onClose());
+
   useEffect(() => {
     if (!open) return;
     function handleKeyDown(event: KeyboardEvent) {
@@ -84,7 +92,7 @@ export function useDialogBehavior(open: boolean, onClose: () => void) {
         // dialog at once instead of just the one on top.
         const isTopmost = openDialogStack[openDialogStack.length - 1] === instanceIdRef.current;
         if (isTopmost) {
-          onClose();
+          closeOnEscape();
         }
         return;
       }
@@ -127,7 +135,7 @@ export function useDialogBehavior(open: boolean, onClose: () => void) {
     }
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [open, onClose]);
+  }, [open]);
 
   function backdropProps() {
     return {

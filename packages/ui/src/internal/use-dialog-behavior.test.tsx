@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, StrictMode } from 'react';
+import { act, startTransition, StrictMode, useLayoutEffect } from 'react';
 import type { ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -30,6 +30,19 @@ function dialogTitled(title: string): HTMLElement | null {
       (dialog) => document.getElementById(dialog.getAttribute('aria-labelledby') ?? '')?.textContent === title,
     ) ?? null
   );
+}
+
+// Presses Escape from a layout effect: after the DOM commit that turns
+// `fire` true, before that commit's passive effects. Rendered before the
+// dialog, so it also runs before any layout effect inside the dialog.
+function EscapeInCommit({ fire }: { fire: boolean }) {
+  useLayoutEffect(() => {
+    if (!fire) return;
+    (document.activeElement ?? document).dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+    );
+  }, [fire]);
+  return null;
 }
 
 function focusTrigger() {
@@ -257,3 +270,181 @@ describe('useDialogBehavior focus and Strict Mode (#193) [C]', () => {
     expect(dialogTitled('Under')).toBeNull();
   });
 });
+
+describe('Escape uses the latest close callback (#193)', () => {
+  // A `FormDialog` whose `onClose` really closes it, so "refused" and
+  // "closed" are both observable in the DOM.
+  function editTree(view: { fire: boolean; open: boolean; submitting: boolean }, onClose: () => void) {
+    return (
+      <>
+        <EscapeInCommit fire={view.fire} />
+        <FormDialog
+          open={view.open}
+          onClose={onClose}
+          title="Edit"
+          onSubmit={() => {}}
+          submitLabel="Save"
+          submitting={view.submitting}
+        >
+          <input aria-label="Name" />
+        </FormDialog>
+      </>
+    );
+  }
+
+  it('calls the onClose from the commit the Escape lands in, not an earlier one', () => {
+    const a = vi.fn();
+    const b = vi.fn();
+    const tree = (fire: boolean, onClose: () => void) => (
+      <>
+        <EscapeInCommit fire={fire} />
+        <Modal open onClose={onClose} title="Plain">
+          <button type="button">Inside</button>
+        </Modal>
+      </>
+    );
+    mount(tree(false, a));
+    rerender(tree(true, b));
+    expect(b).toHaveBeenCalledTimes(1);
+    expect(a).not.toHaveBeenCalled();
+  });
+
+  it('refuses an Escape pressed in the commit that starts a submit', () => {
+    const view = { fire: false, open: true, submitting: false };
+    let closes = 0;
+    const onClose = () => {
+      closes += 1;
+      view.open = false;
+      root!.render(editTree(view, onClose));
+    };
+    mount(editTree(view, onClose));
+    view.submitting = true;
+    view.fire = true;
+    rerender(editTree(view, onClose));
+    expect(closes).toBe(0);
+    expect(dialogTitled('Edit')).not.toBeNull();
+  });
+
+  it('refuses an Escape pressed in the commit that starts a submit scheduled as a transition', () => {
+    const view = { fire: false, open: true, submitting: false };
+    let closes = 0;
+    const onClose = () => {
+      closes += 1;
+      view.open = false;
+      root!.render(editTree(view, onClose));
+    };
+    mount(editTree(view, onClose));
+    view.submitting = true;
+    view.fire = true;
+    act(() => startTransition(() => root!.render(editTree(view, onClose))));
+    expect(closes).toBe(0);
+    expect(dialogTitled('Edit')).not.toBeNull();
+  });
+
+  it('closes on an Escape pressed in the commit that ends a submit', () => {
+    const view = { fire: false, open: true, submitting: true };
+    let closes = 0;
+    const onClose = () => {
+      closes += 1;
+      view.open = false;
+      root!.render(editTree(view, onClose));
+    };
+    mount(editTree(view, onClose));
+    view.submitting = false;
+    view.fire = true;
+    rerender(editTree(view, onClose));
+    expect(closes).toBe(1);
+    expect(dialogTitled('Edit')).toBeNull();
+  });
+
+  it('refuses an Escape in the commit that starts a submit when the FormDialog is stacked on top', () => {
+    const view = { edit: true, fire: false, submitting: false, under: true };
+    const closes: string[] = [];
+    const tree = () => (
+      <>
+        <EscapeInCommit fire={view.fire} />
+        <Modal
+          open={view.under}
+          onClose={() => {
+            closes.push('under');
+            view.under = false;
+            root!.render(tree());
+          }}
+          title="Under"
+        >
+          <button type="button">Under action</button>
+        </Modal>
+        <FormDialog
+          open={view.edit}
+          onClose={() => {
+            closes.push('edit');
+            view.edit = false;
+            root!.render(tree());
+          }}
+          title="Edit"
+          onSubmit={() => {}}
+          submitLabel="Save"
+          submitting={view.submitting}
+        >
+          <input aria-label="Name" />
+        </FormDialog>
+      </>
+    );
+    mount(tree());
+    view.submitting = true;
+    view.fire = true;
+    rerender(tree());
+    expect(closes).toEqual([]);
+    expect(dialogTitled('Edit')).not.toBeNull();
+    expect(dialogTitled('Under')).not.toBeNull();
+  });
+
+  it('refuses the start-of-submit Escape under Strict Mode too', () => {
+    const view = { fire: false, open: true, submitting: false };
+    let closes = 0;
+    const tree = () => <StrictMode>{editTree(view, onClose)}</StrictMode>;
+    const onClose = () => {
+      closes += 1;
+      view.open = false;
+      root!.render(tree());
+    };
+    mount(tree());
+    view.submitting = true;
+    view.fire = true;
+    rerender(tree());
+    expect(closes).toBe(0);
+    expect(dialogTitled('Edit')).not.toBeNull();
+  });
+
+  // Not under Strict Mode: these exact call counts describe a normal render
+  // only. Strict Mode's lifecycle is covered by the active-set test above.
+  it('registers one keydown listener per open and removes it on close', () => {
+    const add = vi.spyOn(document, 'addEventListener');
+    const remove = vi.spyOn(document, 'removeEventListener');
+    restoreSpies = () => {
+      add.mockRestore();
+      remove.mockRestore();
+    };
+    const keydown = (spy: typeof add | typeof remove) => spy.mock.calls.filter(([type]) => type === 'keydown');
+    const onClose = vi.fn();
+    const tree = (open: boolean, close: () => void) => (
+      <Modal open={open} onClose={close} title="Plain">
+        <button type="button">Inside</button>
+      </Modal>
+    );
+    mount(tree(true, () => onClose()));
+    rerender(tree(true, () => onClose()));
+    rerender(tree(true, () => onClose()));
+    rerender(tree(true, () => onClose()));
+    expect(keydown(add)).toHaveLength(1);
+    expect(keydown(remove)).toHaveLength(0);
+    rerender(tree(false, () => onClose()));
+    expect(keydown(remove)).toHaveLength(1);
+    expect(keydown(remove)[0][1]).toBe(keydown(add)[0][1]);
+    pressEscape();
+    expect(onClose).not.toHaveBeenCalled();
+    rerender(tree(true, () => onClose()));
+    expect(keydown(add)).toHaveLength(2);
+  });
+});
+
