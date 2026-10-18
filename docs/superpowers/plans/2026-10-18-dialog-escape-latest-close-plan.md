@@ -7,16 +7,18 @@
 | Status | **Draft** (M4), 2026-10-18. Ready for M5 Plan Review. |
 | Date | 2026-10-18 |
 | Tracking issue | [#193](https://github.com/rexescario-dev/clensy-platform/issues/193) "Dialog Escape handler should read the latest dismissal policy without relying on effect timing". Deferred from [#180](https://github.com/rexescario-dev/clensy-platform/issues/180) / PR [#192](https://github.com/rexescario-dev/clensy-platform/pull/192), M7 non-blocking observation. Implementation guidance: the owner's `useEffect` audit comment on #193 (2026-10-18, at `d5d845e`, finding 3). |
-| Branch | `feat/193-dialog-escape-latest-close`, from `main` at `d5d845e`. One PR for this plan, its M5 record and the implementation. Before Task 1 starts, the branch is rebased onto the `main` that contains #196's merge (see Hard prerequisite). |
+| Branch | `feat/193-dialog-escape-latest-close`, from `main` at `d5d845e`. One PR for this plan, its M5 record and the implementation. The branch also carries the Context Forge workflow update (generic 1.5.0 → 1.6.0), committed in `ffcf7a6` at the owner's request, before M5. Before Task 1 starts, the branch is rebased onto the `main` that contains #196's merge (see Hard prerequisite). |
 | Implements (Accepted) | [Dashboard UX Foundation](../specs/2026-08-17-dashboard-ux-foundation-design.md), Status **Accepted** (2026-08-17), with [Amendment #180](../specs/2026-08-17-dashboard-ux-foundation-design.md#8-amendment-180--form-dialog-dismissal-while-submitting) **Accepted** (2026-10-16). Governing text: §8.3.1 (items 1, 5, 7), §8.3.2, §8.3.3, §8.5; §4.4 (`Modal`, `ConfirmDialog`, `DetailDrawer`) and §4.6 (focus in on open, restore on close). |
 | No spec amendment | Owner decision, 2026-10-18 (brainstorm): #193 is an internal hook fix under the existing §8.3. No amendment and no M3 by default. §8.5 already states the guarantee unconditionally ("A submitting `FormDialog` MUST NOT close because of a user-initiated dismissal"), so making it hold however the `submitting` update is scheduled adds no product semantics. If planning or execution finds §8.3 ambiguous or insufficient, or that #193 needs a specified behavior to change, stop and return to M2/M3. |
 | Authority | Where this plan and the Accepted spec disagree, the **spec wins** and this plan must be revised. File names, test names, helper names and task order are planning decisions, not product semantics. |
-| Scope | `packages/ui`: `src/internal/use-dialog-behavior.ts` and two new test files. **No** change to `Modal`, `FormDialog`, `ConfirmDialog`, `DetailDrawer`, the existing `@clensy/ui` tests, any caller in `apps/web` or `packages/web`, `package.json`, `pnpm-lock.yaml`, copy, API, schema or GraphQL. |
+| Scope | `packages/ui`: `src/internal/use-dialog-behavior.ts` and two new test files. Separately, the authorized workflow update in `ffcf7a6` (six paths, listed in Task 3 Step 2). **No** change to `Modal`, `FormDialog`, `ConfirmDialog`, `DetailDrawer`, the existing `@clensy/ui` tests, any caller in `apps/web` or `packages/web`, `package.json`, `pnpm-lock.yaml`, copy, API, schema or GraphQL. |
 | Package names | `pnpm --filter @clensy/ui` is `packages/ui`. `pnpm --filter web` is `apps/web`. |
 | Baseline | On `main` at `d5d845e`, at planning time: `pnpm --filter @clensy/ui exec vitest run`, 9 files, 96/96 passed. `pnpm --filter web exec vitest run`, 48 files, 2185/2185 passed. This is a baseline, not pre-validation. Task 1 re-records it after the rebase. |
 | Pre-validation | **Partial.** Two throwaway planning probes ran on `main` at `d5d845e` and were deleted, and the tree was restored (`git status` clean). (1) A single test equivalent to Task 2's `refuses an Escape pressed in the commit that starts a submit`, against unmodified code: **failed** at `expect(closes).toBe(0)`, which reproduces the #193 defect. (2) The same test with the hook temporarily changed to the Task 2 Step 3 mechanism: `pnpm --filter @clensy/ui exec vitest run` reported 10 files, 97/97 passed. **Not run:** every other test in this plan, lint (the #196 rules do not exist yet), `tsc`, the `web` suite and Task 3's commands. Every other `Expected:` line is a prediction until M6 records the actual result. |
 | Red-phase evidence | Each "verify it fails" step gives the behavioral failure and a **predicted** count. The count is not a pass criterion. At every red phase the implementer records the actual totals and each failing test's name and first failure message in the Execution record. If the result differs from the prediction, stop and find out why before writing the implementation, and record the explanation. |
 | M7 | Application code changes. `CLAUDE.md` requires a **fresh independent reviewer** on the most capable model, given the Accepted spec (with Amendment #180), this plan and the branch diff. |
+| M10 | **Applies**: the slice changes workflow assets (`ffcf7a6`). The validation report goes in this plan's Gate outcomes, before closeout. |
+| Workflow version | Planned under generic **1.6.0**, including its characterization-test rule (M4 step 9): each labelled characterization test records the behavior broken, the tests that break covers, and an outside-the-commit run. See [Characterization breaks](#characterization-breaks-task-1). |
 
 **Goal:** The shared Escape handler in `useDialogBehavior` always calls the `onClose` from the latest commit, so Escape can never dismiss a `FormDialog` once its submit has started (and never stays refused once it has ended), however React schedules the `submitting` update.
 
@@ -99,6 +101,23 @@ In `use-dialog-behavior.test.tsx`, `describe('useDialogBehavior focus and Strict
 - `closes once per Escape under Strict Mode and restores focus`: same as the first test with the tree wrapped in `<StrictMode>` and `onClose` a `vi.fn()` that sets `open` false → after one Escape, `onClose` called exactly once and focus is on Trigger.
 - `keeps topmost-only Escape under Strict Mode`: in `<StrictMode>`, open a `Modal` titled `Under`, then a `FormDialog` with `submitting` true on top → Escape → neither `onClose` is called and both dialogs are present; set `submitting` false → Escape → only the `FormDialog`'s `onClose` is called.
 
+#### Characterization breaks (Task 1)
+
+Each row is one behavior deliberately broken in the code under test. Every test listed in the row must fail **because of that break** (its failure message shows the broken behavior, not a fixture or import error). The edit that produces the break is M6's choice; this plan names only the behavior. Each run is made outside the committed change (Step 4) and nothing from it is committed. A test may sit in more than one row.
+
+| Break | Behavior deliberately broken | Tests expected to fail because of it |
+| --- | --- | --- |
+| B1 | Escape never closes any dialog. | `closes on Escape`; `closes only a ConfirmDialog opened on top of it, then itself on the next Escape` |
+| B2 | One Escape press closes every open dialog, not only the topmost. | `closes only a ConfirmDialog opened on top of it, then itself on the next Escape`; `keeps topmost-only Escape under Strict Mode` |
+| B3 | A click on the backdrop does not close the dialog. | `closes on a backdrop click` |
+| B4 | A click anywhere inside the overlay, including inside the panel, closes the dialog as a backdrop click would. | `does not close on a click inside the panel` |
+| B5 | The `DetailDrawer` × button does not close the drawer. | `closes on ×` |
+| B6 | Focus does not move into the dialog when it opens. | `moves focus into the dialog on open and restores it to the trigger on close` |
+| B7 | Focus is not restored to the trigger when the dialog closes or unmounts. | `moves focus into the dialog on open and restores it to the trigger on close`; `restores focus to the trigger and stops handling Escape when the dialog unmounts while open`; `closes once per Escape under Strict Mode and restores focus` |
+| B8 | A dialog keeps handling Escape after its effects are cleaned up (on close, on unmount, and on Strict Mode's simulated unmount). | `restores focus to the trigger and stops handling Escape when the dialog unmounts while open`; `closes once per Escape under Strict Mode and restores focus` |
+
+All nine Task 1 tests appear in at least one row.
+
 - [ ] **Step 3: Run them on unmodified code**
 
 Run: `pnpm --filter @clensy/ui exec vitest run src/base/detail-drawer.test.tsx src/internal/use-dialog-behavior.test.tsx`
@@ -110,6 +129,12 @@ Expected: 2 files, 9/9 passed. Any failure → stop (see the Task 1 preamble).
 git add packages/ui/src/base/detail-drawer.test.tsx packages/ui/src/internal/use-dialog-behavior.test.tsx
 git commit -m "test(193): pin dialog dismissal, focus and Strict Mode behavior"
 ```
+
+- [ ] **Step 5: Record the characterization evidence outside the commit**
+
+For each of B1–B8 in turn: create a disposable worktree at the Step 4 commit, outside the repository (`git worktree add --detach "$(mktemp -d)" HEAD`, then `pnpm install --frozen-lockfile --offline` in it). Make an edit to the code under test that produces that row's behavior, and run `pnpm --filter @clensy/ui exec vitest run src/base/detail-drawer.test.tsx src/internal/use-dialog-behavior.test.tsx` there. Record, per row: the edit made (a one-line description), each assigned test's result and first failure message, and the totals. Then remove the worktree (`git worktree remove --force` it, then `git worktree prune`), even when the run fails. Confirm `git status --short` in the main checkout is empty after each row. Nothing from these runs is committed. The results go in the Execution record (Task 3 Step 3).
+
+A row is evidence only when **every** test assigned to it fails because of that break. If any assigned test passes, or fails for another reason, record that row as **unsuccessful** with the planned behavior, each assigned test and what the run showed. Do not invent a different break and continue. Stop and return the plan to M4/M5 for a replacement break (M6 step 3.6). Task 2 does not start until every row is evidence.
 
 ### Task 2: Escape always calls the latest `onClose` (type: `code`)
 
@@ -188,13 +213,15 @@ Expected: all succeed. `@clensy/ui` 111/111. `web` 48 files, 2185/2185, unchange
 - [ ] **Step 2: Account for every changed path**
 
 Run: `git diff --name-only <rebased-base> HEAD | sort`, where `<rebased-base>` is `git merge-base HEAD origin/main` after the Task 1 Step 0 rebase.
-Expected: exactly these four paths, with none missing and no others:
-`docs/superpowers/plans/2026-10-18-dialog-escape-latest-close-plan.md`, `packages/ui/src/base/detail-drawer.test.tsx`, `packages/ui/src/internal/use-dialog-behavior.test.tsx`, `packages/ui/src/internal/use-dialog-behavior.ts`.
-Any other path, or a missing one, means stop and investigate. Then `git diff --quiet <rebased-base> HEAD -- packages/ui/src/base packages/ui/package.json pnpm-lock.yaml apps packages/web ':!packages/ui/src/base/detail-drawer.test.tsx'` exits 0. Record the full output.
+Expected: exactly the ten paths below, in two groups, with none missing and no others. Record the full output and each path's group. Any other path, or a missing one, means stop and investigate.
+
+- **#193 implementation and plan**, exactly: `docs/superpowers/plans/2026-10-18-dialog-escape-latest-close-plan.md`, `packages/ui/src/base/detail-drawer.test.tsx`, `packages/ui/src/internal/use-dialog-behavior.test.tsx`, `packages/ui/src/internal/use-dialog-behavior.ts`.
+- **Authorized workflow update** (owner request, `ffcf7a6`, or its rebased equivalent), exactly: `docs/workflows/README.md`, `docs/workflows/prompts/code-review.md`, `docs/workflows/prompts/implementation-execution.md`, `docs/workflows/prompts/implementation-planning.md`, `docs/workflows/prompts/plan-review.md`, `workflow.yaml`. `git log --format='%h %s' <rebased-base>..HEAD -- docs/workflows workflow.yaml` prints only that one commit.
+ Then `git diff --quiet <rebased-base> HEAD -- packages/ui/src/base packages/ui/package.json pnpm-lock.yaml apps packages/web ':!packages/ui/src/base/detail-drawer.test.tsx'` exits 0. Record the full output.
 
 - [ ] **Step 3: Write the Execution record and the M6 Slice Completion Report, then commit**
 
-Append `## Execution record` with each task's red and green results as actual output, and the Step 1 and Step 2 results. Then emit the M6 Slice Completion Report per `docs/workflows/conventions/reporting-conventions.md`, with Next Gate M7 (a fresh independent reviewer).
+Append `## Execution record` with each task's red and green results as actual output, Task 1 Step 5's B1–B8 rows (edit, per-test result, evidence or unsuccessful), and the Step 1 and Step 2 results. Then emit the M6 Slice Completion Report per `docs/workflows/conventions/reporting-conventions.md`, with Next Gate M7 (a fresh independent reviewer).
 
 ```bash
 git add docs/superpowers/plans/2026-10-18-dialog-escape-latest-close-plan.md
@@ -214,6 +241,7 @@ git commit -m "docs(193): record M6 execution"
 | §8.3.1 item 5 (no `onClose` call, no replay) | Existing `form-dialog.test.tsx` (`does not replay a refused Escape…`, `changes nothing visible…`), unedited; Task 3 Step 1 |
 | Owner comment (listener registered once per `open`) | Task 2 `registers one keydown listener per open and removes it on close` |
 | Owner sequencing (#196 first) | Hard prerequisite; Task 1 Step 0; Task 2 Step 4 lint |
+| Workflow 1.6.0 characterization rule (M4 step 9, M6 step 3.6) | [Characterization breaks](#characterization-breaks-task-1); Task 1 Step 4 |
 
 ## Deferred (not in this plan)
 
