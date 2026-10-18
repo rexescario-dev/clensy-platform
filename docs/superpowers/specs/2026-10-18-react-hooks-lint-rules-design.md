@@ -2,7 +2,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft** (M2), 2026-10-18. Ready for Design Review (M3). |
+| Status | **Draft, revision 2** (M2), 2026-10-18. Ready for Design Review (M3, second pass). |
+| M3 history | First pass (2026-10-18, owner, reviewed `fe96b24`): **Returned for Revision**, findings M3-1 and M3-2 (P1) and M3-3 and M3-4 (P2). All are addressed in [Revision 2 (M3 review 1)](#revision-2-m3-review-1). The owner asked to keep unchanged: the three workspaces; exactly two explicitly registered rules at `error`; no preset; per-workspace dependencies with a consistent lockfile; the managed fragment untouched; no suppression, source-behavior change or CI change; separate issues and reviews for app-code fixes; version, config shape and task order left to M4. |
 | Date | 2026-10-18 |
 | Document kind | Process specification. It defines how React code in this repository is checked, not product behavior. |
 | Tracking issue | [#196](https://github.com/rexescario-dev/clensy-platform/issues/196) "Enforce React Hooks lint rules in the React workspaces". Source: the `useEffect` audit at `d5d845e`, 2026-10-18, finding 1. |
@@ -29,7 +30,7 @@
 
 **In scope (normative):**
 
-1. `eslint-plugin-react-hooks`, major version 6 or later, as a devDependency of exactly `apps/web`, `packages/ui` and `packages/web`, each declaring it in its own `package.json` (the managed fragment's header requires per-package installation of plugins).
+1. `eslint-plugin-react-hooks` as a devDependency of exactly `apps/web`, `packages/ui` and `packages/web`, each declaring it in its own `package.json` (the managed fragment's header requires per-package installation of plugins). The version is one M4 selects whose **installed** behavior passes §5 invariants 5 and 7. #196's floor of major version 6 is a lower bound only. This spec does not claim that every release from 6 on recognizes `useEffectEvent` (M3-4).
 2. In each of those three packages' project-owned `eslint.config.mjs`: the plugin registered under the `react-hooks` namespace, and the two rules `react-hooks/rules-of-hooks` and `react-hooks/exhaustive-deps` set to `error`, for every file that package's `lint` script checks.
 3. `pnpm-lock.yaml` updated to match.
 4. Every finding the new rules raise on the existing code, handled per §5 invariant 6.
@@ -71,13 +72,25 @@
 
 ## 5. Invariants and boundaries
 
-1. In each React workspace, the effective `react-hooks/*` rule set for that workspace's linted files is exactly the two rules, both at `error` (severity 2). The PR shows this with `eslint --print-config` output for at least one `.tsx` file per workspace.
+1. In each React workspace, the effective `react-hooks/*` rule set for that workspace's linted files is exactly the two rules, both at `error`. It is checked **separately for each workspace**, on at least one non-test `.tsx` file and one test file that the workspace's `lint` script covers (M3-3):
+   - Run `eslint --print-config <file>` from the workspace directory and extract every rule ID that starts with `react-hooks/`, for example with `jq '.rules | with_entries(select(.key | startswith("react-hooks/")))'`.
+   - The extracted set must be exactly `react-hooks/rules-of-hooks` and `react-hooks/exhaustive-deps`, each at severity `2` (printed as `2` or as an array whose first element is `2`). Any other `react-hooks/*` key, at any severity including `0`, fails the check.
+   - `--print-config` reports the final merged config, so the check covers rules inherited from any spread or base config, not only the block this slice adds.
+   - The PR records, for each workspace, the file paths checked and the extracted output.
 2. The plugin is registered explicitly. The configs MUST NOT spread `reactHooks.configs.*` or any other preset that adds `react-hooks/*` rules.
 3. `tooling/eslint.contextforge.mjs` is byte-for-byte unchanged, and its `workflow.yaml` digest still matches.
 4. Each React workspace's `package.json` declares the plugin, and `pnpm-lock.yaml` agrees: `pnpm install --frozen-lockfile` succeeds.
 5. The rules are demonstrably active. In each React workspace, a throwaway violation of each rule makes `pnpm --filter <workspace> lint` fail with that rule's id, and is reverted. The violation is never committed.
-6. Existing findings MUST NOT be suppressed to pass lint. Each finding is either fixed by a change that alters no runtime behavior (test-only code, or configuration), or left unfixed and recorded in the PR with a link to a separate application-code issue. If any finding is left that way, this slice cannot make lint pass on its own. It then stops and the owner decides the order (§7).
-7. `useEffectEvent` is recognized. A throwaway file shows two things: an effect event left out of an Effect's dependency array is reported by neither rule, and an effect event called outside an Effect (for example, during render) is reported by `rules-of-hooks`. The throwaway file is never committed.
+6. **Finding inventory and owner decision gate (M3-1).** Existing findings MUST NOT be suppressed, and the rules MUST NOT be weakened, to pass lint. The suppressions and weakenings forbidden here include `eslint-disable` comments, `off` or `warn` severity, rule options that narrow either rule, and `files`/`ignores` globs that exclude linted code.
+   1. **Inventory first.** Before any implementation commit, the two rules are run, at `error`, over every file each React workspace's `lint` script covers. Every finding is recorded with workspace, file, line, rule ID and message. M4 decides whether the inventory is a throwaway planning probe or the first M6 step. It is taken against the base the slice will merge into.
+   2. **Classify each finding.** Either (a) it can be fixed by a change that alters no runtime behavior, in test-only code or in configuration this spec allows, or (b) its fix needs a production-source change.
+   3. **Gate.** If every finding is class (a), the slice fixes them and proceeds. If any finding is class (b), the slice **stops** before committing the lint configuration. It presents the class (b) findings and affected files to the owner, each with a draft issue. The owner then chooses one of three paths: the application fix lands first in its own issue and slice (with its own fresh independent review), and this slice resumes on the updated base; this slice waits; or another sequencing the owner authorizes explicitly and records in the PR. Whichever path is chosen, no class (b) fix is made in this slice.
+   4. **No merge on red.** This slice is not merged while `Lint` fails. A path that would merge it with a failing required check is not available under this gate.
+7. **`useEffectEvent` is recognized by the installed version (M3-2).** This is checked against the exact plugin version in `pnpm-lock.yaml`, through each React workspace's real config, using a throwaway component file that is never committed. Each case's diagnostics are read as structured output (for example `eslint --format json`), and the assertions are on rule IDs, not on whether lint failed:
+   - **Case A, omitted from deps (accepted):** an Effect calls an effect event from `useEffectEvent` and lists only its other dependencies. No message has rule ID `react-hooks/exhaustive-deps` or `react-hooks/rules-of-hooks`.
+   - **Case B, called outside an Effect (rejected):** the same effect event is called during render. At least one message has rule ID exactly `react-hooks/rules-of-hooks`, and its line is the line of the call.
+   - **Case C, control:** an ordinary missing dependency in the same file produces a message with rule ID exactly `react-hooks/exhaustive-deps`. This shows that Case A's silence comes from recognition of the effect event, not from the rule being inactive.
+   The PR records the plugin version and each case's rule IDs and lines. A version that fails any case does not satisfy §2 item 1.
 8. The only files that change are the three `eslint.config.mjs` files, the three `package.json` files, `pnpm-lock.yaml`, this slice's spec and plan, and test-only code that §5 invariant 6 permits. No production source file changes.
 9. `pnpm run lint` passes in CI on the PR head, as part of the required checks.
 
@@ -87,19 +100,20 @@
 - **`error`, not `warn` (my call, matching the issue's gating criterion).** CI's `Lint` job passes no `--max-warnings`, so warnings never fail the build. Only `error` gates.
 - **Project-owned configs, not the managed fragment.** The fragment is overwritten on installer update. The three project configs are the documented extension point, as their existing `no-restricted-imports` and `sort-keys` overrides show.
 - **Per-package devDependency.** The fragment's header requires plugins to resolve from the package, not from `tooling/` or by hoisting.
-- **Version 6 or later.** That floor is #196's own, and the latest stable (7.1.1) satisfies it. The exact version is a planning decision for M4 (§8).
-- **No suppression.** The point of the slice is enforcement. A suppression added to pass lint would hide exactly what the rules exist to catch.
+- **Version chosen by behavior, not by range.** The floor of 6 is #196's own. It is not evidence of `useEffectEvent` support, so M4 picks a version and invariant 7 proves that version on the installed copy. The latest stable at drafting was 7.1.1, which this spec has not verified (§8).
+- **No suppression, and an explicit gate instead.** The point of the slice is enforcement. A suppression added to pass lint would hide exactly what the rules exist to catch. Because `Lint` is a required check, an unfixed finding blocks the merge, so invariant 6 makes the owner's sequencing decision an explicit step taken before implementation, not something found at merge time.
 
 ## 7. Worked examples (non-normative)
 
 - A component calls `useState` inside an `if`. `rules-of-hooks` reports it at `error`, and `pnpm run lint` exits 1.
 - An Effect reads `onClose` but its array is `[open]`. `exhaustive-deps` reports the missing dependency at `error`.
 - An Effect calls `const onEscape = useEffectEvent(...)` and lists `[open]`. Neither rule reports it (goal 2).
-- The rules find a missing dependency in `apps/web/lib/foo.ts` whose fix would change when an Effect re-runs. That is an application-code change. It is recorded in the PR with a link to a new issue, and the owner decides whether that issue lands first or this slice waits (invariant 6).
+- The rules find a missing dependency in `apps/web/lib/foo.ts` whose fix would change when an Effect re-runs. That is an application-code change, class (b). The inventory finds it before implementation. The slice stops and presents it with a draft issue, and the owner chooses the path (invariant 6.3).
 
 ## 8. Deferrals and decisions left to M4
 
-- **Exact plugin version and range** (for example `^7.1.1`): M4, within §2 item 1.
+- **Exact plugin version and range** (for example `^7.1.1`): M4, which must select a version whose installed behavior passes invariants 5 and 7.
+- **When the finding inventory runs** (planning probe or first M6 step): M4, within invariant 6.1.
 - **Config shape** (one block per config with `files` matching what the lint script checks, or another layout): M4, within invariants 1–2.
 - **Task order and how findings are reviewed**: M4.
 - **React Compiler–derived rules**: a later issue, if wanted.
@@ -113,7 +127,7 @@
 | #196 Scope: project-owned configs only; do not edit the managed fragment | §2 item 2; §4; §5 invariant 3 |
 | #196 Scope: explicit rules, no preset; show the effective set | §5 invariants 1–2 |
 | #196 Scope: lockfile | §2 item 3; §5 invariant 4 |
-| #196 Scope: review every finding; no suppression; app-code fixes go to separate issues | §4; §5 invariant 6 |
+| #196 Scope: review every finding; no suppression; app-code fixes go to separate issues | §4; §5 invariant 6 (inventory, classification, owner gate, no merge on red) |
 | #196 Scope: verify with React 19.2.8, Next.js 16.3, flat config; `useEffectEvent` recognized | §5 invariant 7 |
 | #196 Acceptance: throwaway violation per rule | §5 invariant 5 |
 | #196 Acceptance: CI lint passes; severity gates CI | §5 invariants 1, 9; §6 |
@@ -124,10 +138,22 @@
 
 M3 may move this specification from Draft to Accepted when it confirms that:
 
-1. The scope names exactly the three React workspaces and the two rules, and gives a reason for leaving out `apps/api` and `packages/client`.
-2. The invariants make "exactly two rules, at `error`" and "no preset" checkable from the PR, not from prose.
-3. The rules for handling findings forbid suppression and keep any application-code change out of this slice.
+1. The scope names exactly the three React workspaces and the two rules, and gives a reason for leaving out `apps/api` and `packages/client`. The version is tied to verified behavior, not to a range.
+2. The invariants make "exactly two rules, at `error`" and "no preset" checkable from the PR, per workspace, through an extraction of the effective `react-hooks/*` rule set.
+3. The rules for handling findings forbid suppression, keep any application-code change out of this slice, and define an inventory and an owner decision gate that runs before implementation.
 4. Gating is tied to the `Lint` job's actual severity behavior.
-5. `useEffectEvent` recognition is a stated, verifiable requirement, because #193 depends on it.
+5. `useEffectEvent` recognition is verified on the installed version, through rule-ID assertions with a control case, because #193 depends on it.
 6. Nothing in it conflicts with the Accepted Required CI Checks specification, or edits installer-managed files.
 7. It leaves the version, the config shape and the task order to M4.
+
+## Revision 2 (M3 review 1)
+
+M3 first pass (owner, 2026-10-18, reviewed `fe96b24`): **Request changes**.
+
+| Finding | Resolution |
+| --- | --- |
+| M3-1 (P1) Invariant 6's stop condition is ambiguous | Invariant 6 is now an explicit gate: inventory every finding before any implementation commit; classify each as (a) fixable with no runtime change or (b) needing a production-source change; on any (b), stop before committing the config and present the findings, the affected files and draft issues to the owner. The owner chooses: the app fix lands first, this slice waits, or another sequencing the owner authorizes and records. No suppression or weakening (each kind listed), and no merge while `Lint` is red. Rationale and worked example updated. |
+| M3-2 (P1) Invariant 7 does not isolate `rules-of-hooks` | Invariant 7 now runs on the exact installed version, through each workspace's real config, and asserts rule IDs from structured output. Case A: an omitted effect event gets no `react-hooks/*` message. Case B: a call during render gets `react-hooks/rules-of-hooks` on the call's line. Case C (control): an ordinary missing dependency gets `react-hooks/exhaustive-deps`, which shows that A's silence is recognition, not an inactive rule. |
+| M3-3 (P2) Effective rule-set inspection is imprecise | Invariant 1 now extracts the `react-hooks/*` keys from `--print-config` per workspace, on a non-test `.tsx` file and a test file. The set must be exactly the two rules at severity `2`; any other key, even at `0`, fails. The merged config covers inherited rules. The PR records the paths and outputs. |
+| M3-4 (P2) The version floor overstates compatibility | §2 item 1 now requires M4 to select a version whose installed behavior passes invariants 5 and 7. The floor of 6 is called a lower bound, and the spec does not claim the range is verified. Rationale and §8 updated. |
+
