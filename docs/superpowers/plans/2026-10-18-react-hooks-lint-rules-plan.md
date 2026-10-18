@@ -333,3 +333,18 @@ M6, native, 2026-10-19, on `feat/196-react-hooks-lint-rules`. `BASE` = `d5d845e`
 
 - Invariant 9 (`Lint` passes in CI on the PR head): Task 3, `V(H1)` and `V(H2)`.
 - The M6 Slice Completion Report: Task 3 Step 3, emitted only after `V(H2)` and gates 2–3 pass.
+
+### Task 3
+
+- **Step 1.** Pushed `feat/196-react-hooks-lint-rules`. Opened draft PR [#199](https://github.com/rexescario-dev/clensy-platform/pull/199). `H1` = `61aa9ebab686b74192d80de805cf3fbf672b10a3`.
+- **Step 2, `V(H1)`: passed**, all parts 0–8, run in order after every CI run for `H1` had completed:
+  - Part 0: `{"id":356997703,"path":".github/workflows/ci.yml","state":"active"}`.
+  - Part 1: `headRefOid` = `H1`.
+  - Part 2: one CI run for `H1`. `W` = `39144563828`, `workflow_id` 356997703, `path` `.github/workflows/ci.yml`, `event` `pull_request`, `run_attempt` 1, `completed`/`success`, `check_suite_id` 106077004507.
+  - Part 3: jobs of attempt 1, each exactly once, `completed`/`success` on `H1`: `Release gate` 117725662059, `Test` 117725662180, `API e2e` 117725662188, `Lint` 117725662253.
+  - Part 4: the check runs with those same four ids exist, with `check_suite` 106077004507, `head_sha` `H1` and `success`. No newer check run is pending.
+  - Part 5: re-read of `W`: same `workflow_id` and `path`, `run_attempt` 1, `completed`/`success`. Re-listed runs: only `39144563828`.
+  - Part 6: `headRefOid` still `H1`.
+  - Part 7: local `HEAD` and remote branch both `H1`.
+  - Part 8: `mergeStateStatus` `CLEAN` (information only).
+- These `H1` results do **not** cover `H2`, the commit that records them. `V(H2)` and Step 3's gates are still to run.
