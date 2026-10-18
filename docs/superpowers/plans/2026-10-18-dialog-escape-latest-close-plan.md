@@ -4,8 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft, revision 2** (M4), 2026-10-18. Ready for M5 Plan Review (second pass). |
-| M5 history | First pass (2026-10-18, owner, reviewed `8c9b613`): **Returned for Revision** ("Request changes"), findings M5-1 to M5-6 and one execution guard. All are addressed in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). The owner asked to preserve: the #196 prerequisite, no spec amendment, the layout-effect probe (with its claim narrowed), the split between characterization and regression tests, the hook-and-tests-only scope, and the fresh independent M7 reviewer. |
+| Status | **Draft, revision 3** (M4), 2026-10-18. Ready for M5 Plan Review (third pass). |
+| M5 history | First pass (2026-10-18, owner, reviewed `8c9b613`): **Returned for Revision** ("Request changes"), findings M5-1 to M5-6 and one execution guard. All are addressed in [Revision 2 (M5 review 1)](#revision-2-m5-review-1). Second pass (2026-10-18, owner, reviewed `e9bfc3e`): **Returned for Revision**, findings M5-7 (P1) and M5-8 (P2). The six earlier findings are recorded as addressed. Both are resolved in [Revision 3 (M5 review 2)](#revision-3-m5-review-2). The owner asked to preserve: the #196 prerequisite, no spec amendment, the layout-effect probe (with its claim narrowed), the split between characterization and regression tests, the hook-and-tests-only scope, and the fresh independent M7 reviewer. |
 | Date | 2026-10-18 |
 | Tracking issue | [#193](https://github.com/rexescario-dev/clensy-platform/issues/193) "Dialog Escape handler should read the latest dismissal policy without relying on effect timing". Deferred from [#180](https://github.com/rexescario-dev/clensy-platform/issues/180) / PR [#192](https://github.com/rexescario-dev/clensy-platform/pull/192), M7 non-blocking observation. Implementation guidance: the owner's `useEffect` audit comment on #193 (2026-10-18, at `d5d845e`, finding 3). |
 | Branch | `feat/193-dialog-escape-latest-close`, from `main` at `d5d845e`. One PR for this plan, its M5 record and the implementation. The branch also carries the Context Forge workflow update (generic 1.5.0 → 1.6.0), committed in `ffcf7a6` at the owner's request, before M5. Before Task 1 starts, the branch is rebased onto the `main` that contains #196's merge (see Hard prerequisite). |
@@ -18,7 +18,7 @@
 | Pre-validation | **Partial.** Two throwaway planning probes ran on `main` at `d5d845e` and were deleted, and the tree was restored (`git status` clean). (1) A single test equivalent to Task 2's `refuses an Escape pressed in the commit that starts a submit`, against unmodified code: **failed** at `expect(closes).toBe(0)`, which reproduces the #193 defect. (2) The same test with the hook temporarily changed to the Task 2 Step 3 mechanism: `pnpm --filter @clensy/ui exec vitest run` reported 10 files, 97/97 passed. **Not run:** every other test in this plan, lint (the #196 rules do not exist yet), `tsc`, the `web` suite and Task 3's commands. Every other `Expected:` line is a prediction until M6 records the actual result. |
 | Red-phase evidence | Each "verify it fails" step gives the behavioral failure and a **predicted** count. The count is not a pass criterion. At every red phase the implementer records the actual totals and each failing test's name and first failure message in the Execution record. If the result differs from the prediction, stop and find out why before writing the implementation, and record the explanation. |
 | M7 | Application code changes. `CLAUDE.md` requires a **fresh independent reviewer** on the most capable model, given the Accepted spec (with Amendment #180), this plan and the branch diff. |
-| M10 | **Applies**: the slice changes workflow assets (`ffcf7a6`). The validation report goes in this plan's Gate outcomes, before closeout. |
+| M10 | **Applies**: the slice changes workflow assets (`ffcf7a6`). The validation report is recorded in this plan under `## Gate outcomes` → `### M10 — Workflow Validation`, after M9 and before closeout. See [M10 validation](#m10-validation-record-location-and-evidence) for its location and required evidence. |
 | Workflow version | Planned under generic **1.6.0**, including its characterization-test rule (M4 step 9): each labelled characterization test records the behavior broken, the tests that break covers, and an outside-the-commit run. See [Characterization breaks](#characterization-breaks-task-1). |
 
 **Goal:** The shared Escape handler in `useDialogBehavior` calls the `onClose` from the latest commit, so an Escape that lands in the commit changing `submitting` sees the new dismissal policy: it cannot dismiss a `FormDialog` whose submit has just started, and it is not refused once the submit has ended.
@@ -103,7 +103,7 @@ In `use-dialog-behavior.test.tsx`, `describe('useDialogBehavior focus and Strict
 Shared fixture rules: every tree renders a real `<button type="button">Trigger</button>` in the same root as the dialog, **before** it. Each test first mounts the tree with the dialog closed or absent, focuses Trigger with `act(() => trigger.focus())` and asserts `document.activeElement` is Trigger. Only then does it open the dialog, by a `rerender`. Every open, close and unmount is a `rerender` inside `act`, so its effects have flushed before the next assertion. **Close** means rerendering the same mounted dialog with `open={false}`. **Unmount** means rerendering the tree without the dialog element.
 
 - `moves focus into the dialog on open and restores it to the trigger on close`: a `Modal` (title `Focus`) containing `<button type="button">First</button>`. Open → active element is First. Close → active element is Trigger.
-- `restores focus to the trigger and stops handling Escape when the dialog unmounts while open`: a `DetailDrawer` (title `Details`, `onClose` = `spy`) that appears in the tree already `open`, the `?detail=` pattern. After the rerender that adds it, the active element is inside the drawer. Unmount → active element is Trigger, and `dialogTitled('Details')` is null. Then `pressEscape()` → `spy` not called.
+- `restores focus to the trigger and stops handling Escape when the dialog unmounts while open`: a `DetailDrawer` (title `Details`, `onClose` = `spy`) that appears in the tree already `open`, the `?detail=` pattern. Before the rerender that adds it, install the same calling-through `addEventListener`/`removeEventListener` spies as the Strict Mode test, keeping the set of active `'keydown'` handlers, and record the set's size as `before`. After the rerender that adds the drawer, the active element is inside the drawer and the set's size is `before + 1`. Unmount → the set's size is back to `before`, the active element is Trigger, and `dialogTitled('Details')` is null. Then `pressEscape()` → `spy` not called. Restore the spies in a `finally` (or `afterEach`), so a failing assertion does not leak them into later tests (M5-7). The size check is what proves cleanup: the Escape check alone would pass with a leaked listener, because the unmounted drawer is no longer topmost.
 - `closes once per Escape under Strict Mode, cleans up on close and restores focus`: the first test's tree inside `<StrictMode>`. The `Modal`'s `onClose` is a `vi.fn()` that closes it. Spies on `document.addEventListener` and `removeEventListener` (calling through) keep a set of the **currently active** `'keydown'` handlers: add on add, delete on remove. The test asserts the active set, never the number of add or remove calls, because Strict Mode's extra development setup and cleanup are not the product contract (M5-3, M5-4). While open: active set size 1; one Escape → `onClose` called exactly once and the dialog is gone; active set size 0; active element is Trigger. Then one more `pressEscape()` → `onClose` still called once. Reopen: active set size 1; one Escape → `onClose` called twice in total. Restore the spies.
 - `keeps topmost-only Escape under Strict Mode`: in `<StrictMode>`, open a `Modal` titled `Under`, then a `FormDialog` (title `Edit`) with `submitting` true on top. Escape → neither `onClose` is called, and `dialogTitled('Edit')` and `dialogTitled('Under')` are both present (M5-5). Set `submitting` false, then Escape → only the `FormDialog`'s `onClose` is called, and `Under` is still present.
 
@@ -121,6 +121,7 @@ Each row is one behavior deliberately broken in the code under test. Every test 
 | B6 | Focus does not move into the dialog when it opens. | `moves focus into the dialog on open and restores it to the trigger on close` |
 | B7 | Focus is not restored to the trigger when the dialog closes or unmounts. | `moves focus into the dialog on open and restores it to the trigger on close`; `restores focus to the trigger and stops handling Escape when the dialog unmounts while open`; `closes once per Escape under Strict Mode, cleans up on close and restores focus` |
 | B8 | A dialog keeps handling Escape after its effects are cleaned up (on close, on unmount, and on Strict Mode's simulated unmount). | `restores focus to the trigger and stops handling Escape when the dialog unmounts while open`; `closes once per Escape under Strict Mode, cleans up on close and restores focus` |
+| B9 | The dialog's `keydown` listener stays registered on `document` after its effects are cleaned up, while the dialog still leaves the topmost order normally (so a later Escape does not reach it). | `restores focus to the trigger and stops handling Escape when the dialog unmounts while open`; `closes once per Escape under Strict Mode, cleans up on close and restores focus` |
 
 All nine Task 1 tests appear in at least one row.
 
@@ -138,7 +139,7 @@ git commit -m "test(193): pin dialog dismissal, focus and Strict Mode behavior"
 
 - [ ] **Step 5: Record the characterization evidence outside the commit**
 
-For each of B1–B8 in turn: create a disposable worktree at the Step 4 commit, outside the repository (`git worktree add --detach "$(mktemp -d)" HEAD`, then `pnpm install --frozen-lockfile --offline` in it). Make an edit to the code under test that produces that row's behavior, and run `pnpm --filter @clensy/ui exec vitest run src/base/detail-drawer.test.tsx src/internal/use-dialog-behavior.test.tsx` there. Record, per row: the edit made (a one-line description), each assigned test's result and first failure message, and the totals. Then remove the worktree (`git worktree remove --force` it, then `git worktree prune`), even when the run fails. Confirm `git status --short` in the main checkout is empty after each row. Nothing from these runs is committed. The results go in the Execution record (Task 3 Step 3).
+For each of B1–B9 in turn: create a disposable worktree at the Step 4 commit, outside the repository (`git worktree add --detach "$(mktemp -d)" HEAD`, then `pnpm install --frozen-lockfile --offline` in it). Make an edit to the code under test that produces that row's behavior, and run `pnpm --filter @clensy/ui exec vitest run src/base/detail-drawer.test.tsx src/internal/use-dialog-behavior.test.tsx` there. Record, per row: the edit made (a one-line description), each assigned test's result and first failure message, and the totals. Then remove the worktree (`git worktree remove --force` it, then `git worktree prune`), even when the run fails. Confirm `git status --short` in the main checkout is empty after each row. Nothing from these runs is committed. The results go in the Execution record (Task 3 Step 3).
 
 A row is evidence only when **every** test assigned to it fails because of that break. If any assigned test passes, or fails for another reason, record that row as **unsuccessful** with the planned behavior, each assigned test and what the run showed. Do not invent a different break and continue. Stop and return the plan to M4/M5 for a replacement break (M6 step 3.6). Task 2 does not start until every row is evidence.
 
@@ -228,12 +229,26 @@ Expected: exactly the ten paths below, in two groups, with none missing and no o
 
 - [ ] **Step 3: Write the Execution record and the M6 Slice Completion Report, then commit**
 
-Append `## Execution record` with each task's red and green results as actual output, Task 1 Step 5's B1–B8 rows (edit, per-test result, evidence or unsuccessful), and the Step 1 and Step 2 results. Then emit the M6 Slice Completion Report per `docs/workflows/conventions/reporting-conventions.md`, with Next Gate M7 (a fresh independent reviewer).
+Append `## Execution record` with each task's red and green results as actual output, Task 1 Step 5's B1–B9 rows (edit, per-test result, evidence or unsuccessful), and the Step 1 and Step 2 results. Then emit the M6 Slice Completion Report per `docs/workflows/conventions/reporting-conventions.md`, with Next Gate M7 (a fresh independent reviewer). The Execution record holds M6 evidence only. It is not the M10 report, and passing M6 tests do not validate the workflow update ([M10 validation](#m10-validation-record-location-and-evidence)).
 
 ```bash
 git add docs/superpowers/plans/2026-10-18-dialog-escape-latest-close-plan.md
 git commit -m "docs(193): record M6 execution"
 ```
+
+## M10 validation: record location and evidence
+
+M10 is not an M6 task. It runs after M9 and before closeout (process spec §2.6, §2.12), and it is listed here so its record cannot be confused with M6's (M5-8).
+
+- **Location.** The plan gets one `## Gate outcomes` section, appended after the M5 decision, with one subsection per gate as each happens (`### M5`, `### M6`, … `### M10 — Workflow Validation`). That is the default home the M10 prompt names. The M10 report is recorded **only** there, not in the Execution record. The Execution record (Task 3) holds M6 evidence. The M10 subsection may cite it, but cannot be replaced by it.
+- **Form.** The M10 prompt's outcome template (`Decision`, `Subject`, `Governing specification`, `Asset inventory`, `Blocking findings`, `Non-blocking observations`, `Gate`), with `Subject: workflow prompt library (as updated in ffcf7a6, generic 1.6.0)`. Then the M10 Slice Completion Report row.
+- **Required evidence**, each recorded as the command run and its actual output:
+  1. **Installed files match the manifest:** `awk '/- path:/{p=$3} /digest:/{print substr($2,8)"  "p}' workflow.yaml | sha256sum -c` reports `OK` for every asset (27 at planning time, all OK on `8c9b613`'s tree), and `grep -c 'version: 1.6.0' workflow.yaml` matches the number of `generic` assets.
+  2. **Only the update commit touched them:** Task 3 Step 2's workflow-update group, with `git log` showing a single commit.
+  3. **The M10 checklist** in `docs/workflows/prompts/workflow-validation.md`, each row marked pass or fail with the reason. At minimum, for the 1.6.0 delta: the characterization-test rule reads consistently across the M4 prompt (step 9 and its self-check), M5 (step 6 and its checklist), M6 (step 3.6 and its checklist) and M7 (step 7); and the `README.md` layout lists every file under `conventions/`.
+  4. **Executability observation:** whether this slice could follow the 1.6.0 characterization rule without inventing instructions, citing Task 1 Step 5's B1–B9 results in the Execution record as the worked case.
+- **Decision rule.** M10 is **Accepted** only with no blocking finding. A failing digest, an unexplained extra commit on the workflow paths, or a failing checklist row is blocking. M6, M7 and test results never stand in for any item above.
+- The implementer may perform M10. It is not an independent review, and the M10 prompt does not require one.
 
 ## Traceability
 
@@ -248,7 +263,8 @@ git commit -m "docs(193): record M6 execution"
 | §8.3.1 item 5 (no `onClose` call, no replay) | Existing `form-dialog.test.tsx` (`does not replay a refused Escape…`, `changes nothing visible…`), unedited; Task 3 Step 1 |
 | Owner comment (listener registered once per `open`) | Task 2 `registers one keydown listener per open and removes it on close` |
 | Owner sequencing (#196 first) | Hard prerequisite; Task 1 Step 0; Task 2 Step 4 lint |
-| Workflow 1.6.0 characterization rule (M4 step 9, M6 step 3.6) | [Characterization breaks](#characterization-breaks-task-1); Task 1 Step 4 |
+| Workflow 1.6.0 characterization rule (M4 step 9, M6 step 3.6) | [Characterization breaks](#characterization-breaks-task-1); Task 1 Step 5 |
+| Workflow update validated (process spec §2.10, §2.12 M10) | [M10 validation](#m10-validation-record-location-and-evidence) |
 
 ## Deferred (not in this plan)
 
@@ -271,4 +287,15 @@ M5 first pass (owner, 2026-10-18, reviewed `8c9b613`): **Request changes**. Each
 | Guard: hooks lint flags `useEffectEvent` | Added to Hard prerequisite and Task 2 Step 4: stop and reassess with the owner; no suppression, no rule change, no scope growth. |
 
 Counts change: Task 2 has 7 tests (was 6); predicted red is 7 failed, 4 passed; the `@clensy/ui` total is 112 (was 111). Task 1 is still 9 tests, and the B1–B8 rows are unchanged apart from the renamed test.
+
+## Revision 3 (M5 review 2)
+
+M5 second pass (owner, 2026-10-18, reviewed `e9bfc3e`): **Request changes**. The six Revision 2 findings are recorded as addressed. The owner asked to keep the mechanism and the narrowed test claims.
+
+| Finding | Resolution |
+| --- | --- |
+| M5-7 (P1) The unmount test does not prove the listener was removed | The unmount test now tracks the active `keydown` handlers. It records their count before the drawer mounts, asserts one more while it is open and the original count after unmount, then asserts Escape does not call the removed drawer's `onClose`. Spies are restored in `finally`/`afterEach`. New break **B9** ("the listener stays registered after cleanup, while the dialog still leaves the topmost order") is assigned to this test and to the Strict Mode lifecycle test, so the cleanup assertion itself has characterization evidence. |
+| M5-8 (P2) Where the M10 report and its evidence go is unclear | New section [M10 validation](#m10-validation-record-location-and-evidence): the record lives only in `## Gate outcomes` → `### M10 — Workflow Validation`, not in the Execution record. It names the template, four required evidence items (manifest digests, single update commit, the M10 checklist with the 1.6.0 cross-prompt consistency check, the executability observation) and the decision rule. Task 3 Step 3 states that the Execution record is M6 evidence only. |
+
+Counts: Task 1 is still 9 tests. Its breaks are now B1–B9. Task 2 and the totals (112) are unchanged.
 
