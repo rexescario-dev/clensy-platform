@@ -397,6 +397,19 @@ Gate: Merge per human/project norms. M8/M9 may follow when appropriate.
 
 The change is two declarative config blocks per workspace and three dependency entries, with nothing to restructure. The repeated config object follows the existing per-package pattern that the managed fragment's header requires. Factoring it into a shared module would add a project-owned shared ESLint file, which neither the spec nor the plan authorizes.
 
+### M9 — Documentation: Complete (2026-10-19)
+
+Scope, exactly: `docs/superpowers/README.md`, `docs/development/testing-and-ci.md`, and the spec's tracking row. Out of scope: `docs/conventions/javascript/README.md`, which is installer-managed (`javascript-conventions`, `workflow.yaml`), and `docs/history/shipped-slices.md`, which records slices that change the API's behavior, which this slice does not.
+
+| Path | Change | Kind | Caused by |
+| --- | --- | --- | --- |
+| `docs/superpowers/README.md` | Index row for the spec under "Platform and API", Status Accepted | Content | Spec Accepted at M3 |
+| `docs/superpowers/README.md` | Plan count "65 so far" → "68 so far" (`ls docs/superpowers/plans \| wc -l` = 68 on this branch; `main` already had 67, so the count had been stale) | Content | This slice's plan |
+| `docs/development/testing-and-ci.md` | The `pnpm lint` row names the two React Hooks rules, the three workspaces and their effect on the **Lint** check, and links the spec | Content | Task 1 (shipped configuration) |
+| Spec tracking row | "Implemented in PR #199" | Content | PR #199 |
+
+Editorial verification: both new relative links (`specs/2026-10-18-react-hooks-lint-rules-design.md` from `docs/superpowers/`, and `../superpowers/specs/…` from `docs/development/`) resolve to existing files. No heading changes. No contradictory text: the CI table's **Lint** row (`pnpm run lint`, then `tsc` for `apps/api` and `apps/web`) is still accurate. Terminology matches the spec (§3). No implementation change.
+
 ### M10 — Workflow Validation: N/A
 
 This slice changes no workflow asset (`git diff --name-only d5d845e HEAD -- docs/workflows .claude workflow.yaml` is empty), so M10 does not apply (process spec §2.12).

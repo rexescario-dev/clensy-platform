@@ -9,7 +9,7 @@ Run from the repository root after `pnpm install`.
 | Command | Runs |
 | --- | --- |
 | `pnpm test` | Every workspace `test` script through Turborepo: API unit tests (Jest), web and package tests (Vitest). No database needed. |
-| `pnpm lint` | Every workspace `lint` script (ESLint). |
+| `pnpm lint` | Every workspace `lint` script (ESLint). In `apps/web`, `packages/ui` and `packages/web` this includes `react-hooks/rules-of-hooks` and `react-hooks/exhaustive-deps` at `error`, so a violation fails the **Lint** check ([spec](../superpowers/specs/2026-10-18-react-hooks-lint-rules-design.md)). |
 | `pnpm --filter api exec tsc --noEmit` | Type-check `apps/api` (CI runs this in the Lint job). |
 | `pnpm --filter web exec tsc --noEmit` | Type-check `apps/web` (CI runs this in the Lint job). |
 | `pnpm build` | Every workspace `build` script. |

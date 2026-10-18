@@ -20,6 +20,7 @@ Specifications and implementation plans, produced by the project's [engineering 
 | [nestjs-query GraphQL reads](specs/2026-08-28-nestjs-query-graphql-reads-design.md) | Accepted |
 | [Paginated GraphQL collections](specs/2026-08-28-paginated-graphql-collections-design.md) | Accepted |
 | [Required CI checks on `main`](specs/2026-10-06-required-ci-checks-design.md) | Accepted |
+| [React Hooks lint rules](specs/2026-10-18-react-hooks-lint-rules-design.md): `rules-of-hooks` and `exhaustive-deps` at `error` in the React workspaces | Accepted |
 
 ### Business modules
 
@@ -56,4 +57,4 @@ Specifications and implementation plans, produced by the project's [engineering 
 
 ## Plans
 
-One plan per delivery slice, 65 so far, in [`plans/`](plans/). The file name gives the date and topic; the plan's header names its GitHub issue and spec. Slices that changed the API's behavior also have a short note in [shipped slices](../history/shipped-slices.md).
+One plan per delivery slice, 68 so far, in [`plans/`](plans/). The file name gives the date and topic; the plan's header names its GitHub issue and spec. Slices that changed the API's behavior also have a short note in [shipped slices](../history/shipped-slices.md).
