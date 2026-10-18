@@ -448,3 +448,36 @@ M6 resumed under revision 7 on 2026-10-19. C3 and C4 were changed to mount their
 
 **M6 resume after acceptance.** Edit C3 only. Rerun Task 1 Step 3 (9/9 and name reconciliation) and commit. Rerun all of B1–B10 against that commit. Every row must be evidence before Task 2.
 
+
+## Execution record
+
+M6, native, under revision 8 (Accepted 2026-10-19). Rebased base: `66b55f9` (PR #199 merge, #196). Every result below is actual output. The revision 6–8 history above records the earlier runs that returned the plan.
+
+### Task 1
+
+| Step | Result |
+| --- | --- |
+| 0 Prerequisite and baseline | #196 `CLOSED`. `66b55f9` is on `origin/main`. `packages/ui/eslint.config.mjs:15` has `'react-hooks/exhaustive-deps': 'error'`. Rebase onto `origin/main` was clean (8 commits; the workflow update became `086941e`). #196 deferred no finding (it had none). Frozen install exit 0. `@clensy/ui` 9 files, 96/96. `@clensy/ui` lint exit 0. **Passed.** |
+| 1–2 Tests written | `detail-drawer.test.tsx` (D1–D5) and `use-dialog-behavior.test.tsx` first block (C1–C4). Final form per revisions 6–8: C1's open assertion is "focus is in the dialog, not on Trigger"; C3 and C4 mount their dialogs open in `<StrictMode>`; C3 has the after-close delta assertion. Convention-only fixes (`contextforge/function-order`, sorted unions, a non-null listener type) left the assertions unchanged. ESLint and `tsc --noEmit` exit 0. |
+| 3 Run on unmodified code | Final run, on the revision 8 tests: `--reporter=verbose`, 2 files, **9/9 passed**. The nine reported names match D1–D5 and C1–C4 one to one, and each is in a B1–B10 row. |
+| 4 Commit | `5ab1185` (initial), `5d51bea` (revision 7: C3/C4 open mount), `fef1d94` (revision 8: C3 delta). |
+| 5 Characterization evidence | B1–B10 rerun against `fef1d94`, each in a disposable worktree (`git worktree add --detach`, `pnpm install --frozen-lockfile --offline`, a behavior edit, vitest JSON), then removed. Main checkout status: 0 lines after every row. **All ten rows are evidence:**<br>B1 (Escape never closes): D1 `[]`≠`['drawer']`, D5 `[]`≠`['confirm']`.<br>B2 (Escape closes all): D5 `['drawer','confirm']`, C4 first Escape `['under']`.<br>B3 (backdrop inert): D2 `[]`.<br>B4 (inside click closes): D4 `['drawer']`.<br>B5 (× inert): D3 `[]`.<br>B6 (no focus-in): C1 `:113` false.<br>B7 (no restore): C1 `:116`, C2 `:145`, C3 `:182` `<body>`≠Trigger.<br>B8 (listener and entry kept): C2 size `:144` and `spy` called `:148`; C3 initial size `:177` 2, first Escape `:179` 2, **delta `:188` 4≠2 (fails)**.<br>B9 (listener kept, entry removed): C2 size `:144`, `spy` not called (passed); C3 initial size `:177` 2, **delta passed**.<br>B10 (entry kept, listener removed): C4 final Escape `['edit']`, D5 second Escape `['confirm']`, C3 passed. |
+
+### Task 2
+
+| Step | Result |
+| --- | --- |
+| 1 Tests | Seven tests in the second `describe`, with `EscapeInCommit` as the first child. ESLint (after moving `EscapeInCommit` into alphabetical helper order) and `tsc` exit 0. |
+| 2 Red | `vitest run src/internal/use-dialog-behavior.test.tsx`: **7 failed, 4 passed**, as predicted. `calls the onClose from the commit…`: "expected vi.fn() to be called 1 times, but got 0 times" (`b`). `refuses … starts a submit`: "expected 1 to be +0". `… scheduled as a transition`: "expected 1 to be +0". `closes … ends a submit`: "expected +0 to be 1". `… stacked on top`: "expected [ 'edit' ] to deeply equal []". `… under Strict Mode too`: "expected 1 to be +0". `registers one keydown listener…`: "to have a length of 1 but got 4". |
+| 3 Implementation | `use-dialog-behavior.ts`: import `useEffectEvent`; `const closeOnEscape = useEffectEvent(() => onClose());`; the topmost branch calls `closeOnEscape()`; the `keydown` effect deps went from `[open, onClose]` to `[open]`; one comment. The stack effect, focus effect, Tab branch, `backdropProps` and `getFocusableElements` are untouched. |
+| 4 Green | `@clensy/ui` vitest: **11 files, 112/112**. Lint exit 0, with no `react-hooks/*` finding (the rules recognize the effect event) and no `eslint-disable` in any changed file. `build` is `tsc --noEmit` per `packages/ui/package.json`: exit 0. |
+| 5 Commit | `152d7ab` "fix(193): call the latest onClose from the dialog Escape handler". |
+
+### Task 3
+
+| Step | Result |
+| --- | --- |
+| 1 CI-equivalent | `pnpm install --frozen-lockfile` exit 0. `pnpm run lint` exit 0 (6/6). `pnpm --filter web exec tsc --noEmit` exit 0. `pnpm run test` exit 0 (10/10). `@clensy/ui` 11 files 112/112, `@clensy/web` 16 files 418/418, `web` 48 files 2185/2185 (cache miss, executed). `api` 75 suites 1071/1071, `@clensy/client` 2 files 13/13, `@clensy/validation` 6 files 79/79 (cache hit, replayed: unchanged inputs). |
+| 2 Paths | `git diff --name-only 66b55f9 HEAD`: exactly the ten paths. #193 group: the plan, `detail-drawer.test.tsx`, `use-dialog-behavior.test.tsx`, `use-dialog-behavior.ts`. Workflow update group: `docs/workflows/README.md`, the `code-review`, `implementation-execution`, `implementation-planning` and `plan-review` prompts, `workflow.yaml`. `git log 66b55f9..HEAD -- docs/workflows workflow.yaml` prints only `086941e`. The untouched-paths `git diff --quiet` exit 0. |
+
+The M6 Slice Completion Report is emitted with this record. Next Gate: M7, a fresh independent reviewer (`CLAUDE.md`).
