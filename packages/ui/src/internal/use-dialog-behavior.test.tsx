@@ -149,6 +149,10 @@ describe('useDialogBehavior focus and Strict Mode (#193) [C]', () => {
   });
 
   it('closes once per Escape under Strict Mode, cleans up on close and restores focus', () => {
+    // The `Modal` mounts already open: Strict Mode re-runs effect setup and
+    // cleanup only on mount, so only an open mount exercises that sequence
+    // while the dialog is open. Closing keeps it mounted with `open={false}`.
+    let mounted = false;
     let open = false;
     const onClose = vi.fn(() => {
       open = false;
@@ -156,12 +160,18 @@ describe('useDialogBehavior focus and Strict Mode (#193) [C]', () => {
     });
     const tree = () => (
       <StrictMode>
-        <FocusTree open={open} onClose={onClose} />
+        <button type="button">Trigger</button>
+        {mounted ? (
+          <Modal open={open} onClose={onClose} title="Focus">
+            <button type="button">First</button>
+          </Modal>
+        ) : null}
       </StrictMode>
     );
     mount(tree());
     focusTrigger();
     const active = trackActiveKeydownListeners();
+    mounted = true;
     open = true;
     rerender(tree());
     expect.soft(active.size).toBe(1);
@@ -180,42 +190,50 @@ describe('useDialogBehavior focus and Strict Mode (#193) [C]', () => {
   });
 
   it('keeps topmost-only Escape under Strict Mode, and closes the dialog beneath next', () => {
-    const view = { edit: false, submitting: true, under: false };
+    // Each dialog mounts already open, so Strict Mode's mount-time setup,
+    // cleanup and setup run while it is open. Closing keeps it mounted.
+    const view = { edit: false, editMounted: false, submitting: true, under: false, underMounted: false };
     const closes: string[] = [];
     const tree = () => (
       <StrictMode>
         <button type="button">Trigger</button>
-        <Modal
-          open={view.under}
-          onClose={() => {
-            closes.push('under');
-            view.under = false;
-            root!.render(tree());
-          }}
-          title="Under"
-        >
-          <button type="button">Under action</button>
-        </Modal>
-        <FormDialog
-          open={view.edit}
-          onClose={() => {
-            closes.push('edit');
-            view.edit = false;
-            root!.render(tree());
-          }}
-          title="Edit"
-          onSubmit={() => {}}
-          submitLabel="Save"
-          submitting={view.submitting}
-        >
-          <input aria-label="Name" />
-        </FormDialog>
+        {view.underMounted ? (
+          <Modal
+            open={view.under}
+            onClose={() => {
+              closes.push('under');
+              view.under = false;
+              root!.render(tree());
+            }}
+            title="Under"
+          >
+            <button type="button">Under action</button>
+          </Modal>
+        ) : null}
+        {view.editMounted ? (
+          <FormDialog
+            open={view.edit}
+            onClose={() => {
+              closes.push('edit');
+              view.edit = false;
+              root!.render(tree());
+            }}
+            title="Edit"
+            onSubmit={() => {}}
+            submitLabel="Save"
+            submitting={view.submitting}
+          >
+            <input aria-label="Name" />
+          </FormDialog>
+        ) : null}
       </StrictMode>
     );
     mount(tree());
     focusTrigger();
+    view.underMounted = true;
     view.under = true;
     rerender(tree());
+    view.editMounted = true;
     view.edit = true;
     rerender(tree());
     pressEscape();
