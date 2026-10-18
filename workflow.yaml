@@ -2,7 +2,7 @@ workflow:
   version: "1"
   profile: application
   packages:
-    generic: 1.5.0
+    generic: 1.6.0
     claude: 0.3.0
     ui-ux-claude: 0.1.0
     ui-ux: 0.1.0
@@ -11,55 +11,55 @@ workflow:
   assets:
     - path: docs/workflows/README.md
       package: generic
-      version: 1.5.0
-      digest: sha256:ce2d90a4b4bec3c3c23cb607dc75bb3e97ac3c0fcb689370f763cc4aac53bd0a
+      version: 1.6.0
+      digest: sha256:f94c9ab6f82da06fbe61a718c1f87aec618ac1bddb281a000315b44cc5290205
     - path: docs/workflows/specs/agent-workflow-design.md
       package: generic
-      version: 1.5.0
+      version: 1.6.0
       digest: sha256:60eac7bf644b0bae76c62e859eabec915e3ef155f058d6b12ae8ea7e884b480e
     - path: docs/workflows/conventions/prompt-library.md
       package: generic
-      version: 1.5.0
+      version: 1.6.0
       digest: sha256:b45b7ee524ddf95a26701ce491ba3f7c85ba8372595d4a1f029785bc2256f960
     - path: docs/workflows/conventions/reporting-conventions.md
       package: generic
-      version: 1.5.0
+      version: 1.6.0
       digest: sha256:52a5a0e332ca03da31126137c9a2c268e221db758bf72f0768f4846b9977692d
     - path: docs/workflows/prompts/specification.md
       package: generic
-      version: 1.5.0
+      version: 1.6.0
       digest: sha256:90a7f6b5cff99b1f657d3dde4d963a2496dc4164b4bdfa6316faaa123c1e8a17
     - path: docs/workflows/prompts/design-review.md
       package: generic
-      version: 1.5.0
+      version: 1.6.0
       digest: sha256:656d2c280f1bb1288a32a491179710f3720bd27109ae22ffde47ea1c812831f2
     - path: docs/workflows/prompts/implementation-planning.md
       package: generic
-      version: 1.5.0
-      digest: sha256:1858808b97c9f411e4042808cd3148a66a081e2ef1fc238729217d5885533100
+      version: 1.6.0
+      digest: sha256:d252251b752b69dbc39ed34d12faeee9c0b7b87aa2b20bd9d4a8f18ca1ff8fb3
     - path: docs/workflows/prompts/plan-review.md
       package: generic
-      version: 1.5.0
-      digest: sha256:9f0ca24efac4acb622a7af1cc8b3276eb81e992a0bb4f8ef7e63624f46a10e0c
+      version: 1.6.0
+      digest: sha256:424232f58e127ce7459933ee1ef7a9af6a1713ebf3e44d5f03a92eed8392fe4d
     - path: docs/workflows/prompts/implementation-execution.md
       package: generic
-      version: 1.5.0
-      digest: sha256:e05037b3662348477bfa411756ca0d6a08a07c19a02b54600cfc1dfac65cdc47
+      version: 1.6.0
+      digest: sha256:eb32c283cea62af08042741dcbf3e6bc71b6787d2fe1b88d40374bb6cab46667
     - path: docs/workflows/prompts/code-review.md
       package: generic
-      version: 1.5.0
-      digest: sha256:c4c07c0c3c46b8d35ab837b6f2c7ce7ebc8ebeaa10b4dc5514d980cca21152aa
+      version: 1.6.0
+      digest: sha256:b67c1b49713eacf7dec57f340e8161be9dc6dcfe00617a7276d4789f71387015
     - path: docs/workflows/prompts/refactoring.md
       package: generic
-      version: 1.5.0
+      version: 1.6.0
       digest: sha256:606c58b290d663441c7ec5c3cc640cb70a49a85f6e10170d4069d4d90cff18e0
     - path: docs/workflows/prompts/documentation-execution.md
       package: generic
-      version: 1.5.0
+      version: 1.6.0
       digest: sha256:75b82fa6b185681f14852f8db2668352fe826a4b9aa3b733fb0d53f991abf0c8
     - path: docs/workflows/prompts/workflow-validation.md
       package: generic
-      version: 1.5.0
+      version: 1.6.0
       digest: sha256:9e46a6854ff15d2bd0930fe648837485ac46169a7512f2776b591f32629960bf
     - path: .claude/skills/workflow/SKILL.md
       package: claude
@@ -115,10 +115,10 @@ workflow:
       digest: sha256:b677dc5b0bc3d94952d14a7a39dfb0a21d3e9a20154bbad9a4d373f7d2141c9e
     - path: docs/workflows/conventions/configuration-change.md
       package: generic
-      version: 1.5.0
+      version: 1.6.0
       digest: sha256:93a4d513cca144bd2e41212c9fa93e15261a293c39cb77097d93bad10f46bf91
   installation:
-    installedAt: 2026-10-16T15:15:58.529Z
+    installedAt: 2026-10-18T13:18:42.647Z
     toolVersion: 0.0.0
     catalogId: local
   providers:

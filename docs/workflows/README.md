@@ -35,6 +35,8 @@ docs/workflows/
     agent-workflow-design.md
   conventions/
     prompt-library.md
+    reporting-conventions.md
+    configuration-change.md
   prompts/
     …
 ```
