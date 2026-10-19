@@ -29,7 +29,7 @@ Review a Draft implementation plan produced by M4 and decide **Accepted** or **R
 3. **Check completeness against M4 expectations.** Constraints (SHALL/SHALL NOT), ownership boundaries, sequencing, verification/TDD approach, tasks, and traceability. Missing contract-critical plan content → **Return**. Do **not** require implementation-level detail (algorithms, code structure, or private helper design) unless the Accepted specification explicitly defines it.
 4. **Evaluate executability.** Can tasks be executed in the stated order without inventing missing work? Impossible or underspecified ordering → **Return**.
 5. **Check slice quality.** Prefer evidence of small independently reviewable slices that preserve correctness; flag plans that force large partially implemented intermediate states without justification.
-6. **Verify TDD / verification.** For code slices: tests that fail first and observable behaviors are identified. For docs/process-only: replacement verification is explicit. Missing strategy → **Return**.
+6. **Verify TDD / verification.** For code slices: tests that fail first and observable behaviors are identified. For docs/process-only: replacement verification is explicit. Missing strategy → **Return**. A labelled characterization test records the behavior deliberately broken, the tests covered by that break, and that the run stays outside the committed change. A missing entry → **Return**. Do not author the entry in this review.
 7. **Check coverage vs deferral.** Every Accepted-spec requirement in scope for this plan MUST be implemented by at least one task **or** explicitly deferred. Silent omissions → **Return**. Deferred work MUST reference the Accepted specification or an explicit out-of-scope decision.
 8. **Check for hidden redesign.** Any new product semantics, normative API freezes beyond the Accepted spec, or “while we’re here” features → **Return** (or require deferral / return to M2–M3). Planning decisions (layout, naming, order) are non-normative; do not treat them as product contracts—but they also must not smuggle design.
 9. **Missing design semantics.** If the plan (or review) reveals gaps that require inventing normative behavior, **Return** the plan and require the specification to go back to M2/M3—do not Accept a gap-filling plan.
@@ -54,6 +54,7 @@ Review a Draft implementation plan produced by M4 and decide **Accepted** or **R
 | TDD/verification strategy adequate for the work kind | Return |
 | A pre-validation claim covers every command the plan's `Expected:` lines name, or is labelled **partial** with the gaps named | Return |
 | Tests that pin already-correct behavior are labelled characterization tests | Return |
+| Every labelled characterization test records the behavior broken, the tests covered by that break, and an outside-the-commit run | Return |
 | Public surfaces not frozen beyond Accepted spec | Return |
 | No hidden redesign / gap-filling of missing semantics | Return |
 | Risks are execution/dependency/scheduling only; do not reopen design | Return |
