@@ -267,11 +267,11 @@ The owner reviewed the M6 diff (`49c8636..3099245`) and accepted M6, with one do
 
 ### M7 — Code Review: Approved for merge (fresh independent review, 2026-10-23)
 
-**Reviewer:** a fresh, independent agent on the most capable model (Opus 5.5), dispatched under `CLAUDE.md`'s standing M7 rule for application-code slices. It did not implement the change. It reviewed `181052a..3099245` against the Accepted spec and the Accepted revision 2 plan. It used one disposable worktree, which it removed, and left the main checkout clean. `ddc6577` (the docs-only wording fix above) came after the reviewed range; the review does not cover it. This record is written by the implementer and cites that review.
+**Reviewer:** a fresh, independent agent on the most capable model (Opus 5.5), dispatched under `CLAUDE.md`'s standing M7 rule for application-code slices. It did not implement the change. It reviewed `181052a..3099245` against the Accepted spec and the Accepted revision 2 plan, then, in an addendum, `ddc6577`. It used one disposable worktree, which it removed, and left the main checkout clean. This record is written by the implementer and cites that review.
 
 ```text
 Decision: Approved for merge
-Subject: feat/198-sidebar-use-effect-event (local; no PR or CI yet), change set 181052a..3099245
+Subject: feat/198-sidebar-use-effect-event (local; no PR or CI yet), change set 181052a..ddc6577 (3099245, plus the docs-only ddc6577 in an addendum)
 Accepted specification: docs/superpowers/specs/2026-09-10-web-shell-and-design-system-design.md (§4.7, §6). No amendment (owner decision).
 Accepted implementation plan: this file (revision 2; M5 record 49c8636)
 
@@ -283,12 +283,13 @@ Verified by the reviewer:
 - In a disposable worktree at 539173e: B1, B2 and B3 reproduced as recorded. A reviewer's own B5 variant made C4 fail as assigned. C2, C6 and C8 also failed, because the variant's edit differs from the implementer's. Extra break on HEAD, AppSidebar wrapped in memo(): only C7 failed, with ['first','first'].
 - useEffectEvent: in react-dom 19.2.8, the before-mutation pass swaps ref.impl = nextImpl for function components (tag 0) only, not memo (15) or forwardRef (11). It runs before passive Effects. AppSidebar is a plain function component. The event function is called only from the [pathname] Effect, which still runs on mount.
 - The fixture change weakens no assertion. Both labels the assertions use are inline, so a missing label would fail the open guards and C1, not pass them vacuously. Only MISSING_MESSAGE errors are swallowed.
+- Addendum, ddc6577: docs only, one paragraph. Code and tests are identical to 3099245. The reworded sentence matches the reviewer's own B1–B3 runs; B4 and the implementer's B5 are taken from the record. No new findings, and the decision is unchanged.
 Taken from the Execution record (not rerun): build exit 0, B4, the implementer's own B5 edit, the Step 0 baseline.
 
 Blocking findings: None (no merge blockers)
 
 Non-blocking observations:
 - Wrapping AppSidebar in memo or forwardRef later would leave a stale onMobileNavClose in this React build. C7 would catch it; a code comment is optional.
-- The record does not say the breaks were made at 539173e's parent code; the reviewer re-ran B1–B3 there and they behave as recorded.
+- The record does not say at which commit B2 and B3 were run. The reviewer re-ran B1–B3 at 539173e, before the refactor, and they behave as recorded.
 - The comment in web-shell-regressions.test.ts ("No DOM test environment exists") is out of date (plan decision e). For M9.
 ```
