@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 2)** at M5, 2026-10-23. M6 not started. |
+| Status | **Accepted (revision 2)** at M5, 2026-10-23. M6 complete ([Execution record](#execution-record)); ready for M7 (fresh independent review). |
 | M5 decision | **Accepted** — 2026-10-23, revision 2, by the owner: "The reported corrections are sufficient for M5 acceptance. Proceed to M6, subject to that final diff check." The owner's qualifications: the acceptance rests on the reported changes; the owner did not inspect the revision 2 diff, and it does not establish that any test, characterization break, lint, `tsc` or build has passed. The diff check the owner asked for was done before this record: the uncommitted change against `e2477dc` touched only this file (39 insertions, 14 deletions), in the four hunks reported. The owner's M6 requirements: run C1–C8 on unmodified code and stop on a `next/link` failure before changing the fixture or mocking; run B1–B5 one at a time and record the actual failures and each restore; refactor without editing the tests; record the full suite, lint, `tsc` and build, keeping environment failures apart from passes; then the fresh independent M7 reviewer. Predicted counts and the planning probe are not execution evidence. |
 | M5 history | First pass (2026-10-23, reviewed `e2477dc`; review carried out by the plan's author, not independent): **Returned for Revision** by the owner. Three blockers: C1 named the desktop `nav` "Primary navigation" instead of "Primary"; re-rendering with a reused element object would make React skip the update, so pathname changes and C3's re-render could go unseen; the pre-validation row overstated what the probe covered. Two non-blocking notes: unmount inside `act`; commit the M6 record. All five are addressed in revision 2. |
 | Date | 2026-10-23 |
@@ -217,6 +217,47 @@ Then emit the M6 Slice Completion Report.
 - Any change to `DashboardLayout`, the sidebar's markup, collapse behavior or navigation items.
 - Updating the stale comment in `web-shell-regressions.test.ts` (M9 to decide; decision e).
 - Other `useEffect` audit findings.
+
+## Execution record
+
+M6, 2026-10-23. Native execution in the planning session, at `49c8636` (plan revision 2 + M5 record). Spec: `docs/superpowers/specs/2026-09-10-web-shell-and-design-system-design.md` (Accepted). Plan: this file (Accepted, revision 2). All results below are actual.
+
+**Deviation (owner decision at M6): the test fixture's messages.** Task 1 Step 4's `pnpm --filter web lint` failed: `lib/app-sidebar.test.tsx:7:1 error '../i18n/messages' import is restricted from being used by a pattern. getMessages() is internal to the i18n loading boundary … no-restricted-imports`. `apps/web/eslint.config.mjs` allows `getMessages()` only in `i18n/**` and six named, spec-justified test files, and this plan forbids changing the lint configuration. Execution stopped. The owner chose a catalog-free fixture, with the smallest inline `messages` object. The fixture now passes `messages = { nav: { sidebar: { primary: 'Primary', mobileTitle: 'Primary navigation' } } }`, the only two labels the assertions use. It also passes an `onError` that ignores `IntlErrorCode.MISSING_MESSAGE` and rethrows any other error. `AppSidebar` renders 17 keys: four `sidebar.*` keys, four group labels and nine item labels. The other 15 fall back to their keys. No assertion changed, and nothing was mocked. Before the owner chose, one trial was run and reverted: `messages={{}}` with key fallbacks, asserting keys. It gave 8/8, eslint clean, and B1 failed 5 tests. Step 2 and B1–B5 were then **re-run on the final fixture**. The results below are from that final run. The first-fixture run gave the same pass/fail sets, with line numbers 9 lower.
+
+**Task 1: characterization tests**
+- Step 0 baseline: `git status` clean. `vitest run`: 48 files, 2185/2185 passed. Lint clean.
+- Step 2, on unmodified code: 8/8 passed. Real `next/link` links rendered under jsdom with the `TENANT_OWNER` fixture, and there were no React or next-intl warnings in the output. This settles the open `next/link` question from Pre-validation.
+- Step 3: each break was run on its own, and `git checkout` restored the file after each one. `git status --short` after every restore: `?? apps/web/lib/app-sidebar.test.tsx` only. The edit used for each break:
+  - B1: the close Effect keyed on `[]`.
+  - B2: the Effect calls `onMobileNavClose` directly, keyed on `[pathname, onMobileNavClose]`.
+  - B3: the ref-sync Effect removed.
+  - B4: a mounted-ref guard that skips the first run.
+  - B5: Sheet `open={mobileNavOpen || pathname === openedOn}`, where `openedOn` records the pathname each time `mobileNavOpen` turns true.
+
+  | Break | Result | Failing tests: first failure (line) |
+  | --- | --- | --- |
+  | B1 | 5 failed, 3 passed. **Matches prediction.** | C2 `expected true to be false` (134); C4 same (151); C6 same (180); C7 `expected [ 'first' ] to deeply equal [ 'first', 'second' ]` (193); C8 `expected true to be false` (203) |
+  | B2 | 7 failed, 1 passed (C1). **Matches prediction.** | C2 `expected false to be true` at its open guard (131); C3 same (140); C4 same (149); C5 same at its final open (171); C6 same (178); C7 `expected [ 'first', 'second' ] to deeply equal [ 'first' ]` at the same-pathname re-render (190); C8 `expected false to be true` (200) |
+  | B3 | 1 failed. **Matches prediction.** | C7 `expected [ 'first', 'first' ] to deeply equal [ 'first', 'second' ]` (193) |
+  | B4 | 1 failed. **Matches prediction.** | C7 `expected [] to deeply equal [ 'first' ]` (187) |
+  | B5 | 1 failed. **Matches prediction.** | C4 `expected true to be false` after returning to `/app/customers` (153) |
+
+  Every assigned test failed at the assertion for the behavior broken. No assigned test passed, and none failed for an unrelated reason.
+- Step 4: `vitest run`: 49 files, 2193/2193 passed. Lint clean, after the fixture change; the first attempt failed, as described above.
+- Step 5: committed as `539173e`.
+
+**Task 2: refactor**
+- Step 1: `onMobileNavCloseRef`, its sync Effect and the `useRef` import were removed. `const closeMobileNav = useEffectEvent(() => { onMobileNavClose(); })` is called from the Effect keyed on `[pathname]`.
+- Step 2: `eslint components/layout/app-sidebar.tsx` exited 0 with no output. No disable comment.
+- Step 3: 8/8 passed. `git diff HEAD --stat -- apps/web/lib/app-sidebar.test.tsx` was empty.
+- Step 4: all six checks passed.
+  - `vitest run`: 49 files, 2193/2193 passed.
+  - `pnpm --filter web lint`: clean.
+  - `tsc --noEmit`: exit 0.
+  - `pnpm --filter web build`: exit 0. All 16 routes were built, and the build left no tracked changes.
+  - The `grep` for `useRef` / `onMobileNavCloseRef`: no match.
+  - `git diff main --stat`: only `app-sidebar.tsx` (11 lines changed), `lib/app-sidebar.test.tsx` (new) and this plan.
+- Step 5: committed as `da0d7b8`.
 
 ## Gate outcomes
 
