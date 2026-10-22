@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 2)** at M5, 2026-10-23. M6 complete ([Execution record](#execution-record)); ready for M7 (fresh independent review). |
+| Status | **Accepted (revision 2)** at M5, 2026-10-23. M6 complete ([Execution record](#execution-record)). M7 **Approved for merge** (fresh independent review). M8 N/A. M9 complete. M10 does not apply. Branch not pushed; no PR yet. Closeout awaits the owner's authorization. |
 | M5 decision | **Accepted** — 2026-10-23, revision 2, by the owner: "The reported corrections are sufficient for M5 acceptance. Proceed to M6, subject to that final diff check." The owner's qualifications: the acceptance rests on the reported changes; the owner did not inspect the revision 2 diff, and it does not establish that any test, characterization break, lint, `tsc` or build has passed. The diff check the owner asked for was done before this record: the uncommitted change against `e2477dc` touched only this file (39 insertions, 14 deletions), in the four hunks reported. The owner's M6 requirements: run C1–C8 on unmodified code and stop on a `next/link` failure before changing the fixture or mocking; run B1–B5 one at a time and record the actual failures and each restore; refactor without editing the tests; record the full suite, lint, `tsc` and build, keeping environment failures apart from passes; then the fresh independent M7 reviewer. Predicted counts and the planning probe are not execution evidence. |
 | M5 history | First pass (2026-10-23, reviewed `e2477dc`; review carried out by the plan's author, not independent): **Returned for Revision** by the owner. Three blockers: C1 named the desktop `nav` "Primary navigation" instead of "Primary"; re-rendering with a reused element object would make React skip the update, so pathname changes and C3's re-render could go unseen; the pre-validation row overstated what the probe covered. Two non-blocking notes: unmount inside `act`; commit the M6 record. All five are addressed in revision 2. |
 | Date | 2026-10-23 |
@@ -293,3 +293,65 @@ Non-blocking observations:
 - The record does not say at which commit B2 and B3 were run. The reviewer re-ran B1–B3 at 539173e, before the refactor, and they behave as recorded.
 - The comment in web-shell-regressions.test.ts ("No DOM test environment exists") is out of date (plan decision e). For M9.
 ```
+
+### M8 — Refactoring: N/A (2026-10-23)
+
+```text
+Decision: N/A
+Subject: feat/198-sidebar-use-effect-event; apps/web/components/layout/app-sidebar.tsx, apps/web/lib/app-sidebar.test.tsx
+Accepted specification: docs/superpowers/specs/2026-09-10-web-shell-and-design-system-design.md
+Accepted implementation plan: this file (revision 2)
+M7 / authorization: Approved for merge (fresh independent review)
+
+Maintainability goals: none worth the risk. The change is 11 lines and already the minimal form the plan named. The M7 suggestion of a code comment about memo/forwardRef is optional, and C7 already fails if AppSidebar is wrapped (shown by the reviewer's memo break).
+
+Verification: Before: as recorded at M6 and M7. After: not run (no change).
+
+Externally observable behavior changes: None
+
+Gate: N/A — proceed to M9.
+```
+
+### M9 — Documentation: Complete (2026-10-23)
+
+```text
+Decision: Complete
+Subject: #198, feat/198-sidebar-use-effect-event
+Accepted specification: docs/superpowers/specs/2026-09-10-web-shell-and-design-system-design.md (no amendment; owner decision)
+Accepted implementation plan: this file (revision 2)
+M7: Approved for merge (fresh independent review)
+M8: N/A
+
+Documentation scope:
+- This plan's Status row and Gate outcomes
+- docs/superpowers/README.md (plan count)
+- apps/web/lib/web-shell-regressions.test.ts:36-37 (one code comment; no assertion)
+
+Updated artifacts:
+- This plan, Status row ← M7, M8, M9 and M10 outcomes
+- docs/superpowers/README.md: "69 so far" → "70 so far" (`ls docs/superpowers/plans | wc -l` = 70 on this branch) ← this slice's plan
+- apps/web/lib/web-shell-regressions.test.ts: the comment "No DOM test environment exists in this repo, so the shell's wiring … is pinned at source level" now says the wiring is pinned at source level and that AppSidebar's mobile nav behavior is rendered under jsdom in lib/app-sidebar.test.tsx (#198) ← plan decision (e); M7 observation 3
+
+Editorial changes:
+- The test comment above (a statement that was no longer true)
+
+Content updates:
+- Status row; plan count
+
+Not changed: apps/web/README.md. It describes the shell and its guard tests, and nothing it says about the sidebar changed. No spec change.
+
+Verification:
+- Links checked: the Status row's #execution-record anchor resolves; the README link to plans/ is unchanged
+- Heading hierarchy checked: Gate outcomes holds ### M6, M7, M8, M9, M10 entries
+- Status consistency checked: Status row matches the Gate outcomes
+- Cross-references checked: plan, spec and issue links unchanged
+- Terminology checked: "mobile nav Sheet", "Effect Event" as used in the plan
+- Duplicates / outdated refs checked: the stale test comment fixed; no other doc names the removed ref
+- The edited test file still passes: vitest lib/web-shell-regressions.test.ts 196/196; eslint exit 0
+
+Gate: Documentation complete. Code/behavior/contracts unchanged by this stage.
+```
+
+### M10 — Workflow Validation: does not apply (2026-10-23)
+
+The slice changes no workflow assets: `git diff main -- docs/workflows workflow.yaml .claude` is empty. Per the process spec §2.12, M10 applies only when a slice changes workflow assets.

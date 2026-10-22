@@ -33,8 +33,9 @@ describe('web shell regressions', () => {
     );
   });
 
-  // No DOM test environment exists in this repo, so the shell's wiring to the
-  // pure visibility rules (lib/nav-groups.test.ts) is pinned at source level.
+  // The shell's wiring to the pure visibility rules (lib/nav-groups.test.ts)
+  // is pinned at source level. AppSidebar's mobile nav behavior is rendered
+  // under jsdom in lib/app-sidebar.test.tsx (#198).
   it('renders the sidebar from visibleNavGroups(currentAdmin), not the full NAV_GROUPS list', () => {
     const sidebar = readWebSource('components/layout/app-sidebar.tsx');
 
