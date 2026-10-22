@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 
 import { findActiveHref, visibleNavGroups, type NavGroup } from '../../lib/nav-groups';
 import { useSidebarCollapsed } from '../../lib/use-sidebar-collapsed';
@@ -33,7 +33,6 @@ export function AppSidebar({ mobileNavOpen, onMobileNavClose }: AppSidebarProps)
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useSidebarCollapsed();
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
-  const onMobileNavCloseRef = useRef(onMobileNavClose);
   const activeHref = findActiveHref(pathname ?? '');
   // Until currentAdmin resolves (or if it fails) no groups render, so a
   // Super Admin never sees a flash of tenant navigation. UX only — the API
@@ -41,12 +40,12 @@ export function AppSidebar({ mobileNavOpen, onMobileNavClose }: AppSidebarProps)
   const { data } = useCurrentAdminQuery();
   const groups = visibleNavGroups(data?.currentAdmin);
 
-  useEffect(() => {
-    onMobileNavCloseRef.current = onMobileNavClose;
-  }, [onMobileNavClose]);
+  const closeMobileNav = useEffectEvent(() => {
+    onMobileNavClose();
+  });
 
   useEffect(() => {
-    onMobileNavCloseRef.current();
+    closeMobileNav();
   }, [pathname]);
 
   return (
