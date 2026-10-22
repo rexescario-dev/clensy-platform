@@ -261,4 +261,34 @@ M6, 2026-10-23. Native execution in the planning session, at `49c8636` (plan rev
 
 ## Gate outcomes
 
-*(Appended after M5.)*
+### M6 — owner review: Accepted (2026-10-23)
+
+The owner reviewed the M6 diff (`49c8636..3099245`) and accepted M6, with one documentation correction. The record's sentence on the break results implied that every test failed under every break. The owner withdrew a concern about C7 after reading the test: C7 does prove that the newest callback is the one called. The sentence was reworded in `ddc6577` to name the tests assigned to each break and the unassigned tests that passed. That commit changed docs only, one sentence.
+
+### M7 — Code Review: Approved for merge (fresh independent review, 2026-10-23)
+
+**Reviewer:** a fresh, independent agent on the most capable model (Opus 5.5), dispatched under `CLAUDE.md`'s standing M7 rule for application-code slices. It did not implement the change. It reviewed `181052a..3099245` against the Accepted spec and the Accepted revision 2 plan. It used one disposable worktree, which it removed, and left the main checkout clean. `ddc6577` (the docs-only wording fix above) came after the reviewed range; the review does not cover it. This record is written by the implementer and cites that review.
+
+```text
+Decision: Approved for merge
+Subject: feat/198-sidebar-use-effect-event (local; no PR or CI yet), change set 181052a..3099245
+Accepted specification: docs/superpowers/specs/2026-09-10-web-shell-and-design-system-design.md (§4.7, §6). No amendment (owner decision).
+Accepted implementation plan: this file (revision 2; M5 record 49c8636)
+
+Plan tasks reviewed: Task 1 (C1–C8, with the owner-approved fixture change) ✓; Task 2 (refactor) ✓; Task 2 Step 6 (Execution record) ✓
+
+Verified by the reviewer:
+- The diff matches Task 2 Step 1 exactly. AppSidebarProps, the markup, the Sheet's onOpenChange and dashboard-layout.tsx are unchanged. Only three files changed: the plan, app-sidebar.tsx and the new test file.
+- On HEAD: vitest 49 files, 2193/2193 passed; lint exit 0; tsc --noEmit exit 0; app-sidebar.test.tsx 8/8.
+- In a disposable worktree at 539173e: B1, B2 and B3 reproduced as recorded. A reviewer's own B5 variant made C4 fail as assigned. C2, C6 and C8 also failed, because the variant's edit differs from the implementer's. Extra break on HEAD, AppSidebar wrapped in memo(): only C7 failed, with ['first','first'].
+- useEffectEvent: in react-dom 19.2.8, the before-mutation pass swaps ref.impl = nextImpl for function components (tag 0) only, not memo (15) or forwardRef (11). It runs before passive Effects. AppSidebar is a plain function component. The event function is called only from the [pathname] Effect, which still runs on mount.
+- The fixture change weakens no assertion. Both labels the assertions use are inline, so a missing label would fail the open guards and C1, not pass them vacuously. Only MISSING_MESSAGE errors are swallowed.
+Taken from the Execution record (not rerun): build exit 0, B4, the implementer's own B5 edit, the Step 0 baseline.
+
+Blocking findings: None (no merge blockers)
+
+Non-blocking observations:
+- Wrapping AppSidebar in memo or forwardRef later would leave a stale onMobileNavClose in this React build. C7 would catch it; a code comment is optional.
+- The record does not say the breaks were made at 539173e's parent code; the reviewer re-ran B1–B3 there and they behave as recorded.
+- The comment in web-shell-regressions.test.ts ("No DOM test environment exists") is out of date (plan decision e). For M9.
+```
