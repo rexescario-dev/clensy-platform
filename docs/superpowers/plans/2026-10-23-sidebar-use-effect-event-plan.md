@@ -4,7 +4,9 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft** (M4), 2026-10-23. Awaiting Plan Review (M5). |
+| Status | **Accepted (revision 2)** at M5, 2026-10-23. M6 not started. |
+| M5 decision | **Accepted** — 2026-10-23, revision 2, by the owner: "The reported corrections are sufficient for M5 acceptance. Proceed to M6, subject to that final diff check." The owner's qualifications: the acceptance rests on the reported changes; the owner did not inspect the revision 2 diff, and it does not establish that any test, characterization break, lint, `tsc` or build has passed. The diff check the owner asked for was done before this record: the uncommitted change against `e2477dc` touched only this file (39 insertions, 14 deletions), in the four hunks reported. The owner's M6 requirements: run C1–C8 on unmodified code and stop on a `next/link` failure before changing the fixture or mocking; run B1–B5 one at a time and record the actual failures and each restore; refactor without editing the tests; record the full suite, lint, `tsc` and build, keeping environment failures apart from passes; then the fresh independent M7 reviewer. Predicted counts and the planning probe are not execution evidence. |
+| M5 history | First pass (2026-10-23, reviewed `e2477dc`; review carried out by the plan's author, not independent): **Returned for Revision** by the owner. Three blockers: C1 named the desktop `nav` "Primary navigation" instead of "Primary"; re-rendering with a reused element object would make React skip the update, so pathname changes and C3's re-render could go unseen; the pre-validation row overstated what the probe covered. Two non-blocking notes: unmount inside `act`; commit the M6 record. All five are addressed in revision 2. |
 | Date | 2026-10-23 |
 | Tracking issue | [#198](https://github.com/rexescario-dev/clensy-platform/issues/198) "Replace AppSidebar's latest-callback ref with useEffectEvent". Source: `useEffect` audit at `d5d845e`, finding 4. |
 | Branch | `feat/198-sidebar-use-effect-event`, from `main` at `181052a`. One PR for this plan, its M5 record and the implementation. |
@@ -15,7 +17,7 @@
 | Scope | `apps/web/components/layout/app-sidebar.tsx` (the ref, its sync Effect and the `pathname` Effect only) and one new test file, `apps/web/lib/app-sidebar.test.tsx`. **No** change to `AppSidebarProps`, `DashboardLayout`, `@clensy/ui`, `apps/web/lib/web-shell-regressions.test.ts`, the sidebar markup, copy, `package.json`, `pnpm-lock.yaml`, API, schema or GraphQL. |
 | Package names | `pnpm --filter web` is `apps/web`. |
 | Baseline | On `main` at `181052a`, at planning time: `pnpm --filter web exec vitest run`, 48 files, 2185/2185 passed. `pnpm --filter web lint` clean. `pnpm --filter web exec tsc --noEmit` clean. This is a baseline, not pre-validation. Task 1 re-records it. |
-| Pre-validation | **Partial.** A throwaway probe test was run at `181052a`, then deleted, and the tree restored (`git status` clean). It rendered `AppSidebar` under jsdom inside a harness wired like `DashboardLayout`, with mocked `usePathname` and `useCurrentAdminQuery`. (1) On unmodified code, the Sheet's `role="dialog"` count was 0 after mount, 1 after the toggle, and 0 after a pathname change. (2) With the Task 2 mechanism applied temporarily, the same counts held and `pnpm --filter web exec eslint components/layout/app-sidebar.tsx` exited 0. (3) With the close Effect keyed on `[pathname, onMobileNavClose]`, the count was **0 right after the toggle**: the nav closed as soon as it opened (break B2 below). **Not run:** the tests as written in this plan, `tsc`, the full `web` suite after a change, `pnpm --filter web build`. Every `Expected:` line in the tasks is a prediction until M6 records the actual result. |
+| Pre-validation | **Partial.** A throwaway probe test was run at `181052a`, then deleted, and the tree restored (`git status` clean). It rendered `AppSidebar` under jsdom inside a harness wired like `DashboardLayout`, with mocked `usePathname` and `useCurrentAdminQuery`. The probe's mock used an invalid admin role, `OWNER`, so `visibleNavGroups` returned no groups and **no navigation links rendered**. `next/link` under jsdom, with this plan's valid `TENANT_OWNER` fixture, has therefore **not been exercised**. No existing jsdom test in `apps/web/lib` renders `next/link` either. Hypothesis, not test evidence: reading Next 16.3.1's `next/dist/client/link.js`, a `Link` with no router context renders an `<a>` and returns early from prefetch, so it should render under jsdom. Task 1 Step 2 is the first real check. The probe always re-rendered with freshly created JSX, so it did not hit the reused-element case (see the Fixture). (1) On unmodified code, the Sheet's `role="dialog"` count was 0 after mount, 1 after the toggle, and 0 after a pathname change. (2) With the Task 2 mechanism applied temporarily, the same counts held and `pnpm --filter web exec eslint components/layout/app-sidebar.tsx` exited 0. (3) With the close Effect keyed on `[pathname, onMobileNavClose]`, the count was **0 right after the toggle**: the nav closed as soon as it opened (break B2 below). **Not run:** the tests as written in this plan, `tsc`, the full `web` suite after a change, `pnpm --filter web build`. Every `Expected:` line in the tasks is a prediction until M6 records the actual result. |
 | M7 | Application code changes. `CLAUDE.md` requires a **fresh independent reviewer** on the most capable model, given the Accepted spec (§4.7), this plan and the branch diff. |
 | M10 | **Does not apply**: the slice changes no workflow assets. |
 
@@ -78,8 +80,16 @@ Pins §4.7 ("Route changes MUST close the Sheet") and the issue's acceptance cri
 - `// @vitest-environment jsdom` and `IS_REACT_ACT_ENVIRONMENT = true`.
 - `inputs = vi.hoisted(() => ({ pathname: '/app/customers' }))`. `vi.mock('next/navigation', () => ({ usePathname: () => inputs.pathname }))`.
 - `vi.mock('@clensy/client', ...)`: `useCurrentAdminQuery` returns `{ data: { currentAdmin: { id: 'admin-1', role: 'TENANT_OWNER', scope: 'TENANT' } }, loading: false }`.
-- `Harness({ label = 'first', calls })` wires `AppSidebar` the way `DashboardLayout` does (decision a): `const [open, setOpen] = useState(false)`, a `<button type="button" aria-label="Toggle navigation menu">` whose `onClick` is `setOpen((o) => !o)`, and `onMobileNavClose={() => { calls?.push(label); setOpen(false); }}`. Inside `NextIntlClientProvider locale="en" messages={getMessages()}`.
-- Helpers: `mount(element)` creates a container and root and renders inside `act`. `navigateTo(path, element)` sets `inputs.pathname` and re-renders the same root with `element` inside `act`. `toggleNav()` clicks the toggle inside `act`. `sheetIsOpen()` returns whether a `[role="dialog"]` whose text includes `"Primary navigation"` exists (decision b). `afterEach` unmounts, removes the container and resets `inputs.pathname` to `/app/customers`.
+- `Harness({ label = 'first', calls }: { label?: string; calls?: string[] })` wires `AppSidebar` the way `DashboardLayout` does (decision a): `const [open, setOpen] = useState(false)`, a `<button type="button" aria-label="Toggle navigation menu">` whose `onClick` is `setOpen((o) => !o)`, and `onMobileNavClose={() => { calls?.push(label); setOpen(false); }}`. Inside `NextIntlClientProvider locale="en" messages={getMessages()}`.
+- **Fresh JSX on every render.** React skips the update when `root.render` is given the same element object again. `Harness` would then not re-render, `usePathname()` would not be read again, and the test would see nothing. So no helper takes an element. Each helper takes `Harness` props and builds a new element on every call: `harness(props) = <Harness {...props} />`, wrapped in `<StrictMode>` when the test mounted in strict mode.
+- Helpers, all sharing one module-level `container`, `root` and `strict` flag per test, so `Harness` state survives re-renders:
+  - `mount(props = {}, { strict = false } = {})` creates the container and root, stores `strict`, and renders `harness(props)` inside `act`.
+  - `rerender(props = {})` renders a fresh `harness(props)` into the **same** root inside `act`.
+  - `navigateTo(path, props = {})` sets `inputs.pathname = path`, then calls `rerender(props)`.
+  - `toggleNav()` clicks the toggle button inside `act`.
+  - `sheetIsOpen()` returns whether a `[role="dialog"]` whose text includes `"Primary navigation"` (`nav.sidebar.mobileTitle`, the Sheet's title) exists (decision b).
+  - `desktopNav()` returns the `nav[aria-label="Primary"]` elements (`nav.sidebar.primary`) that are not inside a `[role="dialog"]`.
+- `afterEach`: `try { act(() => root.unmount()) } finally { container.remove(); inputs.pathname = '/app/customers'; }`, so the container and pathname are reset even if unmount throws.
 
 - [ ] **Step 0: Re-record the baseline**
 
@@ -92,19 +102,19 @@ Expected: 48 files, 2185/2185 passed; lint clean. Record the actual numbers in t
 
 | Id | Test name | Sequence and assertions |
 | --- | --- | --- |
-| C1 | `starts closed after mount` | mount at `/app/customers` → `sheetIsOpen()` false; the desktop `nav` with accessible name "Primary navigation" is in the document. |
-| C2 | `closes the open nav when the pathname changes` | mount → `toggleNav()` → `sheetIsOpen()` **true** (guard) → `navigateTo('/app/bookings')` → false. |
-| C3 | `stays open when the parent re-renders on the same pathname` | mount → `toggleNav()` → true → re-render the root with the same element and pathname → still true. |
-| C4 | `does not reopen when returning to an earlier pathname` | mount at `/app/customers` → `toggleNav()` → true → `navigateTo('/app/bookings')` → false → `navigateTo('/app/customers')` → false. Then `toggleNav()` → true → `navigateTo('/app/bookings')` → false → `navigateTo('/app/customers')` → false. |
-| C5 | `stays closed when navigating while closed, and still opens afterwards` | mount → `navigateTo('/app/bookings')` → false → `navigateTo('/app/jobs')` → false → `toggleNav()` → **true**. |
-| C6 | `closes on each of several route changes in a row` | mount, then for each of `/app/bookings`, `/app/jobs`, `/app/laundry`: `toggleNav()` → true → `navigateTo(path)` → false. |
-| C7 | `calls the newest onMobileNavClose once on mount and once per pathname change` | `calls = []`; mount `<Harness label="first" calls={calls} />` → `calls` equals `['first']`. Re-render with `label="second"` on the same pathname → `calls` still `['first']`. `navigateTo('/app/bookings', <Harness label="second" calls={calls} />)` → `calls` equals `['first', 'second']`. |
-| C8 | `opens and closes on route change under Strict Mode` | mount the harness inside `<StrictMode>` → false → `toggleNav()` → true → `navigateTo('/app/bookings')` (same `StrictMode` wrapper) → false. |
+| C1 | `starts closed after mount` | `mount()` at `/app/customers` → `sheetIsOpen()` false; `desktopNav()` has length 1 (the desktop `nav`, accessible name "Primary"); no `[role="dialog"]` is in the document. |
+| C2 | `closes the open nav when the pathname changes` | `mount()` → `toggleNav()` → `sheetIsOpen()` **true** (guard) → `navigateTo('/app/bookings')` → false. |
+| C3 | `stays open when the parent re-renders on the same pathname` | `mount()` → `toggleNav()` → true → `rerender()` (a fresh `<Harness />`, pathname unchanged) → still true. |
+| C4 | `does not reopen when returning to an earlier pathname` | `mount()` at `/app/customers` → `toggleNav()` → true → `navigateTo('/app/bookings')` → false → `navigateTo('/app/customers')` → false. Then `toggleNav()` → true → `navigateTo('/app/bookings')` → false → `navigateTo('/app/customers')` → false. |
+| C5 | `stays closed when navigating while closed, and still opens afterwards` | `mount()` → `navigateTo('/app/bookings')` → false → `navigateTo('/app/jobs')` → false → `toggleNav()` → **true**. |
+| C6 | `closes on each of several route changes in a row` | `mount()`, then for each of `/app/bookings`, `/app/jobs`, `/app/laundry`: `toggleNav()` → true → `navigateTo(path)` → false. |
+| C7 | `calls the newest onMobileNavClose once on mount and once per pathname change` | `calls: string[] = []`; `mount({ label: 'first', calls })` → `calls` equals `['first']`. `rerender({ label: 'second', calls })` on the same pathname → `calls` still `['first']`. `navigateTo('/app/bookings', { label: 'second', calls })` → `calls` equals `['first', 'second']`. |
+| C8 | `opens and closes on route change under Strict Mode` | `mount({}, { strict: true })` → false → `toggleNav()` → true → `navigateTo('/app/bookings')` (the stored `strict` flag keeps the `StrictMode` wrapper) → false. No call counts (decision d). |
 
 - [ ] **Step 2: Run the new file on unmodified code**
 
 Run: `pnpm --filter web exec vitest run lib/app-sidebar.test.tsx`
-Expected: 8/8 pass. If any fails, stop (see the task intro).
+Expected: 8/8 pass. If any fails, stop (see the task intro). This is the first run with real `next/link` links rendered under jsdom (see Pre-validation). If a failure comes from `next/link` itself, record it and stop; do not mock `next/link` or change the fixture's role without the owner.
 
 - [ ] **Step 3: Characterization breaks (outside the commit, not committed)**
 
@@ -174,7 +184,23 @@ git add apps/web/components/layout/app-sidebar.tsx
 git commit -m "refactor(198): close the mobile nav through useEffectEvent"
 ```
 
-Then record M6 in this plan's Execution record (actual baseline, break results, verification output) and emit the M6 Slice Completion Report.
+- [ ] **Step 6: Record M6 and commit the record**
+
+Add `## Execution record` to this plan, before `## Gate outcomes`. Record **actual** results only:
+- Task 1 Step 0 baseline (files, tests, lint).
+- Task 1 Step 2 result.
+- For each of B1–B5: the edit's behavior, the tests that actually failed and each one's first failure message, any difference from the prediction and its explanation, and `git status --short` after the restore.
+- Task 1 Step 4 result.
+- Task 2 Steps 2–4: lint, the behavior tests, the full suite, `tsc`, build, the `grep` and the `git diff main --stat` output.
+
+A check that was not run is recorded as **not run**, with the reason. It is never recorded as passed, and a prediction is never copied in as a result.
+
+```bash
+git add docs/superpowers/plans/2026-10-23-sidebar-use-effect-event-plan.md
+git commit -m "docs(198): record M6 execution"
+```
+
+Then emit the M6 Slice Completion Report.
 
 ## Traceability
 
