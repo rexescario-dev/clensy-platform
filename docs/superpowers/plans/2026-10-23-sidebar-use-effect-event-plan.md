@@ -242,7 +242,7 @@ M6, 2026-10-23. Native execution in the planning session, at `49c8636` (plan rev
   | B4 | 1 failed. **Matches prediction.** | C7 `expected [] to deeply equal [ 'first' ]` (187) |
   | B5 | 1 failed. **Matches prediction.** | C4 `expected true to be false` after returning to `/app/customers` (153) |
 
-  Every assigned test failed at the assertion for the behavior broken. No assigned test passed, and none failed for an unrelated reason.
+  For each break, every test the Step 3 table assigns to it failed at the assertion for the behavior broken. None of those tests passed, and none failed for an unrelated reason. Tests not assigned to a break were not expected to fail, and passed: C1, C3 and C5 under B1; C1 under B2; and the other seven tests under each of B3, B4 and B5.
 - Step 4: `vitest run`: 49 files, 2193/2193 passed. Lint clean, after the fixture change; the first attempt failed, as described above.
 - Step 5: committed as `539173e`.
 
