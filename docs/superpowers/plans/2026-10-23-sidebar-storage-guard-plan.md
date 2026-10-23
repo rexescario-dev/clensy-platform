@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft** (M4), 2026-10-23. Awaiting Plan Review (M5). |
+| Status | **Accepted** at M5, 2026-10-23, with two clarifications folded in (see M5 decision). M6 in progress. |
+| M5 decision | **Accepted** — 2026-10-23, by the owner, on the Draft at `1ea0ee7`. Decisions (a)–(f) accepted as written. Caveats: (c) keep the tests on the hook contract, since the existing UI tests cover sidebar interaction; (d) make sure the `window.localStorage` property failure is actually exercised and not bypassed by the test setup; (e) keep each `try`/`catch` limited to its own storage operation. Two clarifications for M6: (1) keep the first-render behavior: the state starts expanded and the saved value is restored in the mount Effect, with no storage access during render and no change to initialization timing; (2) prove each failure on its own and **verify in each test that the stubbed failure was actually triggered**. Clarification (2) is applied below as an added assertion in R1–R4: the stub's spy was called. Execution method: **native**, followed by one fresh independent M7 review. Expected outcomes remain predictions until M6 runs them. |
 | Date | 2026-10-23 |
 | Tracking issue | [#197](https://github.com/rexescario-dev/clensy-platform/issues/197) "Handle unavailable localStorage in the sidebar collapsed state". Source: `useEffect` audit at `d5d845e`, finding 2. |
 | Branch | `feat/197-sidebar-storage-guard`, from `main` at `98debb9`. One PR for this plan, its M5 record and the implementation. |
@@ -101,10 +102,10 @@ Expected: 49 files 2193/2193; 11 files 112/112; 16 files 418/418; lint clean. Re
 
 | Id | Test name | Sequence and assertions |
 | --- | --- | --- |
-| R1 | `starts expanded when reading storage throws, and still saves toggles` | `localStorage.setItem(KEY, 'true')`; stub `getItem` to throw (decision d) → `expect(mount).not.toThrow()` → `shown()` `'expanded'` (the stored `'true'` is ignored because it cannot be read) → `expect(() => toggle(true)).not.toThrow()` → `'collapsed'` → `toggle(false)` → `'expanded'` → `vi.restoreAllMocks()` → `localStorage.getItem(KEY)` is `'false'` (the write was still tried, and it replaced the stored `'true'`). |
-| R2 | `starts expanded and toggles in memory when localStorage itself throws` | Stub the `window.localStorage` getter to throw → `mount` does not throw → `'expanded'` → `toggle(true)` does not throw → `'collapsed'` → `toggle(false)` → `'expanded'`. |
-| R3 | `keeps toggling in memory when writing storage throws` | Stub `setItem` to throw → `mount()` → `'expanded'` → `toggle(true)` does not throw → `'collapsed'` → `toggle(false)` does not throw → `'expanded'`. |
-| R4 | `still restores the stored value when only writing throws` | `localStorage.setItem(KEY, 'true')` **before** stubbing `setItem` to throw → `mount()` → `'collapsed'` → `toggle(false)` does not throw → `'expanded'`. |
+| R1 | `starts expanded when reading storage throws, and still saves toggles` | `localStorage.setItem(KEY, 'true')`; stub `getItem` to throw (decision d) → `expect(mount).not.toThrow()` → the `getItem` spy was called → `shown()` `'expanded'` (the stored `'true'` is ignored because it cannot be read) → `expect(() => toggle(true)).not.toThrow()` → `'collapsed'` → `toggle(false)` → `'expanded'` → `vi.restoreAllMocks()` → `localStorage.getItem(KEY)` is `'false'` (the write was still tried, and it replaced the stored `'true'`). |
+| R2 | `starts expanded and toggles in memory when localStorage itself throws` | Stub the `window.localStorage` getter to throw → `mount` does not throw → the getter spy was called → `'expanded'` → `toggle(true)` does not throw → `'collapsed'` → `toggle(false)` → `'expanded'` → the getter spy's call count went up with each toggle (the write path also reached the throwing property). |
+| R3 | `keeps toggling in memory when writing storage throws` | Stub `setItem` to throw → `mount()` → `'expanded'` → `toggle(true)` does not throw → the `setItem` spy was called with `(KEY, 'true')` → `'collapsed'` → `toggle(false)` does not throw → `'expanded'`. |
+| R4 | `still restores the stored value when only writing throws` | `localStorage.setItem(KEY, 'true')` **before** stubbing `setItem` to throw → `mount()` → `'collapsed'` → `toggle(false)` does not throw → the `setItem` spy was called with `(KEY, 'false')` → `'expanded'`. |
 
 - [ ] **Step 2: Run the new file on unmodified code**
 
@@ -201,4 +202,6 @@ Then emit the M6 Slice Completion Report.
 
 ## Gate outcomes
 
-*(Appended after M5.)*
+### M5 — Plan Review: Accepted (2026-10-23)
+
+By the owner, with native execution. The decisions, caveats and the two clarifications are recorded in the M5 decision row of the header table.
