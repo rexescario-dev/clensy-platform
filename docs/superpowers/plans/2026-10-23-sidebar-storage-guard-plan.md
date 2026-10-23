@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted** at M5, 2026-10-23, with two clarifications folded in (see M5 decision). M6 complete ([Execution record](#execution-record)). M7 pending (fresh independent review). |
+| Status | **Accepted** at M5, 2026-10-23, with two clarifications folded in (see M5 decision). M6 complete ([Execution record](#execution-record)). M7 **Approved for merge** (fresh independent review). M8, M9 pending. Branch not pushed; no PR yet. |
 | M5 decision | **Accepted** — 2026-10-23, by the owner, on the Draft at `1ea0ee7`. Decisions (a)–(f) accepted as written. Caveats: (c) keep the tests on the hook contract, since the existing UI tests cover sidebar interaction; (d) make sure the `window.localStorage` property failure is actually exercised and not bypassed by the test setup; (e) keep each `try`/`catch` limited to its own storage operation. Two clarifications for M6: (1) keep the first-render behavior: the state starts expanded and the saved value is restored in the mount Effect, with no storage access during render and no change to initialization timing; (2) prove each failure on its own and **verify in each test that the stubbed failure was actually triggered**. Clarification (2) is applied below as an added assertion in R1–R4: the stub's spy was called. Execution method: **native**, followed by one fresh independent M7 review. Expected outcomes remain predictions until M6 runs them. |
 | Date | 2026-10-23 |
 | Tracking issue | [#197](https://github.com/rexescario-dev/clensy-platform/issues/197) "Handle unavailable localStorage in the sidebar collapsed state". Source: `useEffect` audit at `d5d845e`, finding 2. |
@@ -224,3 +224,24 @@ M6, 2026-10-23. Native execution in the planning session, from `d52f928` (plan +
 ### M5 — Plan Review: Accepted (2026-10-23)
 
 By the owner, with native execution. The decisions, caveats and the two clarifications are recorded in the M5 decision row of the header table.
+
+### M7 — Code Review: Approved for merge (fresh independent review, 2026-10-23)
+
+The decision rests on a review by a **fresh, independent agent** on the most capable model (Opus), as `CLAUDE.md` requires for application code. That agent did not implement the change. It was given the Accepted spec (§4.4, §6), this plan and the branch diff `main...9db0d79`. It edited nothing, and the tree was clean when it finished. This record was written by the implementer and cites that review. It is not a self-review.
+
+- **Plan tasks:** Task 1 (`8a0a709`) ✓. Task 2 (`e6779c6`) ✓. Execution record (`9db0d79`) ✓.
+- **Verification the reviewer ran itself, at `9db0d79`:**
+  - The hook's test file: 9/9 passed.
+  - A red check with `main`'s hook swapped in: 5 passed and 4 failed. R1 and R2 failed with `SecurityError` from mount, and R3 and R4 with `QuotaExceededError` from the toggle, as the M6 record says.
+  - B1–B4 re-run one at a time: each break failed only its assigned test, with the same messages as the M6 record.
+  - Four extra mutations of the fix:
+    - the `window.localStorage` access moved out of the read `try`, which R2 caught;
+    - the same access moved out of the write `try`, which R2 caught;
+    - `setCollapsed` moved after `setItem` inside the `try`, which R2, R3 and R4 caught;
+    - the write skipped once a read had failed, which R1 caught.
+  - Suites: `web` 2202/2202, `@clensy/ui` 112/112, `@clensy/web` 418/418. Lint exit 0, `tsc` exit 0.
+  - `git diff main...HEAD --stat`: 3 files.
+  - Build not re-run; the M6 record has exit 0.
+- **Summary:** The fix does what Task 2 Step 1 says. The read stays in the mount Effect. Each `try` covers only its own storage operation, including the `window.localStorage` access. `setCollapsed` comes first and sits outside the write `try`. The catch comments match `shell-chrome.tsx`. Every R test asserts that its stub was actually triggered (M5 clarification 2). No scope expansion. M5 acceptance (`d52f928`) came before Task 1.
+- **Blocking findings:** None.
+- **Non-blocking observations** (they do not affect the decision): R1 calls `vi.restoreAllMocks()` mid-test, so it can read real storage, and `afterEach` repeats it; this is harmless. A shared storage helper for `shell-chrome.tsx` and this hook is a possible M8 candidate (already deferred).
