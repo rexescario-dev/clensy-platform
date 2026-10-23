@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted** at M5, 2026-10-23, with one clarification applied ([Revision 2 (M5 review 1)](#revision-2-m5-review-1)). Spec Amendment #194 is Accepted at M3. M6 **complete** ([Execution record](#execution-record)). M7 **Approved for merge** (fresh independent review). M8 N/A. M9 complete. M10 does not apply. PR [#203](https://github.com/rexescario-dev/clensy-platform/pull/203) open, CI green on `95c64df` (Lint, Test, Release gate, API e2e); merge awaits the owner. |
+| Status | **Accepted** at M5, 2026-10-23, with one clarification applied ([Revision 2 (M5 review 1)](#revision-2-m5-review-1)). Spec Amendment #194 is Accepted at M3. M6 **complete** ([Execution record](#execution-record)). M7 **Approved for merge** (fresh independent review). M8 N/A. M9 complete. M10 does not apply. Merged in PR [#203](https://github.com/rexescario-dev/clensy-platform/pull/203) (`842aa10`); #194 closed; closeout complete ([Closeout](#closeout-2026-10-24)). |
 | M5 decision | **Accepted** — 2026-10-23, by the owner, reviewing `13cd4ca`. All areas pass: scope, close guard, stacked Escape (test 13 must still show both dialogs open and the drawer's `onClose` not called), the caller-modelled rejection tests, the characterization tests, the B1–B4 breaks (predictions until executed), verification, and the deferred Bookings trigger. One clarification before M6: keep user-initiated close, the disabled buttons and programmatic close distinct. The owner also confirmed that the spec stays Accepted at M3. Execution contract: record actual test and break outcomes, not predicted counts; M7 needs a fresh independent review of the actual diff, including the dialog stack behavior and the caller-modelled rejection tests. |
 | Date | 2026-10-23 |
 | Tracking issue | [#194](https://github.com/rexescario-dev/clensy-platform/issues/194) "Decide whether ConfirmDialog should refuse dismissal while confirming". |
@@ -515,3 +515,83 @@ The slice changes no workflow assets: `git diff 4257fb7 HEAD -- docs/workflows w
 - PR [#203](https://github.com/rexescario-dev/clensy-platform/pull/203), opened from `feat/194-confirm-dialog-confirming-guard` at `95c64df`, base `main` at `4257fb7` (unchanged).
 - CI on `95c64df`: Lint, Test, Release gate and API e2e all **SUCCESS**. `mergeable`: MERGEABLE.
 - `gh pr diff 203 --name-only` lists the same 7 paths as `git diff --name-only 4257fb7 HEAD`. `git diff --quiet b46383b HEAD -- packages apps/web/app apps/web/lib apps/api` exits 0, so nothing after the M7-reviewed head is code. Only the four docs paths of the M9 commit changed.
+- After the M9 commit, `e5f4c4b` (docs only: this section and the Status row) became the PR head. CI on `e5f4c4b`: Lint, Test, Release gate and API e2e all **SUCCESS**.
+
+### Closeout (2026-10-24)
+
+**Merge check (§2.12, before the merge).** Each applicable stage was checked in order. Every one had a recorded passing outcome, and no stage was skipped or overridden.
+
+| Gate | Outcome |
+| --- | --- |
+| M1 | Installed prompt library present |
+| M2 | Amendment #194 drafted |
+| M3 | Amendment #194 Accepted |
+| M4 | Plan drafted |
+| M5 | Plan Accepted (revision 2) |
+| M6 | Complete |
+| M7 | Approved for merge (independent) |
+| M8 | N/A |
+| M9 | Complete |
+| M10 | Does not apply (no workflow assets changed) |
+
+**Merge.**
+- Authorized by the owner ("merge, closeout").
+- Merged as a merge commit, pinned to the CI-verified head `e5f4c4b`: `gh pr merge 203 --merge --match-head-commit e5f4c4b…`. Nothing after the M7-reviewed head `b46383b` is code.
+
+**Verification.**
+- PR #203 shows `MERGED`, with merge commit `842aa10`, at 2026-10-23T16:27:34Z (UTC).
+- `main` fast-forwarded locally to `842aa10`.
+- #194 closed automatically.
+
+**Post-merge cleanup.**
+- The project defines no cleanup policy, and earlier slice branches stay on the remote, so the remote branch stays too. This step is a no-op.
+- The B1–B4 and P1–P3 break worktrees were disposable and are already gone (`git worktree list` lists none for #194).
+
+**Final M7 position.** Approved for merge, with no blocking findings. Its three non-blocking observations:
+1. The repo-wide runs were cache replays. **Resolved:** `pnpm run test --force` passed fresh, with 0 cached ([Fresh full-suite run](#fresh-full-suite-run-before-the-pr-2026-10-23)).
+2. The task checkboxes were unticked. **Resolved** at M9.
+3. There was no manual browser check of Staff or Bookings. **Accepted without a fix:** §9.8 does not require one.
+
+**Follow-ups.**
+
+| Item | Outcome |
+| --- | --- |
+| Bookings trigger stays enabled while confirming (the known limitation; §9.7) | Not filed. Recorded in the plan and in `apps/web/README.md`. Outside this slice's scope. |
+| Load-induced jsdom timeouts in a fully uncached parallel `pnpm run test --force` (pre-existing; [Fresh full-suite run](#fresh-full-suite-run-before-the-pr-2026-10-23), run 1) | Not filed. Handoff note only; a candidate fix is a higher timeout or less turbo concurrency for jsdom suites. |
+
+## Slice Completion Report (final)
+
+| Field | Result |
+| --- | --- |
+| Slice | #194 ConfirmDialog confirming guard |
+| Tracking | https://github.com/rexescario-dev/clensy-platform/issues/194 |
+| M4 | Plan **Accepted** (revision 2) |
+| M5 | Review **Accepted** |
+| M6 | **Complete** |
+| M7 | **Approved** (fresh, independent reviewer) |
+| M8 | **N/A** |
+| M9 | **Complete** |
+| Branch | `feat/194-confirm-dialog-confirming-guard` |
+| PR | https://github.com/rexescario-dev/clensy-platform/pull/203 (merged, `842aa10`) |
+| Status | **Slice complete** |
+
+### Shipped
+
+- While `confirming`, a `ConfirmDialog` ignores Escape, backdrop clicks and Cancel. Confirm stays disabled. A refused close shows nothing and is not replayed (§9.3.1).
+- A topmost confirming `ConfirmDialog` consumes Escape, so a `DetailDrawer` under it stays open (§9.3.2).
+- Once the caller clears `confirming`, after success or failure, dismissal works as before. Programmatic close (`open` set to false) always works (§9.3.3).
+- One `@clensy/ui` change covers the Staff and Bookings callers, with no caller edits. 14 component tests pin the behavior; B1–B4 and P1–P3 each fail the expected tests.
+
+### Validation
+
+| Check | Result |
+| --- | --- |
+| Tests | **Passed**: `pnpm run test --force`, 10/10 tasks, 0 cached: `@clensy/ui` 124/124, `web` 2202/2202, `@clensy/web` 418/418, `api` 1071/1071, `@clensy/validation` 79/79, `@clensy/client` 13/13 |
+| Typecheck | **Passed**: `@clensy/ui` and `web` `tsc --noEmit` |
+| Lint | **Passed**: `pnpm run lint` (turbo 6/6) |
+| Build | **Passed**: `tsc --noEmit` build tasks. `next build` not run. |
+| Package validation | **Passed**: `pnpm install --frozen-lockfile`; PR CI green on `e5f4c4b` |
+
+### Next Gate
+
+None — slice complete
