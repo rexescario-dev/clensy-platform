@@ -38,11 +38,23 @@ export function ConfirmDialog({
     }
   }
 
+  // The single user-dismissal guard (#194, Dashboard UX Foundation §9.3):
+  // Escape and the backdrop (through `Modal`'s `onClose`) and Cancel all
+  // come through here, and none of them closes the dialog while confirming.
+  // The request is dropped, not queued. It reads only the caller-owned
+  // `confirming`, never `onConfirm`'s promise, so it lifts as soon as the
+  // caller clears it. `open` stays caller-owned, so a caller can still close
+  // the dialog itself at any time.
+  function requestClose() {
+    if (confirming) return;
+    onClose();
+  }
+
   return (
-    <Modal open={open} onClose={onClose} title={title}>
+    <Modal open={open} onClose={requestClose} title={title}>
       <p className="text-sm text-slate-600">{description}</p>
       <div className="mt-6 flex justify-end gap-3">
-        <Button type="button" variant="secondary" onClick={onClose} disabled={confirming}>
+        <Button type="button" variant="secondary" onClick={requestClose} disabled={confirming}>
           Cancel
         </Button>
         <Button
