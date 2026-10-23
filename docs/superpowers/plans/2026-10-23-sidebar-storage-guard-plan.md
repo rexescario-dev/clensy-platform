@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted** at M5, 2026-10-23, with two clarifications folded in (see M5 decision). M6 in progress. |
+| Status | **Accepted** at M5, 2026-10-23, with two clarifications folded in (see M5 decision). M6 complete ([Execution record](#execution-record)). M7 pending (fresh independent review). |
 | M5 decision | **Accepted** — 2026-10-23, by the owner, on the Draft at `1ea0ee7`. Decisions (a)–(f) accepted as written. Caveats: (c) keep the tests on the hook contract, since the existing UI tests cover sidebar interaction; (d) make sure the `window.localStorage` property failure is actually exercised and not bypassed by the test setup; (e) keep each `try`/`catch` limited to its own storage operation. Two clarifications for M6: (1) keep the first-render behavior: the state starts expanded and the saved value is restored in the mount Effect, with no storage access during render and no change to initialization timing; (2) prove each failure on its own and **verify in each test that the stubbed failure was actually triggered**. Clarification (2) is applied below as an added assertion in R1–R4: the stub's spy was called. Execution method: **native**, followed by one fresh independent M7 review. Expected outcomes remain predictions until M6 runs them. |
 | Date | 2026-10-23 |
 | Tracking issue | [#197](https://github.com/rexescario-dev/clensy-platform/issues/197) "Handle unavailable localStorage in the sidebar collapsed state". Source: `useEffect` audit at `d5d845e`, finding 2. |
@@ -199,6 +199,25 @@ Then emit the M6 Slice Completion Report.
 - A shared storage helper for `shell-chrome.tsx` and this hook. Two call sites do not justify one in a bug fix. M8 may raise it.
 - Any change to `AppSidebar`, the collapse control, the Sheet or the theme storage.
 - Other `useEffect` audit findings.
+
+## Execution record
+
+M6, 2026-10-23. Native execution in the planning session, from `d52f928` (plan + M5 record). Spec: `docs/superpowers/specs/2026-09-10-web-shell-and-design-system-design.md` (Accepted). Plan: this file (Accepted). All results below are actual. No deviation from the plan.
+
+**Task 1 (`8a0a709`)**
+- Step 0 baseline: `git status` clean. `web` 49 files, 2193/2193. `@clensy/ui` 11 files, 112/112. `@clensy/web` 16 files, 418/418. `pnpm --filter web lint` exit 0.
+- Step 2, on unmodified code: 5 passed, 4 failed, as predicted. C1–C4 (5 tests) passed. R1 and R2 failed at `expect(mount).not.toThrow()`: "expected [Function mount] to not throw an error but DOMException{ stack: 'SecurityError:…' } was thrown". R3 and R4 failed at their first toggle's `not.toThrow()`: "… DOMException{ stack: 'QuotaExceededE…' } was thrown". R4 got past its `mount()` assertion (`'collapsed'`) before failing.
+- Step 3, each break run on its own with `-t "characterization"`, then `git checkout apps/web/lib/use-sidebar-collapsed.ts`. `git status --short` after each restore: `?? apps/web/lib/use-sidebar-collapsed.test.tsx` only. Every assigned test failed because of its break, and no other test failed:
+  - B1, a lazy `useState` initializer that reads storage: C1 failed, "expected '<output>collapsed</output>' to contain '>expanded<'". 1 failed, 4 passed.
+  - B2, the mount Effect's `setCollapsed` call removed: C3 (`true`) failed, "expected 'expanded' to be 'collapsed'". 1 failed, 4 passed.
+  - B3, the `setItem` call removed: C4 failed, "expected null to be 'true'". 1 failed, 4 passed.
+  - B4, the `setCollapsed` call in `update` removed: C4 failed, "expected 'expanded' to be 'collapsed'". 1 failed, 4 passed.
+- `pnpm exec eslint lib/use-sidebar-collapsed.test.tsx` (in `apps/web`) exit 0 before the commit.
+
+**Task 2 (`e6779c6`)**
+- Step 2: `lib/use-sidebar-collapsed.test.tsx` 9/9 passed. `git diff HEAD --stat` on the test file was empty.
+- Step 3: `web` 50 files, 2202/2202. `@clensy/ui` 11 files, 112/112. `@clensy/web` 16 files, 418/418. `pnpm --filter web lint` exit 0. `pnpm --filter web exec tsc --noEmit` exit 0. `pnpm --filter web build` exit 0. `git diff main --stat`: this plan, `apps/web/lib/use-sidebar-collapsed.test.tsx`, `apps/web/lib/use-sidebar-collapsed.ts` (3 files). No environment failures.
+- Acceptance item 5: the tests stub `Storage.prototype.getItem`, `Storage.prototype.setItem` and the `window.localStorage` getter. They prove the guard works. They do not show that the original crash was reproduced in a browser, and no browser check was run.
 
 ## Gate outcomes
 
