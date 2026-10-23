@@ -4,7 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft** — 2026-10-23 (M4). Ready for M5. |
+| Status | **Accepted** at M5, 2026-10-23, with one clarification applied ([Revision 2 (M5 review 1)](#revision-2-m5-review-1)). Spec Amendment #194 is Accepted at M3. Neither status means the code is implemented or validated. |
+| M5 decision | **Accepted** — 2026-10-23, by the owner, reviewing `13cd4ca`. All areas pass: scope, close guard, stacked Escape (test 13 must still show both dialogs open and the drawer's `onClose` not called), the caller-modelled rejection tests, the characterization tests, the B1–B4 breaks (predictions until executed), verification, and the deferred Bookings trigger. One clarification before M6: keep user-initiated close, the disabled buttons and programmatic close distinct. The owner also confirmed that the spec stays Accepted at M3. Execution contract: record actual test and break outcomes, not predicted counts; M7 needs a fresh independent review of the actual diff, including the dialog stack behavior and the caller-modelled rejection tests. |
 | Date | 2026-10-23 |
 | Tracking issue | [#194](https://github.com/rexescario-dev/clensy-platform/issues/194) "Decide whether ConfirmDialog should refuse dismissal while confirming". |
 | Branch | `feat/194-confirm-dialog-confirming-guard`, from `main` at `4257fb7`. One PR for the amendment, this plan, its M5 record and the implementation. |
@@ -29,6 +30,15 @@
 **Spec:** `docs/superpowers/specs/2026-08-17-dashboard-ux-foundation-design.md` §9 (Amendment #194).
 
 ## Global Constraints
+
+**Three close-related behaviors, kept distinct (M5 clarification).** The guard must not treat every close as the same request:
+
+| Behavior | While `confirming` | Mechanism | Verified by |
+| --- | --- | --- | --- |
+| User-initiated close (Escape, backdrop, Cancel, any later affordance) | **Refused**, no feedback, not replayed (§9.3.1 items 1, 2, 4, 5) | `requestClose`, the one new guard | Tests 4, 5, 7, 9, 11, 13 |
+| Cancel and Confirm buttons | **Disabled**, as today (§4.4, §9.3.1 item 3) | The existing `disabled={confirming}`, unchanged. Not the guard. | Test 6 [C]; B2 |
+| Programmatic close (the caller sets `open` to `false`) | **Unchanged**: closes and restores focus (§9.3.1 item 7) | `open` stays caller-owned. The guard sits only on the `onClose` path and never reads or overrides `open`. | Test 8 [C]; B3 |
+
 
 - The change is confined to `@clensy/ui`. No `ConfirmDialog` caller is edited (spec §9.5, §9.7).
 - `ConfirmDialogProps` is unchanged as callers see it (§9.4).
@@ -299,6 +309,13 @@ Each §9.8 acceptance criterion, and the §9.3 and §9.5 text it points to, maps
 | §9.8 bullet 7 (old characterization tests replaced; existing suites pass) | Task 1 Step 1; Task 2 Step 1 |
 | §9.8 bullet 9 (component-level; app suites are regression only) | [Coverage](#coverage-component-tests-vs-regression-suites); Task 2 Step 1 record wording |
 | §9.7 (Bookings trigger stays enabled; no duplicate-action guarantee) | Known limitation above; Task 2 Step 2 (no `apps` change) |
+
+## Revision 2 (M5 review 1)
+
+| Finding | Resolution |
+| --- | --- |
+| **Clarification** (before M6): make the relationship between the close guard and the disabled buttons explicit, and keep programmatic close separate. | Added the three-behavior table at the top of [Global Constraints](#global-constraints). The guard covers only user-initiated close. The disabled buttons stay the existing `disabled={confirming}`. Programmatic close goes through caller-owned `open` and is untouched. Each row names its tests and break. No task, test or prediction changed. |
+| Spec status. | The owner confirmed that Amendment #194 stays **Accepted** at M3, and that this is distinct from implementation completion. No spec edit. |
 
 ## Deferred (not in this plan)
 
