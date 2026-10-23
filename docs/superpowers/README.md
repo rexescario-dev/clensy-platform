@@ -57,4 +57,4 @@ Specifications and implementation plans, produced by the project's [engineering 
 
 ## Plans
 
-One plan per delivery slice, 71 so far, in [`plans/`](plans/). The file name gives the date and topic; the plan's header names its GitHub issue and spec. Slices that changed the API's behavior also have a short note in [shipped slices](../history/shipped-slices.md).
+One plan per delivery slice, 72 so far, in [`plans/`](plans/). The file name gives the date and topic; the plan's header names its GitHub issue and spec. Slices that changed the API's behavior also have a short note in [shipped slices](../history/shipped-slices.md).

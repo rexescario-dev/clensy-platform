@@ -538,7 +538,7 @@ The other observations have the outcomes listed under Follow-ups below, or need 
 | Item | Outcome |
 | --- | --- |
 | Dialog hook Escape timing (passive-effect window; predates #180) | Deferred: filed as [#193](https://github.com/rexescario-dev/clensy-platform/issues/193) (`enhancement`) |
-| `ConfirmDialog` dismissal while `confirming` (spec §8.7) | Design question, decision only: filed as [#194](https://github.com/rexescario-dev/clensy-platform/issues/194) (`question`) |
+| `ConfirmDialog` dismissal while `confirming` (spec §8.7) | Filed as [#194](https://github.com/rexescario-dev/clensy-platform/issues/194) (`question`). Resolved by #194: the owner decided a confirming `ConfirmDialog` refuses dismissal, recorded as spec Amendment #194 (§9), and delivered in the [ConfirmDialog confirming guard plan](2026-10-23-confirm-dialog-confirming-guard-plan.md). |
 | Combined refused-then-close `@clensy/ui` test | Not filed. Low priority; covered end to end. Handoff note only. |
 | Two Context Forge package gaps (M10): the M4 self-check doesn't schedule characterization-test failure evidence; the README Layout block omits two convention files | Filed in `rexescario-dev/context-forge` as two issues: [context-forge#129](https://github.com/rexescario-dev/context-forge/issues/129) (the M4 self-check gap; higher priority) and [context-forge#130](https://github.com/rexescario-dev/context-forge/issues/130) (the README Layout gap) |
 
