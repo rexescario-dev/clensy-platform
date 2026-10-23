@@ -443,7 +443,29 @@ The owner asked for `pnpm run test --force` before pushing, because the M6 and M
 - **Repeats:** `@clensy/ui` alone passed 3 of 3 times (124/124, about 1.7 s each).
 - **Unchanged code:** neither file, nor `Modal`, `use-dialog-behavior.ts` or `FormDialog`, changed on this branch. Their last change is `152d7ab`. Vitest runs each file in its own worker.
 
-Conclusion: the run 1 timeouts came from CPU contention during a fully uncached parallel run. This change did not cause them. No code was changed in response. The flake is pre-existing. It is a candidate follow-up (a higher timeout or less turbo concurrency for jsdom suites) and is not fixed in this slice.
+Conclusion at the time: CPU contention during a fully uncached parallel run. This change did not cause the timeouts, and no code was changed in response. **Superseded** by the follow-up investigation below, which found host memory pressure, not CPU contention.
+
+**Follow-up investigation (2026-10-24, after the merge).** The owner asked whether the timeouts are reproducible and whether they come from a test race, too short a timeout, or resource contention.
+
+- **The failing tests:**
+  - `src/internal/use-dialog-behavior.test.tsx:119`: `useDialogBehavior focus and Strict Mode (#193) [C] > moves focus into the dialog on open and restores it to the trigger on close`.
+  - `src/base/dialogs/form-dialog.test.tsx:128`: `FormDialog dismissal (#180) > closes on Escape when idle [C]`.
+  - Both failed with `Error: Test timed out in 5000ms.` Both are synchronous, with no timers or awaited promises, so a race can't be the cause. Vitest reports a timeout when a synchronous test's wall time goes past the limit.
+- **Repeat runs:** the `@clensy/ui` suite ran with a JSON reporter, recording per-test durations. Scripts and results are in session scratch, not committed.
+
+  | Condition | Runs | Result | Slowest first test of the three dialog files | Slowest dialog file |
+  | --- | --- | --- | --- | --- |
+  | Idle | 3 | 124/124 each | 62 ms | 164 ms |
+  | 8 busy-loop processes on 8 cores | 2 | 124/124 each | 130 ms | 339 ms |
+  | 16 busy loops | 2 | 124/124 each | 276 ms | 621 ms |
+  | 32 busy loops | 2 | 124/124 each | 322 ms | 791 ms |
+  | Alongside the rest of `turbo run test --force` | 3 | 124/124 each; the other 9 tasks passed | 255 ms | 753 ms |
+
+  At four times CPU oversubscription, the worst first test still had about 15 times headroom under the 5000 ms limit. CPU contention cannot produce the 19.5 s files seen in run 1. 0 of 12 runs reproduced the timeouts.
+- **Machine-wide slowdown in run 1:** individual `api` specs took about 42 s each, and `api`'s `Time:` was 1m50.9s. In normal forced runs the whole `api` suite takes 13.0–17.6 s. So every package was slowed, not only jsdom.
+- **Cause, from the system journal:** at 12:00:36, four seconds before run 1 finished (12:00:40), `systemd-oomd` reported memory pressure across the desktop session's cgroups at avg10 about 20% and avg60 about 17%, with an editor at 18.0 GB and a browser at 16.8 GB on a 46 GB machine. It killed processes in the editor's cgroup, and the kernel OOM-killed the same scope at 12:02:06. Runs 2 and 3 started after that and passed. With 20 GiB available, the same runs no longer slow down.
+
+Conclusion: the run 1 timeouts were transient host memory pressure, caused by other applications on the machine. They were not a test race, not too short a timeout under any realistic CPU load, and not caused by this branch or the test suite. No ticket is filed, per the owner's instruction to record evidence for transient contention instead of creating work. Raising `testTimeout` would only have hidden it.
 
 ### M8 — Refactoring: N/A (2026-10-23)
 
@@ -556,8 +578,8 @@ The slice changes no workflow assets: `git diff 4257fb7 HEAD -- docs/workflows w
 
 | Item | Outcome |
 | --- | --- |
-| Bookings trigger stays enabled while confirming (the known limitation; §9.7) | Not filed. Recorded in the plan and in `apps/web/README.md`. Outside this slice's scope. |
-| Load-induced jsdom timeouts in a fully uncached parallel `pnpm run test --force` (pre-existing; [Fresh full-suite run](#fresh-full-suite-run-before-the-pr-2026-10-23), run 1) | Not filed. Handoff note only; a candidate fix is a higher timeout or less turbo concurrency for jsdom suites. |
+| Bookings trigger stays enabled while confirming (the known limitation; §9.7) | Filed 2026-10-24 as [#205](https://github.com/rexescario-dev/clensy-platform/issues/205) (`enhancement`): one active delete at a time, covering repeated clicks and reopen attempts. |
+| jsdom timeouts in run 1 of `pnpm run test --force` ([Fresh full-suite run](#fresh-full-suite-run-before-the-pr-2026-10-23)) | Investigated 2026-10-24: transient host memory pressure (systemd-oomd killed other applications), not reproducible in 12 runs under CPU and full-suite load. Not filed; evidence recorded. |
 
 ## Slice Completion Report (final)
 
