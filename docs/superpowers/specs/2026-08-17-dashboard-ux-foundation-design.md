@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Status | Accepted. [Amendment #180](#8-amendment-180--form-dialog-dismissal-while-submitting) **Accepted** — 2026-10-16; where §8.3 qualifies a sentence in §4.4 or §4.6, §8.3 governs. |
-| Amendment #194 | **Draft** — 2026-10-23 (M2). Tracking [#194](https://github.com/rexescario-dev/clensy-platform/issues/194). Slice-local; does not replace this specification or reopen Amendment #180. See [§9](#9-amendment-194--confirmation-dialog-dismissal-while-confirming). The rest of this specification stays Accepted. |
+| Amendment #194 | **Accepted** — 2026-10-23 (M3), by the owner, reviewing `3b78962`, with two clarifications applied before M4 (§9.3.2 stacked-Escape verification; §9.8 rejected-action recovery modelled by the caller clearing `confirming`). Tracking [#194](https://github.com/rexescario-dev/clensy-platform/issues/194). Slice-local; does not replace this specification or reopen Amendment #180. See [§9](#9-amendment-194--confirmation-dialog-dismissal-while-confirming). M3 findings: the `confirming`-only guard, the Bookings trigger non-goal, replacing the characterization tests and relying on existing app suites as regression coverage all pass; no design blocker. Ready for M4. |
 | Amendment #180 | **Accepted** — 2026-10-16 (M3), by the owner, reviewing `7a18433`. Tracking [#180](https://github.com/rexescario-dev/clensy-platform/issues/180). Slice-local; does not replace this specification. M2 review applied two wording corrections (§8.2 user-initiated dismissal; §8.4 `Modal` exception tied to the `FormDialog` guard). M3 findings: compatibility with §4.4 and §4.6, submission lifecycle, scope boundaries, and acceptance criteria all pass; no design blocker; no further spec edits. Ready for M4. |
 | Date | 2026-08-17 |
 | Tracking issue | [#24](https://github.com/rexescario-dev/clensy-platform/issues/24) |
@@ -198,7 +198,7 @@ export interface ConfirmDialogProps {
 
 `ConfirmDialog` owns the Cancel and Confirm actions; `confirming` disables both and exposes the pending state while `onConfirm` is in flight.
 
-> **Amendment #194 (Draft, 2026-10-23).** While `confirming` is true, a `ConfirmDialog` refuses user-initiated dismissal, including the Escape and backdrop-click closing that `Modal` otherwise provides. See §9.3.1. This sentence is otherwise unchanged.
+> **Amendment #194 (Accepted, 2026-10-23).** While `confirming` is true, a `ConfirmDialog` refuses user-initiated dismissal, including the Escape and backdrop-click closing that `Modal` otherwise provides. See §9.3.1. This sentence is otherwise unchanged.
 
 **`DetailDrawer`** — the right-side overlay (§3): `{ open, onClose, title, children, widthClassName? }`, default width in the 360–480px range. `role="dialog"`, `aria-modal="true"` (same as `Modal` — sliding in from the side doesn't make it a `complementary` landmark), `aria-labelledby` pointing at its title. Unlike `Modal`, the backdrop is non-blocking *visually* (the background list stays visible so the user keeps spatial context) but is inert while open — no click, focus, or keyboard interaction reaches the content behind it; a click on the backdrop itself still closes the drawer.
 
@@ -228,7 +228,7 @@ Built into `Modal`/`DetailDrawer` once, not per call site: Escape closes; focus 
 
 > **Amendment #180 (Accepted, 2026-10-16).** "Escape closes" has one exception: Escape does not close a `FormDialog` that is submitting, and it does not reach a dialog underneath that one. See §8.3.2.
 
-> **Amendment #194 (Draft, 2026-10-23).** The same exception covers a `ConfirmDialog` that is confirming. See §9.3.2.
+> **Amendment #194 (Accepted, 2026-10-23).** The same exception covers a `ConfirmDialog` that is confirming. See §9.3.2.
 
 ### 4.7 Migration scope
 
@@ -395,7 +395,7 @@ Amendment #180 may move from Draft to Accepted once Design Review (M3) confirms:
 
 | Field | Value |
 | --- | --- |
-| **Status** | **Draft** — 2026-10-23 (M2). |
+| **Status** | **Accepted** — 2026-10-23 (M3). |
 | **Date** | 2026-10-23 |
 | **Tracking** | [#194](https://github.com/rexescario-dev/clensy-platform/issues/194) "Decide whether ConfirmDialog should refuse dismissal while confirming". Deferred by Amendment #180 (§8.4, §8.7). |
 | **Kind** | Slice-local amendment of this specification. Not a second specification. |
@@ -441,6 +441,8 @@ While a `ConfirmDialog` is open and confirming:
 1. A single Escape press is still handled only by the topmost dialog.
 2. If the topmost dialog is a confirming `ConfirmDialog`, the press is **consumed**. That dialog stays open, and no dialog underneath it, such as the booking `DetailDrawer`, closes or receives the press as a close request.
 3. If the topmost dialog is anything else, Escape behaves as before, even when a confirming `ConfirmDialog` is open underneath it.
+
+Refusing the close of the topmost dialog does not by itself show that the press was consumed. The verification for item 2 MUST observe both outcomes of one Escape press, with a real `DetailDrawer` underneath: the confirming `ConfirmDialog` is still open, and the `DetailDrawer` is still open with its `onClose` not called.
 
 #### 9.3.3 When confirming is false
 
@@ -488,6 +490,7 @@ Unchanged, and still Accepted whether or not this amendment is accepted:
 
 - No change to `FormDialog` or `DetailDrawer`.
 - No change to any `ConfirmDialog` caller, including the Bookings "Delete booking" trigger, which stays enabled while a delete runs. Disabling it is caller-side duplicate-action hardening and, if wanted, a separate issue.
+- No guarantee of duplicate-action prevention. This amendment closes the Escape-and-reopen route to a second action in Bookings. It does not prevent duplicate actions on every path, and that remains each caller's responsibility (owner decision 4).
 - No change to the Laundry caller's choice to close its dialog before starting the action and not pass `confirming`.
 - No error-display slot on `ConfirmDialog`, and no change to where callers show success or failure.
 - No new close affordance, busy indicator, toast, live-region message or copy change.
@@ -500,9 +503,11 @@ Amendment #194 may move from Draft to Accepted once Design Review (M3) confirms:
 
 - §9.3.1 states that, while confirming, Escape, a backdrop click and every other user-initiated dismissal path leave a `ConfirmDialog` open, that Cancel and Confirm stay disabled, and that a refused dismissal produces no feedback and is not replayed.
 - §9.3.3 states that once confirming is false again, after success or failure, Escape, the backdrop and Cancel close the dialog as before, and §9.2 and §9.5 define "settled" so a rejected action cannot leave the dialog locked.
-- §9.3.2 keeps topmost-only Escape handling and states that a topmost confirming `ConfirmDialog` consumes the press without closing itself or any dialog beneath, including the booking `DetailDrawer`.
+- §9.3.2 keeps topmost-only Escape handling and states that a topmost confirming `ConfirmDialog` consumes the press without closing itself or any dialog beneath, including the booking `DetailDrawer`, and requires the verification to observe both dialogs still open.
 - §9.4 and §9.5 preserve behavior when confirming is false or omitted, programmatic close, `FormDialog` and `DetailDrawer` dismissal, and every caller's feedback locations.
 - §9.4 states exactly which Amendment #180 sentences it qualifies, without reopening Amendment #180.
 - The amendment names no implementation API and leaves the mechanism to M4.
 - The verification it requires is concrete enough to plan against: `@clensy/ui` tests cover the confirming and the idle states, including stacked Escape over a `DetailDrawer` and a rejected `onConfirm`. The characterization tests in `packages/ui/src/base/dialogs/confirm-dialog.test.tsx` that pin today's "still closes while confirming" behavior are replaced by tests of §9.3. The existing `apps/web` and `packages/web` tests keep passing, including the Laundry list page tests.
+- The rejected-action verification models the caller: the fixture's `onConfirm` rejects, and the fixture then sets `confirming` to `false`, as a mutation's loading flag does. It shows that dismissal is refused while `confirming` is still true and works again once the caller clears it. It does not rely on `ConfirmDialog` detecting the rejection itself, which §9.5 forbids.
+- The verification is component-level. The existing `apps/web` and `packages/web` suites are regression coverage only. None of them opens the Staff or Bookings `ConfirmDialog`, so passing them does not by itself show that those flows behave as §9.3 requires.
 - The rest of this specification, including Amendment #180, stays Accepted and is not reopened.
