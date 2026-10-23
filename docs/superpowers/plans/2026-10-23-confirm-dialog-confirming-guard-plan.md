@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted** at M5, 2026-10-23, with one clarification applied ([Revision 2 (M5 review 1)](#revision-2-m5-review-1)). Spec Amendment #194 is Accepted at M3. M6 **complete** ([Execution record](#execution-record)); ready for M7. |
+| Status | **Accepted** at M5, 2026-10-23, with one clarification applied ([Revision 2 (M5 review 1)](#revision-2-m5-review-1)). Spec Amendment #194 is Accepted at M3. M6 **complete** ([Execution record](#execution-record)). M7 **Approved for merge** (fresh independent review). M8 N/A. M9 complete. M10 does not apply. PR open; merge awaits the owner. |
 | M5 decision | **Accepted** — 2026-10-23, by the owner, reviewing `13cd4ca`. All areas pass: scope, close guard, stacked Escape (test 13 must still show both dialogs open and the drawer's `onClose` not called), the caller-modelled rejection tests, the characterization tests, the B1–B4 breaks (predictions until executed), verification, and the deferred Bookings trigger. One clarification before M6: keep user-initiated close, the disabled buttons and programmatic close distinct. The owner also confirmed that the spec stays Accepted at M3. Execution contract: record actual test and break outcomes, not predicted counts; M7 needs a fresh independent review of the actual diff, including the dialog stack behavior and the caller-modelled rejection tests. |
 | Date | 2026-10-23 |
 | Tracking issue | [#194](https://github.com/rexescario-dev/clensy-platform/issues/194) "Decide whether ConfirmDialog should refuse dismissal while confirming". |
@@ -97,7 +97,7 @@ Implements spec §9.3.1, §9.3.2, §9.3.3 and §9.5. Planning decisions (a)–(d
 - Consumes: `Modal` (`../modal`), `DetailDrawer` (`../detail-drawer`), `ConfirmDialog`, all unchanged in their props.
 - Produces: no new export. `ConfirmDialogProps` is unchanged.
 
-- [ ] **Step 1: Rewrite `confirm-dialog.test.tsx`**
+- [x] **Step 1: Rewrite `confirm-dialog.test.tsx`**
 
 The file starts with `// @vitest-environment jsdom` and sets `IS_REACT_ACT_ENVIRONMENT = true`. It renders with `createRoot` and `act` into a container appended to `document.body`, unmounted in `afterEach`. Its header comment says what it covers (#194, Amendment #194 §9.3), that each fixture `onClose` really closes its dialog, and that [C] marks characterization tests. It replaces the old #180 header, which said a future issue would update these tests.
 
@@ -161,28 +161,28 @@ Tests in `describe('ConfirmDialog dismissal (#194)')`. [C] marks a characterizat
 
 Tests 10 and 11 also rely on the default vitest behavior that fails a run on an unhandled rejection. They therefore check that the rejected `onConfirm` is still consumed (§9.3.1 item 6).
 
-- [ ] **Step 2: Run the tests to verify the red phase**
+- [x] **Step 2: Run the tests to verify the red phase**
 
 Run: `pnpm --filter @clensy/ui exec vitest run src/base/dialogs/confirm-dialog.test.tsx`
 Expected (predicted): 7 failed / 7 passed. The failing tests are 4, 5, 7, 9, 10, 11 and 13. Each fails because `closes` contains `'confirm'` or the confirm dialog is gone. Test 10 fails at its first Escape. The [C] tests 1, 2, 3, 6, 8, 12 and 14 pass. Record actual counts and messages. Any other failure (an import, act or unhandled-rejection error) means stop and investigate.
 
-- [ ] **Step 3: Implement the guard in `confirm-dialog.tsx`**
+- [x] **Step 3: Implement the guard in `confirm-dialog.tsx`**
 
 Add, inside `ConfirmDialog`, `function requestClose(): void` that returns without calling `onClose` while `confirming` is true, and otherwise calls `onClose()`. Pass `onClose={requestClose}` to `Modal` and `onClick={requestClose}` to the Cancel button. Keep `disabled={confirming}` on both buttons and leave `handleConfirmClick` as it is. Add a short comment, matching `FormDialog`'s: this is the single user-dismissal guard for #194 (spec §9.3), the request is dropped, not queued, the guard reads only `confirming`, and `open` stays caller-owned. Declare it after `handleConfirmClick`, keeping the nested functions alphabetical. Nothing else changes.
 
-- [ ] **Step 4: Run the `@clensy/ui` checks**
+- [x] **Step 4: Run the `@clensy/ui` checks**
 
 Run: `pnpm --filter @clensy/ui exec vitest run && pnpm --filter @clensy/ui lint && pnpm --filter @clensy/ui build`
 Expected (predicted): 11 files, 124/124 passed (112 baseline − 2 replaced + 14). Lint and `tsc --noEmit` clean.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/ui/src/base/dialogs/confirm-dialog.tsx packages/ui/src/base/dialogs/confirm-dialog.test.tsx
 git commit -m "feat(ui): keep a confirming ConfirmDialog open on user dismissal (#194)"
 ```
 
-- [ ] **Step 6: Prove the characterization tests, in a disposable worktree**
+- [x] **Step 6: Prove the characterization tests, in a disposable worktree**
 
 The [C] tests pin behavior that is already correct, so the red phase cannot show that they would catch a regression. Each break below is a behavior to produce in a disposable worktree of the committed `HEAD` (Step 5). M6 chooses the source edit that produces it. The run is made outside the committed change, and nothing from it is committed.
 
@@ -267,12 +267,12 @@ TDD does not apply. The verification below and the Execution record replace it.
 **Files:**
 - Modify: this plan (append `## Execution record`)
 
-- [ ] **Step 1: Run the CI-equivalent checks**
+- [x] **Step 1: Run the CI-equivalent checks**
 
 Run: `pnpm install --frozen-lockfile && pnpm run lint && pnpm --filter web exec tsc --noEmit && pnpm run test`
 Expected: all succeed. `@clensy/ui` 124/124. `web` 50 files, 2202/2202, and `@clensy/web` 16 files, 418/418, both unchanged from the baseline. Record each command's actual result and every package's test totals. In the record, describe the `web` and `@clensy/web` results as regression coverage, per [Coverage](#coverage-component-tests-vs-regression-suites), not as proof of the Staff or Bookings flows.
 
-- [ ] **Step 2: Account for every changed path**
+- [x] **Step 2: Account for every changed path**
 
 Run: `git diff --name-only 4257fb7 HEAD | sort`
 Every path in the output must belong to exactly one group below, and every listed path must appear. Record the full output and each path's group. A path in no group, or a missing path, means stop and investigate. Do not filter the command.
@@ -282,7 +282,7 @@ Every path in the output must belong to exactly one group below, and every liste
 
 Then verify: `git diff --quiet 4257fb7 HEAD -- packages/ui/src/base/modal.tsx packages/ui/src/internal/use-dialog-behavior.ts packages/ui/src/base/dialogs/form-dialog.tsx packages/ui/src/base/detail-drawer.tsx apps packages/web pnpm-lock.yaml` exits 0, so no shared primitive, caller or dependency changed.
 
-- [ ] **Step 3: Write the Execution record and the M6 Slice Completion Report, then commit**
+- [x] **Step 3: Write the Execution record and the M6 Slice Completion Report, then commit**
 
 Append `## Execution record` with Task 1's red and green results and Step 6's four break proofs as actual output, and the Step 1 and Step 2 results. Then emit the M6 Slice Completion Report per `docs/workflows/conventions/reporting-conventions.md`, with Next Gate M7 (a fresh independent reviewer).
 
@@ -425,3 +425,87 @@ Not run: a manual browser check of the Staff disable or Bookings delete flow. It
   - The repo-wide lint and test runs were turbo cache replays. `pnpm run test --force` before merge would give fully fresh app-suite evidence.
   - The task checkboxes are still unticked, which is cosmetic.
   - No manual browser check of the Staff or Bookings flows was done. It is not required by §9.8.
+
+### Fresh full-suite run before the PR (2026-10-23)
+
+The owner asked for `pnpm run test --force` before pushing, because the M6 and M7 repo-wide runs were turbo cache replays.
+
+| Run | Command | Result |
+| --- | --- | --- |
+| 1 | `pnpm run test --force` | **FAILED**, exit 1, 0/7 cached. Two `@clensy/ui` tests hit vitest's 5000 ms timeout: `use-dialog-behavior.test.tsx` › `moves focus into the dialog on open and restores it to the trigger on close` [C] (#193), and `form-dialog.test.tsx` › `closes on Escape when idle` [C] (#180). Turbo then stopped the run: `api` stopped after 7 suites with `ELIFECYCLE` (turbo lists only `@clensy/ui#test` as failed), and `web` and `@clensy/web` did not run. |
+| 2 | `pnpm run test --force --continue` | PASS, exit 0, 10/10 tasks, 0 cached: `@clensy/ui` 124/124, `web` 2202/2202, `@clensy/web` 418/418, `api` 1071/1071, `@clensy/validation` 79/79, `@clensy/client` 13/13. |
+| 3 | `pnpm run test --force` (the owner's exact command) | PASS, exit 0, 10/10 tasks, 0 cached, the same totals as run 2. |
+
+**Investigation of run 1, done before pushing.**
+- **Timings:** in run 1, `use-dialog-behavior.test.tsx` took 19,672 ms and `form-dialog.test.tsx` 19,436 ms. In run 2 they took 306 ms and 406 ms. `confirm-dialog.test.tsx` took 1,306 ms and then 521 ms.
+- **Load:** in run 1, every `api` spec took more than 40 s while the other packages ran at the same time on 8 cores.
+- **Which tests:** both timed-out tests are the first, synchronous test in their file, which pays that file's start-up cost.
+- **Repeats:** `@clensy/ui` alone passed 3 of 3 times (124/124, about 1.7 s each).
+- **Unchanged code:** neither file, nor `Modal`, `use-dialog-behavior.ts` or `FormDialog`, changed on this branch. Their last change is `152d7ab`. Vitest runs each file in its own worker.
+
+Conclusion: the run 1 timeouts came from CPU contention during a fully uncached parallel run. This change did not cause them. No code was changed in response. The flake is pre-existing. It is a candidate follow-up (a higher timeout or less turbo concurrency for jsdom suites) and is not fixed in this slice.
+
+### M8 — Refactoring: N/A (2026-10-23)
+
+```text
+Decision: N/A, by the owner, 2026-10-23
+Subject: feat/194-confirm-dialog-confirming-guard; packages/ui/src/base/dialogs/confirm-dialog.tsx, confirm-dialog.test.tsx
+Accepted specification: docs/superpowers/specs/2026-08-17-dashboard-ux-foundation-design.md (Amendment #194)
+Accepted implementation plan: this file
+M7 / authorization: Approved for merge (fresh independent review)
+
+Maintainability goals considered:
+- Sharing one guard helper between FormDialog and ConfirmDialog. Not done: each guard is a 2-line function reading its own prop, so a shared helper would add indirection for no behavior gain, and FormDialog is outside this plan's ownership boundary.
+- Test helpers. Already small and single-purpose, in name order as the lint rules require.
+
+Verification: Before: as recorded at M6 and M7. After: not run (no change).
+
+Externally observable behavior changes: None
+
+Gate: N/A — proceed to M9.
+```
+
+### M9 — Documentation: Complete (2026-10-23)
+
+```text
+Decision: Complete
+Subject: #194, feat/194-confirm-dialog-confirming-guard
+Accepted specification: docs/superpowers/specs/2026-08-17-dashboard-ux-foundation-design.md (Amendment #194, Accepted at M3)
+Accepted implementation plan: this file
+M7: Approved for merge (fresh independent review)
+M8: N/A
+
+Documentation scope:
+- apps/web/README.md (§ UI)
+- docs/superpowers/README.md (plan count)
+- docs/superpowers/plans/2026-10-16-form-dialog-submit-guard-plan.md (the #194 follow-up row)
+- This plan's Status row, step checkboxes and Gate outcomes
+
+Updated artifacts:
+- apps/web/README.md § UI: a new "Pending confirmation" paragraph. While confirming, Escape, the backdrop and Cancel don't close a ConfirmDialog, a drawer under it stays open, and it closes normally once the page clears confirming. It names the Staff and Bookings uses, says Laundry is unaffected, notes the Bookings trigger limitation, and links #194 and Amendment #194 §9.3 and §9.7 ← the shipped behavior (Task 1, M7 Approved). It follows the #180 "Pending create" precedent; shipped-slices.md says web-console slices are recorded in apps/web/README.md.
+- docs/superpowers/README.md: "71 so far" → "72 so far" (`ls docs/superpowers/plans | wc -l` = 72 on this branch) ← this slice's plan
+- Form Dialog Submit Guard plan, Follow-ups row for #194: restated as resolved, with a link to this plan ← the #194 resolution
+- This plan: Status row ← M7, M8, M9 and M10; Task steps ticked ← the Execution record (M7 observation)
+
+Editorial changes:
+- Step checkboxes ticked
+
+Content updates:
+- The README paragraph, the plan count, the resolved follow-up row and the Status row
+
+Not changed: packages/ui/README.md documents layout and the export surface, not primitive behavior. The spec's Amendment #194 rows already read Accepted. docs/history/shipped-slices.md is for slices that changed the API's behavior; this one did not.
+
+Verification:
+- Links checked: ../../docs/superpowers/specs/2026-08-17-dashboard-ux-foundation-design.md resolves from apps/web/; 2026-10-23-confirm-dialog-confirming-guard-plan.md resolves from docs/superpowers/plans/
+- Heading hierarchy checked: Gate outcomes holds ### M7, Fresh full-suite run, M8, M9 and M10 entries
+- Status consistency checked: spec Amendment #194 Accepted; plan Accepted; M7 Approved; Status row matches the Gate outcomes
+- Cross-references checked: issue, spec-section and plan links
+- Terminology checked: "confirming", "user-initiated dismissal" and "programmatic close" as §9.2 and §8.2 define them
+- Duplicates / outdated refs checked: the #180 plan's Deferred list ("ConfirmDialog refusing dismissal … needs a separate issue") is a historical record of that slice and stays as written; its Follow-ups row now points to the resolution
+
+Gate: Documentation complete. Code/behavior/contracts unchanged by this stage.
+```
+
+### M10 — Workflow Validation: does not apply (2026-10-23)
+
+The slice changes no workflow assets: `git diff 4257fb7 HEAD -- docs/workflows workflow.yaml .claude` is empty. Per the process spec §2.12, M10 applies only when a slice changes workflow assets.
