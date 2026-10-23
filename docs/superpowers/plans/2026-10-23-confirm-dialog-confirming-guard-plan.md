@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted** at M5, 2026-10-23, with one clarification applied ([Revision 2 (M5 review 1)](#revision-2-m5-review-1)). Spec Amendment #194 is Accepted at M3. Neither status means the code is implemented or validated. |
+| Status | **Accepted** at M5, 2026-10-23, with one clarification applied ([Revision 2 (M5 review 1)](#revision-2-m5-review-1)). Spec Amendment #194 is Accepted at M3. M6 **complete** ([Execution record](#execution-record)); ready for M7. |
 | M5 decision | **Accepted** — 2026-10-23, by the owner, reviewing `13cd4ca`. All areas pass: scope, close guard, stacked Escape (test 13 must still show both dialogs open and the drawer's `onClose` not called), the caller-modelled rejection tests, the characterization tests, the B1–B4 breaks (predictions until executed), verification, and the deferred Bookings trigger. One clarification before M6: keep user-initiated close, the disabled buttons and programmatic close distinct. The owner also confirmed that the spec stays Accepted at M3. Execution contract: record actual test and break outcomes, not predicted counts; M7 needs a fresh independent review of the actual diff, including the dialog stack behavior and the caller-modelled rejection tests. |
 | Date | 2026-10-23 |
 | Tracking issue | [#194](https://github.com/rexescario-dev/clensy-platform/issues/194) "Decide whether ConfirmDialog should refuse dismissal while confirming". |
@@ -322,3 +322,80 @@ Each §9.8 acceptance criterion, and the §9.3 and §9.5 text it points to, maps
 - Disabling the Bookings "Delete booking" trigger while a delete runs, or any other caller-side duplicate-action hardening (spec §9.7). It needs a separate issue if it is wanted.
 - A caller-level test for the Staff or Bookings confirm flow. The spec does not require one (§9.8). It would be a separate test-only issue.
 - Any docs change. M9 decides.
+
+## Execution record
+
+### M6 — 2026-10-23
+
+Executed inline (native), in plan order, on `feat/194-confirm-dialog-confirming-guard` from the M5 acceptance commit `8a559f5`. Every `Expected:` line was compared with the real output. All counts below are **actual** results. Each matched its prediction.
+
+| Task | Commit | Red (actual) | Green (actual) |
+| --- | --- | --- | --- |
+| 1 | `3185379` | `vitest run src/base/dialogs/confirm-dialog.test.tsx`: 7 failed, 7 passed (14). The failures were tests 4, 5, 9, 10, 11 and 13, each with `AssertionError: expected [ 'confirm' ] to deeply equal []`, and test 7 with `TypeError: Cannot read properties of null (reading 'parentElement')`, because the Escape had already closed the dialog before the backdrop click. The plan allows this ("or the confirm dialog is gone"). Test 10 failed at its first Escape. The 7 [C] tests passed. | `@clensy/ui` 11 files, 124/124. `lint` clean. `build` (`tsc --noEmit`) clean. |
+
+**Task 1 Step 6, characterization breaks (actual).** The plan's script was used as written, with `apply_break` and `expected` filled in from scratch files outside the repository (one Python edit per break, applied only under the worktree, and a title list per break). Each break ran in its own disposable detached worktree of `3185379`. `pnpm install --frozen-lockfile --offline` succeeded every time, so the online fallback was not needed. Each run exited 0 with `CHECK 1 OK` to `CHECK 5 OK`: the break changed the worktree, exactly the assigned tests failed out of 14, the working-tree status was unchanged, the active `ConfirmDialog` still contains `requestClose`, and the worktree was removed. Nothing from these runs was committed.
+
+| Break | Edit used (worktree only) | Failed (exactly the assigned set) and first failure |
+| --- | --- | --- |
+| B1 | `requestClose` body replaced by `return;` | Tests 1, 2, 3, 12 [C] and 10: each `expected [] to deeply equal [ 'confirm' ]`, at lines 186, 193, 199, 288 and 268. Line 268 is test 10's last step (Escape after recovery), as predicted. |
+| B2 | Both `disabled={confirming}` → `disabled={false}` | Test 6 [C], `expected false to be true` at line 220 (`cancel().disabled`), and test 10 at line 258, its first assertion (`confirmButton().disabled` after the click), as predicted. |
+| B3 | `<Modal open={open \|\| confirming}` | Test 8 [C], `expected <div role="dialog" …> to be null` at line 240. |
+| B4 | While `open && confirming`, a capture-phase `document` `keydown` listener calls `stopImmediatePropagation()` on Escape | Test 14 [C], `expected [] to deeply equal [ 'modal' ]` at line 306. |
+
+All 7 [C] tests failed under their assigned break, for the expected reason. No assigned test passed or failed for an unrelated reason. Tests 4, 5, 7, 9, 11 and 13 did not fail under any break, as predicted. They are proven by the red phase.
+
+**Rulings (deviations from the plan's text):**
+1. Task 1: `contextforge/record-key-order` applies to test files under `packages/ui/src`. The fixture's `state` keys and their `beforeEach` resets are therefore in the rule's order (`confirming`, `confirmMode`, `confirmOpen`, `drawerOpen`, `modalOpen`), not the plan's listing order. Top-level helpers are in name order for `contextforge/function-order`. This is lint conformance, not a plan change.
+2. Task 1: the test-10/11 caller model is wrapped in a helper, `rejectAndSettle()`, and the confirm-dialog open step in `openConfirm(confirming)`. These are planning-level helper names. The plan's arrangements and assertions are unchanged.
+
+### Task 2 — verification (actual results)
+
+| Check | Result |
+| --- | --- |
+| `pnpm install --frozen-lockfile` | PASS, exit 0 |
+| `pnpm run lint` | PASS. turbo 6/6 tasks. |
+| `pnpm --filter web exec tsc --noEmit` | PASS, exit 0 |
+| `pnpm run test` | PASS. turbo 10/10 tasks: `@clensy/ui` 11 files 124/124 (baseline 112 − 2 replaced + 14); `web` 50 files 2202/2202; `@clensy/web` 16 files 418/418; `@clensy/validation` 79/79; `@clensy/client` 13/13; `api` 75 suites 1071/1071. `api`, `@clensy/client` and `@clensy/validation` were turbo cache hits, because none of their inputs changed. |
+| Scope (Step 2) | PASS. `git diff --name-only 4257fb7 HEAD` lists 4 paths, each in exactly one group. **#194 implementation (2):** `packages/ui/src/base/dialogs/confirm-dialog.test.tsx`, `packages/ui/src/base/dialogs/confirm-dialog.tsx`. **#194 workflow artifacts (2):** the spec (Amendment #194) and this plan. `git diff --quiet 4257fb7 HEAD -- modal.tsx use-dialog-behavior.ts form-dialog.tsx detail-drawer.tsx apps packages/web pnpm-lock.yaml` exits 0. |
+
+**What the results prove.** The §9.3 behavior is proven at the component level by `confirm-dialog.test.tsx`: the red phase for the new behaviors, and B1–B4 for the [C] tests. The `web` and `@clensy/web` results are **regression coverage only**. Per [Coverage](#coverage-component-tests-vs-regression-suites), no suite opens the Staff or Bookings `ConfirmDialog`, and no suite renders the Bookings page. Their passing shows nothing else regressed. It does not show that the Staff or Bookings flows behave as §9.3 requires.
+
+Not run: a manual browser check of the Staff disable or Bookings delete flow. It is not required by the plan or by spec §9.8. An owner may do it at M7 or before merge.
+
+## Slice Completion Report (M6)
+
+| Field | Result |
+| --- | --- |
+| Slice | #194 ConfirmDialog confirming guard |
+| Tracking | https://github.com/rexescario-dev/clensy-platform/issues/194 |
+| M4 | Plan **Accepted** |
+| M5 | Review **Accepted** |
+| M6 | **Complete** |
+| M7 | Pending |
+| M8 | Pending |
+| M9 | Pending |
+| Branch | `feat/194-confirm-dialog-confirming-guard` |
+| PR | Not yet opened |
+| Status | **Ready for M7** |
+
+### Shipped
+
+- While `confirming`, a `ConfirmDialog` refuses Escape, backdrop and Cancel dismissal, with no feedback and no replay (spec §9.3.1).
+- A topmost confirming `ConfirmDialog` consumes Escape. A `DetailDrawer` underneath stays open (§9.3.2).
+- Dismissal returns to normal on the render where the caller clears `confirming`, including after a rejected `onConfirm`. The guard keeps no lock of its own (§9.3.3, §9.5).
+- Programmatic close and the disabled buttons are unchanged. No caller, shared primitive or dependency changed.
+- The #180 characterization tests that pinned "still closes while confirming" are replaced by 14 tests of §9.3, with B1–B4 break evidence for the 7 [C] tests.
+
+### Validation
+
+| Check | Result |
+| --- | --- |
+| Tests | **Passed** (`pnpm run test`, 10/10 turbo tasks; `@clensy/ui` 124/124) |
+| Typecheck | **Passed** (`pnpm --filter web exec tsc --noEmit`; `@clensy/ui` `tsc --noEmit`) |
+| Lint | **Passed** (`pnpm run lint`, 6/6) |
+| Build | **Passed** (`@clensy/ui` `build` = `tsc --noEmit`) |
+| Package validation | **Passed** (`pnpm install --frozen-lockfile`; scope audit, 4 paths) |
+
+### Next Gate
+
+**M7 — Code Review** (a fresh, independent reviewer, per `CLAUDE.md`)
