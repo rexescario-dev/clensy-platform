@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted** at M5, 2026-10-23, with two clarifications folded in (see M5 decision). M6 complete ([Execution record](#execution-record)). M7 **Approved for merge** (fresh independent review). M8, M9 pending. Branch not pushed; no PR yet. |
+| Status | **Accepted** at M5, 2026-10-23, with two clarifications folded in (see M5 decision). M6 complete ([Execution record](#execution-record)). M7 **Approved for merge** (fresh independent review). M8 N/A (deferred). M9 complete. M10 does not apply. Branch not pushed; no PR yet. Closeout awaits the owner's authorization. |
 | M5 decision | **Accepted** — 2026-10-23, by the owner, on the Draft at `1ea0ee7`. Decisions (a)–(f) accepted as written. Caveats: (c) keep the tests on the hook contract, since the existing UI tests cover sidebar interaction; (d) make sure the `window.localStorage` property failure is actually exercised and not bypassed by the test setup; (e) keep each `try`/`catch` limited to its own storage operation. Two clarifications for M6: (1) keep the first-render behavior: the state starts expanded and the saved value is restored in the mount Effect, with no storage access during render and no change to initialization timing; (2) prove each failure on its own and **verify in each test that the stubbed failure was actually triggered**. Clarification (2) is applied below as an added assertion in R1–R4: the stub's spy was called. Execution method: **native**, followed by one fresh independent M7 review. Expected outcomes remain predictions until M6 runs them. |
 | Date | 2026-10-23 |
 | Tracking issue | [#197](https://github.com/rexescario-dev/clensy-platform/issues/197) "Handle unavailable localStorage in the sidebar collapsed state". Source: `useEffect` audit at `d5d845e`, finding 2. |
@@ -245,3 +245,63 @@ The decision rests on a review by a **fresh, independent agent** on the most cap
 - **Summary:** The fix does what Task 2 Step 1 says. The read stays in the mount Effect. Each `try` covers only its own storage operation, including the `window.localStorage` access. `setCollapsed` comes first and sits outside the write `try`. The catch comments match `shell-chrome.tsx`. Every R test asserts that its stub was actually triggered (M5 clarification 2). No scope expansion. M5 acceptance (`d52f928`) came before Task 1.
 - **Blocking findings:** None.
 - **Non-blocking observations** (they do not affect the decision): R1 calls `vi.restoreAllMocks()` mid-test, so it can read real storage, and `afterEach` repeats it; this is harmless. A shared storage helper for `shell-chrome.tsx` and this hook is a possible M8 candidate (already deferred).
+
+### M8 — Refactoring: N/A, deferred (2026-10-23)
+
+```text
+Decision: N/A (deferred), by the owner, 2026-10-23
+Subject: feat/197-sidebar-storage-guard; apps/web/lib/use-sidebar-collapsed.ts, apps/web/lib/use-sidebar-collapsed.test.tsx
+Accepted specification: docs/superpowers/specs/2026-09-10-web-shell-and-design-system-design.md
+Accepted implementation plan: this file
+M7 / authorization: Approved for merge (fresh independent review)
+
+Maintainability goals considered:
+- A shared storage helper for shell-chrome.tsx and this hook (M7 observation; already in this plan's Deferred list). Deferred: two call sites alone do not justify a shared abstraction in this narrowly scoped fix. The independent guards stay in use-sidebar-collapsed.ts and shell-chrome.tsx.
+- R1's mid-test vi.restoreAllMocks() (M7 observation). Kept: it restores the real Storage methods so the test can read what was written, it does not affect any later assertion, and afterEach restores mocks and clears storage again, so nothing leaks into other tests. Moving all restoration into the cleanup path is preferred when convenient, but not worth expanding this bug fix.
+
+Verification: Before: as recorded at M6 and M7. After: not run (no change).
+
+Externally observable behavior changes: None
+
+Gate: N/A — proceed to M9.
+```
+
+### M9 — Documentation: Complete (2026-10-23)
+
+```text
+Decision: Complete
+Subject: #197, feat/197-sidebar-storage-guard
+Accepted specification: docs/superpowers/specs/2026-09-10-web-shell-and-design-system-design.md (no amendment; owner decision)
+Accepted implementation plan: this file
+M7: Approved for merge (fresh independent review)
+M8: N/A (deferred)
+
+Documentation scope:
+- This plan's Status row and Gate outcomes
+- docs/superpowers/README.md (plan count)
+
+Updated artifacts:
+- This plan, Status row ← M7, M8, M9 and M10 outcomes
+- docs/superpowers/README.md: "70 so far" → "71 so far" (`ls docs/superpowers/plans | wc -l` = 71 on this branch) ← this slice's plan
+
+Editorial changes: None
+
+Content updates:
+- Status row; plan count
+
+Not changed: apps/web/README.md and every other guide. No doc outside the specs and plans names useSidebarCollapsed or clensy.sidebar.collapsed (grep over docs/ and apps/web/README.md). The specs stay as they are: persistence under clensy.sidebar.collapsed is unchanged, and the unavailable-storage fallback is a bug fix under that contract (owner decision). docs/history/shipped-slices.md is for slices that changed the API's behavior; this one did not.
+
+Verification:
+- Links checked: the Status row's #execution-record anchor resolves; the README link to plans/ is unchanged
+- Heading hierarchy checked: Gate outcomes holds ### M5, M7, M8, M9, M10 entries
+- Status consistency checked: Status row matches the Gate outcomes
+- Cross-references checked: plan, spec and issue links unchanged
+- Terminology checked: "collapse", "clensy.sidebar.collapsed", "expanded" as the specs use them
+- Duplicates / outdated refs checked: none found
+
+Gate: Documentation complete. Code/behavior/contracts unchanged by this stage.
+```
+
+### M10 — Workflow Validation: does not apply (2026-10-23)
+
+The slice changes no workflow assets: `git diff main -- docs/workflows workflow.yaml .claude` is empty. Per the process spec §2.12, M10 applies only when a slice changes workflow assets.
