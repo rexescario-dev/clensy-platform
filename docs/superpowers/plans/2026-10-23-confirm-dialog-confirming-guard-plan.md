@@ -399,3 +399,29 @@ Not run: a manual browser check of the Staff disable or Bookings delete flow. It
 ### Next Gate
 
 **M7 — Code Review** (a fresh, independent reviewer, per `CLAUDE.md`)
+
+## Gate outcomes
+
+### M7 — Code Review (2026-10-23)
+
+**Reviewer:** a fresh, independent, read-only agent on the most capable model (Opus 5.5). It did not write the change and made no changes to the repository. It reviewed `4257fb7..b46383b` against the Accepted spec (Amendment #194), this plan, its Execution record and issue #194. **This is not a self-review.** It satisfies the `CLAUDE.md` M7 rule for application-code slices.
+
+**Decision: Approved for merge.** No blocking findings.
+
+- **Plan tasks:** Task 1 Steps 1–6 ✓, Task 2 Steps 1–3 ✓. The two recorded rulings (lint-driven order, helper names) were accepted as planning-level.
+- **M6 gate:** the implementation (`3185379`) follows the M5 acceptance (`8a559f5`).
+- **Verification the reviewer ran at `b46383b`:** `@clensy/ui` vitest 124/124 (fresh), lint and `tsc --noEmit` clean; `confirm-dialog.test.tsx` 14/14 with titles matching plan tests 1–14 and no unhandled rejections; `pnpm run lint` 6/6; `web` `tsc --noEmit` clean; `pnpm run test` 10/10 (turbo cache replays); the scope audit found exactly 4 paths and `git diff --quiet` on every shared primitive, `apps`, `packages/web`, `pnpm-lock.yaml` and both `package.json` files; the spec diff removes no lines and does not edit §8.
+- **Independent re-runs, in a disposable worktree:** the red phase and B1–B4 reproduced the recorded failing titles, messages and line numbers exactly. Three extra probes:
+  - P1, the topmost-only check removed from the hook, fails exactly test 13, with `['drawer']`. So test 13 detects the drawer underneath closing.
+  - P2, `ConfirmDialog` unlocking itself on a caught rejection, fails exactly test 11.
+  - P3, `ConfirmDialog` keeping its own in-flight lock, fails exactly tests 10 and 12.
+- **Owner focus points:**
+  - (1) Stacked Escape is proven both ways, by the red phase and by P1.
+  - (2) The rejection tests model the caller, and P2 and P3 show they rule out inferred settlement and an own lock.
+  - (3) The three close behaviors stay distinct.
+  - (4) The B1–B4 evidence meets `code-review.md` step 7.
+  - (5) Scope and coverage claims do not overclaim.
+- **Non-blocking observations:**
+  - The repo-wide lint and test runs were turbo cache replays. `pnpm run test --force` before merge would give fully fresh app-suite evidence.
+  - The task checkboxes are still unticked, which is cosmetic.
+  - No manual browser check of the Staff or Bookings flows was done. It is not required by §9.8.
