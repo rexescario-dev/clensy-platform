@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted** at M5, 2026-10-23, with one clarification applied ([Revision 2 (M5 review 1)](#revision-2-m5-review-1)). Spec Amendment #194 is Accepted at M3. M6 **complete** ([Execution record](#execution-record)). M7 **Approved for merge** (fresh independent review). M8 N/A. M9 complete. M10 does not apply. PR open; merge awaits the owner. |
+| Status | **Accepted** at M5, 2026-10-23, with one clarification applied ([Revision 2 (M5 review 1)](#revision-2-m5-review-1)). Spec Amendment #194 is Accepted at M3. M6 **complete** ([Execution record](#execution-record)). M7 **Approved for merge** (fresh independent review). M8 N/A. M9 complete. M10 does not apply. PR [#203](https://github.com/rexescario-dev/clensy-platform/pull/203) open, CI green on `95c64df` (Lint, Test, Release gate, API e2e); merge awaits the owner. |
 | M5 decision | **Accepted** — 2026-10-23, by the owner, reviewing `13cd4ca`. All areas pass: scope, close guard, stacked Escape (test 13 must still show both dialogs open and the drawer's `onClose` not called), the caller-modelled rejection tests, the characterization tests, the B1–B4 breaks (predictions until executed), verification, and the deferred Bookings trigger. One clarification before M6: keep user-initiated close, the disabled buttons and programmatic close distinct. The owner also confirmed that the spec stays Accepted at M3. Execution contract: record actual test and break outcomes, not predicted counts; M7 needs a fresh independent review of the actual diff, including the dialog stack behavior and the caller-modelled rejection tests. |
 | Date | 2026-10-23 |
 | Tracking issue | [#194](https://github.com/rexescario-dev/clensy-platform/issues/194) "Decide whether ConfirmDialog should refuse dismissal while confirming". |
@@ -509,3 +509,9 @@ Gate: Documentation complete. Code/behavior/contracts unchanged by this stage.
 ### M10 — Workflow Validation: does not apply (2026-10-23)
 
 The slice changes no workflow assets: `git diff 4257fb7 HEAD -- docs/workflows workflow.yaml .claude` is empty. Per the process spec §2.12, M10 applies only when a slice changes workflow assets.
+
+### PR and CI (2026-10-23)
+
+- PR [#203](https://github.com/rexescario-dev/clensy-platform/pull/203), opened from `feat/194-confirm-dialog-confirming-guard` at `95c64df`, base `main` at `4257fb7` (unchanged).
+- CI on `95c64df`: Lint, Test, Release gate and API e2e all **SUCCESS**. `mergeable`: MERGEABLE.
+- `gh pr diff 203 --name-only` lists the same 7 paths as `git diff --name-only 4257fb7 HEAD`. `git diff --quiet b46383b HEAD -- packages apps/web/app apps/web/lib apps/api` exits 0, so nothing after the M7-reviewed head is code. Only the four docs paths of the M9 commit changed.
