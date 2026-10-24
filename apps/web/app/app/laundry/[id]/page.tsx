@@ -14,10 +14,12 @@ import {
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState, type ReactNode } from 'react';
+import { LaundryInvoiceCard, LaundryOrderPaymentCard } from '../../../../components/laundry/laundry-invoice-payment';
 import { LaundryServicesEditor } from '../../../../components/laundry/laundry-services-editor';
 import { LaundryPriceCard } from '../../../../components/laundry/laundry-price-card';
 import { LaundryWeighingEditor } from '../../../../components/laundry/laundry-weighing-editor';
 import { formatMinorUnits } from '../../../../lib/format-price';
+import { laundryInvoiceView, laundryPaymentFailureAlert, laundryPaymentView } from '../../../../lib/laundry-invoice-payment';
 import { isUuid } from '../../../../lib/laundry-order-list-query';
 import {
   LAUNDRY_ORDER_SECTIONS,
@@ -41,6 +43,8 @@ import {
   type LaundryServiceSelectionState,
 } from '../../../../lib/use-laundry-service-selection';
 import { useConfirmLaundryPrice, type ConfirmLaundryPriceState } from '../../../../lib/use-confirm-laundry-price';
+import { useGenerateLaundryInvoice, type GenerateLaundryInvoiceState } from '../../../../lib/use-generate-laundry-invoice';
+import { useLaundryOrderTransition, type LaundryOrderTransitionState } from '../../../../lib/use-laundry-order-transition';
 
 type LaundryOrderDetail = NonNullable<LaundryOrderQuery['laundryOrder']>;
 type Invoice = InvoiceForOrderQuery['invoices']['nodes'][number];
@@ -49,8 +53,10 @@ type Translate = (key: string) => string;
 // The order workspace (lifecycle spec §8.4.4, #156). Weighing records a
 // weight (#155). Services chooses the base service and add-ons (#158).
 // Price shows the estimate and confirms it, or the final price (#162).
-// Invoice (#166) and Actions (#165) still show facts until their issues add
-// controls. The list still opens the drawer until the cutover (#161).
+// Invoice and payment generates the invoice and runs the two payment verbs
+// (#166). Actions still names the remaining lifecycle verbs as text until
+// #165 adds controls. The list still opens the drawer until the cutover
+// (#161).
 export default function LaundryOrderPage() {
   const { id } = useParams<{ id: string }>();
   // A new key per order, so moving between orders starts fresh.
@@ -73,6 +79,10 @@ function LaundryOrderWorkspace({ id }: { id: string }) {
   // Lives here, above Weighing and Price, so both editors are disabled
   // while a price is confirmed and its refetch runs (#162 owner decision 6.3).
   const confirmPrice = useConfirmLaundryPrice({ refetch: () => orderQuery.refetch() });
+  // The page's one in-flight guard for lifecycle verbs (#166). #165's
+  // Actions buttons and confirm dialogs use this same instance.
+  const transition = useLaundryOrderTransition({ orderId: id, refetch: () => orderQuery.refetch() });
+  const generateInvoice = useGenerateLaundryInvoice({ orderId: id, refetch: () => invoiceQuery.refetch() });
   // A weight being saved and reloaded makes the estimate stale before the
   // order shows the new weight, so Price holds Confirm until both settle
   // (#162 M7 follow-up).
@@ -189,11 +199,14 @@ function LaundryOrderWorkspace({ id }: { id: string }) {
       />
 
       <OrderSection section="invoice" t={t}>
-        <InvoiceBody
-          error={Boolean(invoiceQuery.error)}
-          invoice={invoices?.[0]}
-          resolved={invoices !== undefined}
-          t={t}
+        <InvoicePaymentBody
+          generateInvoice={generateInvoice}
+          invoiceError={Boolean(invoiceQuery.error)}
+          invoiceLoading={invoiceQuery.loading}
+          invoices={invoices}
+          order={order}
+          transition={transition}
+          verbs={verbs}
         />
       </OrderSection>
 
@@ -440,42 +453,57 @@ function PriceBody({
   );
 }
 
-function InvoiceBody({
-  error,
-  invoice,
-  resolved,
-  t,
+// #166: generating an invoice and the order's payment verbs, side by side
+// and kept separate. Marking the order paid changes its status only; the
+// invoice's payment status is #39's (lifecycle spec §8.4.4).
+function InvoicePaymentBody({
+  generateInvoice,
+  invoiceError,
+  invoiceLoading,
+  invoices,
+  order,
+  transition,
+  verbs,
 }: {
-  error: boolean;
-  invoice: Invoice | undefined;
-  // `resolvedInvoiceNodes` returned a node list: finished, no error,
-  // connection present.
-  resolved: boolean;
-  t: Translate;
+  generateInvoice: GenerateLaundryInvoiceState;
+  invoiceError: boolean;
+  invoiceLoading: boolean;
+  // `resolvedInvoiceNodes`: a node list only from a finished, error-free
+  // result that carries the connection.
+  invoices: readonly Invoice[] | undefined;
+  order: LaundryOrderDetail;
+  transition: LaundryOrderTransitionState;
+  verbs: readonly LaundryOrderVerb[];
 }) {
-  if (error) return <p className="text-red-600">{t('order.invoice.error')}</p>;
-  if (!resolved) return null;
-  if (!invoice) return <p>{t('order.invoice.none')}</p>;
   return (
-    <dl className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-      <div>
-        <dt className="text-slate-500">{t('order.invoice.number')}</dt>
-        <dd className="font-medium text-slate-900">{invoice.invoiceNumber}</dd>
-      </div>
-      <div>
-        <dt className="text-slate-500">{t('order.invoice.total')}</dt>
-        <dd className="font-medium text-slate-900">{formatMinorUnits(invoice.totalMinorUnits)}</dd>
-      </div>
-      <div>
-        <dt className="text-slate-500">{t('order.invoice.paymentStatus')}</dt>
-        <dd className="font-medium text-slate-900">{t(`invoicePaymentStatus.${invoice.paymentStatus}`)}</dd>
-      </div>
-    </dl>
+    <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:gap-4">
+      <LaundryInvoiceCard
+        failed={generateInvoice.failed}
+        generating={generateInvoice.generating}
+        invoice={invoices?.[0]}
+        view={laundryInvoiceView({ error: invoiceError, invoices, loading: invoiceLoading, verbs })}
+        onGenerate={(paymentTerms) => void generateInvoice.generate(paymentTerms)}
+      />
+      <LaundryOrderPaymentCard
+        // `order.status` is read from the order query on every render. The
+        // transition hook keeps `pending` until its refetch settles; once
+        // Apollo has applied that refetch, this is the reloaded status, and a
+        // failure is hidden only when it is the attempted outcome (decision
+        // k). That Apollo applies a refetch to the query, or sets `error`
+        // when it fails, is relied on, not tested: the page tests set the
+        // query state themselves.
+        failure={laundryPaymentFailureAlert(transition.failure, order.status)}
+        pending={transition.pending}
+        view={laundryPaymentView(order.status, verbs)}
+        onRun={(verb) => void transition.run(verb)}
+      />
+    </div>
   );
 }
 
 // Names what the actor may do next, as text. The server re-checks every
-// verb; this page offers no control (#156 §Role and lifecycle).
+// verb; Actions offers no control yet (#165). The two payment verbs are
+// buttons in Invoice and payment (#166).
 function ActionsBody({ verbs, t }: { verbs: LaundryOrderVerb[]; t: Translate }) {
   if (verbs.length === 0) return <p>{t('noActions')}</p>;
   return (

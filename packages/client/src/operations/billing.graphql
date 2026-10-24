@@ -69,7 +69,9 @@ query InvoiceForOrder($laundryOrderId: ID!) {
       id
       invoiceNumber
       totalMinorUnits
+      amountDueMinorUnits
       paymentStatus
+      paymentTerms
     }
   }
 }

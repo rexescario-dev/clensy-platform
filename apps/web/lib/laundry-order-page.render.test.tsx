@@ -102,10 +102,14 @@ vi.mock('@clensy/client', () => ({
   useCurrentAdminQuery: () => ({
     data: page.role === undefined ? undefined : { currentAdmin: { role: page.role } },
   }),
+  // The Invoice and payment section's mutations (#166); never called by a
+  // static render.
+  useGenerateInvoiceFromOrderMutation: () => [() => Promise.resolve({ data: {} }), { loading: false }],
   useInvoiceForOrderQuery: (options: { skip?: boolean; variables?: unknown }) => {
     page.invoiceOptions.push(options);
+    const refetch = () => Promise.resolve();
     if (page.invoiceShape !== 'nodes') {
-      return { data: page.invoiceShape === 'noData' ? undefined : {}, error: undefined, loading: false };
+      return { data: page.invoiceShape === 'noData' ? undefined : {}, error: undefined, loading: false, refetch };
     }
     return {
       data:
@@ -114,6 +118,7 @@ vi.mock('@clensy/client', () => ({
           : undefined,
       error: page.invoiceError,
       loading: page.invoiceLoading,
+      refetch,
     };
   },
   useLaundryOrderQuery: (options: { fetchPolicy?: string; skip?: boolean; variables?: unknown }) => {
@@ -127,6 +132,8 @@ vi.mock('@clensy/client', () => ({
       refetch: () => Promise.resolve(),
     };
   },
+  useMarkLaundryOrderAwaitingPaymentMutation: () => [() => Promise.resolve({ data: {} }), { loading: false }],
+  useMarkLaundryOrderPaidMutation: () => [() => Promise.resolve({ data: {} }), { loading: false }],
   usePriceLaundryOrderMutation: () => [
     (...args: unknown[]) => {
       page.priceMutationCalls.push(args);
@@ -205,11 +212,11 @@ describe('laundry order page', () => {
     expect(html).toContain('Back to laundry orders');
     expect(html).not.toContain('role="dialog"');
     expect(html).not.toContain('<table');
-    // Weighing, Services and Price may hold controls (#155, #158, #162).
-    // Everything before the first section, and Overview, Invoice and
-    // Actions, stay read-only.
+    // Weighing, Services, Price and Invoice and payment may hold controls
+    // (#155, #158, #162, #166). Everything before the first section, and
+    // Overview and Actions, stay read-only.
     const header = html.slice(0, html.indexOf('<section'));
-    for (const part of [header, section(html, 'overview'), section(html, 'invoice'), section(html, 'actions')]) {
+    for (const part of [header, section(html, 'overview'), section(html, 'actions')]) {
       expect(part).not.toContain('<button');
       expect(part).not.toContain('<form');
       expect(part).not.toContain('<input');
@@ -236,7 +243,7 @@ describe('laundry order page', () => {
     expect(positions.every((position) => position > -1)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
     expect(count(html, '<h2')).toBe(6);
-    for (const heading of ['Overview', 'Weighing', 'Services', 'Price', 'Invoice', 'Actions']) {
+    for (const heading of ['Overview', 'Weighing', 'Services', 'Price', 'Invoice and payment', 'Actions']) {
       expect(html).toContain(`<h2 class="text-base font-semibold text-slate-900">${heading}</h2>`);
     }
     expect(count(html, 'class="scroll-mt-6"')).toBe(6);
@@ -607,8 +614,9 @@ describe('laundry order page', () => {
     const html = await renderPage();
     const actions = section(html, 'actions');
     expect(actions).toContain('Available to your role:');
-    expect(actions).toContain('Mark awaiting payment');
-    expect(actions).toContain('Mark paid');
+    // #166: the payment verbs are buttons in Invoice and payment.
+    expect(actions).not.toContain('Mark awaiting payment');
+    expect(actions).not.toContain('Mark paid');
     expect(actions).toContain('Cancel order');
     expect(actions).not.toContain('Generate invoice');
     expect(actions).not.toContain('Record weight');
@@ -624,8 +632,11 @@ describe('laundry order page', () => {
     expect(html).not.toContain('aria-current="true"');
   });
 
+  // PROCESSING: TENANT_OWNER may generate an invoice there but has no
+  // payment verb, so only the invoice decides between Invoice and Actions
+  // (#166 moved the payment verbs to Invoice and payment).
   it('shows the invoice and marks Actions once an invoice exists', async () => {
-    page.order = order({ status: 'PRICED' });
+    page.order = order({ status: 'PROCESSING' });
     page.invoiceNodes = [{ id: 'i1', invoiceNumber: 'INV-0001', paymentStatus: 'UNPAID', totalMinorUnits: 45000 }];
     const html = await renderPage();
     const invoice = section(html, 'invoice');
@@ -636,7 +647,10 @@ describe('laundry order page', () => {
     expect(html).toMatch(/<a[^>]*href="#laundry-order-actions"[^>]*aria-current="true"|<a[^>]*aria-current="true"[^>]*href="#laundry-order-actions"/);
   });
 
+  // #166: an actor who may generate sees the terms form instead, so this
+  // uses OPS_MANAGER, who may not.
   it('says when there is no invoice yet', async () => {
+    page.role = 'OPS_MANAGER';
     const html = await renderPage();
     expect(section(html, 'invoice')).toContain('No invoice yet.');
   });
@@ -644,28 +658,28 @@ describe('laundry order page', () => {
   it('says when the invoice cannot be loaded', async () => {
     page.invoiceError = new Error('network down');
     const html = await renderPage();
-    expect(section(html, 'invoice')).toContain('Unable to load the invoice.');
+    expect(section(html, 'invoice')).toContain('Unable to load invoice.');
     expect(section(html, 'invoice')).not.toContain('No invoice yet.');
   });
 
   // M5 review 1: retained "no invoice" data would mark Invoice and say
   // "No invoice yet." if it were read. It is not: the nav falls through to
-  // Actions (TENANT_OWNER may mark a PRICED order paid) and the section
-  // shows the error.
+  // Actions (TENANT_OWNER may mark a PROCESSING order ready) and the
+  // section shows the error.
   it('ignores retained invoice data while the invoice query has failed', async () => {
-    page.order = order({ status: 'PRICED' });
+    page.order = order({ status: 'PROCESSING' });
     page.invoiceNodes = [];
     page.invoiceRetained = true;
     page.invoiceError = new Error('network down');
     const html = await renderPage();
     expect(html).not.toMatch(/<a[^>]*href="#laundry-order-invoice"[^>]*aria-current="true"/);
     expect(html).toMatch(/<a[^>]*href="#laundry-order-actions"[^>]*aria-current="true"/);
-    expect(section(html, 'invoice')).toContain('Unable to load the invoice.');
+    expect(section(html, 'invoice')).toContain('Unable to load invoice.');
     expect(section(html, 'invoice')).not.toContain('No invoice yet.');
   });
 
   it('ignores retained invoice data while the invoice query reloads', async () => {
-    page.order = order({ status: 'PRICED' });
+    page.order = order({ status: 'PROCESSING' });
     page.invoiceNodes = [];
     page.invoiceRetained = true;
     page.invoiceLoading = true;
@@ -673,7 +687,9 @@ describe('laundry order page', () => {
     expect(html).not.toMatch(/<a[^>]*href="#laundry-order-invoice"[^>]*aria-current="true"/);
     expect(html).toMatch(/<a[^>]*href="#laundry-order-actions"[^>]*aria-current="true"/);
     expect(section(html, 'invoice')).not.toContain('No invoice yet.');
-    expect(section(html, 'invoice')).not.toContain('Unable to load the invoice.');
+    expect(section(html, 'invoice')).not.toContain('Unable to load invoice.');
+    // The invoice card alone shows LoadingState (#166).
+    expect(section(html, 'invoice')).toContain('role="status"');
   });
 
   // M5 review 3: only a confirmed node list says whether an invoice exists.
@@ -681,13 +697,13 @@ describe('laundry order page', () => {
     ['with no data', 'noData'],
     ['without the invoice connection', 'noConnection'],
   ] as const)('treats a finished invoice result %s as unresolved', async (_label, shape) => {
-    page.order = order({ status: 'PRICED' });
+    page.order = order({ status: 'PROCESSING' });
     page.invoiceShape = shape;
     const html = await renderPage();
     expect(html).not.toMatch(/<a[^>]*href="#laundry-order-invoice"[^>]*aria-current="true"/);
     expect(html).toMatch(/<a[^>]*href="#laundry-order-actions"[^>]*aria-current="true"/);
     expect(section(html, 'invoice')).not.toContain('No invoice yet.');
-    expect(section(html, 'invoice')).not.toContain('Unable to load the invoice.');
+    expect(section(html, 'invoice')).not.toContain('Unable to load invoice.');
   });
 
   it('renders the shared progress with the payment branch current', async () => {
@@ -755,5 +771,109 @@ describe('laundry order page', () => {
     expect(html).toContain(BACK_LINK);
     expect(page.orderOptions[0]).toMatchObject({ skip: true });
     expect(page.invoiceOptions[0]).toMatchObject({ skip: true });
+  });
+});
+
+// #166: the Invoice and payment section. Generate and the two payment
+// verbs are gated by `laundryOrderActions` only.
+describe('order page invoice and payment (#166)', () => {
+  // The text of each button in the markup.
+  function buttonLabels(html: string): string[] {
+    return [...html.matchAll(/<button\b[^>]*>(.*?)<\/button>/g)].map((match) => match[1]!);
+  }
+
+  const INVOICE = {
+    id: 'i1',
+    amountDueMinorUnits: 45000,
+    invoiceNumber: 'INV-0001',
+    paymentStatus: 'UNPAID',
+    paymentTerms: 'PAY_NOW',
+    totalMinorUnits: 45000,
+  };
+
+  it('case 1: FINANCE sees Generate invoice on PRICED', async () => {
+    page.order = order({ status: 'PRICED' });
+    page.role = 'FINANCE';
+    const invoice = section(await renderPage(), 'invoice');
+    expect(buttonLabels(invoice)).toContain('Generate invoice');
+    expect(invoice).toContain('Pay on completion');
+  });
+
+  it('case 2: SCHEDULER sees neither Generate nor payment buttons on PRICED', async () => {
+    page.order = order({ status: 'PRICED' });
+    page.role = 'SCHEDULER';
+    const invoice = section(await renderPage(), 'invoice');
+    expect(buttonLabels(invoice)).toEqual([]);
+    expect(invoice).toContain('No invoice yet.');
+  });
+
+  it('case 3: OPS_MANAGER sees Mark paid and not Generate on PRICED', async () => {
+    page.order = order({ status: 'PRICED' });
+    page.role = 'OPS_MANAGER';
+    const invoice = section(await renderPage(), 'invoice');
+    expect(buttonLabels(invoice)).toEqual(['Mark paid', 'Mark awaiting payment']);
+    expect(invoice).not.toContain('Generate invoice');
+  });
+
+  it('case 4: RECEIVED offers neither generate nor mark paid', async () => {
+    page.order = order({ status: 'RECEIVED', totalMinorUnits: null, weightGrams: null });
+    page.role = 'TENANT_OWNER';
+    expect(section(await renderPage(), 'invoice')).not.toContain('<button');
+  });
+
+  it('case 5: an existing invoice shows number, formatted amount, terms and the billing href', async () => {
+    page.order = order({ status: 'PRICED' });
+    page.role = 'TENANT_OWNER';
+    page.invoiceNodes = [INVOICE];
+    const invoice = section(await renderPage(), 'invoice');
+    expect(invoice).toContain('INV-0001');
+    expect(invoice).toContain('₱450.00');
+    expect(invoice).toContain('>Unpaid<');
+    expect(invoice).toContain('Pay now');
+    expect(invoice).toContain('href="/app/billing?detail=i1"');
+    expect(invoice).not.toContain('Generate invoice');
+  });
+
+  it('case 6: AWAITING_PAYMENT offers Mark paid only', async () => {
+    page.order = order({ status: 'AWAITING_PAYMENT' });
+    page.role = 'CUSTOMER_SUPPORT';
+    expect(buttonLabels(section(await renderPage(), 'invoice'))).toEqual(['Mark paid']);
+  });
+
+  it('case 7: PAID says processing can start, with no payment button', async () => {
+    page.order = order({ status: 'PAID' });
+    page.role = 'OPS_MANAGER';
+    const invoice = section(await renderPage(), 'invoice');
+    expect(invoice).toContain('Paid. Processing can start.');
+    expect(buttonLabels(invoice)).not.toContain('Mark paid');
+    expect(buttonLabels(invoice)).not.toContain('Mark awaiting payment');
+  });
+
+  it('case 8: the role loading offers no buttons in the Invoice section', async () => {
+    page.order = order({ status: 'PRICED' });
+    page.role = undefined;
+    expect(section(await renderPage(), 'invoice')).not.toContain('<button');
+  });
+
+  it('case 9: the estimate is not on the invoice card', async () => {
+    page.order = order({ status: 'PRICED' });
+    expect(section(await renderPage(), 'invoice')).not.toContain('Estimate');
+  });
+
+  it('case 10: Actions keeps only the remaining lifecycle verbs, as text', async () => {
+    page.order = order({ status: 'PRICED' });
+    page.role = 'FINANCE';
+    let html = await renderPage();
+    expect(section(html, 'actions')).toContain('No further actions for this order.');
+    expect(section(html, 'actions')).not.toContain('<button');
+    expect(buttonLabels(section(html, 'invoice'))).toEqual(['Generate invoice', 'Mark paid', 'Mark awaiting payment']);
+
+    page.order = order({ status: 'PAID' });
+    page.role = 'OPS_MANAGER';
+    html = await renderPage();
+    const actions = section(html, 'actions');
+    expect(actions).toContain('Start processing');
+    expect(actions).toContain('Refund order');
+    expect(actions).not.toContain('<button');
   });
 });

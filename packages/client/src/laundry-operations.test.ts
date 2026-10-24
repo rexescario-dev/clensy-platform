@@ -1,6 +1,6 @@
 import { print, visit, type DocumentNode } from 'graphql';
 import { describe, expect, it } from 'vitest';
-import { LaundryOrderDocument, PreviewLaundryOrderPriceDocument } from './generated/graphql';
+import { InvoiceForOrderDocument, LaundryOrderDocument, PreviewLaundryOrderPriceDocument } from './generated/graphql';
 
 // The arguments of every `lines` field in a document, printed.
 function linesArguments(document: DocumentNode): string[] {
@@ -69,6 +69,14 @@ describe('laundry operations', () => {
         'minimumChargeMinorUnits',
         'minimumChargeApplied',
       ],
+    ]);
+  });
+
+  // #166: the order page's Invoice card shows terms; one invoice per order
+  // (uq_invoice_laundry_order), so the query needs no sort.
+  it('requests the invoice card fields for the order invoice', () => {
+    expect(selectionsUnder(InvoiceForOrderDocument, 'nodes')).toEqual([
+      ['id', 'invoiceNumber', 'totalMinorUnits', 'amountDueMinorUnits', 'paymentStatus', 'paymentTerms'],
     ]);
   });
 });

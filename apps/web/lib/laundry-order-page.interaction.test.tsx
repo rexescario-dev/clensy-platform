@@ -39,10 +39,22 @@ interface Deferred {
 
 const page = vi.hoisted(() => ({
   id: '3f2a9c1e-0b7d-4e55-9a10-6c2b8d4e7f01',
+  awaiting: vi.fn(),
+  awaitings: [] as Deferred[],
   invoice: vi.fn(),
+  invoiceError: undefined as Error | undefined,
+  // Set by the #166 cases that generate an invoice on purpose.
+  invoiceExpected: false,
+  invoiceNodes: [] as unknown[],
+  invoiceRefetch: vi.fn(),
+  invoiceRefetches: [] as Deferred[],
+  invoices: [] as Deferred[],
   order: null as unknown,
   orderError: undefined as Error | undefined,
   paid: vi.fn(),
+  paids: [] as Deferred[],
+  // Set by the #166 cases that run a payment verb on purpose.
+  paymentExpected: false,
   preview: vi.fn(),
   previewCalls: [] as PriceLaundryOrderInput[],
   previewFail: null as unknown,
@@ -99,13 +111,19 @@ vi.mock('@clensy/client', async (importOriginal) => ({
   useAddOnsQuery: (options: never) => catalogQuery(ADD_ONS, 'addOns')(options),
   useCurrentAdminQuery: () => ({ data: { currentAdmin: { role: page.role } } }),
   useGenerateInvoiceFromOrderMutation: () => [page.invoice, { loading: false }],
-  useInvoiceForOrderQuery: () => ({ data: { invoices: { nodes: [] } }, error: undefined, loading: false }),
+  useInvoiceForOrderQuery: () => ({
+    data: { invoices: { nodes: page.invoiceNodes } },
+    error: page.invoiceError,
+    loading: false,
+    refetch: page.invoiceRefetch,
+  }),
   useLaundryOrderQuery: () => ({
     data: { laundryOrder: page.order },
     error: page.orderError,
     loading: false,
     refetch: page.refetch,
   }),
+  useMarkLaundryOrderAwaitingPaymentMutation: () => [page.awaiting, { loading: false }],
   useMarkLaundryOrderPaidMutation: () => [page.paid, { loading: false }],
   usePriceLaundryOrderMutation: () => [page.price, { loading: false }],
   useServicesQuery: (options: never) => catalogQuery(SERVICES, 'services')(options),
@@ -203,8 +221,22 @@ beforeEach(() => {
   page.refetches.length = 0;
   page.refetch.mockReset();
   page.refetch.mockImplementation(deferred(page.refetches));
+  page.invoices.length = 0;
   page.invoice.mockReset();
+  page.invoice.mockImplementation(deferred(page.invoices));
+  page.paids.length = 0;
   page.paid.mockReset();
+  page.paid.mockImplementation(deferred(page.paids));
+  page.awaitings.length = 0;
+  page.awaiting.mockReset();
+  page.awaiting.mockImplementation(deferred(page.awaitings));
+  page.invoiceRefetches.length = 0;
+  page.invoiceRefetch.mockReset();
+  page.invoiceRefetch.mockImplementation(deferred(page.invoiceRefetches));
+  page.invoiceNodes = [];
+  page.invoiceError = undefined;
+  page.invoiceExpected = false;
+  page.paymentExpected = false;
   page.weigh.mockReset();
   page.weigh.mockImplementation(deferred(page.weighs));
   page.weighs.length = 0;
@@ -218,9 +250,14 @@ afterEach(() => {
   act(() => root.unmount());
   container.remove();
   vi.useRealTimers();
-  // Issue Acceptance: Confirm never generates an invoice or marks an order paid.
-  expect(page.invoice).not.toHaveBeenCalled();
-  expect(page.paid).not.toHaveBeenCalled();
+  // Issue Acceptance: Confirm never generates an invoice or marks an order
+  // paid. Only the #166 cases that do so on purpose opt out, each for its
+  // own card, so each also proves the other card's mutation was not sent.
+  if (!page.invoiceExpected) expect(page.invoice).not.toHaveBeenCalled();
+  if (!page.paymentExpected) {
+    expect(page.paid).not.toHaveBeenCalled();
+    expect(page.awaiting).not.toHaveBeenCalled();
+  }
   if (!page.weighExpected) expect(page.weigh).not.toHaveBeenCalled();
 });
 
@@ -261,6 +298,20 @@ async function settleRefetch(index: number, outcome: { error: Error } | { order:
   } else {
     page.orderError = outcome.error;
     await finish(page.refetches, index, 'reject', outcome.error);
+  }
+  mount();
+}
+
+// The invoice twin of `settleRefetch`. It does NOT exercise Apollo's
+// refetch either: it sets the invoice query state the real hook would
+// expose, settles the promise the hook awaits, and re-renders.
+async function settleInvoiceRefetch(index: number, outcome: { error: Error } | { nodes: unknown[] }) {
+  if ('nodes' in outcome) {
+    page.invoiceNodes = outcome.nodes;
+    await finish(page.invoiceRefetches, index, 'resolve', { data: { invoices: { nodes: outcome.nodes } } });
+  } else {
+    page.invoiceError = outcome.error;
+    await finish(page.invoiceRefetches, index, 'reject', outcome.error);
   }
   mount();
 }
@@ -523,5 +574,230 @@ describe('order page price review (#162)', () => {
     expect(confirmButton().disabled).toBe(false);
     expect(page.previewCalls[page.previewCalls.length - 1]).toEqual(page.previewCalls[0]);
     expect(page.price).not.toHaveBeenCalled();
+  });
+});
+
+// #166: the real page, both cards and both hooks, in jsdom. The refetch
+// helpers set query state; they do not run Apollo's refetch.
+describe('order page invoice and payment (#166)', () => {
+  const INVOICE = {
+    id: 'i1',
+    amountDueMinorUnits: 12345,
+    invoiceNumber: 'INV-2026-000001',
+    paymentStatus: 'UNPAID',
+    paymentTerms: 'PAY_NOW',
+    totalMinorUnits: 12345,
+  };
+
+  function button(name: string, label: string): HTMLButtonElement | undefined {
+    return [...section(name).querySelectorAll('button')].find((candidate) => candidate.textContent === label);
+  }
+
+  function invoiceText(): string {
+    return section('invoice').textContent ?? '';
+  }
+
+  function alerts(): string[] {
+    return [...section('invoice').querySelectorAll('[role="alert"]')].map((alert) => alert.textContent ?? '');
+  }
+
+  function priced(status = 'PRICED') {
+    return { ...pricedOrder(), status };
+  }
+
+  function start(role = 'TENANT_OWNER') {
+    page.order = priced();
+    page.role = role;
+    mount();
+  }
+
+  describe('generate', () => {
+    beforeEach(() => {
+      page.invoiceExpected = true;
+    });
+
+    it('case 1: sends the chosen terms and laundry order id only, toasts, and refetches the invoice', async () => {
+      start();
+      act(() => section('invoice').querySelector<HTMLInputElement>('input[value="PAY_NOW"]')!.click());
+      act(() => button('invoice', 'Generate invoice')!.click());
+      expect(page.invoice).toHaveBeenCalledTimes(1);
+      expect(page.invoices[0]!.options).toEqual({
+        variables: { input: { laundryOrderId: page.id, paymentTerms: 'PAY_NOW' } },
+      });
+      await finish(page.invoices, 0, 'resolve', { data: { generateInvoiceFromOrder: { id: 'i1' } } });
+      expect(document.body.textContent).toContain('Invoice generated.');
+      expect(page.invoiceRefetch).toHaveBeenCalledTimes(1);
+      await settleInvoiceRefetch(0, { nodes: [INVOICE] });
+      expect(invoiceText()).toContain('INV-2026-000001');
+      expect(invoiceText()).toContain('Unpaid');
+      expect(invoiceText()).toContain('Pay now');
+      // Generating does not change the order's status.
+      expect(page.refetch).not.toHaveBeenCalled();
+      expect(container.textContent).toContain('Priced');
+    });
+
+    it('case 2: a double click on Generate sends one request', () => {
+      start();
+      act(() => {
+        button('invoice', 'Generate invoice')!.click();
+        button('invoice', 'Generate invoice')!.click();
+      });
+      expect(page.invoice).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['rejected', 'reject', new Error('network down')],
+      ['resolved with errors', 'resolve', { errors: [{ message: 'Bad request' }] }],
+    ] as const)('cases 3–4: a generate %s alerts, refetches, and re-enables Generate', async (_label, how, value) => {
+      start();
+      act(() => button('invoice', 'Generate invoice')!.click());
+      await finish(page.invoices, 0, how, value);
+      expect(page.invoiceRefetches).toHaveLength(1);
+      await settleInvoiceRefetch(0, { nodes: [] });
+      expect(alerts()).toEqual(['Unable to generate invoice.']);
+      expect(button('invoice', 'Generate invoice')!.disabled).toBe(false);
+      expect(document.body.textContent).not.toContain('Invoice generated.');
+    });
+
+    it('case 5: when another user generated first, the refetch shows their invoice and no stale alert', async () => {
+      start();
+      act(() => button('invoice', 'Generate invoice')!.click());
+      await finish(page.invoices, 0, 'reject', new Error('An invoice already exists for this laundry order'));
+      await settleInvoiceRefetch(0, { nodes: [INVOICE] });
+      expect(invoiceText()).toContain('INV-2026-000001');
+      expect(section('invoice').querySelector('a[href="/app/billing?detail=i1"]')).not.toBeNull();
+      expect(alerts()).toEqual([]);
+      expect(invoiceText()).not.toContain('Unable to generate invoice.');
+      expect(button('invoice', 'Generate invoice')).toBeUndefined();
+    });
+
+    it('case 6: a failed invoice refetch says so and keeps the order page', async () => {
+      start();
+      act(() => button('invoice', 'Generate invoice')!.click());
+      await finish(page.invoices, 0, 'resolve', { data: { generateInvoiceFromOrder: { id: 'i1' } } });
+      await settleInvoiceRefetch(0, { error: new Error('reload failed') });
+      expect(invoiceText()).toContain('Unable to load invoice.');
+      expect(invoiceText()).not.toContain('No invoice yet.');
+      expect(invoiceText()).not.toContain('Unable to generate invoice.');
+      expect(container.querySelector('h1')?.textContent).toBe('Ana Reyes');
+      expect(container.querySelector('#laundry-order-actions')).not.toBeNull();
+    });
+  });
+
+  describe('payment verbs', () => {
+    beforeEach(() => {
+      page.paymentExpected = true;
+    });
+
+    it('case 7: Mark paid sends the order id, toasts, and refetches the order', async () => {
+      start();
+      act(() => button('invoice', 'Mark paid')!.click());
+      expect(page.paids[0]!.options).toEqual({ variables: { input: { orderId: page.id } } });
+      await finish(page.paids, 0, 'resolve', { data: { markLaundryOrderPaid: { id: page.id } } });
+      expect(document.body.textContent).toContain('Order marked paid.');
+      await settleRefetch(0, { order: priced('PAID') });
+      expect(invoiceText()).toContain('Paid. Processing can start.');
+      expect(page.invoiceRefetch).not.toHaveBeenCalled();
+    });
+
+    it('case 8: Mark awaiting payment', async () => {
+      start();
+      act(() => button('invoice', 'Mark awaiting payment')!.click());
+      expect(page.awaitings[0]!.options).toEqual({ variables: { input: { orderId: page.id } } });
+      await finish(page.awaitings, 0, 'resolve', { data: { markLaundryOrderAwaitingPayment: { id: page.id } } });
+      expect(document.body.textContent).toContain('Order marked awaiting payment.');
+      await settleRefetch(0, { order: priced('AWAITING_PAYMENT') });
+      expect(button('invoice', 'Mark paid')).toBeDefined();
+      expect(button('invoice', 'Mark awaiting payment')).toBeUndefined();
+    });
+
+    it('case 9: while one payment verb runs, both buttons are disabled and a second click sends nothing', async () => {
+      start();
+      act(() => {
+        button('invoice', 'Mark paid')!.click();
+        button('invoice', 'Mark awaiting payment')!.click();
+      });
+      expect(page.paid.mock.calls.length + page.awaiting.mock.calls.length).toBe(1);
+      expect(button('invoice', 'Mark paid')!.disabled).toBe(true);
+      expect(button('invoice', 'Mark awaiting payment')!.disabled).toBe(true);
+      await finish(page.paids, 0, 'resolve', { data: { markLaundryOrderPaid: { id: page.id } } });
+      expect(button('invoice', 'Mark paid')!.disabled).toBe(true);
+      await settleRefetch(0, { order: priced() });
+      expect(button('invoice', 'Mark paid')!.disabled).toBe(false);
+    });
+
+    it.each([
+      ['case 10: a rejected Mark paid', 'reject', new Error('network down')],
+      ['case 11: a Mark paid without its payload', 'resolve', { data: { markLaundryOrderPaid: null } }],
+    ] as const)('%s alerts, refetches, and re-enables the buttons', async (_label, how, value) => {
+      start();
+      act(() => button('invoice', 'Mark paid')!.click());
+      await finish(page.paids, 0, how, value);
+      expect(page.refetches).toHaveLength(1);
+      await settleRefetch(0, { order: priced() });
+      expect(alerts()).toEqual(['Unable to mark the order paid.']);
+      expect(button('invoice', 'Mark paid')!.disabled).toBe(false);
+      expect(button('invoice', 'Mark awaiting payment')!.disabled).toBe(false);
+      expect(document.body.textContent).not.toContain('Order marked paid.');
+    });
+
+    it.each([
+      ['Mark paid', 'PAID'],
+      ['Mark awaiting payment', 'AWAITING_PAYMENT'],
+      ['Mark awaiting payment', 'PAID'],
+    ] as const)(
+      'case 12: %s fails, another user already reached %s: the refetch shows it and no alert',
+      async (label, status) => {
+        start();
+        act(() => button('invoice', label)!.click());
+        await finish(label === 'Mark paid' ? page.paids : page.awaitings, 0, 'reject', new Error('Illegal transition'));
+        await settleRefetch(0, { order: priced(status) });
+        expect(alerts()).toEqual([]);
+        expect(invoiceText()).not.toContain('Unable to mark the order');
+        if (status === 'PAID') {
+          expect(invoiceText()).toContain('Paid. Processing can start.');
+          expect(button('invoice', 'Mark paid')).toBeUndefined();
+        } else {
+          expect(button('invoice', 'Mark paid')).toBeDefined();
+          expect(button('invoice', 'Mark awaiting payment')).toBeUndefined();
+        }
+      },
+    );
+
+    it('case 13: a failed order refetch shows the page error state, not live payment buttons', async () => {
+      start();
+      act(() => button('invoice', 'Mark paid')!.click());
+      await finish(page.paids, 0, 'resolve', { data: { markLaundryOrderPaid: { id: page.id } } });
+      await settleRefetch(0, { error: new Error('reload failed') });
+      expect(container.textContent).toContain('Unable to load laundry order.');
+      expect(container.querySelector('#laundry-order-invoice')).toBeNull();
+      const labels = [...container.querySelectorAll('button')].map((candidate) => candidate.textContent);
+      expect(labels).not.toContain('Mark paid');
+      expect(labels).not.toContain('Mark awaiting payment');
+    });
+
+    it('case 14: when another user cancelled the order, the failed Mark paid stays visible', async () => {
+      start();
+      act(() => button('invoice', 'Mark paid')!.click());
+      await finish(page.paids, 0, 'reject', new Error('Illegal transition'));
+      await settleRefetch(0, { order: priced('CANCELLED') });
+      expect(container.querySelector('h1')?.parentElement?.parentElement?.textContent).toContain('Cancelled');
+      expect(alerts()).toEqual(['Unable to mark the order paid.']);
+      expect(button('invoice', 'Mark paid')).toBeUndefined();
+      expect(button('invoice', 'Mark awaiting payment')).toBeUndefined();
+      expect(document.body.textContent).not.toContain('Order marked paid.');
+    });
+
+    // Decision (k) boundary: AWAITING_PAYMENT is not Mark paid's outcome.
+    it('case 15: when another user marked the order awaiting payment, the failed Mark paid stays visible', async () => {
+      start();
+      act(() => button('invoice', 'Mark paid')!.click());
+      await finish(page.paids, 0, 'reject', new Error('Illegal transition'));
+      await settleRefetch(0, { order: priced('AWAITING_PAYMENT') });
+      expect(alerts()).toEqual(['Unable to mark the order paid.']);
+      expect(button('invoice', 'Mark paid')).toBeDefined();
+      expect(button('invoice', 'Mark awaiting payment')).toBeUndefined();
+      expect(document.body.textContent).not.toContain('Order marked paid.');
+    });
   });
 });

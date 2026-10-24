@@ -673,7 +673,7 @@ export type InvoiceForOrderQueryVariables = Exact<{
 }>;
 
 
-export type InvoiceForOrderQuery = { invoices: { nodes: Array<{ id: string, invoiceNumber: string, totalMinorUnits: number, paymentStatus: InvoicePaymentStatus }> } };
+export type InvoiceForOrderQuery = { invoices: { nodes: Array<{ id: string, invoiceNumber: string, totalMinorUnits: number, amountDueMinorUnits: number, paymentStatus: InvoicePaymentStatus, paymentTerms: InvoicePaymentTerms }> } };
 
 export type GenerateInvoiceFromOrderMutationVariables = Exact<{
   input: GenerateInvoiceFromOrderInput;
@@ -1497,7 +1497,9 @@ export const InvoiceForOrderDocument = gql`
       id
       invoiceNumber
       totalMinorUnits
+      amountDueMinorUnits
       paymentStatus
+      paymentTerms
     }
   }
 }
