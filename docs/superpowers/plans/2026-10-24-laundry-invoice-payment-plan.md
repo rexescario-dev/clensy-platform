@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 3)** at M5, 2026-10-24. Revision 1 was returned by the M4 review for four corrections ([Revision 2 changes](#revision-2-changes)). The M5 review of revision 2 accepted the direction and asked for three focused corrections ([Revision 3 changes](#revision-3-changes)). The owner authorized M6 on 2026-10-24 and it is recorded in the [Execution record](#execution-record). The independent M7 review **returned** the slice on verification grounds only (no code defect); see [M7 round 1](#m7-round-1--returned-for-revision-2026-10-24). |
+| Status | **Accepted (revision 3)** at M5, 2026-10-24. Revision 1 was returned by the M4 review for four corrections ([Revision 2 changes](#revision-2-changes)). The M5 review of revision 2 accepted the direction and asked for three focused corrections ([Revision 3 changes](#revision-3-changes)). The owner authorized M6 on 2026-10-24 and it is recorded in the [Execution record](#execution-record). The independent M7 review returned round 1 on verification grounds only and **approved round 2 for merge** ([M7 round 2](#m7-round-2--approved-for-merge-2026-10-24)). M8 N/A; M9 complete; M10 does not apply (no workflow asset changed). Merge awaits the owner's go-ahead. |
 | M5 decision | **Accepted** — 2026-10-24, revision 3, by the owner. The owner kept decision (k)'s rule for later statuses unchanged: a failed payment alert is hidden only when the refetched status confirms the intended outcome (`markPaid` → `PAID`; `markAwaitingPayment` → `AWAITING_PAYMENT` or `PAID`). `PROCESSING` and any other status that does not meet those conditions keep the alert, "conservative and avoids silently treating an ambiguous outcome as success". The owner confirmed the revision 3 corrections: the F9 cancelled-order failure stays visible with no button left; the Apollo recovery wording separates what the plan relies on from what the helper-based tests prove; and the payment-recording check reads added diff lines only, with generated client code excluded.<br>The acceptance covers the plan, not an implementation. The M5 review was a self-review by the plan's author, and no command in this plan has been run. Every `Expected:` line is still a prediction until M6 records the actual result. M7 remains a fresh independent review of the branch diff against the Accepted specs and this plan (`CLAUDE.md`). The three [open business decisions](#open-business-decisions-for-the-owner) stay open; acceptance does not answer them. |
 | Date | 2026-10-24 |
 | Tracking issue | [#166](https://github.com/rexescario-dev/clensy-platform/issues/166) "Laundry invoice and payment experience". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) (merged in #183: the order page). Shares the in-flight guard with [#165](https://github.com/rexescario-dev/clensy-platform/issues/165) (open, not started: no branch or PR), so this slice introduces the page-level guard and #165 reuses it ([contract](#shared-in-flight-guard-contract)). |
@@ -651,7 +651,7 @@ The jsdom timeouts recorded in #205 did not occur in any run in this session.
 
 ### Owner-directed review fixes (after the M6 commits, before M7)
 
-The owner reviewed the code diff in six parts, found no blocking defect, and directed four optional fixes. They are uncommitted until M7 and the browser check are reviewed.
+The owner reviewed the code diff in six parts, found no blocking defect, and directed four optional fixes. They were committed, unchanged from what M7 reviewed, in `3e93d11`.
 
 1. **Per-instance terms ids and radio group.** `GenerateForm` builds its radio ids, help-text ids and radio `name` from React's `useId()` (`${prefix}-terms-<TERM>`, `${prefix}-terms-<TERM>-help`, `name="${prefix}-terms"`). This replaces Task 4's fixed `laundry-invoice-terms-<TERM>` ids and `name="laundry-invoice-terms"`. The plan treats ids and names as planning decisions, so the accepted plan is not revised; its behavioral requirements are unchanged (choices, default, label and help-text links). The owner kept the `name` change too, because radios that share a name behave as one group across forms. Card case 4 now checks the label and `aria-describedby` relationships instead of literal ids. A new card test, "two generate forms on one page share no id and no radio group", **failed first** on the fixed ids (12 ids, 6 distinct) and passes now.
 2. **Page comment.** The comment on `order.status` in `InvoicePaymentBody` now says the page relies on Apollo applying the refetch, or setting `error` when it fails, and that this is not tested. No logic changed.
@@ -696,3 +696,60 @@ An **independent** review by a fresh agent on the most capable model, which did 
 | Not run | Browser check (environment constraint; container stop not authorized) |
 | Accepted reviewer conclusion | Apollo refetch reliance acceptable; integration test optional |
 | Deferred | Due-date display clarification; optional integration test |
+
+### M7 round 2 — Approved for merge (2026-10-24)
+
+The same **independent** reviewer as round 1, a fresh agent on the most capable model that did not implement the change, reviewed the delta at `3e93d11` and modified no file.
+
+```text
+Decision: Approved for merge
+Subject: feat/166-laundry-invoice-payment at 3e93d11 (main 9135546..3e93d11; working tree clean)
+Accepted specification: docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md (Amendment #164); docs/superpowers/specs/2026-09-06-laundry-invoices-design.md
+Accepted implementation plan: this plan, revision 3, Accepted at M5 2026-10-24
+Plan tasks reviewed: Tasks 1–5 ✓ (round 1; code unchanged); Task 6 Steps 1, 2, 4 ✓; Task 6 Step 3 deferred by owner waiver
+Blocking findings: None (no merge blockers)
+```
+
+**Evidence the reviewer checked:**
+
+- `git diff 43d2f79 3e93d11 --stat` lists only the 5 reviewed code files and this plan, and the working tree is clean.
+- The production code in `git diff main 3e93d11` is byte-identical to the round-1 working-tree diff. The three test-file deltas match what was read in round 1.
+- The three changed test files re-ran 59/59.
+- The round-1 evidence (web 2310/2310, lint and `tsc` exit 0, client 14/14, `@clensy/web` 418/418, the clean greps, and the Apollo 3.14.1 probe) still applies to the identical code.
+
+**Round-1 blockers:**
+
+- **Blocking 2** (subject not committed) is resolved by `3e93d11`.
+- **Blocking 1** (browser check) is resolved by the owner's waiver. The plan's own text would not allow it: "not run" is allowed only for a state the seed data cannot produce. The reviewer accepted the waiver for three reasons:
+  - the owner who accepted the plan at M5 recorded the waiver, with a date;
+  - the record never claims the check passed, and lists what stays unverified;
+  - the residual risk is low: standard Tailwind layout, native radios whose label and help links are tested, a billing href asserted in tests, and an existing billing drawer.
+
+**Scope of the approval and the waiver.** The M7 approval and the browser-check waiver apply to **this slice only**. They do not change the plan's requirements, or the workflow's, for future slices.
+
+**Follow-ups kept open:**
+
+1. Run the waived browser checks when this branch can be served, ideally before the #161 cutover: the 375 px / 1280 px layout, a keyboard pass of the terms radio group, and Open invoice → billing drawer.
+2. Clarify whether the invoice card should display the due date (the issue says "Display that").
+3. Optional: a `MockedProvider` integration test of the real Apollo refetch path.
+4. Add `paymentTerms` to the retargeted `PROCESSING` render fixture's invoice node (harmless today).
+
+### M8 — N/A
+
+Not applicable. The independent M7 reviewer found no maintainability issue that needs refactoring, and none was identified during M6. No code was changed for M8.
+
+### M9 — Complete
+
+`apps/web/README.md` § "Laundry order page" now matches the shipped behavior:
+
+- **Layout:** the section is named Invoice and payment.
+- **Read-only list:** it now names four control sections. Actions names only the remaining lifecycle verbs as text and is still #165's to replace.
+- **New Invoice and payment bullet:** it covers the two cards, `laundryInvoiceView`, the generate hook and its alert rule, `laundryPaymentView`, the shared transition guard, and `laundryPaymentFailureAlert`'s outcome rule.
+- **Data:** the `InvoiceForOrder` fields.
+- **Query states and Current section:** they include the payment verbs.
+
+`docs/features/laundry.md` needs no change. It documents the lifecycle and the API rules, and none of those changed; it already links the README for the web screens.
+
+### M10 — does not apply
+
+No workflow asset changed in this slice (process spec §2.12).
