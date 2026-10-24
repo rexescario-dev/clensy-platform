@@ -607,8 +607,9 @@ describe('laundry order page', () => {
     const html = await renderPage();
     const actions = section(html, 'actions');
     expect(actions).toContain('Available to your role:');
-    expect(actions).toContain('Mark awaiting payment');
-    expect(actions).toContain('Mark paid');
+    // #166: the payment verbs are buttons in Invoice and payment.
+    expect(actions).not.toContain('Mark awaiting payment');
+    expect(actions).not.toContain('Mark paid');
     expect(actions).toContain('Cancel order');
     expect(actions).not.toContain('Generate invoice');
     expect(actions).not.toContain('Record weight');
@@ -624,8 +625,11 @@ describe('laundry order page', () => {
     expect(html).not.toContain('aria-current="true"');
   });
 
+  // PROCESSING: TENANT_OWNER may generate an invoice there but has no
+  // payment verb, so only the invoice decides between Invoice and Actions
+  // (#166 moved the payment verbs to Invoice and payment).
   it('shows the invoice and marks Actions once an invoice exists', async () => {
-    page.order = order({ status: 'PRICED' });
+    page.order = order({ status: 'PROCESSING' });
     page.invoiceNodes = [{ id: 'i1', invoiceNumber: 'INV-0001', paymentStatus: 'UNPAID', totalMinorUnits: 45000 }];
     const html = await renderPage();
     const invoice = section(html, 'invoice');
@@ -650,10 +654,10 @@ describe('laundry order page', () => {
 
   // M5 review 1: retained "no invoice" data would mark Invoice and say
   // "No invoice yet." if it were read. It is not: the nav falls through to
-  // Actions (TENANT_OWNER may mark a PRICED order paid) and the section
-  // shows the error.
+  // Actions (TENANT_OWNER may mark a PROCESSING order ready) and the
+  // section shows the error.
   it('ignores retained invoice data while the invoice query has failed', async () => {
-    page.order = order({ status: 'PRICED' });
+    page.order = order({ status: 'PROCESSING' });
     page.invoiceNodes = [];
     page.invoiceRetained = true;
     page.invoiceError = new Error('network down');
@@ -665,7 +669,7 @@ describe('laundry order page', () => {
   });
 
   it('ignores retained invoice data while the invoice query reloads', async () => {
-    page.order = order({ status: 'PRICED' });
+    page.order = order({ status: 'PROCESSING' });
     page.invoiceNodes = [];
     page.invoiceRetained = true;
     page.invoiceLoading = true;
@@ -681,7 +685,7 @@ describe('laundry order page', () => {
     ['with no data', 'noData'],
     ['without the invoice connection', 'noConnection'],
   ] as const)('treats a finished invoice result %s as unresolved', async (_label, shape) => {
-    page.order = order({ status: 'PRICED' });
+    page.order = order({ status: 'PROCESSING' });
     page.invoiceShape = shape;
     const html = await renderPage();
     expect(html).not.toMatch(/<a[^>]*href="#laundry-order-invoice"[^>]*aria-current="true"/);

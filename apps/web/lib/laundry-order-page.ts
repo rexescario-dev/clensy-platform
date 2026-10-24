@@ -54,9 +54,16 @@ export function resolvedInvoiceNodes<T>(query: {
   return Array.isArray(nodes) ? nodes : undefined;
 }
 
-// Verbs that the Weighing, Services and Invoice sections own. The Actions
-// section names the rest.
-const SECTION_VERBS: ReadonlySet<LaundryOrderVerb> = new Set<LaundryOrderVerb>(['weigh', 'price', 'generateInvoice']);
+// Verbs that the Weighing, Services and Invoice and payment sections own
+// (#166 moves the two payment verbs there). The Actions section names the
+// rest.
+const SECTION_VERBS: ReadonlySet<LaundryOrderVerb> = new Set<LaundryOrderVerb>([
+  'weigh',
+  'price',
+  'generateInvoice',
+  'markAwaitingPayment',
+  'markPaid',
+]);
 
 export function laundryLifecycleVerbs(verbs: readonly LaundryOrderVerb[]): LaundryOrderVerb[] {
   return verbs.filter((verb) => !SECTION_VERBS.has(verb));
@@ -75,8 +82,9 @@ export interface CurrentLaundryOrderSectionInput {
 // The section the nav marks current: the next step forward the actor may
 // take (owner decision, #156 M4). Re-weighing a WEIGHED order is a
 // correction, so Weighing is current only while RECEIVED. Pricing starts
-// with choosing services, so `price` marks Services. Overview and Price are
-// never current. `null` when the actor has nothing to do.
+// with choosing services, so `price` marks Services. Generating an invoice
+// and the two payment verbs live in Invoice and payment (#166). Overview
+// and Price are never current. `null` when the actor has nothing to do.
 export function currentLaundryOrderSection({
   invoiceExists,
   status,
@@ -85,6 +93,7 @@ export function currentLaundryOrderSection({
   if (status === 'RECEIVED' && verbs.includes('weigh')) return 'weighing';
   if (verbs.includes('price')) return 'services';
   if (invoiceExists === false && verbs.includes('generateInvoice')) return 'invoice';
+  if (verbs.includes('markPaid') || verbs.includes('markAwaitingPayment')) return 'invoice';
   if (laundryLifecycleVerbs(verbs).length > 0) return 'actions';
   return null;
 }

@@ -92,8 +92,12 @@ describe('currentLaundryOrderSection', () => {
     ['WEIGHED', 'OPS_MANAGER', false, 'services'],
     ['WEIGHED', 'FINANCE', false, null],
     ['PRICED', 'TENANT_OWNER', false, 'invoice'],
-    ['PRICED', 'TENANT_OWNER', true, 'actions'],
-    ['PRICED', 'TENANT_OWNER', undefined, 'actions'],
+    // #166: the payment verbs live in Invoice and payment, so it stays
+    // current while either is offered, whether or not an invoice exists.
+    ['PRICED', 'TENANT_OWNER', true, 'invoice'],
+    ['PRICED', 'TENANT_OWNER', undefined, 'invoice'],
+    ['PRICED', 'OPS_MANAGER', true, 'invoice'],
+    ['AWAITING_PAYMENT', 'CUSTOMER_SUPPORT', true, 'invoice'],
     ['PRICED', 'SCHEDULER', false, null],
     ['PAID', 'SCHEDULER', true, 'actions'],
     ['COMPLETED', 'FINANCE', false, 'invoice'],
@@ -154,11 +158,10 @@ describe('resolvedInvoiceNodes', () => {
 });
 
 describe('laundryLifecycleVerbs', () => {
-  it('drops the verbs that belong to the weighing, services and invoice sections', () => {
-    expect(laundryLifecycleVerbs(['weigh', 'price', 'generateInvoice', 'markPaid', 'cancel'])).toEqual([
-      'markPaid',
-      'cancel',
-    ]);
+  it('drops the verbs that the weighing, services and invoice and payment sections own', () => {
+    expect(
+      laundryLifecycleVerbs(['weigh', 'price', 'generateInvoice', 'markPaid', 'markAwaitingPayment', 'cancel']),
+    ).toEqual(['cancel']);
   });
 });
 

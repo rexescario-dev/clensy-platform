@@ -10,10 +10,11 @@ import {
   PageHeader,
   StatusBadge,
 } from '@clensy/ui';
-import type { DataTableColumn, StatusTone } from '@clensy/ui';
+import type { DataTableColumn } from '@clensy/ui';
 import Link from 'next/link';
 import { Suspense, useState } from 'react';
 import { formatMinorUnits } from '../../../lib/format-price';
+import { INVOICE_PAYMENT_STATUS_TONE } from '../../../lib/invoice-payment-status';
 import { useDetailDrawer } from '../../../lib/use-detail-drawer';
 
 type InvoiceRow = {
@@ -25,13 +26,6 @@ type InvoiceRow = {
   issueDate: unknown;
   customer: { id: string; fullName: string };
   [key: string]: unknown;
-};
-
-const STATUS_TONE: Record<InvoicePaymentStatus, StatusTone> = {
-  PAID: 'success',
-  PARTIALLY_PAID: 'warning',
-  UNPAID: 'neutral',
-  VOID: 'danger',
 };
 
 function formatDate(value: unknown): string {
@@ -75,7 +69,7 @@ function BillingPageContent() {
       render: (r) => (
         <StatusBadge
           label={r.paymentStatus}
-          tone={STATUS_TONE[r.paymentStatus]}
+          tone={INVOICE_PAYMENT_STATUS_TONE[r.paymentStatus]}
         />
       ),
     },
@@ -166,7 +160,7 @@ function InvoiceDetailDrawer({
           <dd>
             <StatusBadge
               label={invoice.paymentStatus}
-              tone={STATUS_TONE[invoice.paymentStatus]}
+              tone={INVOICE_PAYMENT_STATUS_TONE[invoice.paymentStatus]}
             />
           </dd>
         </dl>
