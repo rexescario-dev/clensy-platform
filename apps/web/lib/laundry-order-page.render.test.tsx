@@ -236,7 +236,7 @@ describe('laundry order page', () => {
     expect(positions.every((position) => position > -1)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
     expect(count(html, '<h2')).toBe(6);
-    for (const heading of ['Overview', 'Weighing', 'Services', 'Price', 'Invoice', 'Actions']) {
+    for (const heading of ['Overview', 'Weighing', 'Services', 'Price', 'Invoice and payment', 'Actions']) {
       expect(html).toContain(`<h2 class="text-base font-semibold text-slate-900">${heading}</h2>`);
     }
     expect(count(html, 'class="scroll-mt-6"')).toBe(6);
@@ -648,7 +648,7 @@ describe('laundry order page', () => {
   it('says when the invoice cannot be loaded', async () => {
     page.invoiceError = new Error('network down');
     const html = await renderPage();
-    expect(section(html, 'invoice')).toContain('Unable to load the invoice.');
+    expect(section(html, 'invoice')).toContain('Unable to load invoice.');
     expect(section(html, 'invoice')).not.toContain('No invoice yet.');
   });
 
@@ -664,7 +664,7 @@ describe('laundry order page', () => {
     const html = await renderPage();
     expect(html).not.toMatch(/<a[^>]*href="#laundry-order-invoice"[^>]*aria-current="true"/);
     expect(html).toMatch(/<a[^>]*href="#laundry-order-actions"[^>]*aria-current="true"/);
-    expect(section(html, 'invoice')).toContain('Unable to load the invoice.');
+    expect(section(html, 'invoice')).toContain('Unable to load invoice.');
     expect(section(html, 'invoice')).not.toContain('No invoice yet.');
   });
 
@@ -677,7 +677,7 @@ describe('laundry order page', () => {
     expect(html).not.toMatch(/<a[^>]*href="#laundry-order-invoice"[^>]*aria-current="true"/);
     expect(html).toMatch(/<a[^>]*href="#laundry-order-actions"[^>]*aria-current="true"/);
     expect(section(html, 'invoice')).not.toContain('No invoice yet.');
-    expect(section(html, 'invoice')).not.toContain('Unable to load the invoice.');
+    expect(section(html, 'invoice')).not.toContain('Unable to load invoice.');
   });
 
   // M5 review 3: only a confirmed node list says whether an invoice exists.
@@ -691,7 +691,7 @@ describe('laundry order page', () => {
     expect(html).not.toMatch(/<a[^>]*href="#laundry-order-invoice"[^>]*aria-current="true"/);
     expect(html).toMatch(/<a[^>]*href="#laundry-order-actions"[^>]*aria-current="true"/);
     expect(section(html, 'invoice')).not.toContain('No invoice yet.');
-    expect(section(html, 'invoice')).not.toContain('Unable to load the invoice.');
+    expect(section(html, 'invoice')).not.toContain('Unable to load invoice.');
   });
 
   it('renders the shared progress with the payment branch current', async () => {

@@ -114,10 +114,19 @@ export const laundry = {
     },
     back: 'Back to laundry orders',
     invoice: {
-      error: 'Unable to load the invoice.',
+      error: 'Unable to load invoice.',
+      generating: 'Generating…',
       none: 'No invoice yet.',
       number: 'Invoice number',
+      open: 'Open invoice',
       paymentStatus: 'Payment status',
+      terms: 'Payment terms',
+      termsHelp: {
+        PAY_NOW: 'Due when the invoice is issued.',
+        PAY_ON_COMPLETION: 'Due when the work is complete. No due date is set yet.',
+        PAY_ON_DELIVERY: 'Due when the laundry is delivered. No due date is set yet.',
+      },
+      title: 'Invoice',
       total: 'Invoice total',
     },
     overview: {
@@ -126,6 +135,15 @@ export const laundry = {
       pricedOne: '1 service priced.',
       pricedPartial: 'Services are priced.',
       seePrice: 'See Price',
+    },
+    // The order-level payment verbs (#166). They set the laundry order's
+    // status only and never record money against the invoice.
+    payment: {
+      choose: 'Mark paid if the customer pays at the counter. Mark awaiting payment if they will pay later.',
+      explanation:
+        'The order must be marked paid before processing starts. That is separate from the invoice payment status.',
+      paid: 'Paid. Processing can start.',
+      title: 'Order payment',
     },
     price: {
       beforePricing: 'Price is available after the order is weighed and services are chosen.',
@@ -158,7 +176,7 @@ export const laundry = {
     },
     sections: {
       actions: 'Actions',
-      invoice: 'Invoice',
+      invoice: 'Invoice and payment',
       overview: 'Overview',
       price: 'Price',
       services: 'Services',
