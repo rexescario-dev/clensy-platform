@@ -62,7 +62,7 @@ export const laundry = {
   failure: {
     cancel: 'Unable to cancel the order.',
     complete: 'Unable to complete the order.',
-    generateInvoice: 'Unable to generate the invoice.',
+    generateInvoice: 'Unable to generate invoice.',
     markAwaitingDelivery: 'Unable to mark the order awaiting delivery.',
     markAwaitingPayment: 'Unable to mark the order awaiting payment.',
     markAwaitingPickup: 'Unable to mark the order awaiting pickup.',
