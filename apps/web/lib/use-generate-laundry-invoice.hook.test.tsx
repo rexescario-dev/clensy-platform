@@ -130,6 +130,10 @@ describe('useGenerateLaundryInvoice', () => {
       void latest.generate('PAY_ON_DELIVERY');
     });
     expect(api.generate).toHaveBeenCalledTimes(1);
+    // The surviving call is the first one: the second did not replace it.
+    expect(api.generates[0]!.options).toEqual({
+      variables: { input: { laundryOrderId: ORDER, paymentTerms: 'PAY_NOW' } },
+    });
   });
 
   it.each(OUTCOMES)('case 4: fails when the mutation %s, and still refetches the invoice', async (_label, how, make) => {

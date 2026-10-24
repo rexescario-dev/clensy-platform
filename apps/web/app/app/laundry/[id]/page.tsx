@@ -485,9 +485,13 @@ function InvoicePaymentBody({
         onGenerate={(paymentTerms) => void generateInvoice.generate(paymentTerms)}
       />
       <LaundryOrderPaymentCard
-        // `order.status` is the refetched status once the failure refetch
-        // settles, so a failure is hidden only when that status is the
-        // attempted outcome (decision k).
+        // `order.status` is read from the order query on every render. The
+        // transition hook keeps `pending` until its refetch settles; once
+        // Apollo has applied that refetch, this is the reloaded status, and a
+        // failure is hidden only when it is the attempted outcome (decision
+        // k). That Apollo applies a refetch to the query, or sets `error`
+        // when it fails, is relied on, not tested: the page tests set the
+        // query state themselves.
         failure={laundryPaymentFailureAlert(transition.failure, order.status)}
         pending={transition.pending}
         view={laundryPaymentView(order.status, verbs)}

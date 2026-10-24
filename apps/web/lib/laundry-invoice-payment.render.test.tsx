@@ -45,6 +45,26 @@ function paymentCard(
   );
 }
 
+// For each radio: its value, the text of the element its
+// `aria-describedby` names, and the text of the label whose `for` is its id.
+function termOptions(html: string): Array<{ help: string | undefined; label: string | undefined; value: string }> {
+  const textOf = (pattern: RegExp) => pattern.exec(html)?.[1];
+  const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return [...html.matchAll(/<input\b[^>]*type="radio"[^>]*>/g)].map(([input]) => {
+    const id = /\bid="([^"]+)"/.exec(input)?.[1] ?? '';
+    const describedBy = /\baria-describedby="([^"]+)"/.exec(input)?.[1] ?? '';
+    return {
+      help: textOf(new RegExp(`<p\\b[^>]*\\bid="${escape(describedBy)}"[^>]*>([^<]*)</p>`)),
+      label: textOf(new RegExp(`<label\\b[^>]*\\bfor="${escape(id)}"[^>]*>([^<]*)</label>`)),
+      value: /\bvalue="([^"]+)"/.exec(input)?.[1] ?? '',
+    };
+  });
+}
+
+function ids(html: string): string[] {
+  return [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]!);
+}
+
 function buttons(html: string): string[] {
   return [...html.matchAll(/<button\b[^>]*>(.*?)<\/button>/g)].map((match) => match[0]);
 }
@@ -84,8 +104,13 @@ describe('LaundryInvoiceCard', () => {
     }
     expect(html).not.toMatch(/>PAY_[A-Z_]+</);
     expect(html).not.toContain('type="date"');
-    expect(html).toMatch(/aria-describedby="laundry-invoice-terms-PAY_NOW-help"/);
-    expect(html).toContain('id="laundry-invoice-terms-PAY_NOW-help"');
+    // Each radio is described by its own help text and named by its own
+    // label, whatever ids React generates.
+    expect(termOptions(html)).toEqual([
+      { help: 'Due when the invoice is issued.', label: 'Pay now', value: 'PAY_NOW' },
+      { help: 'Due when the work is complete. No due date is set yet.', label: 'Pay on completion', value: 'PAY_ON_COMPLETION' },
+      { help: 'Due when the laundry is delivered. No due date is set yet.', label: 'Pay on delivery', value: 'PAY_ON_DELIVERY' },
+    ]);
     const [generate] = buttons(html);
     expect(generate).toContain('Generate invoice');
     expect(generate).not.toContain('disabled=""');
@@ -96,6 +121,23 @@ describe('LaundryInvoiceCard', () => {
     expect(busy).toContain('Generating…');
 
     expect(invoiceCard('generate', { failed: true })).toMatch(/<p role="alert"[^>]*>Unable to generate invoice\.<\/p>/);
+  });
+
+  // Review fix: ids and the radio group come from `useId()`, so two mounted
+  // forms neither share an id nor join one radio group.
+  it('two generate forms on one page share no id and no radio group', () => {
+    const html = renderToStaticMarkup(
+      <>
+        <LaundryInvoiceCard failed={false} generating={false} invoice={undefined} view="generate" onGenerate={() => undefined} />
+        <LaundryInvoiceCard failed={false} generating={false} invoice={undefined} view="generate" onGenerate={() => undefined} />
+      </>,
+    );
+    const all = ids(html);
+    expect(all).toHaveLength(12);
+    expect(new Set(all).size).toBe(all.length);
+    const names = [...html.matchAll(/<input\b[^>]*\bname="([^"]+)"/g)].map((match) => match[1]);
+    expect(new Set(names).size).toBe(2);
+    expect(termOptions(html).every((option) => option.help !== undefined && option.label !== undefined)).toBe(true);
   });
 
   it('case 5: existing invoice shows number, amount, badge, terms and the billing link', () => {

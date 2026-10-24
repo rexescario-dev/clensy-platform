@@ -787,5 +787,17 @@ describe('order page invoice and payment (#166)', () => {
       expect(button('invoice', 'Mark awaiting payment')).toBeUndefined();
       expect(document.body.textContent).not.toContain('Order marked paid.');
     });
+
+    // Decision (k) boundary: AWAITING_PAYMENT is not Mark paid's outcome.
+    it('case 15: when another user marked the order awaiting payment, the failed Mark paid stays visible', async () => {
+      start();
+      act(() => button('invoice', 'Mark paid')!.click());
+      await finish(page.paids, 0, 'reject', new Error('Illegal transition'));
+      await settleRefetch(0, { order: priced('AWAITING_PAYMENT') });
+      expect(alerts()).toEqual(['Unable to mark the order paid.']);
+      expect(button('invoice', 'Mark paid')).toBeDefined();
+      expect(button('invoice', 'Mark awaiting payment')).toBeUndefined();
+      expect(document.body.textContent).not.toContain('Order marked paid.');
+    });
   });
 });

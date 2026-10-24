@@ -4,7 +4,7 @@ import type { InvoiceForOrderQuery, InvoicePaymentTerms } from '@clensy/client';
 import { Button, LoadingState, StatusBadge } from '@clensy/ui';
 import { useClensyTranslations } from '@clensy/web';
 import Link from 'next/link';
-import { useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { formatMinorUnits } from '../../lib/format-price';
 import { INVOICE_PAYMENT_STATUS_TONE } from '../../lib/invoice-payment-status';
 import type { LaundryInvoiceView, LaundryPaymentVerb, LaundryPaymentView } from '../../lib/laundry-invoice-payment';
@@ -99,18 +99,20 @@ function GenerateForm({
   t: Translate;
 }) {
   const [terms, setTerms] = useState<InvoicePaymentTerms>(DEFAULT_TERMS);
+  // Per instance, so two mounted forms never share an id or a radio group.
+  const prefix = useId();
   return (
     <div className="mt-3 flex flex-col gap-3">
       <fieldset className="flex flex-col gap-2">
         <legend className="text-sm font-medium text-slate-700">{t('order.invoice.terms')}</legend>
         {PAYMENT_TERMS.map((option) => {
-          const id = `laundry-invoice-terms-${option}`;
+          const id = `${prefix}-terms-${option}`;
           return (
             <div key={option} className="flex items-start gap-2">
               <input
                 id={id}
                 type="radio"
-                name="laundry-invoice-terms"
+                name={`${prefix}-terms`}
                 value={option}
                 checked={terms === option}
                 disabled={generating}

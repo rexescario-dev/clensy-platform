@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 3)** at M5, 2026-10-24. Revision 1 was returned by the M4 review for four corrections ([Revision 2 changes](#revision-2-changes)). The M5 review of revision 2 accepted the direction and asked for three focused corrections ([Revision 3 changes](#revision-3-changes)). **M6 has not started and stays blocked until the owner explicitly authorizes implementation.** |
+| Status | **Accepted (revision 3)** at M5, 2026-10-24. Revision 1 was returned by the M4 review for four corrections ([Revision 2 changes](#revision-2-changes)). The M5 review of revision 2 accepted the direction and asked for three focused corrections ([Revision 3 changes](#revision-3-changes)). The owner authorized M6 on 2026-10-24 and it is recorded in the [Execution record](#execution-record). The independent M7 review **returned** the slice on verification grounds only (no code defect); see [M7 round 1](#m7-round-1--returned-for-revision-2026-10-24). |
 | M5 decision | **Accepted** — 2026-10-24, revision 3, by the owner. The owner kept decision (k)'s rule for later statuses unchanged: a failed payment alert is hidden only when the refetched status confirms the intended outcome (`markPaid` → `PAID`; `markAwaitingPayment` → `AWAITING_PAYMENT` or `PAID`). `PROCESSING` and any other status that does not meet those conditions keep the alert, "conservative and avoids silently treating an ambiguous outcome as success". The owner confirmed the revision 3 corrections: the F9 cancelled-order failure stays visible with no button left; the Apollo recovery wording separates what the plan relies on from what the helper-based tests prove; and the payment-recording check reads added diff lines only, with generated client code excluded.<br>The acceptance covers the plan, not an implementation. The M5 review was a self-review by the plan's author, and no command in this plan has been run. Every `Expected:` line is still a prediction until M6 records the actual result. M7 remains a fresh independent review of the branch diff against the Accepted specs and this plan (`CLAUDE.md`). The three [open business decisions](#open-business-decisions-for-the-owner) stay open; acceptance does not answer them. |
 | Date | 2026-10-24 |
 | Tracking issue | [#166](https://github.com/rexescario-dev/clensy-platform/issues/166) "Laundry invoice and payment experience". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) (merged in #183: the order page). Shares the in-flight guard with [#165](https://github.com/rexescario-dev/clensy-platform/issues/165) (open, not started: no branch or PR), so this slice introduces the page-level guard and #165 reuses it ([contract](#shared-in-flight-guard-contract)). |
@@ -643,6 +643,56 @@ No ruling changes product behavior, the Accepted specs, or the M5-accepted decis
 | Unchanged paths | `git diff --stat main...HEAD -- apps/api packages/ui 'apps/web/app/app/laundry/page.tsx'` | empty |
 | No payment recording added | `git diff main...HEAD -- apps packages ':(exclude)packages/client/src/generated' \| grep -E '^\+' \| grep -vE '^\+\+\+ ' \| grep -nE 'recordPayment\|amountPaidMinorUnits'` | no output, grep exit 1 |
 | API suites | — | **NOT RUN**: no API change; not claimed as covered |
-| Browser check (Step 3) | — | **NOT RUN**. The running `clensy-platform-web-1` container serves a built image (`pnpm start`, no source mount), not this branch. Running the check would mean rebuilding that container or starting a second dev server against the shared API, reading the admin seed credentials, and creating FINANCE, OPS_MANAGER and SCHEDULER accounts and priced orders. Those are outward-facing steps that need the owner's go-ahead. No other check stands in for it: the 375 px / 1280 px layout, the keyboard pass of the terms radio group, and the real billing-drawer link stay unverified. |
+| Browser check (Step 3) | — | **NOT RUN — environment constraint.** The running `clensy-platform-web-1` container serves a built image (`pnpm start`, no source mount), not this branch, and holds port 3001, the only browser origin the API's CORS accepts (`WEB_ORIGIN`). Checking this branch means stopping that container and running `next dev` from the working tree; the `docker stop` was **not authorized** (the session's permission policy denied it), and the owner chose on 2026-10-24 to skip the check rather than authorize it. Not passed, and nothing stands in for it: the 375 px / 1280 px layout, the keyboard pass of the terms radio group, and the real billing-drawer link are unverified. See the setup and cleanup note below. |
 
 The jsdom timeouts recorded in #205 did not occur in any run in this session.
+
+**Browser-check setup and cleanup.** Before the container stop was refused, three QA staff accounts were created in the local dev tenant, following the #155/#158 `qa…` precedent: `qa166-finance-973af1@example.com`, `qa166-ops-manager-973af1@example.com` and `qa166-scheduler-973af1@example.com`. The seed owner's credentials were read from `.env` and never printed. A `next dev` started from this branch failed at once because port 3001 was taken; the container was never stopped or changed. When the owner chose to skip the check, all three accounts were disabled through `disableAdmin` (confirmed `isActive = false` in the database) and the file with their generated passwords was deleted. No order or invoice was changed.
+
+### Owner-directed review fixes (after the M6 commits, before M7)
+
+The owner reviewed the code diff in six parts, found no blocking defect, and directed four optional fixes. They are uncommitted until M7 and the browser check are reviewed.
+
+1. **Per-instance terms ids and radio group.** `GenerateForm` builds its radio ids, help-text ids and radio `name` from React's `useId()` (`${prefix}-terms-<TERM>`, `${prefix}-terms-<TERM>-help`, `name="${prefix}-terms"`). This replaces Task 4's fixed `laundry-invoice-terms-<TERM>` ids and `name="laundry-invoice-terms"`. The plan treats ids and names as planning decisions, so the accepted plan is not revised; its behavioral requirements are unchanged (choices, default, label and help-text links). The owner kept the `name` change too, because radios that share a name behave as one group across forms. Card case 4 now checks the label and `aria-describedby` relationships instead of literal ids. A new card test, "two generate forms on one page share no id and no radio group", **failed first** on the fixed ids (12 ids, 6 distinct) and passes now.
+2. **Page comment.** The comment on `order.status` in `InvoicePaymentBody` now says the page relies on Apollo applying the refetch, or setting `error` when it fails, and that this is not tested. No logic changed.
+3. **Interaction case 15** (F9 ii boundary): Mark paid is rejected and the refetch shows `AWAITING_PAYMENT`; the alert stays, Mark paid stays, Mark awaiting payment is absent, and there is no success toast. It passed on first run because it pins existing behavior. Break evidence, run outside the change and not kept: `laundryPaymentFailureAlert` was temporarily made to hide a `markPaid` failure at `AWAITING_PAYMENT` too. Case 15 then failed (`expected [] to deeply equal [ 'Unable to mark the order paid.' ]`), and the file was restored from git and confirmed clean.
+4. **Generate hook case 3** also asserts that the one surviving request carries the first call's `PAY_NOW` and the order id. This has not been shown to fail on its own: removing the guard trips the call-count assertion first. The owner kept it as documentation of the contract.
+
+Results after the fixes (actual): the four affected test files 134/134; `pnpm --filter web exec tsc --noEmit` exit 0; `pnpm --filter web lint` exit 0; `pnpm --filter web test` exit 0, 54 files, 2310/2310.
+
+### M7 round 1 — Returned for Revision (2026-10-24)
+
+An **independent** review by a fresh agent on the most capable model, which did not implement the change (`CLAUDE.md`). It was given the Accepted specs, this plan and `git diff main` (the six commits plus the uncommitted review fixes), and it modified no file.
+
+- **Decision:** Returned for Revision, on verification only. Tasks 1–5 conform to the plan and both Accepted specs, with no correctness, scope or convention defect.
+- **Blocking 1 (verification):** the Task 6 Step 3 browser check was not run, and the plan allows "not run" only for states the seed data cannot produce.
+- **Blocking 2 (subject integrity):** the reviewed fixes and this record were uncommitted.
+- **Evidence the reviewer re-ran itself:**
+  - web 2310/2310; web lint and `tsc` exit 0; `@clensy/client` 14/14; `@clensy/web` 418/418;
+  - the unchanged-path diff (empty) and the added-lines payment grep (no output);
+  - a probe against real Apollo Client 3.14.1 (`watchQuery`, `network-only`, scripted link). A successful `refetch()` applies the new data before its promise resolves, and `loading` does not flip. A failed `refetch()` rejects and leaves the query with `error` set and the old data retained.
+
+**Accepted reviewer conclusions (the owner adopted these, 2026-10-24):**
+
+- **Apollo refetch reliance is acceptable.** The probe confirms both behaviors the hooks rely on, and the ordering means `pending` clears only after `order.status` is the reloaded status. A dedicated `MockedProvider` integration test is **optional follow-up**, not needed before merge.
+- The guard contract (items 1–7), Review focus 1–5 and the four M6 rulings hold. Nothing implies money is recorded or that `Invoice.paymentStatus` changes, and the three open business decisions remain unanswered by the UI.
+
+**Owner decisions on the return (2026-10-24):**
+
+1. **Browser check: not run, environment constraint.** The container stop was not authorized, and the owner chose not to authorize it for this slice. The check is recorded above as not run, never as passed. M7 is asked to confirm whether this documented exception satisfies the plan's gate.
+2. **Commit:** commit the five reviewed code files, unchanged, with this record, then send the delta to the M7 reviewer for re-review. No push and no PR yet.
+
+**Deferred (follow-up, not in this slice):**
+
+- **Due-date display.** The issue says of `dueDate` (issue date for Pay now, otherwise null), "Display that". The Accepted plan's invoice-exists layout lists number, amount, payment-status badge, terms and the billing link, and the card follows it. The owner left the card as planned for this review. Whether the card should show the due date is recorded as a clarification for the owner to settle in a follow-up, not as a silent scope change.
+- **Optional `MockedProvider` refetch integration test** (from the M7 conclusion above).
+- **Minor fixture note** (reviewer): the `PROCESSING` render fixture's invoice node lacks `paymentTerms`. This is harmless to its assertions.
+
+**Status summary:**
+
+| Class | Items |
+| --- | --- |
+| Passed | Automated tests, lint and typecheck, as recorded by M6 and re-run independently by M7 |
+| Not run | Browser check (environment constraint; container stop not authorized) |
+| Accepted reviewer conclusion | Apollo refetch reliance acceptable; integration test optional |
+| Deferred | Due-date display clarification; optional integration test |
