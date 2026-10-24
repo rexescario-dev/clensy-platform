@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 3)** at M5, 2026-10-24. Revision 1 was returned by the M4 review for four corrections ([Revision 2 changes](#revision-2-changes)). The M5 review of revision 2 accepted the direction and asked for three focused corrections ([Revision 3 changes](#revision-3-changes)). The owner authorized M6 on 2026-10-24 and it is recorded in the [Execution record](#execution-record). The independent M7 review returned round 1 on verification grounds only and **approved round 2 for merge** ([M7 round 2](#m7-round-2--approved-for-merge-2026-10-24)). M8 N/A; M9 complete; M10 does not apply (no workflow asset changed). Merge awaits the owner's go-ahead. |
+| Status | **Accepted (revision 3)** at M5, 2026-10-24. Revision 1 was returned by the M4 review for four corrections ([Revision 2 changes](#revision-2-changes)). The M5 review of revision 2 accepted the direction and asked for three focused corrections ([Revision 3 changes](#revision-3-changes)). The owner authorized M6 on 2026-10-24 and it is recorded in the [Execution record](#execution-record). The independent M7 review returned round 1 on verification grounds only and **approved round 2 for merge** ([M7 round 2](#m7-round-2--approved-for-merge-2026-10-24)). M8 N/A; M9 complete; M10 does not apply (no workflow asset changed). Merged in PR [#207](https://github.com/rexescario-dev/clensy-platform/pull/207) (`573a171`); #166 closed; closeout complete ([Closeout](#closeout-2026-10-24)). |
 | M5 decision | **Accepted** — 2026-10-24, revision 3, by the owner. The owner kept decision (k)'s rule for later statuses unchanged: a failed payment alert is hidden only when the refetched status confirms the intended outcome (`markPaid` → `PAID`; `markAwaitingPayment` → `AWAITING_PAYMENT` or `PAID`). `PROCESSING` and any other status that does not meet those conditions keep the alert, "conservative and avoids silently treating an ambiguous outcome as success". The owner confirmed the revision 3 corrections: the F9 cancelled-order failure stays visible with no button left; the Apollo recovery wording separates what the plan relies on from what the helper-based tests prove; and the payment-recording check reads added diff lines only, with generated client code excluded.<br>The acceptance covers the plan, not an implementation. The M5 review was a self-review by the plan's author, and no command in this plan has been run. Every `Expected:` line is still a prediction until M6 records the actual result. M7 remains a fresh independent review of the branch diff against the Accepted specs and this plan (`CLAUDE.md`). The three [open business decisions](#open-business-decisions-for-the-owner) stay open; acceptance does not answer them. |
 | Date | 2026-10-24 |
 | Tracking issue | [#166](https://github.com/rexescario-dev/clensy-platform/issues/166) "Laundry invoice and payment experience". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) (merged in #183: the order page). Shares the in-flight guard with [#165](https://github.com/rexescario-dev/clensy-platform/issues/165) (open, not started: no branch or PR), so this slice introduces the page-level guard and #165 reuses it ([contract](#shared-in-flight-guard-contract)). |
@@ -753,3 +753,93 @@ Not applicable. The independent M7 reviewer found no maintainability issue that 
 ### M10 — does not apply
 
 No workflow asset changed in this slice (process spec §2.12).
+
+### Closeout (2026-10-24)
+
+**Merge check (§2.12, before the merge).** Each applicable stage was checked in order. Every one had a recorded outcome. No stage was skipped or overridden; one plan step inside M6 was waived (see below).
+
+| Gate | Outcome |
+| --- | --- |
+| M1 | Installed prompt library present |
+| M2 | No new specification or amendment; the Accepted lifecycle spec (Amendment #164 §8.4.4) and invoices spec govern |
+| M3 | Both specs already Accepted |
+| M4 | Plan drafted (revisions 1–3) |
+| M5 | Plan Accepted (revision 3, owner) |
+| M6 | Complete |
+| M7 | Approved for merge (independent, round 2) |
+| M8 | N/A |
+| M9 | Complete |
+| M10 | Does not apply (no workflow assets changed) |
+
+**Waived plan step.** Task 6 Step 3, the browser check, was **not run**: an environment constraint (the container stop was not authorized) and the owner's waiver for this slice only. M7 round 2 accepted the waiver. It was never recorded as passed.
+
+**Merge.**
+
+- Authorized by the owner ("merge, closeout").
+- Merged as a merge commit with `gh pr merge 207 --merge`. The head was `b00a692`, the commit on which PR CI passed (Test, Lint, API e2e, Release gate all pass). Nothing after the M7-reviewed `3e93d11` is code.
+
+**Verification.**
+
+- PR #207 shows `MERGED`, with merge commit `573a171`, at 2026-10-24T03:13:28Z (UTC).
+- `b00a692` is an ancestor of `origin/main`, and `git diff b00a692 origin/main` is empty.
+- Local `main` fast-forwarded to `573a171`.
+- #166 closed automatically (2026-10-24T03:13:30Z).
+
+**Post-merge cleanup.**
+
+- The project defines no cleanup policy, and earlier slice branches stay on the remote, so `feat/166-laundry-invoice-payment` stays too. This step is a no-op.
+- The session's scratch execution ledger was deleted; git history is the record.
+- The three `qa166` browser-check accounts were already disabled (see the Task 6 setup and cleanup note).
+
+**Final M7 position.** Approved for merge in round 2, with no blocking findings. The round-1 return was resolved by committing the reviewed subject (`3e93d11`) and by the owner's browser-check waiver. The approval and the waiver apply to this slice only; they do not change the plan's or the workflow's requirements for future slices.
+
+**Follow-ups.** None has been filed as an issue yet.
+
+| Item | Outcome |
+| --- | --- |
+| Run the waived browser checks (375 px / 1280 px layout, keyboard pass of the terms radio group, Open invoice → billing drawer) when this branch's code can be served, ideally before the #161 cutover | Open. Recorded here and in PR #207. |
+| Should the invoice card display the due date? (The issue says "Display that"; the Accepted plan's layout does not include it.) | Open, for the owner to clarify. |
+| Optional `MockedProvider` integration test of the real Apollo refetch path (M7 judged the reliance acceptable without it) | Open, optional. |
+| The retargeted `PROCESSING` render fixture's invoice node lacks `paymentTerms` (harmless to its assertions) | Open, minor. |
+
+## Slice Completion Report (final)
+
+| Field | Result |
+| --- | --- |
+| Slice | #166 Laundry invoice and payment experience |
+| Tracking | https://github.com/rexescario-dev/clensy-platform/issues/166 |
+| M4 | Plan **Accepted** (revision 3) |
+| M5 | Review **Accepted** (owner) |
+| M6 | **Complete** |
+| M7 | **Approved** (fresh, independent reviewer; round 2) |
+| M8 | **N/A** |
+| M9 | **Complete** |
+| Branch | `feat/166-laundry-invoice-payment` |
+| PR | https://github.com/rexescario-dev/clensy-platform/pull/207 (merged, `573a171`) |
+| Status | **Slice complete** |
+
+### Shipped
+
+- **Invoice and payment section.** It replaces the order page's read-only Invoice facts with two cards: stacked on mobile, side by side from `lg`.
+- **Invoice card.**
+  - FINANCE and TENANT_OWNER, from `PRICED` through `COMPLETED`, choose payment terms in plain language and generate an Unpaid invoice. Generating never changes the order's status.
+  - An existing invoice shows its number, total, billing-toned status badge and terms, and links to the billing drawer.
+- **Order payment card.** The PAYMENT roles get Mark paid, and Mark awaiting payment from `PRICED`. The card states that this is separate from the invoice's payment status. Neither verb records money against the invoice (#39).
+- **One page-level lifecycle guard.** It drops double submits and holds until the refetch settles. #165 will reuse it.
+- **Failure handling.** Every failure outcome alerts and refetches. A payment alert is hidden only when the reloaded status is the attempted outcome, so a cancellation keeps it.
+- **Actions.** It names only the remaining lifecycle verbs, and the nav follows the payment verbs. `InvoiceForOrder` adds terms and amount due.
+
+### Validation
+
+| Check | Result |
+| --- | --- |
+| Tests | **Passed**: web 2310/2310, `@clensy/web` 418/418, `@clensy/client` 14/14 (local); PR CI Test and API e2e pass on `b00a692` |
+| Typecheck | **Passed**: web `tsc --noEmit`; `@clensy/web` and `@clensy/client` build (`tsc --noEmit`) |
+| Lint | **Passed**: web, `@clensy/web`, `@clensy/client`; PR CI Lint pass |
+| Build | **Passed**: `tsc --noEmit` builds. `next build` not run. |
+| Package validation | **Passed**: PR CI Release gate pass; unchanged-path and payment-recording checks clean |
+| Browser check | **Skipped**: owner waiver for this slice (environment constraint) |
+
+### Next Gate
+
+None — slice complete
