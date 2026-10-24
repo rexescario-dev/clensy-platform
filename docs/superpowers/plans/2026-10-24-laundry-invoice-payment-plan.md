@@ -606,4 +606,43 @@ The M5 review of revision 2 accepted the plan's direction and asked for three fo
 
 ## Execution record
 
-*(Appended at M6.)*
+### M6 — 2026-10-24
+
+The owner authorized M6 on 2026-10-24 ("m6") after recording the M5 acceptance (`a848f08`). It was executed inline in one session (superpowers:executing-plans), task by task in plan order, each test watched failing before the code that passes it. Every result below is an **actual** result from this session, not a prediction.
+
+| Task | Commit | RED (observed) | GREEN (observed) |
+| --- | --- | --- | --- |
+| 1 `InvoiceForOrder` fields | `1f9e071` | The new client test failed: the selection lacked `amountDueMinorUnits` and `paymentTerms`. | 4/4 in the file; `@clensy/client` build exit 0. Codegen changed 4 lines of `generated/graphql.ts`, with no reordering. |
+| 2 Pure views, tones, section ownership | `a139484` | The new test file failed on the missing module; 4 changed `currentLaundryOrderSection` rows and the `laundryLifecycleVerbs` test failed. | 109/109 in the two unit files; with the render file, 174/174; `tsc --noEmit` exit 0. |
+| 3 Hooks | `068883d` | Both hook files failed on missing modules. | 26/26 (generate 11, transition 15); `tsc` and `eslint` exit 0. |
+| 4 Cards | `2fe7ba5` | The render file failed on the missing module. One assertion of my own was wrong on the first green run: it matched `disabled` inside Tailwind's `disabled:` classes. It was fixed to assert the `disabled=""` attribute. | 16/16 cards; 95/95 with the page tests; `@clensy/web` test 418/418, build and lint exit 0. |
+| 5 Page wiring | `4c069b5` | 7 new render cases failed. All 16 new interaction cases failed, each because the control did not exist yet (`Cannot read properties of undefined (reading 'click')`); the 14 #162 cases still passed. | 105/105 in the two page files; full `apps/web` suite 54 files, 2308/2308. |
+
+**Rulings made during execution** (each also in the session ledger):
+
+1. **Task 2.** Moving `markPaid` and `markAwaitingPayment` into `SECTION_VERBS` broke 6 existing render tests. The plan placed one of them in Task 5 and did not list the other 5. Those 5 asserted that Actions is the current section for a `PRICED` order as TENANT_OWNER, which decision (a) changes. They were fixed in Task 2 so every commit stays green. They exist to prove retained or incomplete invoice data never marks Invoice (#156 M5 reviews 1 and 3). They now use `PROCESSING`, where TENANT_OWNER may generate an invoice but has no payment verb, so the invoice result alone still decides the nav. *Cost if wrong:* those five no longer exercise `PRICED`; the new #166 render cases cover `PRICED`.
+2. **Task 4.** The copy changes broke 3 existing render assertions that the plan updates in Task 5 (the section heading list, and "Unable to load invoice." twice). They were updated in Task 4 with the plan's own edits, so the commit stays green. *Cost if wrong:* none.
+3. **Task 5.** Render cases 2, 4, 8 and 9 passed before the page change. They assert that controls or wording are absent, which the old read-only Invoice body satisfies. They were kept as written because they pin role and status gating once controls exist; cases 1, 3, 5–7 and 10 failed first and cover the presence side. *Cost if wrong:* those four have not shown they can fail; M7 may ask for a break run.
+4. **Task 5.** The existing render test "says when there is no invoice yet" used the default TENANT_OWNER on `AWAITING_PAYMENT`. That role now sees the Generate form, as the issue's Layout requires. Its role was changed to OPS_MANAGER, who may not generate. *Cost if wrong:* none to behavior.
+
+No ruling changes product behavior, the Accepted specs, or the M5-accepted decisions. No characterization tests were labelled by the plan, and none were added.
+
+### Task 6 — verification (actual results)
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Web tests | `pnpm --filter web test` | exit 0 — 54 files, 2308/2308 |
+| Web lint | `pnpm --filter web lint` | exit 0 |
+| Web typecheck | `pnpm --filter web exec tsc --noEmit` | exit 0 |
+| `@clensy/web` tests | `pnpm --filter @clensy/web test` | exit 0 — 418/418 |
+| `@clensy/web` lint | `pnpm --filter @clensy/web lint` | exit 0 |
+| `@clensy/web` build | `pnpm --filter @clensy/web build` | exit 0 |
+| `@clensy/client` tests | `pnpm --filter @clensy/client test` | exit 0 — 14/14 |
+| `@clensy/client` build | `pnpm --filter @clensy/client build` | exit 0 |
+| `@clensy/client` lint | `pnpm --filter @clensy/client lint` | exit 0 |
+| Unchanged paths | `git diff --stat main...HEAD -- apps/api packages/ui 'apps/web/app/app/laundry/page.tsx'` | empty |
+| No payment recording added | `git diff main...HEAD -- apps packages ':(exclude)packages/client/src/generated' \| grep -E '^\+' \| grep -vE '^\+\+\+ ' \| grep -nE 'recordPayment\|amountPaidMinorUnits'` | no output, grep exit 1 |
+| API suites | — | **NOT RUN**: no API change; not claimed as covered |
+| Browser check (Step 3) | — | **NOT RUN**. The running `clensy-platform-web-1` container serves a built image (`pnpm start`, no source mount), not this branch. Running the check would mean rebuilding that container or starting a second dev server against the shared API, reading the admin seed credentials, and creating FINANCE, OPS_MANAGER and SCHEDULER accounts and priced orders. Those are outward-facing steps that need the owner's go-ahead. No other check stands in for it: the 375 px / 1280 px layout, the keyboard pass of the terms radio group, and the real billing-drawer link stay unverified. |
+
+The jsdom timeouts recorded in #205 did not occur in any run in this session.
