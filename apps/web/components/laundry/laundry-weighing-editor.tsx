@@ -6,11 +6,16 @@ import { formatWeightGrams, useClensyTranslations } from '@clensy/web';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { graphQLErrorMessage } from '../../lib/graphql-error-message';
 import { kilogramsInputFromGrams, summarizeWeightEntries } from '../../lib/laundry-weight-entries';
+import type { LaundryMutationLock } from '../../lib/use-laundry-mutation-lock';
 
 export interface LaundryWeighingEditorProps {
   // Every control is disabled, and a submit is dropped, while a price is
-  // confirmed (#162 owner decision 6.3).
+  // confirmed (#162 owner decision 6.3), and while any other mutation on
+  // the order page runs (#165).
   disabled?: boolean;
+  // The order page's shared mutation lock (#165). Without it, the editor's
+  // own guard is the only one, as before.
+  lock?: LaundryMutationLock;
   // Told when a save starts and when it ends, after the reload that follows
   // it, so the page can hold Confirm meanwhile (#162 M7 follow-up).
   onPendingChange?: (pending: boolean) => void;
@@ -48,6 +53,7 @@ function entry(key: number, text: string): Entry {
 // (§8.4.1); this form only stops input it would reject anyway.
 export function LaundryWeighingEditor({
   disabled = false,
+  lock,
   onPendingChange,
   onRecorded,
   orderId,
@@ -126,7 +132,9 @@ export function LaundryWeighingEditor({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (inFlight.current || disabled) return;
+    // Refused before validating while another mutation holds the page lock
+    // (#165 Rules item 2), so a refused submit changes no state.
+    if (inFlight.current || disabled || lock?.isHeld()) return;
     setAttempted(true);
     setFailure(undefined);
     if (!summary.submittable) {
@@ -134,6 +142,10 @@ export function LaundryWeighingEditor({
       if (invalid) setFocusRow({ key: invalid.key });
       return;
     }
+    // Validation passed: take the lock in this same synchronous step, so it
+    // cannot have been taken since the check above.
+    const lease = lock ? lock.tryAcquire('weigh') : undefined;
+    if (lease === null) return;
     inFlight.current = true;
     setPending(true);
     onPendingChange?.(true);
@@ -170,6 +182,7 @@ export function LaundryWeighingEditor({
       inFlight.current = false;
       setPending(false);
       onPendingChange?.(false);
+      if (lease) lock?.release(lease);
     }
   }
 

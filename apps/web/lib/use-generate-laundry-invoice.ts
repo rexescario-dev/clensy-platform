@@ -3,6 +3,7 @@ import { useGenerateInvoiceFromOrderMutation, type InvoicePaymentTerms } from '@
 import { useToast } from '@clensy/ui';
 import { useClensyTranslations } from '@clensy/web';
 import { useRef, useState } from 'react';
+import type { LaundryMutationLock } from './use-laundry-mutation-lock';
 
 export interface GenerateLaundryInvoiceState {
   generate: (paymentTerms: InvoicePaymentTerms) => Promise<void>;
@@ -17,12 +18,19 @@ export interface UseGenerateLaundryInvoiceOptions {
   // Reloads `InvoiceForOrder`. After a failure it shows an invoice another
   // user generated first (#166 F4).
   refetch: () => Promise<unknown>;
+  // The order page's shared mutation lock (#165). Without it, the hook's
+  // own guard is the only one, as before.
+  lock?: LaundryMutationLock;
 }
 
 // `generateInvoiceFromOrder`, once per click (#166). The input is the order
 // and the chosen terms only: generating never marks the order paid and
 // always creates an UNPAID invoice (invoices spec §4.4).
-export function useGenerateLaundryInvoice({ orderId, refetch }: UseGenerateLaundryInvoiceOptions): GenerateLaundryInvoiceState {
+export function useGenerateLaundryInvoice({
+  lock,
+  orderId,
+  refetch,
+}: UseGenerateLaundryInvoiceOptions): GenerateLaundryInvoiceState {
   const t = useClensyTranslations('laundry');
   const toast = useToast();
   const [generateInvoice] = useGenerateInvoiceFromOrderMutation();
@@ -34,6 +42,9 @@ export function useGenerateLaundryInvoice({ orderId, refetch }: UseGenerateLaund
 
   async function generate(paymentTerms: InvoicePaymentTerms) {
     if (inFlight.current) return;
+    // The page lock (#165 Rules item 2): refused before any state changes.
+    const lease = lock ? lock.tryAcquire('generateInvoice') : undefined;
+    if (lease === null) return;
     inFlight.current = true;
     setGenerating(true);
     setFailed(false);
@@ -58,6 +69,7 @@ export function useGenerateLaundryInvoice({ orderId, refetch }: UseGenerateLaund
     } finally {
       inFlight.current = false;
       setGenerating(false);
+      if (lease) lock?.release(lease);
     }
   }
 

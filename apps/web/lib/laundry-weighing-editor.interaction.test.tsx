@@ -5,6 +5,7 @@ import { ToastProvider } from '@clensy/ui';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { useLaundryMutationLock, type LaundryMutationLease, type LaundryMutationLock } from './use-laundry-mutation-lock';
 
 // Drives the real weighing editor (#155) in jsdom with a controllable
 // `weighLaundryOrder`. Typing uses the native value setter plus an
@@ -562,5 +563,190 @@ describe('laundry weighing editor', () => {
       expect(weigh.calls).toEqual([]);
       expect(changes).toEqual([]);
     });
+  });
+});
+
+// #165: the editor with the order page's mutation lock. The host owns the
+// lock, as `LaundryOrderWorkspace` does, and can hide the editor to unmount
+// it mid-save.
+describe('laundry weighing editor with the page lock (#165)', () => {
+  let lock: LaundryMutationLock;
+  let onPendingChange: Mock<(pending: boolean) => void>;
+
+  async function mountWithLock(show = true) {
+    const { LaundryWeighingEditor } = await import('../components/laundry/laundry-weighing-editor');
+    function Host() {
+      lock = useLaundryMutationLock();
+      return show ? (
+        <LaundryWeighingEditor
+          lock={lock}
+          onPendingChange={onPendingChange}
+          onRecorded={onRecorded}
+          orderId={ORDER_ID}
+          weightGrams={null}
+        />
+      ) : null;
+    }
+    act(() =>
+      root.render(
+        <ToastProvider>
+          <Host />
+        </ToastProvider>,
+      ),
+    );
+  }
+
+  async function enterOneBag() {
+    await mountWithLock();
+    type(0, '1.25');
+  }
+
+  beforeEach(() => {
+    onPendingChange = vi.fn<(pending: boolean) => void>();
+  });
+
+  it('acquires as weigh on a valid submit, before the first await', async () => {
+    await enterOneBag();
+    act(() => {
+      button('Record weight').click();
+      expect(lock.isHeld()).toBe(true);
+    });
+    await act(async () => weigh.resolve());
+  });
+
+  it('releases after a recorded weight and its reload', async () => {
+    let reload: () => void = () => {};
+    onRecorded = vi.fn<() => Promise<unknown>>(
+      () =>
+        new Promise((resolve) => {
+          reload = () => resolve(undefined);
+        }),
+    );
+    await enterOneBag();
+    click('Record weight');
+    await act(async () => weigh.resolve());
+    expect(lock.isHeld()).toBe(true);
+    await act(async () => reload());
+    expect(lock.isHeld()).toBe(false);
+  });
+
+  it('releases after a recorded weight whose reload fails', async () => {
+    onRecorded = vi.fn<() => Promise<unknown>>(() => Promise.reject(new Error('reload failed')));
+    await enterOneBag();
+    click('Record weight');
+    expect(lock.isHeld()).toBe(true);
+    await act(async () => weigh.resolve());
+    expect(container.textContent).toContain('Weight recorded.');
+    expect(lock.isHeld()).toBe(false);
+  });
+
+  it.each([
+    [
+      'a rejection with a server message',
+      () =>
+        weigh.reject({
+          graphQLErrors: [
+            {
+              extensions: { originalError: { message: 'Cannot weigh a laundry order in status PRICED' } },
+              message: 'Cannot weigh a laundry order in status PRICED',
+            },
+          ],
+        }),
+      'Cannot weigh a laundry order in status PRICED',
+    ],
+    [
+      'a resolved result with GraphQL errors',
+      () =>
+        weigh.resolve({
+          data: null,
+          errors: [
+            {
+              extensions: { originalError: { message: 'Cannot weigh a laundry order in status PRICED' } },
+              message: 'Cannot weigh a laundry order in status PRICED',
+            },
+          ],
+        }),
+      'Cannot weigh a laundry order in status PRICED',
+    ],
+    ['a network rejection', () => weigh.reject(new Error('Failed to fetch')), 'Unable to record weight.'],
+  ])('takes the early return on %s and cleans up', async (_label, fail, alert) => {
+    await enterOneBag();
+    click('Record weight');
+    expect(lock.isHeld()).toBe(true);
+    await act(async () => fail());
+    // The failure branch inside the try, not the validation return (a
+    // request was sent) and not the success path (no reload, no toast).
+    expect(weigh.calls).toHaveLength(1);
+    expect(onRecorded).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain('Weight recorded.');
+    // Cleanup.
+    expect(lock.isHeld()).toBe(false);
+    expect(button('Record weight').disabled).toBe(false);
+    expect(inputs().every((input) => !input.disabled)).toBe(true);
+    expect(onPendingChange.mock.calls).toEqual([[true], [false]]);
+    expect(alertText()).toBe(alert);
+    expect(inputs().map((input) => input.value)).toEqual(['1.25']);
+    click('Record weight');
+    expect(weigh.calls).toHaveLength(2);
+    await act(async () => weigh.resolve());
+  });
+
+  it.each(['price', 'weigh'] as const)(
+    'refuses a valid submit while a %s lease holds the lock, keeping the earlier failure',
+    async (owner) => {
+      await enterOneBag();
+      click('Record weight');
+      await act(async () => weigh.reject(new Error('Failed to fetch')));
+      expect(alertText()).toBe('Unable to record weight.');
+      onPendingChange.mockClear();
+
+      let lease: LaundryMutationLease | null = null;
+      act(() => {
+        lease = lock.tryAcquire(owner);
+      });
+      click('Record weight');
+      expect(weigh.calls).toHaveLength(1);
+      expect(onPendingChange).not.toHaveBeenCalled();
+      expect(alertText()).toBe('Unable to record weight.');
+      expect(container.textContent).not.toContain('Weight recorded.');
+      expect(lock.isHeld()).toBe(true);
+      act(() => {
+        lock.release(lease!);
+      });
+    },
+  );
+
+  it('refuses before validating, so a refused submit shows no validation error', async () => {
+    await mountWithLock();
+    type(0, 'abc');
+    act(() => {
+      lock.tryAcquire('transition');
+    });
+    click('Record weight');
+    expect(weigh.calls).toEqual([]);
+    expect(inputs()[0]!.getAttribute('aria-invalid')).toBeNull();
+    expect(container.textContent).not.toContain('Enter a weight in kilograms, up to 3 decimal places.');
+  });
+
+  it('never acquires for a blocked submit', async () => {
+    await mountWithLock();
+    type(0, 'abc');
+    act(() => {
+      button('Record weight').click();
+      expect(lock.isHeld()).toBe(false);
+    });
+    expect(lock.isHeld()).toBe(false);
+    expect(weigh.calls).toEqual([]);
+    expect(container.textContent).toContain('Enter a weight in kilograms, up to 3 decimal places.');
+  });
+
+  it('releases the lock when the save settles after the editor unmounted', async () => {
+    await enterOneBag();
+    click('Record weight');
+    expect(lock.isHeld()).toBe(true);
+    await mountWithLock(false);
+    expect(container.querySelector('form')).toBeNull();
+    await act(async () => weigh.reject(new Error('Failed to fetch')));
+    expect(lock.isHeld()).toBe(false);
   });
 });

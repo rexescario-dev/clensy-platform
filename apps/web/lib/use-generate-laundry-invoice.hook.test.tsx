@@ -31,6 +31,7 @@ vi.mock('@clensy/client', async (importOriginal) => ({
 }));
 
 const { useGenerateLaundryInvoice } = await import('./use-generate-laundry-invoice');
+const { useLaundryMutationLock } = await import('./use-laundry-mutation-lock');
 type Hook = ReturnType<typeof useGenerateLaundryInvoice>;
 
 const ORDER = '00000000-0000-4000-8000-000000000001';
@@ -183,4 +184,84 @@ describe('useGenerateLaundryInvoice', () => {
     expect(latest.generating).toBe(false);
     expect(latest.failed).toBe(true);
   });
+});
+
+describe('useGenerateLaundryInvoice with the page lock (#165)', () => {
+  let lock: ReturnType<typeof useLaundryMutationLock>;
+
+  function LockProbe() {
+    lock = useLaundryMutationLock();
+    latest = useGenerateLaundryInvoice({ lock, orderId: ORDER, refetch: api.refetch });
+    return null;
+  }
+
+  beforeEach(() => {
+    act(() =>
+      root.render(
+        <ToastProvider>
+          <LockProbe />
+        </ToastProvider>,
+      ),
+    );
+  });
+
+  it('acquires as generateInvoice before the first await', () => {
+    act(() => {
+      void latest.generate('PAY_NOW');
+      expect(lock.isHeld()).toBe(true);
+    });
+  });
+
+  it.each([
+    ['success', 'resolve', GENERATED, 'resolve'],
+    ['a rejection', 'reject', new Error('network down'), 'resolve'],
+    ['GraphQL errors', 'resolve', { errors: [{ message: 'Conflict' }] }, 'resolve'],
+    ['a missing payload', 'resolve', { data: {} }, 'resolve'],
+    ['a rejected refetch', 'resolve', GENERATED, 'reject'],
+  ] as const)('holds the lock until the refetch settles, then releases it, after %s', async (_label, how, value, refetch) => {
+    act(() => {
+      void latest.generate('PAY_NOW');
+    });
+    await settle(api.generates, 0, how, value);
+    expect(lock.isHeld()).toBe(true);
+    await settle(api.refetches, 0, refetch, refetch === 'reject' ? new Error('reload failed') : undefined);
+    expect(lock.isHeld()).toBe(false);
+    expect(lock.held).toBe(false);
+  });
+
+  it.each(['transition', 'generateInvoice'] as const)(
+    'refuses while a %s lease holds the lock, changes nothing, and does not release it',
+    async (owner) => {
+      act(() => {
+        void latest.generate('PAY_NOW');
+      });
+      await settle(api.generates, 0, 'reject', new Error('network down'));
+      await settle(api.refetches, 0, 'resolve', undefined);
+      expect(latest.failed).toBe(true);
+      api.generate.mockClear();
+      api.refetch.mockClear();
+
+      let lease: ReturnType<typeof lock.tryAcquire> = null;
+      act(() => {
+        lease = lock.tryAcquire(owner);
+      });
+      await act(async () => {
+        await latest.generate('PAY_NOW');
+      });
+      expect(api.generate).not.toHaveBeenCalled();
+      expect(api.refetch).not.toHaveBeenCalled();
+      expect(document.body.textContent).not.toContain('Invoice generated.');
+      expect(latest.generating).toBe(false);
+      expect(latest.failed).toBe(true);
+      expect(lock.isHeld()).toBe(true);
+
+      act(() => {
+        lock.release(lease!);
+      });
+      act(() => {
+        void latest.generate('PAY_NOW');
+      });
+      expect(api.generate).toHaveBeenCalledTimes(1);
+    },
+  );
 });
