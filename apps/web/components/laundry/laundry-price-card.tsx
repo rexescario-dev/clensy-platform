@@ -13,6 +13,9 @@ export type LaundryPriceCardProps =
   {
       kind: 'estimate';
       confirming: boolean;
+      // Another mutation on the order page holds the page lock (#165):
+      // Confirm is disabled, with the estimate unchanged.
+      disabled?: boolean;
       // The confirm failure to show, already limited to the current
       // selection by the page (planning decision e).
       failure: string | undefined;
@@ -56,6 +59,7 @@ const STATE_SENTENCE: Partial<Record<LaundryEstimateState, string>> = {
 
 function EstimateBody({
   confirming,
+  disabled = false,
   failure,
   onConfirm,
   onRetry,
@@ -92,7 +96,7 @@ function EstimateBody({
       <Button
         type="button"
         className="mt-4 w-full sm:w-auto"
-        disabled={!ready || confirming}
+        disabled={!ready || confirming || disabled}
         aria-describedby={CAPTION_ID}
         onClick={onConfirm}
       >

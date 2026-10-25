@@ -15,17 +15,23 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState, type ReactNode } from 'react';
 import { LaundryInvoiceCard, LaundryOrderPaymentCard } from '../../../../components/laundry/laundry-invoice-payment';
+import { LaundryOrderActions } from '../../../../components/laundry/laundry-order-actions';
 import { LaundryServicesEditor } from '../../../../components/laundry/laundry-services-editor';
 import { LaundryPriceCard } from '../../../../components/laundry/laundry-price-card';
 import { LaundryWeighingEditor } from '../../../../components/laundry/laundry-weighing-editor';
 import { formatMinorUnits } from '../../../../lib/format-price';
 import { laundryInvoiceView, laundryPaymentFailureAlert, laundryPaymentView } from '../../../../lib/laundry-invoice-payment';
 import { isUuid } from '../../../../lib/laundry-order-list-query';
-import { isLaundryPaymentVerb } from '../../../../lib/laundry-order-lifecycle-actions';
+import {
+  isLaundryPaymentVerb,
+  laundryActionFailure,
+  laundryActionGroups,
+  type LaundryActionVerb,
+} from '../../../../lib/laundry-order-lifecycle-actions';
 import {
   LAUNDRY_ORDER_SECTIONS,
   currentLaundryOrderSection,
-  laundryLifecycleVerbs,
+  formatLaundryOrderTime,
   laundryOrderSectionId,
   laundryWeighingView,
   resolvedInvoiceNodes,
@@ -45,6 +51,7 @@ import {
 } from '../../../../lib/use-laundry-service-selection';
 import { useConfirmLaundryPrice, type ConfirmLaundryPriceState } from '../../../../lib/use-confirm-laundry-price';
 import { useGenerateLaundryInvoice, type GenerateLaundryInvoiceState } from '../../../../lib/use-generate-laundry-invoice';
+import { useLaundryMutationLock, type LaundryMutationLock } from '../../../../lib/use-laundry-mutation-lock';
 import { useLaundryOrderTransition, type LaundryOrderTransitionState } from '../../../../lib/use-laundry-order-transition';
 
 type LaundryOrderDetail = NonNullable<LaundryOrderQuery['laundryOrder']>;
@@ -55,9 +62,10 @@ type Translate = (key: string) => string;
 // weight (#155). Services chooses the base service and add-ons (#158).
 // Price shows the estimate and confirms it, or the final price (#162).
 // Invoice and payment generates the invoice and runs the two payment verbs
-// (#166). Actions still names the remaining lifecycle verbs as text until
-// #165 adds controls. The list still opens the drawer until the cutover
-// (#161).
+// (#166). Actions offers the remaining lifecycle verbs as buttons, with a
+// confirmation for the destructive ones, and Activity shows when the order
+// was created and last changed (#165). The list still opens the drawer
+// until the cutover (#161).
 export default function LaundryOrderPage() {
   const { id } = useParams<{ id: string }>();
   // A new key per order, so moving between orders starts fresh.
@@ -77,13 +85,23 @@ function LaundryOrderWorkspace({ id }: { id: string }) {
   });
   const { data: adminData } = useCurrentAdminQuery();
   const role = adminData?.currentAdmin.role;
+  // The page's one mutation lock (#165, U5). Every mutation owner below
+  // takes it before it starts, so two mutations never overlap; it lives in
+  // this workspace, which is keyed by order id, so each order has its own.
+  const lock = useLaundryMutationLock();
   // Lives here, above Weighing and Price, so both editors are disabled
   // while a price is confirmed and its refetch runs (#162 owner decision 6.3).
-  const confirmPrice = useConfirmLaundryPrice({ refetch: () => orderQuery.refetch() });
-  // The page's one in-flight guard for lifecycle verbs (#166). #165's
-  // Actions buttons and confirm dialogs use this same instance.
-  const transition = useLaundryOrderTransition({ orderId: id, refetch: () => orderQuery.refetch() });
-  const generateInvoice = useGenerateLaundryInvoice({ orderId: id, refetch: () => invoiceQuery.refetch() });
+  const confirmPrice = useConfirmLaundryPrice({ lock, refetch: () => orderQuery.refetch() });
+  // The page's one in-flight guard for lifecycle verbs (#166): the payment
+  // card and the Actions buttons and confirm dialog share it (#165).
+  const transition = useLaundryOrderTransition({ lock, orderId: id, refetch: () => orderQuery.refetch() });
+  const generateInvoice = useGenerateLaundryInvoice({ lock, orderId: id, refetch: () => invoiceQuery.refetch() });
+  // The destructive verb whose confirmation is open, and the one whose
+  // confirmation has been submitted. The dialog's `confirming` is only its
+  // own submission, so an unrelated mutation never makes an unsubmitted
+  // dialog impossible to cancel (#165 rule 6).
+  const [confirmVerb, setConfirmVerb] = useState<LaundryActionVerb | null>(null);
+  const [submittingVerb, setSubmittingVerb] = useState<LaundryActionVerb | null>(null);
   // A weight being saved and reloaded makes the estimate stale before the
   // order shows the new weight, so Price holds Confirm until both settle
   // (#162 M7 follow-up).
@@ -181,7 +199,8 @@ function LaundryOrderWorkspace({ id }: { id: string }) {
 
       <OrderSection section="weighing" t={t}>
         <WeighingBody
-          disabled={confirmPrice.confirming}
+          disabled={lock.held}
+          lock={lock}
           order={order}
           verbs={verbs}
           onPendingChange={setWeighing}
@@ -192,6 +211,7 @@ function LaundryOrderWorkspace({ id }: { id: string }) {
 
       <PricingSections
         confirmPrice={confirmPrice}
+        locked={lock.held}
         order={order}
         roleResolved={role !== undefined}
         verbs={verbs}
@@ -201,6 +221,7 @@ function LaundryOrderWorkspace({ id }: { id: string }) {
 
       <OrderSection section="invoice" t={t}>
         <InvoicePaymentBody
+          busy={lock.held}
           generateInvoice={generateInvoice}
           invoiceError={Boolean(invoiceQuery.error)}
           invoiceLoading={invoiceQuery.loading}
@@ -212,7 +233,37 @@ function LaundryOrderWorkspace({ id }: { id: string }) {
       </OrderSection>
 
       <OrderSection section="actions" t={t}>
-        {role === undefined ? null : <ActionsBody verbs={laundryLifecycleVerbs(verbs)} t={t} />}
+        {role === undefined ? null : (
+          <LaundryOrderActions
+            verbs={verbs}
+            disabled={lock.held}
+            failure={laundryActionFailure(transition.failure, transition.message)}
+            // A refetch that removes the verb hides its dialog.
+            confirmVerb={confirmVerb !== null && laundryActionGroups(verbs).destructive.includes(confirmVerb) ? confirmVerb : null}
+            confirming={submittingVerb !== null}
+            onRun={(verb) => void transition.run(verb)}
+            onRequestConfirm={(verb) => {
+              if (!lock.isHeld()) setConfirmVerb(verb);
+            }}
+            onConfirm={async (verb) => {
+              // Refused while another mutation holds the lock: the dialog
+              // stays open and cancellable, and nothing is sent.
+              if (lock.isHeld()) return;
+              setSubmittingVerb(verb);
+              try {
+                await transition.run(verb);
+              } finally {
+                setSubmittingVerb(null);
+                setConfirmVerb(null);
+              }
+            }}
+            onCloseConfirm={() => setConfirmVerb(null)}
+          />
+        )}
+      </OrderSection>
+
+      <OrderSection section="activity" t={t}>
+        <ActivityBody order={order} t={t} />
       </OrderSection>
     </div>
   );
@@ -274,6 +325,7 @@ function OverviewBody({ order, t }: { order: LaundryOrderDetail; t: Translate })
 // value, so it changes only after a save's refetch.
 function WeighingBody({
   disabled,
+  lock,
   onPendingChange,
   onRecorded,
   order,
@@ -281,6 +333,7 @@ function WeighingBody({
   verbs,
 }: {
   disabled: boolean;
+  lock: LaundryMutationLock;
   onPendingChange: (pending: boolean) => void;
   onRecorded: () => Promise<unknown>;
   order: LaundryOrderDetail;
@@ -306,6 +359,7 @@ function WeighingBody({
       {recorded}
       <LaundryWeighingEditor
         disabled={disabled}
+        lock={lock}
         onPendingChange={onPendingChange}
         onRecorded={onRecorded}
         orderId={order.id}
@@ -321,6 +375,7 @@ function WeighingBody({
 // another order starts with an empty selection.
 function PricingSections({
   confirmPrice,
+  locked,
   order,
   roleResolved,
   t,
@@ -328,6 +383,8 @@ function PricingSections({
   weighing,
 }: {
   confirmPrice: ConfirmLaundryPriceState;
+  // The page lock is held by any mutation (#165).
+  locked: boolean;
   order: LaundryOrderDetail;
   roleResolved: boolean;
   t: Translate;
@@ -358,7 +415,15 @@ function PricingSections({
       </OrderSection>
 
       <OrderSection section="price" t={t}>
-        <PriceBody confirmPrice={confirmPrice} order={order} selection={selection} t={t} view={priceView} weighing={weighing} />
+        <PriceBody
+          confirmPrice={confirmPrice}
+          locked={locked}
+          order={order}
+          selection={selection}
+          t={t}
+          view={priceView}
+          weighing={weighing}
+        />
       </OrderSection>
     </>
   );
@@ -399,6 +464,7 @@ function ServicesBody({
 // (owner decision 6.1).
 function PriceBody({
   confirmPrice,
+  locked,
   order,
   selection,
   t,
@@ -406,6 +472,8 @@ function PriceBody({
   weighing,
 }: {
   confirmPrice: ConfirmLaundryPriceState;
+  // The page lock is held by any mutation (#165): Confirm is disabled.
+  locked: boolean;
   order: LaundryOrderDetail;
   selection: LaundryServiceSelectionState;
   t: Translate;
@@ -436,6 +504,7 @@ function PriceBody({
     <LaundryPriceCard
       kind="estimate"
       confirming={confirmPrice.confirming}
+      disabled={locked}
       failure={failure}
       rows={preview ? laundryPreviewRows(preview.lines) : []}
       state={laundryEstimateState({
@@ -458,6 +527,7 @@ function PriceBody({
 // and kept separate. Marking the order paid changes its status only; the
 // invoice's payment status is #39's (lifecycle spec §8.4.4).
 function InvoicePaymentBody({
+  busy,
   generateInvoice,
   invoiceError,
   invoiceLoading,
@@ -466,6 +536,9 @@ function InvoicePaymentBody({
   transition,
   verbs,
 }: {
+  // The page lock is held by any mutation (#165): every control here is
+  // disabled.
+  busy: boolean;
   generateInvoice: GenerateLaundryInvoiceState;
   invoiceError: boolean;
   invoiceLoading: boolean;
@@ -479,6 +552,7 @@ function InvoicePaymentBody({
   return (
     <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:gap-4">
       <LaundryInvoiceCard
+        disabled={busy}
         failed={generateInvoice.failed}
         generating={generateInvoice.generating}
         invoice={invoices?.[0]}
@@ -497,7 +571,7 @@ function InvoicePaymentBody({
           isLaundryPaymentVerb(transition.failure) ? transition.failure : null,
           order.status,
         )}
-        pending={transition.pending}
+        pending={busy}
         view={laundryPaymentView(order.status, verbs)}
         onRun={(verb) => void transition.run(verb)}
       />
@@ -505,19 +579,26 @@ function InvoicePaymentBody({
   );
 }
 
-// Names what the actor may do next, as text. The server re-checks every
-// verb; Actions offers no control yet (#165). The two payment verbs are
-// buttons in Invoice and payment (#166).
-function ActionsBody({ verbs, t }: { verbs: LaundryOrderVerb[]; t: Translate }) {
-  if (verbs.length === 0) return <p>{t('noActions')}</p>;
+// When the order was created and last changed, and its status (#165). It is
+// not an event log: no audit history is read (ticket "There is no
+// order-history API"), so the section is "Activity", not "History".
+function ActivityBody({ order, t }: { order: LaundryOrderDetail; t: Translate }) {
   return (
-    <>
-      <p>{t('order.actions.available')}</p>
-      <ul className="mt-2 list-disc pl-5">
-        {verbs.map((verb) => (
-          <li key={verb}>{t(`actions.${verb}`)}</li>
-        ))}
-      </ul>
-    </>
+    <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <ActivityItem term={t('order.activity.created')}>{formatLaundryOrderTime(order.createdAt)}</ActivityItem>
+      <ActivityItem term={t('order.activity.updated')}>{formatLaundryOrderTime(order.updatedAt)}</ActivityItem>
+      <ActivityItem term={t('order.activity.status')}>
+        <StatusBadge label={t(`status.${order.status}`)} tone={LAUNDRY_STATUS_TONE[order.status]} />
+      </ActivityItem>
+    </dl>
+  );
+}
+
+function ActivityItem({ term, children }: { term: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <dt className="text-slate-500">{term}</dt>
+      <dd className="font-medium text-slate-900">{children}</dd>
+    </div>
   );
 }

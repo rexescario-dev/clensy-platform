@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '@clensy/ui';
+import { formatLaundryOrderTime } from './laundry-order-page';
 
 // The `/app/laundry/[id]` order page (#156), rendered statically.
 const ID = '3f2a9c1e-0b7d-4e55-9a10-6c2b8d4e7f01';
@@ -51,6 +52,7 @@ function order(overrides: Record<string, unknown> = {}) {
     lines: { nodes: [] as Line[], pageInfo: { hasNextPage: false } },
     status: 'AWAITING_PAYMENT',
     totalMinorUnits: 45000,
+    updatedAt: '2026-10-02T14:30:00.000Z',
     weightGrams: 2505,
     ...overrides,
   };
@@ -222,11 +224,11 @@ describe('laundry order page', () => {
     expect(html).toContain('Back to laundry orders');
     expect(html).not.toContain('role="dialog"');
     expect(html).not.toContain('<table');
-    // Weighing, Services, Price and Invoice and payment may hold controls
-    // (#155, #158, #162, #166). Everything before the first section, and
-    // Overview and Actions, stay read-only.
+    // Weighing, Services, Price, Invoice and payment and Actions may hold
+    // controls (#155, #158, #162, #166, #165). Everything before the first
+    // section, and Overview and Activity, stay read-only.
     const header = html.slice(0, html.indexOf('<section'));
-    for (const part of [header, section(html, 'overview'), section(html, 'actions')]) {
+    for (const part of [header, section(html, 'overview'), section(html, 'activity')]) {
       expect(part).not.toContain('<button');
       expect(part).not.toContain('<form');
       expect(part).not.toContain('<input');
@@ -244,19 +246,19 @@ describe('laundry order page', () => {
     expect(html).toContain('₱450.00');
   });
 
-  it('renders the section nav and six sections in order', async () => {
+  it('renders the section nav and seven sections in order', async () => {
     const html = await renderPage();
     expect(html).toContain('<nav aria-label="Order sections">');
     expect(html).toContain('<ul class="flex gap-3 overflow-x-auto">');
-    const names = ['overview', 'weighing', 'services', 'price', 'invoice', 'actions'];
+    const names = ['overview', 'weighing', 'services', 'price', 'invoice', 'actions', 'activity'];
     const positions = names.map((name) => html.indexOf(`href="#laundry-order-${name}"`));
     expect(positions.every((position) => position > -1)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
-    expect(count(html, '<h2')).toBe(6);
-    for (const heading of ['Overview', 'Weighing', 'Services', 'Price', 'Invoice and payment', 'Actions']) {
+    expect(count(html, '<h2')).toBe(7);
+    for (const heading of ['Overview', 'Weighing', 'Services', 'Price', 'Invoice and payment', 'Actions', 'Activity']) {
       expect(html).toContain(`<h2 class="text-base font-semibold text-slate-900">${heading}</h2>`);
     }
-    expect(count(html, 'class="scroll-mt-6"')).toBe(6);
+    expect(count(html, 'class="scroll-mt-6"')).toBe(7);
   });
 
   it('shows em dashes and no line list for a received order', async () => {
@@ -338,7 +340,7 @@ describe('laundry order page', () => {
   describe('Services editor and views (#158)', () => {
     const OPERATIONAL = ['TENANT_OWNER', 'OPS_MANAGER', 'SCHEDULER', 'CUSTOMER_SUPPORT', 'FINANCE', 'ANALYST', 'SUPER_ADMIN'];
 
-    it('offers the editor and the Estimate card to OPS_MANAGER on a weighed order, with controls only in Weighing, Services and Price', async () => {
+    it('offers the editor and the Estimate card to OPS_MANAGER on a weighed order, with controls only in Weighing, Services, Price and Actions', async () => {
       page.order = order({ status: 'WEIGHED', totalMinorUnits: null });
       page.role = 'OPS_MANAGER';
       const html = await renderPage();
@@ -354,7 +356,11 @@ describe('laundry order page', () => {
       expect(price).not.toContain('Final price');
       expect(price).toContain('Select a base service to see an estimate.');
       expect(price).toMatch(/<button[^>]*disabled=""[^>]*>Confirm price<\/button>/);
-      const outside = html.replace(section(html, 'weighing'), '').replace(services, '').replace(price, '');
+      const outside = html
+        .replace(section(html, 'weighing'), '')
+        .replace(services, '')
+        .replace(price, '')
+        .replace(section(html, 'actions'), '');
       expect(outside).not.toContain('<button');
       expect(outside).not.toContain('<form');
       expect(outside).not.toContain('<input');
@@ -487,7 +493,7 @@ describe('laundry order page', () => {
   });
 
   // #155: controls appear only inside Weighing; every other section stays read-only.
-  it('offers the weighing editor to an operational role on a received order, and controls only there', async () => {
+  it('offers the weighing editor to an operational role on a received order, with controls only there and in Actions', async () => {
     page.order = order({ status: 'RECEIVED', totalMinorUnits: null, weightGrams: null });
     page.role = 'OPS_MANAGER';
     const html = await renderPage();
@@ -507,7 +513,8 @@ describe('laundry order page', () => {
     expect(weighing).toContain('Record weight');
     expect(weighing).not.toContain('Recorded weight');
     expect(weighing).not.toContain('Weight is locked');
-    const outside = html.replace(weighing, '');
+    // Actions holds Reject and Cancel order (#165).
+    const outside = html.replace(weighing, '').replace(section(html, 'actions'), '');
     expect(outside).not.toContain('<button');
     expect(outside).not.toContain('<form');
     expect(outside).not.toContain('<input');
@@ -618,20 +625,20 @@ describe('laundry order page', () => {
     expect(html).not.toContain('<button');
   });
 
-  it('names the role-allowed lifecycle actions as text in Actions', async () => {
+  it('offers the role-allowed lifecycle actions as buttons in Actions', async () => {
     page.order = order({ status: 'PRICED' });
     page.role = 'TENANT_OWNER';
     page.invoiceNodes = [{ id: 'i1', invoiceNumber: 'INV-0001', paymentStatus: 'UNPAID', totalMinorUnits: 45000 }];
     const html = await renderPage();
     const actions = section(html, 'actions');
-    expect(actions).toContain('Available to your role:');
+    expect(actions).not.toContain('Available to your role:');
     // #166: the payment verbs are buttons in Invoice and payment.
     expect(actions).not.toContain('Mark awaiting payment');
     expect(actions).not.toContain('Mark paid');
-    expect(actions).toContain('Cancel order');
     expect(actions).not.toContain('Generate invoice');
     expect(actions).not.toContain('Record weight');
-    expect(actions).not.toContain('<button');
+    // #165: the remaining verbs are buttons.
+    expect(actions).toMatch(/<button[^>]*>Cancel order<\/button>/);
   });
 
   it('names nothing in Actions while the role loads', async () => {
@@ -871,7 +878,7 @@ describe('order page invoice and payment (#166)', () => {
     expect(section(await renderPage(), 'invoice')).not.toContain('Estimate');
   });
 
-  it('case 10: Actions keeps only the remaining lifecycle verbs, as text', async () => {
+  it('case 10: Actions keeps only the remaining lifecycle verbs, as buttons (#165)', async () => {
     page.order = order({ status: 'PRICED' });
     page.role = 'FINANCE';
     let html = await renderPage();
@@ -882,9 +889,132 @@ describe('order page invoice and payment (#166)', () => {
     page.order = order({ status: 'PAID' });
     page.role = 'OPS_MANAGER';
     html = await renderPage();
+    expect(buttonLabels(section(html, 'actions'))).toEqual(['Start processing', 'Refund order']);
+  });
+});
+
+// #165: lifecycle actions and Activity, through the real helper and page.
+describe('order page lifecycle actions (#165)', () => {
+  function actionLabels(html: string): string[] {
+    return [...section(html, 'actions').matchAll(/<button[^>]*>([^<]*)<\/button>/g)].map((match) => match[1]!);
+  }
+
+  async function renderAs(status: string, role: string, overrides: Record<string, unknown> = {}) {
+    page.order = order({ status, ...overrides });
+    page.role = role;
+    return renderPage();
+  }
+
+  const STATUSES = [
+    'RECEIVED',
+    'WEIGHED',
+    'PRICED',
+    'AWAITING_PAYMENT',
+    'PAID',
+    'PROCESSING',
+    'READY',
+    'AWAITING_PICKUP',
+    'AWAITING_DELIVERY',
+    'COMPLETED',
+    'CANCELLED',
+    'REJECTED',
+    'LOST',
+    'DAMAGED',
+    'REFUNDED',
+  ];
+
+  it('case 1: gives ANALYST no button in Actions on any status', async () => {
+    for (const status of STATUSES) {
+      expect(actionLabels(await renderAs(status, 'ANALYST'))).toEqual([]);
+    }
+  });
+
+  it('case 2: offers CUSTOMER_SUPPORT Cancel, not Reject or Record weight, on RECEIVED', async () => {
+    const html = await renderAs('RECEIVED', 'CUSTOMER_SUPPORT', { totalMinorUnits: null, weightGrams: null });
+    expect(actionLabels(html)).toEqual(['Cancel order']);
+    expect(html).not.toContain('Record weight');
+    expect(section(html, 'weighing')).not.toContain('<form');
+  });
+
+  it('case 3: offers OPS_MANAGER Cancel and Reject, with no separator, on RECEIVED', async () => {
+    const html = await renderAs('RECEIVED', 'OPS_MANAGER', { totalMinorUnits: null, weightGrams: null });
+    expect(actionLabels(html)).toEqual(['Cancel order', 'Reject order']);
+    expect(section(html, 'actions')).not.toContain('data-slot="separator"');
+  });
+
+  it('case 4: offers SCHEDULER Start processing, not Refund, on PAID', async () => {
+    expect(actionLabels(await renderAs('PAID', 'SCHEDULER'))).toEqual(['Start processing']);
+  });
+
+  it('case 5: offers FINANCE Refund, not Start processing, on PAID', async () => {
+    expect(actionLabels(await renderAs('PAID', 'FINANCE'))).toEqual(['Refund order']);
+  });
+
+  it.each([
+    ['DELIVERY', 'Mark awaiting delivery', 'Mark awaiting pickup'],
+    ['PICKUP', 'Mark awaiting pickup', 'Mark awaiting delivery'],
+  ])('case 6: on READY + %s, offers OPS_MANAGER %s and not %s, before the separator', async (fulfillmentType, shown, hidden) => {
+    const html = await renderAs('READY', 'OPS_MANAGER', { fulfillmentType });
+    expect(actionLabels(html)).toEqual([shown, 'Mark lost', 'Mark damaged', 'Refund order']);
+    expect(section(html, 'actions')).not.toContain(hidden);
     const actions = section(html, 'actions');
-    expect(actions).toContain('Start processing');
-    expect(actions).toContain('Refund order');
-    expect(actions).not.toContain('<button');
+    const separator = actions.indexOf('data-slot="separator"');
+    expect(separator).toBeGreaterThan(actions.indexOf(shown));
+    expect(separator).toBeLessThan(actions.indexOf('Mark lost'));
+  });
+
+  it.each(['REFUNDED', 'CANCELLED', 'REJECTED'])('case 7: offers TENANT_OWNER nothing on %s', async (status) => {
+    const html = await renderAs(status, 'TENANT_OWNER');
+    expect(actionLabels(html)).toEqual([]);
+    expect(section(html, 'actions')).toContain('No further actions for this order.');
+  });
+
+  it('case 8: keeps Mark paid out of Actions, once on the page, on PRICED', async () => {
+    const html = await renderAs('PRICED', 'OPS_MANAGER');
+    expect(actionLabels(html)).toEqual(['Cancel order']);
+    expect(count(html, '>Mark paid</button>')).toBe(1);
+    expect(section(html, 'invoice')).toContain('>Mark paid</button>');
+  });
+
+  it('case 9: shows nothing in Actions while the role loads', async () => {
+    page.role = undefined;
+    page.order = order({ status: 'PAID' });
+    const html = await renderPage();
+    expect(actionLabels(html)).toEqual([]);
+    expect(section(html, 'actions')).not.toContain('No further actions for this order.');
+  });
+
+  it('case 10: renders no confirmation dialog on first render', async () => {
+    for (const [status, role] of [
+      ['RECEIVED', 'OPS_MANAGER'],
+      ['PAID', 'TENANT_OWNER'],
+      ['READY', 'OPS_MANAGER'],
+      ['PRICED', 'OPS_MANAGER'],
+    ]) {
+      expect(await renderAs(status!, role!)).not.toContain('role="dialog"');
+    }
+  });
+
+  it('case 11: lists Activity last in the nav and on the page, and never says History', async () => {
+    const html = await renderAs('PAID', 'TENANT_OWNER');
+    const nav = html.slice(html.indexOf('<nav'), html.indexOf('</nav>'));
+    expect(nav.lastIndexOf('href="#laundry-order-activity"')).toBeGreaterThan(nav.indexOf('href="#laundry-order-actions"'));
+    expect(html.indexOf('id="laundry-order-activity"')).toBeGreaterThan(html.indexOf('id="laundry-order-actions"'));
+    expect(html).not.toContain('History');
+  });
+
+  it('case 12: shows created, updated and status in Activity, and no audit list', async () => {
+    const html = await renderAs('PAID', 'TENANT_OWNER');
+    const activity = section(html, 'activity');
+    expect(activity).toContain('>Created</dt>');
+    expect(activity).toContain('>Updated</dt>');
+    expect(activity).toContain('>Status</dt>');
+    expect(activity).toContain(formatLaundryOrderTime('2026-10-01T09:00:00.000Z'));
+    expect(activity).toContain(formatLaundryOrderTime('2026-10-02T14:30:00.000Z'));
+    expect(activity).toContain('>Paid<');
+    for (const tag of ['<ul', '<ol', '<li']) expect(activity).not.toContain(tag);
+    for (const action of ['laundry_order.received', 'laundry_order.weighed', 'laundry_order.priced', 'laundry_order.cancelled']) {
+      expect(activity).not.toContain(action);
+    }
   });
 });

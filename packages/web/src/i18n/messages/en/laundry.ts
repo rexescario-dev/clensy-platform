@@ -109,9 +109,6 @@ export const laundry = {
   },
   noActions: 'No further actions for this order.',
   order: {
-    actions: {
-      available: 'Available to your role:',
-    },
     // #165: when the order was created and last changed, and its status.
     // Not an event log, so not "History".
     activity: {
