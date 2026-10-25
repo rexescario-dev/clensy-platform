@@ -21,6 +21,7 @@ import { LaundryWeighingEditor } from '../../../../components/laundry/laundry-we
 import { formatMinorUnits } from '../../../../lib/format-price';
 import { laundryInvoiceView, laundryPaymentFailureAlert, laundryPaymentView } from '../../../../lib/laundry-invoice-payment';
 import { isUuid } from '../../../../lib/laundry-order-list-query';
+import { isLaundryPaymentVerb } from '../../../../lib/laundry-order-lifecycle-actions';
 import {
   LAUNDRY_ORDER_SECTIONS,
   currentLaundryOrderSection,
@@ -492,7 +493,10 @@ function InvoicePaymentBody({
         // k). That Apollo applies a refetch to the query, or sets `error`
         // when it fails, is relied on, not tested: the page tests set the
         // query state themselves.
-        failure={laundryPaymentFailureAlert(transition.failure, order.status)}
+        failure={laundryPaymentFailureAlert(
+          isLaundryPaymentVerb(transition.failure) ? transition.failure : null,
+          order.status,
+        )}
         pending={transition.pending}
         view={laundryPaymentView(order.status, verbs)}
         onRun={(verb) => void transition.run(verb)}

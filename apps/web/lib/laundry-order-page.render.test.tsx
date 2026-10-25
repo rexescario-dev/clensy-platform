@@ -99,6 +99,8 @@ vi.mock('@clensy/client', () => ({
     page.addOnsCalls.push(options);
     return { data: undefined, error: undefined, loading: false };
   },
+  useCancelLaundryOrderMutation: () => [() => Promise.resolve({ data: {} }), { loading: false }],
+  useCompleteLaundryOrderMutation: () => [() => Promise.resolve({ data: {} }), { loading: false }],
   useCurrentAdminQuery: () => ({
     data: page.role === undefined ? undefined : { currentAdmin: { role: page.role } },
   }),
@@ -132,8 +134,13 @@ vi.mock('@clensy/client', () => ({
       refetch: () => Promise.resolve(),
     };
   },
+  useMarkLaundryOrderAwaitingDeliveryMutation: () => [() => Promise.resolve({ data: {} }), { loading: false }],
   useMarkLaundryOrderAwaitingPaymentMutation: () => [() => Promise.resolve({ data: {} }), { loading: false }],
+  useMarkLaundryOrderAwaitingPickupMutation: () => [() => Promise.resolve({ data: {} }), { loading: false }],
+  useMarkLaundryOrderDamagedMutation: () => [() => Promise.resolve({ data: {} }), { loading: false }],
+  useMarkLaundryOrderLostMutation: () => [() => Promise.resolve({ data: {} }), { loading: false }],
   useMarkLaundryOrderPaidMutation: () => [() => Promise.resolve({ data: {} }), { loading: false }],
+  useMarkLaundryOrderReadyMutation: () => [() => Promise.resolve({ data: {} }), { loading: false }],
   usePriceLaundryOrderMutation: () => [
     (...args: unknown[]) => {
       page.priceMutationCalls.push(args);
@@ -141,11 +148,14 @@ vi.mock('@clensy/client', () => ({
     },
     { loading: false },
   ],
+  useRefundLaundryOrderMutation: () => [() => Promise.resolve({ data: {} }), { loading: false }],
+  useRejectLaundryOrderMutation: () => [() => Promise.resolve({ data: {} }), { loading: false }],
   useServicesQuery: (options: unknown) => {
     page.servicesCalls.push(options);
     return { data: undefined, error: undefined, loading: false };
   },
   // The weighing editor's mutation; never called by a static render.
+  useStartLaundryProcessingMutation: () => [() => Promise.resolve({ data: {} }), { loading: false }],
   useWeighLaundryOrderMutation: () => [() => Promise.resolve({ data: {} }), { loading: false }],
 }));
 

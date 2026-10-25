@@ -49,6 +49,24 @@ const page = vi.hoisted(() => ({
   invoiceRefetch: vi.fn(),
   invoiceRefetches: [] as Deferred[],
   invoices: [] as Deferred[],
+  // #165: the ten Actions mutations, by GraphQL field, each with its own
+  // deferred list. A case that sends one on purpose adds its field to
+  // `lifecycleExpected`; any other call fails the test.
+  lifecycle: Object.fromEntries(
+    [
+      'cancelLaundryOrder',
+      'completeLaundryOrder',
+      'markLaundryOrderAwaitingDelivery',
+      'markLaundryOrderAwaitingPickup',
+      'markLaundryOrderDamaged',
+      'markLaundryOrderLost',
+      'markLaundryOrderReady',
+      'refundLaundryOrder',
+      'rejectLaundryOrder',
+      'startLaundryProcessing',
+    ].map((field) => [field, { fn: vi.fn(), list: [] as Deferred[] }]),
+  ) as Record<string, { fn: ReturnType<typeof vi.fn>; list: Deferred[] }>,
+  lifecycleExpected: new Set<string>(),
   order: null as unknown,
   orderError: undefined as Error | undefined,
   paid: vi.fn(),
@@ -109,6 +127,8 @@ function catalogQuery(entries: CatalogEntry[], listKey: 'addOns' | 'services') {
 vi.mock('@clensy/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@clensy/client')>()),
   useAddOnsQuery: (options: never) => catalogQuery(ADD_ONS, 'addOns')(options),
+  useCancelLaundryOrderMutation: () => [page.lifecycle.cancelLaundryOrder!.fn, { loading: false }],
+  useCompleteLaundryOrderMutation: () => [page.lifecycle.completeLaundryOrder!.fn, { loading: false }],
   useCurrentAdminQuery: () => ({ data: { currentAdmin: { role: page.role } } }),
   useGenerateInvoiceFromOrderMutation: () => [page.invoice, { loading: false }],
   useInvoiceForOrderQuery: () => ({
@@ -123,10 +143,18 @@ vi.mock('@clensy/client', async (importOriginal) => ({
     loading: false,
     refetch: page.refetch,
   }),
+  useMarkLaundryOrderAwaitingDeliveryMutation: () => [page.lifecycle.markLaundryOrderAwaitingDelivery!.fn, { loading: false }],
   useMarkLaundryOrderAwaitingPaymentMutation: () => [page.awaiting, { loading: false }],
+  useMarkLaundryOrderAwaitingPickupMutation: () => [page.lifecycle.markLaundryOrderAwaitingPickup!.fn, { loading: false }],
+  useMarkLaundryOrderDamagedMutation: () => [page.lifecycle.markLaundryOrderDamaged!.fn, { loading: false }],
+  useMarkLaundryOrderLostMutation: () => [page.lifecycle.markLaundryOrderLost!.fn, { loading: false }],
   useMarkLaundryOrderPaidMutation: () => [page.paid, { loading: false }],
+  useMarkLaundryOrderReadyMutation: () => [page.lifecycle.markLaundryOrderReady!.fn, { loading: false }],
   usePriceLaundryOrderMutation: () => [page.price, { loading: false }],
+  useRefundLaundryOrderMutation: () => [page.lifecycle.refundLaundryOrder!.fn, { loading: false }],
+  useRejectLaundryOrderMutation: () => [page.lifecycle.rejectLaundryOrder!.fn, { loading: false }],
   useServicesQuery: (options: never) => catalogQuery(SERVICES, 'services')(options),
+  useStartLaundryProcessingMutation: () => [page.lifecycle.startLaundryProcessing!.fn, { loading: false }],
   useWeighLaundryOrderMutation: () => [page.weigh, { loading: false }],
 }));
 
@@ -239,6 +267,12 @@ beforeEach(() => {
   page.paymentExpected = false;
   page.weigh.mockReset();
   page.weigh.mockImplementation(deferred(page.weighs));
+  for (const entry of Object.values(page.lifecycle)) {
+    entry.list.length = 0;
+    entry.fn.mockReset();
+    entry.fn.mockImplementation(deferred(entry.list));
+  }
+  page.lifecycleExpected.clear();
   page.weighs.length = 0;
   page.weighExpected = false;
   container = document.createElement('div');
@@ -259,6 +293,9 @@ afterEach(() => {
     expect(page.awaiting).not.toHaveBeenCalled();
   }
   if (!page.weighExpected) expect(page.weigh).not.toHaveBeenCalled();
+  for (const [field, { fn }] of Object.entries(page.lifecycle)) {
+    if (!page.lifecycleExpected.has(field)) expect(fn).not.toHaveBeenCalled();
+  }
 });
 
 function mount() {
