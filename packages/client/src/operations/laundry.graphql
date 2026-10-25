@@ -13,6 +13,7 @@ fragment LaundryOrderRow on LaundryOrder {
 
 fragment LaundryOrderDetail on LaundryOrder {
   ...LaundryOrderRow
+  updatedAt
   lines(paging: { limit: 100 }) {
     nodes {
       id

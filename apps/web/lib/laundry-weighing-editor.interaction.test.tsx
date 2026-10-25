@@ -32,6 +32,7 @@ const RECORDED: WeighResult = {
       lines: { nodes: [], pageInfo: { hasNextPage: false } },
       status: 'WEIGHED',
       totalMinorUnits: null,
+      updatedAt: '2026-10-14T09:05:00.000Z',
       weightGrams: 2500,
     },
   },
