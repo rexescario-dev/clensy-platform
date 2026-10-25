@@ -112,6 +112,13 @@ export const laundry = {
     actions: {
       available: 'Available to your role:',
     },
+    // #165: when the order was created and last changed, and its status.
+    // Not an event log, so not "History".
+    activity: {
+      created: 'Created',
+      status: 'Status',
+      updated: 'Updated',
+    },
     back: 'Back to laundry orders',
     invoice: {
       error: 'Unable to load invoice.',
@@ -176,6 +183,7 @@ export const laundry = {
     },
     sections: {
       actions: 'Actions',
+      activity: 'Activity',
       invoice: 'Invoice and payment',
       overview: 'Overview',
       price: 'Price',

@@ -4,13 +4,30 @@ import { isUuid } from './laundry-order-list-query';
 
 // The order page's sections, in page and nav order (#156). Later issues
 // fill Weighing (#155), Services (#158), Price (#162), Invoice (#166) and
-// Actions (#165).
-export const LAUNDRY_ORDER_SECTIONS = ['overview', 'weighing', 'services', 'price', 'invoice', 'actions'] as const;
+// Actions (#165). Activity is last (#165 U3).
+export const LAUNDRY_ORDER_SECTIONS = [
+  'overview',
+  'weighing',
+  'services',
+  'price',
+  'invoice',
+  'actions',
+  'activity',
+] as const;
 
 export type LaundryOrderSection = (typeof LAUNDRY_ORDER_SECTIONS)[number];
 
 export function laundryOrderSectionId(section: LaundryOrderSection): string {
   return `laundry-order-${section}`;
+}
+
+// The order's created and updated times, rendered as the list's Created
+// column renders them (`formatCreatedAt`, laundry order data table): the
+// locale date and time, or the raw value when it does not parse. No date
+// library.
+export function formatLaundryOrderTime(value: unknown): string {
+  const date = new Date(value as string);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
 }
 
 export function laundryOrderHref(id: string): string {

@@ -596,7 +596,8 @@ describe('laundry order page', () => {
     expect(count(html, 'aria-current="true"')).toBe(1);
     expect(html).toMatch(new RegExp(`<a[^>]*href="#laundry-order-${current}"[^>]*aria-current="true"|<a[^>]*aria-current="true"[^>]*href="#laundry-order-${current}"`));
     expect(html).toMatch(new RegExp(`<a[^>]*href="#laundry-order-${current}"[^>]*class="[^"]*font-medium text-slate-900|<a[^>]*class="[^"]*font-medium text-slate-900[^"]*"[^>]*href="#laundry-order-${current}"`));
-    expect(count(html, 'text-slate-600 whitespace-nowrap') + count(html, 'whitespace-nowrap text-slate-600')).toBe(5);
+    // Seven nav links (#165 adds Activity), one of them current.
+    expect(count(html, 'text-slate-600 whitespace-nowrap') + count(html, 'whitespace-nowrap text-slate-600')).toBe(6);
   });
 
   it('marks no section and names no action for ANALYST', async () => {
