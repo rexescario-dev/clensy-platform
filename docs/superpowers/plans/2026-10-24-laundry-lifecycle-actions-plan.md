@@ -7,7 +7,9 @@
 | Status | **Accepted (revision 2.10)** at M5, 2026-10-25 ([M5 decision](#m5-decision)). Drafted at M4 from 2026-10-24. Revision 1 was returned by the owner with five decisions (U1–U5) and seven corrections ([Revision 2 changes](#revision-2-changes)). Revision 2.1 tightens lock ownership, #166 compatibility and race-test validity after the owner's preliminary review ([Revision 2.1 changes](#revision-21-changes)). Revision 2.2 makes per-order lock isolation explicit and tested, and tightens the acquire contract and the evidence rules ([Revision 2.2 changes](#revision-22-changes)). Revision 2.3 makes the order-switch test prove the key is necessary (same root, same page instance), pins the editor's early-return path, and states what an M5 record may and may not claim ([Revision 2.3 changes](#revision-23-changes)). M5 review of revision 2.2: **Revise** (2026-10-24). Revision 2.4 corrects five test-design and consistency gaps found in a full audit of 2.3 ([Revision 2.4 changes](#revision-24-changes)). Review of the #166 amendment text in 2.4: **Revise before sign-off** (2026-10-24). Revision 2.5 narrows Rules item 2 and separates the destructive dialog's own submission from the page lock ([Revision 2.5 changes](#revision-25-changes)). Revision 2.6 corrects an ambiguous eligibility sentence and adds the helper's verbs for every race fixture ([Revision 2.6 changes](#revision-26-changes)); revision 2.7 corrects two cells of that table. Revision 2.8 makes the race matrix prove that both competing handlers run ([Revision 2.8 changes](#revision-28-changes)). Revision 2.9 corrects the lock-removal procedure so each run records the actual mutation outcome independently of the lock-log assertions ([Revision 2.9 changes](#revision-29-changes)). Revision 2.10 measures row M9, whose two clicks share one mutation spy, by its total submitted mutations ([Revision 2.10 changes](#revision-210-changes)). Accepted at M5 with the owner's sign-off on the #166 amendment. No command in this plan has been run; every result below is expected, not actual, until M6 records it. |
 | M5 decision | **Accepted** — 2026-10-25, revision 2.10, by the owner. See [M5 decision](#m5-decision). |
 | M6 | **Complete** — 2026-10-26, on `feat/165-laundry-lifecycle-actions`. Actual results and deviations in the [Execution record](#execution-record-m6). |
-| M7 | Round 1 **Returned** (2026-10-26), one blocking finding, B1 (a test that proved nothing), fixed in `6836371`; re-review pending. See [M7 round 1](#m7-round-1--returned-2026-10-26). |
+| M7 | **Approved** (round 2, 2026-10-26) by a fresh independent reviewer. Round 1 Returned one blocking finding, B1, fixed in `6836371`. See [M7 round 1](#m7-round-1--returned-2026-10-26) and [M7 round 2](#m7-round-2--approved-2026-10-26). |
+| M8 | **N/A**. See [M8](#m8--not-applicable). |
+| M9 | **Complete** (2026-10-26). See [M9](#m9--documentation-2026-10-26). |
 | Date | 2026-10-24 |
 | Tracking issue | [#165](https://github.com/rexescario-dev/clensy-platform/issues/165) "Laundry lifecycle actions". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) (order page, merged in #183) and the laundry UI foundation (`laundryOrderActions`, merged). Follows [#166](https://github.com/rexescario-dev/clensy-platform/issues/166) (merged in #207), which owns the payment verbs and created the transition hook this slice extends. |
 | Branch | `feat/165-laundry-lifecycle-actions`, from `main` at `e2e73e9`, created at M6. One PR for this plan, its M5 record and the implementation. |
@@ -1006,6 +1008,40 @@ On 2026-10-26, against the local Docker API and Postgres, as the seeded TENANT_O
 - The Services editor stays outside the lock, by decision c.
 
 **Plan document fix.** Commit `8ad4277` (the M6 record) dropped the `## Verification gates` heading above the gates table below. It is restored here; no content changed.
+
+## M7 round 2 — Approved (2026-10-26)
+
+**Reviewer:** the same fresh independent agent as round 1, not the implementer. **Decision: Approved for merge.** It reviewed `6836371` and `eaa7c55` and found:
+
+- B1 is fixed. The test now reads the lock the editor took (`held`), shows it is still held after the editor unmounts, and requires it to be released once the save settles, so a missing `finally` release fails the final assertion. This agrees with the implementer's break run.
+- `eaa7c55` is a plan-only change.
+
+It re-ran, all passing: the weighing-editor test file (53/53), `pnpm --filter web test` (2516/2516), web lint and `tsc --noEmit` (exit 0); `git status` was clean afterwards. It did not repeat the break run, because the review was read-only. No blocking findings. The round 1 non-blocking observations stand.
+
+## M8 — Not applicable
+
+No refactoring. Neither the M7 reviewer nor M6 identified a maintainability issue that needed it. No code changed for M8.
+
+## M9 — Documentation (2026-10-26)
+
+Scope: `apps/web/README.md`, `docs/features/laundry.md` and this plan. Each change follows from the M7-approved implementation (PR #210).
+
+- **`apps/web/README.md`, content:**
+  - The order page has seven sections, ending in Activity, and only Overview and Activity are read-only.
+  - New entries cover the page mutation lock, Actions (grouping, confirmation, outcome) and Activity.
+  - The weighing editor, Confirm price, Generate and transition-guard entries now describe the lock.
+  - The out-of-date "Actions names … as text" and "#165 replaces/reuses" wording is removed.
+- **`docs/features/laundry.md`, content:** the list of web screens now includes invoice and payment, lifecycle actions and activity. One paragraph after the transition table says the order page offers these transitions as role-filtered buttons, confirms the destructive ones, shows the server's refusal, and has no history view because no API reads the audit rows.
+- **This plan:** the Status rows for M7, M8 and M9, and these records.
+- **Editorial checks:**
+  - The new relative links resolve (the plan path, from `apps/web/`), and the features doc's `#laundry-list-applaundry` anchor still matches its heading.
+  - The heading hierarchy is unchanged, apart from this plan's restored `## Verification gates`.
+  - No old wording ("six sections", "names … as text", "#165 replaces", "#165 reuses it") is left.
+  - Terms follow the spec and the copy catalog: Actions, Activity, the verb labels.
+
+## M10 — Not applicable
+
+No workflow asset under `docs/workflows/` or installer-managed file changed.
 
 ## Verification gates
 

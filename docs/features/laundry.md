@@ -2,7 +2,7 @@
 
 A laundry order is received, weighed, priced from the catalog, paid, processed and handed back. This page covers the lifecycle and the API rules that are easy to get wrong. The binding contract is the Accepted [laundry orders lifecycle spec](../superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md), including Amendment #164 (§8.4); pricing comes from the [laundry catalog foundation spec](../superpowers/specs/2026-09-06-laundry-catalog-foundation-design.md) and invoices from the [laundry invoices spec](../superpowers/specs/2026-09-06-laundry-invoices-design.md).
 
-The web screens (list, intake dialog, order page with weighing, services and price review) are documented in [`apps/web/README.md`](../../apps/web/README.md#laundry-list-applaundry).
+The web screens (list, intake dialog, order page with weighing, services, price review, invoice and payment, lifecycle actions and activity) are documented in [`apps/web/README.md`](../../apps/web/README.md#laundry-list-applaundry).
 
 ## Lifecycle
 
@@ -41,6 +41,8 @@ Not drawn, to keep the diagram readable:
 | `PAID`, `PROCESSING`, `READY`, `AWAITING_PICKUP`, `AWAITING_DELIVERY`, `COMPLETED`, `LOST`, `DAMAGED` | `REFUNDED` (`refundLaundryOrder`) |
 
 `CANCELLED`, `REJECTED` and `REFUNDED` are final.
+
+On the order page, the Actions section offers these transitions as buttons from `laundryOrderActions` (the same matrix intersected with the fulfillment branch and the caller's role). Cancel, reject, lost, damaged and refund are confirmed first. The server re-checks every transition, and the page shows its refusal message when it rejects one. The page's Activity section shows only the order's created and updated times and status: audit rows are written for each transition but no API reads them, so there is no history view (#165).
 
 Which roles may call each mutation is pinned in [`role-matrix.ts`](../../apps/api/test/release-gate/role-matrix.ts). Invoices are generated from an order with `generateInvoiceFromOrder` (module `billing`).
 
