@@ -10,6 +10,7 @@
 | M7 | **Approved** (round 2, 2026-10-26) by a fresh independent reviewer. Round 1 Returned one blocking finding, B1, fixed in `6836371`. See [M7 round 1](#m7-round-1--returned-2026-10-26) and [M7 round 2](#m7-round-2--approved-2026-10-26). |
 | M8 | **N/A**. See [M8](#m8--not-applicable). |
 | M9 | **Complete** (2026-10-26). See [M9](#m9--documentation-2026-10-26). |
+| Merge and closeout | Merged in PR [#210](https://github.com/rexescario-dev/clensy-platform/pull/210) (`edd6f9e`, 2026-10-26); #165 closed; follow-ups #211 and #212 filed. See [Closeout](#closeout-2026-10-26). |
 | Date | 2026-10-24 |
 | Tracking issue | [#165](https://github.com/rexescario-dev/clensy-platform/issues/165) "Laundry lifecycle actions". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) (order page, merged in #183) and the laundry UI foundation (`laundryOrderActions`, merged). Follows [#166](https://github.com/rexescario-dev/clensy-platform/issues/166) (merged in #207), which owns the payment verbs and created the transition hook this slice extends. |
 | Branch | `feat/165-laundry-lifecycle-actions`, from `main` at `e2e73e9`, created at M6. One PR for this plan, its M5 record and the implementation. |
@@ -1042,6 +1043,94 @@ Scope: `apps/web/README.md`, `docs/features/laundry.md` and this plan. Each chan
 ## M10 — Not applicable
 
 No workflow asset under `docs/workflows/` or installer-managed file changed.
+
+## Closeout (2026-10-26)
+
+**Merge check (§2.12, before the merge).** Each applicable stage was checked in order. Every one had a recorded outcome. No stage was skipped or overridden.
+
+| Gate | Outcome |
+| --- | --- |
+| M1 | Installed prompt library present |
+| M2 | No new specification or amendment; the Accepted lifecycle spec (Amendment #164 §8.4.4, §4.3, §4.4, §4.9) governs |
+| M3 | Spec already Accepted |
+| M4 | Plan drafted (revisions 1–2.10) |
+| M5 | Plan Accepted (revision 2.10, owner), with the owner's sign-off on the #166 guard-contract amendment |
+| M6 | Complete, including the browser check (not waived) |
+| M7 | Approved for merge (independent, round 2) |
+| M8 | N/A |
+| M9 | Complete |
+| M10 | Does not apply (no workflow assets changed) |
+
+**Merge.**
+
+- Authorized by the owner ("merge 210, closeout").
+- Merged as a merge commit with `gh pr merge 210 --merge --delete-branch`. The head was `608d0c9`, on which PR CI passed (Lint, Test, API e2e and Release gate all `SUCCESS`). Nothing after the M7-reviewed `eaa7c55` is code: `608d0c9` is the M9 docs commit.
+
+**Verification.**
+
+- PR #210 shows `MERGED`, with merge commit `edd6f9e`, at 2026-10-26T02:37:44Z (UTC).
+- `608d0c9` is an ancestor of `origin/main`, and `git diff 608d0c9 edd6f9e` is empty.
+- Local `main` fast-forwarded to `edd6f9e`.
+- #165 closed automatically (2026-10-26T02:37:46Z).
+
+**Post-merge cleanup.**
+
+- `--delete-branch` removed `feat/165-laundry-lifecycle-actions` from the remote. #166's closeout left its branch in place, but that branch is no longer on the remote either. The project defines no cleanup policy.
+- Follow-up issues #211 and #212 linked to files on that branch, so their links were repointed to `main`.
+- **Local data left from the M6 browser check:** two test orders for the seeded customer Amara Chidi stay in the local database: `72c06f77-9a53-4690-b4ba-c1c72c2f102c` (Completed) and `79aad04f-7699-409d-aca3-321a43da77a1` (Cancelled). A gitignored production build is left in `apps/web/.next`.
+
+**Final M7 position.** Approved for merge in round 2, with no blocking findings. The round-1 return (B1, a test that proved nothing) was resolved in `6836371` with a break-run proof. The round 1 non-blocking observations are filed as #212.
+
+**Follow-ups.**
+
+| Item | Outcome |
+| --- | --- |
+| Message when the role lookup fails (U2, deferred by the owner) | Filed as [#211](https://github.com/rexescario-dev/clensy-platform/issues/211) (`enhancement`). Deferred; to be prioritized separately. |
+| Race-matrix test hardening (M7 non-blocking observations) | Filed as [#212](https://github.com/rexescario-dev/clensy-platform/issues/212). Deferred; to be prioritized separately. |
+| Order event timeline (audit rows not readable through any API) | Not filed; needs a separate product decision. |
+| #161 cutover (rows and intake still open the drawer) | Already tracked as #161. |
+| Toast from order A shown after switching to order B | Pre-existing behaviour recorded under Execution risks; not filed. |
+| Race observations print only with `--disableConsoleIntercept` | Recorded in the M6 execution record (deviation 9); not filed. |
+| `next dev` hits the OS file-watch limit on the owner's machine | Environment only; not filed. |
+
+## Slice Completion Report (final)
+
+| Field | Result |
+| --- | --- |
+| Slice | #165 Laundry lifecycle actions |
+| Tracking | https://github.com/rexescario-dev/clensy-platform/issues/165 |
+| M4 | Plan **Accepted** (revision 2.10) |
+| M5 | Review **Accepted** (owner, 2026-10-25) |
+| M6 | **Complete** |
+| M7 | **Approved** (independent, round 2) |
+| M8 | **N/A** |
+| M9 | **Complete** |
+| Branch | `feat/165-laundry-lifecycle-actions` (merged and deleted) |
+| PR | https://github.com/rexescario-dev/clensy-platform/pull/210 |
+| Status | **Slice complete** |
+
+### Shipped
+
+- **Actions buttons:** one button per lifecycle verb the role, status and fulfillment allow. Forward verbs come first, then a separator, then the destructive verbs. Payment verbs stay in Invoice and payment.
+- **Confirmation:** a `ConfirmDialog` with the catalog sentence for Cancel, Reject, Mark lost, Mark damaged and Refund. Nothing is sent before Confirm, and an unrelated mutation never makes an unsubmitted dialog impossible to cancel.
+- **One page mutation lock:** weighing, price confirmation, invoice generation and every lifecycle or payment verb share one synchronous lock, so two mutations never overlap. Each order has its own lock.
+- **Failures:** the server's message, or the catalog fallback, appears in Actions. Payment failures stay in the payment card (decision k unchanged).
+- **Activity:** the last section, showing created time, updated time and status. It is not an audit timeline.
+- **Docs:** the web README and the laundry feature doc describe the lock, Actions and Activity.
+
+### Validation
+
+| Check | Result |
+| --- | --- |
+| Tests | **Passed**: web 2516/2516, `@clensy/web` 418/418, `@clensy/client` 15/15; CI Test and API e2e pass |
+| Typecheck | **Passed** |
+| Lint | **Passed** (also CI) |
+| Build | **Passed** (`@clensy/web`, `@clensy/client`) |
+| Package validation | **Passed**: codegen output matches the committed client; scope check clean; CI Release gate passes |
+
+### Next Gate
+
+**None — slice complete**
 
 ## Verification gates
 
