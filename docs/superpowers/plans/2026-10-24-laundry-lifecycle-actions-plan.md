@@ -7,6 +7,7 @@
 | Status | **Accepted (revision 2.10)** at M5, 2026-10-25 ([M5 decision](#m5-decision)). Drafted at M4 from 2026-10-24. Revision 1 was returned by the owner with five decisions (U1–U5) and seven corrections ([Revision 2 changes](#revision-2-changes)). Revision 2.1 tightens lock ownership, #166 compatibility and race-test validity after the owner's preliminary review ([Revision 2.1 changes](#revision-21-changes)). Revision 2.2 makes per-order lock isolation explicit and tested, and tightens the acquire contract and the evidence rules ([Revision 2.2 changes](#revision-22-changes)). Revision 2.3 makes the order-switch test prove the key is necessary (same root, same page instance), pins the editor's early-return path, and states what an M5 record may and may not claim ([Revision 2.3 changes](#revision-23-changes)). M5 review of revision 2.2: **Revise** (2026-10-24). Revision 2.4 corrects five test-design and consistency gaps found in a full audit of 2.3 ([Revision 2.4 changes](#revision-24-changes)). Review of the #166 amendment text in 2.4: **Revise before sign-off** (2026-10-24). Revision 2.5 narrows Rules item 2 and separates the destructive dialog's own submission from the page lock ([Revision 2.5 changes](#revision-25-changes)). Revision 2.6 corrects an ambiguous eligibility sentence and adds the helper's verbs for every race fixture ([Revision 2.6 changes](#revision-26-changes)); revision 2.7 corrects two cells of that table. Revision 2.8 makes the race matrix prove that both competing handlers run ([Revision 2.8 changes](#revision-28-changes)). Revision 2.9 corrects the lock-removal procedure so each run records the actual mutation outcome independently of the lock-log assertions ([Revision 2.9 changes](#revision-29-changes)). Revision 2.10 measures row M9, whose two clicks share one mutation spy, by its total submitted mutations ([Revision 2.10 changes](#revision-210-changes)). Accepted at M5 with the owner's sign-off on the #166 amendment. No command in this plan has been run; every result below is expected, not actual, until M6 records it. |
 | M5 decision | **Accepted** — 2026-10-25, revision 2.10, by the owner. See [M5 decision](#m5-decision). |
 | M6 | **Complete** — 2026-10-26, on `feat/165-laundry-lifecycle-actions`. Actual results and deviations in the [Execution record](#execution-record-m6). |
+| M7 | Round 1 **Returned** (2026-10-26), one blocking finding, B1 (a test that proved nothing), fixed in `6836371`; re-review pending. See [M7 round 1](#m7-round-1--returned-2026-10-26). |
 | Date | 2026-10-24 |
 | Tracking issue | [#165](https://github.com/rexescario-dev/clensy-platform/issues/165) "Laundry lifecycle actions". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) (order page, merged in #183) and the laundry UI foundation (`laundryOrderActions`, merged). Follows [#166](https://github.com/rexescario-dev/clensy-platform/issues/166) (merged in #207), which owns the payment verbs and created the transition hook this slice extends. |
 | Branch | `feat/165-laundry-lifecycle-actions`, from `main` at `e2e73e9`, created at M6. One PR for this plan, its M5 record and the implementation. |
@@ -983,6 +984,30 @@ On 2026-10-26, against the local Docker API and Postgres, as the seeded TENANT_O
 - **Test data left:** these two orders remain in the local database, one Completed and one Cancelled.
 
 
+
+## M7 round 1 — Returned (2026-10-26)
+
+**Reviewer:** a fresh independent agent on Opus, which did not implement the change (`CLAUDE.md`). It was given the Accepted spec, this plan and `git diff main...feat/165-laundry-lifecycle-actions` (PR #210). It re-ran the following, all exit 0: `pnpm --filter web test` (2516/2516), web lint, web `tsc --noEmit`, `@clensy/web` test (418/418) and `@clensy/client` test (15/15). It did not re-run the break runs or the browser check; for those it relied on the M6 record. It found Tasks 1–8 conforming, the scope clean, decision k and #166 semantics intact, and no M6 deviation blocking.
+
+**B1 (blocking, verification).** The test "releases the lock when the save settles after the editor unmounted" (Task 5 case 5, Rules item 5) proved nothing. `mountWithLock` defines a new `Host` on every call, so `mountWithLock(false)` mounted a new host with a fresh lock and reassigned `lock`. The final assertion therefore read a lock that was never held. The code was correct by reading; the proof was missing.
+
+**Fix (`6836371`).** The test now captures the editor's lock before the remount (`const held = lock`). It asserts that `lock` was replaced and `held` is still held after the editor unmounts, and that `held` is released once the save settles. Verified:
+
+- The fixed test passes.
+- Break run, outside the commit: the editor's `if (lease) lock?.release(lease);` was removed, and the test then failed at its final assertion (line 756, `expected true to be false`). The editor was restored and `git status` showed only the test file changed.
+- Gates after the fix: `pnpm --filter web test` 2516/2516; web lint and `tsc --noEmit` exit 0.
+
+**Non-blocking observations.** Recorded, not changed:
+
+- Race step 6 checks only the second control, not every mutation control.
+- Step 4 checks the loser's pending label but not the absence of a failure alert.
+- Interaction case 1's "every control" holds for its fixture.
+- Case 11's assertion 11.6 holds by construction once the key is present.
+- The Services editor stays outside the lock, by decision c.
+
+**Plan document fix.** Commit `8ad4277` (the M6 record) dropped the `## Verification gates` heading above the gates table below. It is restored here; no content changed.
+
+## Verification gates
 
 | Gate | When | Who |
 | --- | --- | --- |
