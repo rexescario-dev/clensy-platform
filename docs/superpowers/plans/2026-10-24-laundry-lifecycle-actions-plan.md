@@ -6,6 +6,7 @@
 | --- | --- |
 | Status | **Accepted (revision 2.10)** at M5, 2026-10-25 ([M5 decision](#m5-decision)). Drafted at M4 from 2026-10-24. Revision 1 was returned by the owner with five decisions (U1–U5) and seven corrections ([Revision 2 changes](#revision-2-changes)). Revision 2.1 tightens lock ownership, #166 compatibility and race-test validity after the owner's preliminary review ([Revision 2.1 changes](#revision-21-changes)). Revision 2.2 makes per-order lock isolation explicit and tested, and tightens the acquire contract and the evidence rules ([Revision 2.2 changes](#revision-22-changes)). Revision 2.3 makes the order-switch test prove the key is necessary (same root, same page instance), pins the editor's early-return path, and states what an M5 record may and may not claim ([Revision 2.3 changes](#revision-23-changes)). M5 review of revision 2.2: **Revise** (2026-10-24). Revision 2.4 corrects five test-design and consistency gaps found in a full audit of 2.3 ([Revision 2.4 changes](#revision-24-changes)). Review of the #166 amendment text in 2.4: **Revise before sign-off** (2026-10-24). Revision 2.5 narrows Rules item 2 and separates the destructive dialog's own submission from the page lock ([Revision 2.5 changes](#revision-25-changes)). Revision 2.6 corrects an ambiguous eligibility sentence and adds the helper's verbs for every race fixture ([Revision 2.6 changes](#revision-26-changes)); revision 2.7 corrects two cells of that table. Revision 2.8 makes the race matrix prove that both competing handlers run ([Revision 2.8 changes](#revision-28-changes)). Revision 2.9 corrects the lock-removal procedure so each run records the actual mutation outcome independently of the lock-log assertions ([Revision 2.9 changes](#revision-29-changes)). Revision 2.10 measures row M9, whose two clicks share one mutation spy, by its total submitted mutations ([Revision 2.10 changes](#revision-210-changes)). Accepted at M5 with the owner's sign-off on the #166 amendment. No command in this plan has been run; every result below is expected, not actual, until M6 records it. |
 | M5 decision | **Accepted** — 2026-10-25, revision 2.10, by the owner. See [M5 decision](#m5-decision). |
+| M6 | **Complete** — 2026-10-26, on `feat/165-laundry-lifecycle-actions`. Actual results and deviations in the [Execution record](#execution-record-m6). |
 | Date | 2026-10-24 |
 | Tracking issue | [#165](https://github.com/rexescario-dev/clensy-platform/issues/165) "Laundry lifecycle actions". Epic [#154](https://github.com/rexescario-dev/clensy-platform/issues/154). Depends on [#156](https://github.com/rexescario-dev/clensy-platform/issues/156) (order page, merged in #183) and the laundry UI foundation (`laundryOrderActions`, merged). Follows [#166](https://github.com/rexescario-dev/clensy-platform/issues/166) (merged in #207), which owns the payment verbs and created the transition hook this slice extends. |
 | Branch | `feat/165-laundry-lifecycle-actions`, from `main` at `e2e73e9`, created at M6. One PR for this plan, its M5 record and the implementation. |
@@ -867,7 +868,121 @@ When the owner accepts this plan, the M5 record states:
 - **Not claimed:** no test, gate, break run (H1, race matrix, lock-removal, key-removal) or browser check has run. Every `Expected:` line, the race-matrix outcomes, the expected lock records, the lock-removal predictions and the key-removal prediction remain predictions until M6 records actual results.
 - **Next:** M6 on `feat/165-laundry-lifecycle-actions`. M7 is a fresh independent review (`CLAUDE.md`: application code).
 
-## Verification gates
+## Execution record (M6)
+
+2026-10-25 to 2026-10-26, on `feat/165-laundry-lifecycle-actions` from `main` at `e2e73e9`. Every result below was observed in this session. Nothing here is a prediction.
+
+### Commits
+
+| Task | Commit | Summary |
+| --- | --- | --- |
+| Plan and M5 | `d4e7fe1` | This plan, revision 2.10, with its M5 record |
+| 1 | `83e458c` | `updatedAt` on `LaundryOrderDetail`; regenerated client |
+| 2 | `4722a9e` | `useLaundryMutationLock` |
+| 3 | `8d5f67e` | `laundry-order-lifecycle-actions`; `activity` section; `formatLaundryOrderTime`; Activity copy |
+| 4 | `b86ce36` | Transition hook: ten verbs, `message`, lock |
+| 5 | `efe2ac1` | Price, generate and weighing join the lock |
+| 6 | `dea85d4` | `LaundryOrderActions` |
+| 7 | `7a149fd` | Page wiring, cards' `disabled`, Activity, render and interaction tests |
+
+### Red and green per task
+
+| Task | Red (before the change) | Green |
+| --- | --- | --- |
+| 1 | Client test failed: `updatedAt` not selected | 5/5 client operation tests; client build exit 0 |
+| 2 | Module missing | 8/8 lock tests |
+| 3 | Module missing; section list and formatter tests failed | 99/99 in the two files; `@clensy/web` 418/418 and build exit 0 |
+| 4 | 76 of the new hook cases failed (ten verbs unknown, no `message`, no lock) | 101/101 hook tests |
+| 5 | 16/16 new price and generate lock cases failed; 10 of 11 new editor lock cases failed (see deviation 5) | 89/89 in the three files |
+| 6 | Module missing | 18/18 render tests |
+| 7 | Run after the fact (deviation 6): against the committed pre-Task-7 page, 9 of 15 new render cases and 24 of 26 new interaction cases failed | 90/90 render, 57/57 interaction |
+
+### Deviations from the plan
+
+1. **Task 1 touched a Task 5 file.** The weighing editor test's `RECORDED` fixture is typed by the generated fragment, so adding `updatedAt` to the fragment broke the web typecheck until the fixture gained the field. The client test's new helper was also moved to satisfy `contextforge/function-order`.
+2. **Task 3 updated a render assertion early.** The nav gained a seventh link, so the #156 case "marks the next step forward as current" now counts 6 non-current links, not 5. The plan placed render-test changes in Task 7. They were made here to keep the commit green.
+3. **Task 4 did two Task 7 steps early, to keep the commit green.** The widened hook's failure no longer fits `laundryPaymentFailureAlert`, so the page's narrowing (`isLaundryPaymentVerb`) went in with Task 4. The page now calls the ten new mutation hooks through the transition hook, so both page harnesses gained their mocks, deferred lists and expected-call flags in Task 4.
+4. **No `as` casts were needed** for the transition hook's verb-to-mutation map; the generated mutate functions are assignable to its `Mutate` type.
+5. **Tests that pass before their implementation.** Decision (k) said there are none. These pass on the code before the change, because they assert an absence that already held, or they do not involve the changed code:
+   - "never marks Activity" (Task 3);
+   - "never acquires for a blocked submit" (Task 5);
+   - render #165 cases 1, 7 (three statuses), 9 and 10;
+   - H1's two tests.
+
+   No characterization break evidence is claimed for them. In Task 5, four editor cases that first passed trivially (the lock was never taken) were strengthened before implementation to assert the lock is held while the save is pending, and then failed as expected.
+6. **Task 7 TDD order.** The page was wired before the render and interaction tests were written. Red evidence was then taken by restoring the committed pre-Task-7 page, outside the commit, and running the new #165 cases against it:
+   - render: 9 of 15 failed; the six above passed;
+   - interaction: 24 of 26 failed; H1's two passed.
+
+   The page was restored afterwards and `cmp` confirmed it.
+7. **Task 7 changed six existing render assertions, not three.** The plan listed three. All six:
+   - "six sections" became seven;
+   - "names the role-allowed lifecycle actions as text" became buttons;
+   - #166 case 10 became buttons;
+   - three cases that treated Actions as having no controls ("no controls in the read-only sections"; the Services-editor and weighing-editor "controls only in …" cases) now exclude Actions and check Activity instead.
+8. **A race-matrix assertion was corrected before commit.** A first version asserted that the loser's control is disabled after the race. That is wrong for a losing dialog Confirm, which rule 6 keeps enabled and cancellable. M2, M4 and M6 failed on it, and the assertion was changed to follow rule 6. No code changed.
+9. **Race observations need `--disableConsoleIntercept`.** The interaction file uses fake timers, and with them Vitest 5 did not print intercepted `console.info` output. The lock-removal runs used `--disableConsoleIntercept`.
+10. **No jsdom timeouts (#205)** occurred in any run.
+
+### Gates (Task 8 Step 1)
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter web test` | exit 0 — 57 files, 2516/2516 |
+| `pnpm --filter web lint` | exit 0 |
+| `pnpm --filter web exec tsc --noEmit` | exit 0 |
+| `pnpm --filter @clensy/web test` | exit 0 — 16 files, 418/418 |
+| `pnpm --filter @clensy/web lint` | exit 0 |
+| `pnpm --filter @clensy/web build` | exit 0 |
+| `pnpm --filter @clensy/client test` | exit 0 — 2 files, 15/15 |
+| `pnpm --filter @clensy/client build` | exit 0 |
+| `pnpm --filter @clensy/client lint` | exit 0 |
+| `pnpm --filter @clensy/client codegen && git diff --exit-code packages/client/src/generated/graphql.ts` | exit 0 (committed output matches) |
+| Scope: `git diff --name-only main...HEAD` | no file under `apps/api/` or `packages/ui/`; `apps/web/app/app/laundry/page.tsx` not changed |
+| Lock participation: `grep -n "lock" "apps/web/app/app/laundry/[id]/page.tsx"` | one `useLaundryMutationLock()`; passed to `useConfirmLaundryPrice`, `useLaundryOrderTransition`, `useGenerateLaundryInvoice` and, through `WeighingBody`, `LaundryWeighingEditor` |
+
+### Race matrix, normal run
+
+`pnpm --filter web exec vitest run lib/laundry-order-page.interaction.test.tsx -t "race matrix" --disableConsoleIntercept`: 12/12 passed. Every printed observation matched its [expected lock records](#expected-lock-records), with winner 1 call, loser 0 (M9: total 1), and the click counter at 1 (M9: 2).
+
+### Lock-removal check (actual)
+
+Five runs, each an edit to `apps/web/app/app/laundry/[id]/page.tsx` outside the commit, followed by the race-matrix command above with `--reporter=json`. The page was restored after the runs, and `git status` was clean.
+
+| Run | Edit | Both called | Refused, log differs (actual log) | Refused, log as normal | Matches prediction |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `lock={lock}` removed from `LaundryWeighingEditor` | M3, M4, M11, M12 | none | the other eight | yes |
+| 2 | `lock` removed from `useConfirmLaundryPrice` | M5, M6, M11, M12 | none | the other eight | yes |
+| 3 | `lock` removed from `useGenerateLaundryInvoice` | M7, M8, M10 | none | the other nine | yes |
+| 4 | `lock` removed from `useLaundryOrderTransition` | M3, M5, M7, M8, M10 | M1 (isHeld F), M2 (isHeld F), M9 (empty; total 1) | M4, M6, M11, M12 | yes |
+| 5 | As run 4, and both dialog `lock.isHeld()` checks removed | M3, M4, M5, M6, M7, M8, M10 | M1 (empty), M2 (empty), M9 (empty; total 1) | M11, M12 | yes |
+
+Every "both called" row failed first at the loser's mutation-count assertion (test file line 1375). Every "log differs" row failed first at the lock-log assertion (line 1378). Every "log as normal" row passed. No mismatch.
+
+### Key-removal check (actual)
+
+`key={id}` was removed from `LaundryOrderPage` outside the commit, and both page test files were run (`--reporter=json`): 146 of 147 passed. The one failure was case 11 at line 1108, assertion 11.5a (`expected true to be false`: B's Start processing is disabled), after step 4's `mounts === 1` passed. The page was restored and `git status` was clean. This matches the prediction.
+
+### Browser check (Task 8 Step 2)
+
+On 2026-10-26, against the local Docker API and Postgres, as the seeded TENANT_OWNER. The owner approved two things for this check: stopping the `clensy-platform-web-1` container and serving this branch on port 3001, because the API's CORS allows only `http://localhost:3001`. The Claude in Chrome extension was not connected, so the check used the Playwright plugin's Chromium. `next dev` failed with "OS file watch limit reached", so the branch was built (`pnpm --filter web build`) and served with `next start` on 3001. The container was started again afterwards. To observe the in-flight state, the page's `fetch` was wrapped to hold mutation responses for 4 seconds.
+
+- **Order `72c06f77…` (customer pickup), RECEIVED → COMPLETED:** record weight → base service → Confirm price → Mark paid → Start processing → Mark ready → Mark awaiting pickup → Complete order.
+  - RECEIVED: Actions offered Cancel order, Reject order.
+  - PRICED: Mark paid and Mark awaiting payment were in the payment card only; Actions showed Cancel order.
+  - While Start processing ran: Generate invoice, all three payment-terms radios, Start processing and Refund order were disabled.
+  - READY: Mark awaiting pickup (no delivery verb), a separator, then Mark lost, Mark damaged, Refund order.
+  - COMPLETED: Refund order only. Activity showed Created, Updated (later than Created) and the status badge.
+- **At 375 px (READY):** no horizontal page overflow; the three destructive buttons wrapped onto two rows; no button group overflowed.
+- **Order `79aad04f…` (customer pickup), RECEIVED → CANCELLED through the dialog:**
+  - The dialog showed the exact cancel sentence, with Cancel and Cancel order enabled.
+  - After Confirm, while the mutation ran: both dialog buttons, both Actions buttons and every weighing-editor control were disabled, and Escape did not close the dialog.
+  - Afterwards: the dialog closed, the "Order cancelled." toast appeared, the header showed Cancelled, Actions said "No further actions for this order.", and Activity updated.
+- **Console:** no errors other than a missing `favicon.ico` (404).
+- **Screenshots:** in the session scratchpad (`browser/165-02` to `165-06`), not committed.
+- **Test data left:** these two orders remain in the local database, one Completed and one Cancelled.
+
+
 
 | Gate | When | Who |
 | --- | --- | --- |
