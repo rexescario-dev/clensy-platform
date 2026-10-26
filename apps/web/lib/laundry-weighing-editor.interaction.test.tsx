@@ -743,10 +743,16 @@ describe('laundry weighing editor with the page lock (#165)', () => {
   it('releases the lock when the save settles after the editor unmounted', async () => {
     await enterOneBag();
     click('Record weight');
-    expect(lock.isHeld()).toBe(true);
+    // The lock the editor took. `mountWithLock` defines a new host, so the
+    // next render replaces `lock`; the assertions must keep reading this one
+    // (M7 round 1, B1).
+    const held = lock;
+    expect(held.isHeld()).toBe(true);
     await mountWithLock(false);
     expect(container.querySelector('form')).toBeNull();
+    expect(lock).not.toBe(held);
+    expect(held.isHeld()).toBe(true);
     await act(async () => weigh.reject(new Error('Failed to fetch')));
-    expect(lock.isHeld()).toBe(false);
+    expect(held.isHeld()).toBe(false);
   });
 });
