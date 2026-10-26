@@ -18,6 +18,9 @@ const PAYMENT_TERMS: readonly InvoicePaymentTerms[] = ['PAY_NOW', 'PAY_ON_COMPLE
 const DEFAULT_TERMS: InvoicePaymentTerms = 'PAY_ON_COMPLETION';
 
 export interface LaundryInvoiceCardProps {
+  // Another mutation on the order page holds the page lock (#165): Generate
+  // and the terms are disabled, without the "Generating…" label.
+  disabled?: boolean;
   failed: boolean;
   generating: boolean;
   // Set when `view` is `invoice`.
@@ -38,11 +41,19 @@ export interface LaundryOrderPaymentCardProps {
 // The Invoice card (#166): generate with chosen terms, or the existing
 // invoice's facts and a link to the billing drawer, which stays the full
 // invoice view.
-export function LaundryInvoiceCard({ failed, generating, invoice, onGenerate, view }: LaundryInvoiceCardProps) {
+export function LaundryInvoiceCard({ disabled = false, failed, generating, invoice, onGenerate, view }: LaundryInvoiceCardProps) {
   const t = useClensyTranslations('laundry');
   return (
     <Card title={t('order.invoice.title')}>
-      <InvoiceBody failed={failed} generating={generating} invoice={invoice} t={t} view={view} onGenerate={onGenerate} />
+      <InvoiceBody
+        disabled={disabled}
+        failed={failed}
+        generating={generating}
+        invoice={invoice}
+        t={t}
+        view={view}
+        onGenerate={onGenerate}
+      />
     </Card>
   );
 }
@@ -88,11 +99,13 @@ function Card({ title, children }: { title: string; children: ReactNode }) {
 }
 
 function GenerateForm({
+  disabled,
   failed,
   generating,
   onGenerate,
   t,
 }: {
+  disabled: boolean;
   failed: boolean;
   generating: boolean;
   onGenerate: (paymentTerms: InvoicePaymentTerms) => void;
@@ -115,7 +128,7 @@ function GenerateForm({
                 name={`${prefix}-terms`}
                 value={option}
                 checked={terms === option}
-                disabled={generating}
+                disabled={generating || disabled}
                 aria-describedby={`${id}-help`}
                 className="mt-1 focus:ring-2 focus:ring-slate-400"
                 onChange={() => setTerms(option)}
@@ -133,7 +146,7 @@ function GenerateForm({
         })}
       </fieldset>
       <div>
-        <Button type="button" disabled={generating} onClick={() => onGenerate(terms)}>
+        <Button type="button" disabled={generating || disabled} onClick={() => onGenerate(terms)}>
           {t(generating ? 'order.invoice.generating' : 'actions.generateInvoice')}
         </Button>
       </div>
@@ -147,6 +160,7 @@ function GenerateForm({
 }
 
 function InvoiceBody({
+  disabled = false,
   failed,
   generating,
   invoice,
@@ -158,7 +172,7 @@ function InvoiceBody({
     case 'error':
       return <p className="mt-3 text-red-600">{t('order.invoice.error')}</p>;
     case 'generate':
-      return <GenerateForm failed={failed} generating={generating} t={t} onGenerate={onGenerate} />;
+      return <GenerateForm disabled={disabled} failed={failed} generating={generating} t={t} onGenerate={onGenerate} />;
     case 'invoice':
       return invoice ? <InvoiceFacts invoice={invoice} t={t} /> : null;
     case 'loading':

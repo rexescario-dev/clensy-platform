@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import type { PriceLaundryOrderInput, PricingUnit } from '@clensy/client';
 import { ToastProvider } from '@clensy/ui';
-import { act } from 'react';
+import { act, useEffect, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { LaundryMutationLock, LaundryMutationOwner } from './use-laundry-mutation-lock';
 
 // The real order page, the real selection and confirm hooks, the real
 // editors and card, in jsdom (#162). Only the Apollo hooks, the preview
@@ -49,6 +50,24 @@ const page = vi.hoisted(() => ({
   invoiceRefetch: vi.fn(),
   invoiceRefetches: [] as Deferred[],
   invoices: [] as Deferred[],
+  // #165: the ten Actions mutations, by GraphQL field, each with its own
+  // deferred list. A case that sends one on purpose adds its field to
+  // `lifecycleExpected`; any other call fails the test.
+  lifecycle: Object.fromEntries(
+    [
+      'cancelLaundryOrder',
+      'completeLaundryOrder',
+      'markLaundryOrderAwaitingDelivery',
+      'markLaundryOrderAwaitingPickup',
+      'markLaundryOrderDamaged',
+      'markLaundryOrderLost',
+      'markLaundryOrderReady',
+      'refundLaundryOrder',
+      'rejectLaundryOrder',
+      'startLaundryProcessing',
+    ].map((field) => [field, { fn: vi.fn(), list: [] as Deferred[] }]),
+  ) as Record<string, { fn: ReturnType<typeof vi.fn>; list: Deferred[] }>,
+  lifecycleExpected: new Set<string>(),
   order: null as unknown,
   orderError: undefined as Error | undefined,
   paid: vi.fn(),
@@ -109,6 +128,8 @@ function catalogQuery(entries: CatalogEntry[], listKey: 'addOns' | 'services') {
 vi.mock('@clensy/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@clensy/client')>()),
   useAddOnsQuery: (options: never) => catalogQuery(ADD_ONS, 'addOns')(options),
+  useCancelLaundryOrderMutation: () => [page.lifecycle.cancelLaundryOrder!.fn, { loading: false }],
+  useCompleteLaundryOrderMutation: () => [page.lifecycle.completeLaundryOrder!.fn, { loading: false }],
   useCurrentAdminQuery: () => ({ data: { currentAdmin: { role: page.role } } }),
   useGenerateInvoiceFromOrderMutation: () => [page.invoice, { loading: false }],
   useInvoiceForOrderQuery: () => ({
@@ -123,12 +144,48 @@ vi.mock('@clensy/client', async (importOriginal) => ({
     loading: false,
     refetch: page.refetch,
   }),
+  useMarkLaundryOrderAwaitingDeliveryMutation: () => [page.lifecycle.markLaundryOrderAwaitingDelivery!.fn, { loading: false }],
   useMarkLaundryOrderAwaitingPaymentMutation: () => [page.awaiting, { loading: false }],
+  useMarkLaundryOrderAwaitingPickupMutation: () => [page.lifecycle.markLaundryOrderAwaitingPickup!.fn, { loading: false }],
+  useMarkLaundryOrderDamagedMutation: () => [page.lifecycle.markLaundryOrderDamaged!.fn, { loading: false }],
+  useMarkLaundryOrderLostMutation: () => [page.lifecycle.markLaundryOrderLost!.fn, { loading: false }],
   useMarkLaundryOrderPaidMutation: () => [page.paid, { loading: false }],
+  useMarkLaundryOrderReadyMutation: () => [page.lifecycle.markLaundryOrderReady!.fn, { loading: false }],
   usePriceLaundryOrderMutation: () => [page.price, { loading: false }],
+  useRefundLaundryOrderMutation: () => [page.lifecycle.refundLaundryOrder!.fn, { loading: false }],
+  useRejectLaundryOrderMutation: () => [page.lifecycle.rejectLaundryOrder!.fn, { loading: false }],
   useServicesQuery: (options: never) => catalogQuery(SERVICES, 'services')(options),
+  useStartLaundryProcessingMutation: () => [page.lifecycle.startLaundryProcessing!.fn, { loading: false }],
   useWeighLaundryOrderMutation: () => [page.weigh, { loading: false }],
 }));
+
+// #165 lock probe (plan, "Lock probe"): the page's real lock, unchanged,
+// with every `tryAcquire` and `isHeld` call logged with its result.
+type LockRecord = { granted: boolean; op: 'tryAcquire'; owner: LaundryMutationOwner } | { held: boolean; op: 'isHeld' };
+const probe = vi.hoisted(() => ({ log: [] as unknown[] }));
+
+vi.mock('./use-laundry-mutation-lock', async (importOriginal) => {
+  const real = await importOriginal<typeof import('./use-laundry-mutation-lock')>();
+  return {
+    ...real,
+    useLaundryMutationLock: (): LaundryMutationLock => {
+      const lock = real.useLaundryMutationLock();
+      return {
+        ...lock,
+        isHeld: () => {
+          const held = lock.isHeld();
+          probe.log.push({ held, op: 'isHeld' });
+          return held;
+        },
+        tryAcquire: (owner) => {
+          const lease = lock.tryAcquire(owner);
+          probe.log.push({ granted: lease !== null, op: 'tryAcquire', owner });
+          return lease;
+        },
+      };
+    },
+  };
+});
 
 const { default: LaundryOrderPage } = await import('../app/app/laundry/[id]/page');
 
@@ -141,6 +198,7 @@ function weighed(overrides: Record<string, unknown> = {}) {
     lines: { nodes: [], pageInfo: { hasNextPage: false } },
     status: 'WEIGHED',
     totalMinorUnits: null,
+    updatedAt: '2026-10-15T09:30:00.000Z',
     weightGrams: WEIGHT,
     ...overrides,
   };
@@ -239,6 +297,13 @@ beforeEach(() => {
   page.paymentExpected = false;
   page.weigh.mockReset();
   page.weigh.mockImplementation(deferred(page.weighs));
+  for (const entry of Object.values(page.lifecycle)) {
+    entry.list.length = 0;
+    entry.fn.mockReset();
+    entry.fn.mockImplementation(deferred(entry.list));
+  }
+  page.lifecycleExpected.clear();
+  probe.log.length = 0;
   page.weighs.length = 0;
   page.weighExpected = false;
   container = document.createElement('div');
@@ -259,6 +324,9 @@ afterEach(() => {
     expect(page.awaiting).not.toHaveBeenCalled();
   }
   if (!page.weighExpected) expect(page.weigh).not.toHaveBeenCalled();
+  for (const [field, { fn }] of Object.entries(page.lifecycle)) {
+    if (!page.lifecycleExpected.has(field)) expect(fn).not.toHaveBeenCalled();
+  }
 });
 
 function mount() {
@@ -798,6 +866,537 @@ describe('order page invoice and payment (#166)', () => {
       expect(button('invoice', 'Mark paid')).toBeDefined();
       expect(button('invoice', 'Mark awaiting payment')).toBeUndefined();
       expect(document.body.textContent).not.toContain('Order marked paid.');
+    });
+  });
+});
+
+// #165: lifecycle actions, the page mutation lock and Activity, on the real
+// page in jsdom. The refetch helpers set query state; they do not run
+// Apollo's refetch.
+describe('order page lifecycle actions (#165)', () => {
+  const START = 'startLaundryProcessing';
+
+  function controlsIn(name: string): HTMLButtonElement[] {
+    return [...section(name).querySelectorAll('button')];
+  }
+
+  function buttonIn(name: string, label: string): HTMLButtonElement | undefined {
+    return controlsIn(name).find((candidate) => candidate.textContent === label);
+  }
+
+  function dialog(): HTMLElement | null {
+    return container.querySelector<HTMLElement>('[role="dialog"]');
+  }
+
+  function dialogButton(label: string): HTMLButtonElement {
+    const found = [...(dialog()?.querySelectorAll('button') ?? [])].find((candidate) => candidate.textContent === label);
+    expect(found, `dialog button "${label}"`).toBeDefined();
+    return found!;
+  }
+
+  function pressEscape() {
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape' }));
+    });
+  }
+
+  function actionAlerts(): string[] {
+    return [...section('actions').querySelectorAll('[role="alert"]')].map((alert) => alert.textContent ?? '');
+  }
+
+  function paymentAlerts(): string[] {
+    return [...section('invoice').querySelectorAll('[role="alert"]')].map((alert) => alert.textContent ?? '');
+  }
+
+  function headerText(): string {
+    return container.querySelector('h1')?.parentElement?.parentElement?.textContent ?? '';
+  }
+
+  function lifecycle(field: string) {
+    page.lifecycleExpected.add(field);
+    return page.lifecycle[field]!;
+  }
+
+  function at(status: string, overrides: Record<string, unknown> = {}) {
+    const base = ['RECEIVED', 'WEIGHED'].includes(status) ? weighed() : pricedOrder();
+    return { ...base, status, ...(status === 'RECEIVED' ? { weightGrams: null } : {}), ...overrides };
+  }
+
+  function start(status: string, role: string) {
+    page.order = at(status);
+    page.role = role;
+    mount();
+  }
+
+  function weightRow(value: string) {
+    type(section('weighing').querySelector<HTMLInputElement>('input')!, value);
+  }
+
+  it('case 1: a forward verb runs once, disables the controls until its refetch, then follows the new status', async () => {
+    const start_ = lifecycle(START);
+    start('PAID', 'OPS_MANAGER');
+    act(() => buttonIn('actions', 'Start processing')!.click());
+    expect(start_.fn).toHaveBeenCalledTimes(1);
+    expect(start_.list[0]!.options).toEqual({ variables: { input: { orderId: page.id } } });
+    expect(controlsIn('actions').every((button) => button.disabled)).toBe(true);
+    await finish(start_.list, 0, 'resolve', { data: { [START]: { id: page.id } } });
+    expect(controlsIn('actions').every((button) => button.disabled)).toBe(true);
+    await settleRefetch(0, { order: at('PROCESSING') });
+    expect(document.body.textContent).toContain('Processing started.');
+    expect(buttonIn('actions', 'Mark ready')).toBeDefined();
+    expect(buttonIn('actions', 'Start processing')).toBeUndefined();
+  });
+
+  it('case 2: a double click sends one request', () => {
+    const start_ = lifecycle(START);
+    start('PAID', 'OPS_MANAGER');
+    act(() => {
+      buttonIn('actions', 'Start processing')!.click();
+      buttonIn('actions', 'Start processing')!.click();
+    });
+    expect(start_.fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('case 3: a destructive button opens its confirmation and sends nothing; Cancel closes it', () => {
+    const cancel = lifecycle('cancelLaundryOrder');
+    start('RECEIVED', 'OPS_MANAGER');
+    act(() => buttonIn('actions', 'Cancel order')!.click());
+    expect(dialog()?.textContent).toContain(
+      'Cancel this order? It will be called off before payment. This cannot be undone.',
+    );
+    expect(cancel.fn).not.toHaveBeenCalled();
+    act(() => dialogButton('Cancel').click());
+    expect(dialog()).toBeNull();
+    expect(cancel.fn).not.toHaveBeenCalled();
+  });
+
+  it('case 4: Confirm sends once, holds the dialog while it runs, then closes it on the new status', async () => {
+    const cancel = lifecycle('cancelLaundryOrder');
+    start('RECEIVED', 'OPS_MANAGER');
+    act(() => buttonIn('actions', 'Cancel order')!.click());
+    act(() => dialogButton('Cancel order').click());
+    expect(cancel.fn).toHaveBeenCalledTimes(1);
+    expect(dialogButton('Cancel order').disabled).toBe(true);
+    expect(dialogButton('Cancel').disabled).toBe(true);
+    pressEscape();
+    expect(dialog()).not.toBeNull();
+    await finish(cancel.list, 0, 'resolve', { data: { cancelLaundryOrder: { id: page.id } } });
+    await settleRefetch(0, { order: at('CANCELLED') });
+    expect(dialog()).toBeNull();
+    expect(document.body.textContent).toContain('Order cancelled.');
+    expect(section('actions').textContent).toContain('No further actions for this order.');
+  });
+
+  it('case 5: a failure with a server message shows it in Actions, and the status stays as refetched', async () => {
+    const reject = lifecycle('rejectLaundryOrder');
+    start('RECEIVED', 'OPS_MANAGER');
+    act(() => buttonIn('actions', 'Reject order')!.click());
+    act(() => dialogButton('Reject order').click());
+    await finish(reject.list, 0, 'reject', {
+      graphQLErrors: [
+        {
+          extensions: { originalError: { message: 'Laundry order cannot transition from RECEIVED to REJECTED' } },
+          message: 'Bad Request Exception',
+        },
+      ],
+    });
+    await settleRefetch(0, { order: at('RECEIVED') });
+    expect(dialog()).toBeNull();
+    expect(actionAlerts()).toEqual(['Laundry order cannot transition from RECEIVED to REJECTED']);
+    expect(headerText()).toContain('Received');
+    expect(controlsIn('actions').every((button) => !button.disabled)).toBe(true);
+  });
+
+  it('case 6: a failure without a message falls back to the catalog, and the status stays as refetched', async () => {
+    const ready = lifecycle('markLaundryOrderReady');
+    start('PROCESSING', 'OPS_MANAGER');
+    act(() => buttonIn('actions', 'Mark ready')!.click());
+    await finish(ready.list, 0, 'resolve', { data: {} });
+    await settleRefetch(0, { order: at('PROCESSING') });
+    expect(actionAlerts()).toEqual(['Unable to mark the order ready.']);
+    expect(headerText()).toContain('Processing');
+  });
+
+  it('case 7: the alert stays when the refetched status is the verb’s own target (U1)', async () => {
+    const ready = lifecycle('markLaundryOrderReady');
+    start('PROCESSING', 'OPS_MANAGER');
+    act(() => buttonIn('actions', 'Mark ready')!.click());
+    await finish(ready.list, 0, 'reject', new Error('network down'));
+    await settleRefetch(0, { order: at('READY') });
+    expect(actionAlerts()).toEqual(['Unable to mark the order ready.']);
+  });
+
+  it('case 8: a payment failure shows only in the payment card; a lifecycle failure only in Actions', async () => {
+    page.paymentExpected = true;
+    const cancel = lifecycle('cancelLaundryOrder');
+    start('PRICED', 'OPS_MANAGER');
+    act(() => buttonIn('invoice', 'Mark paid')!.click());
+    await finish(page.paids, 0, 'reject', new Error('network down'));
+    await settleRefetch(0, { order: at('PRICED') });
+    expect(paymentAlerts()).toEqual(['Unable to mark the order paid.']);
+    expect(actionAlerts()).toEqual([]);
+    act(() => buttonIn('actions', 'Cancel order')!.click());
+    act(() => dialogButton('Cancel order').click());
+    await finish(cancel.list, 0, 'reject', new Error('network down'));
+    await settleRefetch(1, { order: at('PRICED') });
+    expect(actionAlerts()).toEqual(['Unable to cancel the order.']);
+    expect(paymentAlerts()).toEqual([]);
+  });
+
+  it('case 9: a failed order refetch after a verb shows the order error state, with no Actions buttons', async () => {
+    const start_ = lifecycle(START);
+    start('PAID', 'OPS_MANAGER');
+    act(() => buttonIn('actions', 'Start processing')!.click());
+    await finish(start_.list, 0, 'resolve', { data: { [START]: { id: page.id } } });
+    await settleRefetch(0, { error: new Error('reload failed') });
+    expect(container.textContent).toContain('Unable to load laundry order.');
+    expect(container.querySelector('#laundry-order-actions')).toBeNull();
+  });
+
+  describe('case 11: order switch (per-order isolation)', () => {
+    const A = '3f2a9c1e-0b7d-4e55-9a10-6c2b8d4e7f01';
+    const B = '9b1d2c3e-4f50-4a61-8b72-c3d4e5f60718';
+    let mounts = 0;
+
+    // A test-only sibling of the page: it re-mounts only if the root or the
+    // tree above the page is recreated, which would re-mount the page too.
+    function MountCounter() {
+      useEffect(() => {
+        mounts += 1;
+      }, []);
+      return null;
+    }
+
+    // Renders on the shared `root`; it must never call `createRoot`.
+    function renderTree() {
+      act(() =>
+        root.render(
+          <ToastProvider>
+            <MountCounter />
+            <LaundryOrderPage />
+          </ToastProvider>,
+        ),
+      );
+    }
+
+    function callsFor(orderId: string): number {
+      return page.lifecycle[START]!.fn.mock.calls.filter(
+        ([options]) => (options as { variables: { input: { orderId: string } } }).variables.input.orderId === orderId,
+      ).length;
+    }
+
+    it('gives B its own unlocked lock while A is pending, and A cannot release it', async () => {
+      mounts = 0;
+      const start_ = lifecycle(START);
+      // Step 1.
+      page.id = A;
+      page.order = { ...at('PAID'), id: A };
+      page.role = 'TENANT_OWNER';
+      renderTree();
+      expect(mounts).toBe(1);
+      // Step 2.
+      act(() => buttonIn('actions', 'Start processing')!.click());
+      expect(callsFor(A)).toBe(1);
+      expect(buttonIn('actions', 'Start processing')!.disabled).toBe(true);
+      // Step 3: the route changes; the same root and page instance stay.
+      page.id = B;
+      page.order = { ...at('PAID'), id: B };
+      renderTree();
+      // Step 4.
+      expect(mounts).toBe(1);
+      // 11.5a: B's lock starts unlocked.
+      expect(buttonIn('actions', 'Start processing')!.disabled).toBe(false);
+      expect(buttonIn('invoice', 'Generate invoice')!.disabled).toBe(false);
+      // 11.5b: B acquires while A is pending.
+      act(() => buttonIn('actions', 'Start processing')!.click());
+      expect(callsFor(B)).toBe(1);
+      expect(callsFor(A)).toBe(1);
+      // 11.5c: B's own lease holds B's lock.
+      expect(buttonIn('actions', 'Start processing')!.disabled).toBe(true);
+      // Step 6: A settles; its refetch is page.refetches[0], settled without
+      // changing page.order (still B).
+      await finish(start_.list, 0, 'resolve', { data: { [START]: { id: A } } });
+      expect(page.refetches).toHaveLength(1);
+      await finish(page.refetches, 0, 'resolve', { data: { laundryOrder: page.order } });
+      renderTree();
+      // 11.6: A's release did not release B's lock.
+      expect(buttonIn('actions', 'Start processing')!.disabled).toBe(true);
+      // Step 7: B settles.
+      await finish(start_.list, 1, 'resolve', { data: { [START]: { id: B } } });
+      await finish(page.refetches, 1, 'resolve', { data: { laundryOrder: page.order } });
+      renderTree();
+      // 11.7.
+      expect(buttonIn('actions', 'Start processing')!.disabled).toBe(false);
+      expect(mounts).toBe(1);
+    });
+  });
+
+  it.each(['Escape', 'Cancel'] as const)(
+    'case 12: an unrelated mutation leaves an unsubmitted dialog cancellable (%s), and its Confirm sends nothing',
+    async (dismiss) => {
+      page.weighExpected = true;
+      const cancel = page.lifecycle.cancelLaundryOrder!;
+      start('RECEIVED', 'OPS_MANAGER');
+      weightRow('3');
+      act(() => buttonIn('actions', 'Cancel order')!.click());
+      expect(dialog()).not.toBeNull();
+      // Record weight, behind the modal, takes the lock.
+      act(() => buttonIn('weighing', 'Record weight')!.click());
+      expect(page.weigh).toHaveBeenCalledTimes(1);
+      expect(dialogButton('Cancel order').disabled).toBe(false);
+      expect(dialogButton('Cancel').disabled).toBe(false);
+      act(() => dialogButton('Cancel order').click());
+      expect(cancel.fn).not.toHaveBeenCalled();
+      expect(dialog()).not.toBeNull();
+      if (dismiss === 'Escape') pressEscape();
+      else act(() => dialogButton('Cancel').click());
+      expect(dialog()).toBeNull();
+      expect(cancel.fn).not.toHaveBeenCalled();
+      await finish(page.weighs, 0, 'resolve', { data: { weighLaundryOrder: { id: page.id } } });
+      await settleRefetch(0, { order: at('RECEIVED') });
+    },
+  );
+
+  describe('race harness check H1', () => {
+    let handled: Record<string, number> = {};
+
+    function RaceProbe() {
+      const [disabled, setDisabled] = useState(false);
+      return (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => {
+            handled.one = (handled.one ?? 0) + 1;
+            setDisabled(true);
+          }}
+        >
+          probe
+        </button>
+      );
+    }
+
+    function TwoButtonProbe() {
+      const [secondDisabled, setSecondDisabled] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setSecondDisabled(true)}>
+            first
+          </button>
+          <button
+            type="button"
+            disabled={secondDisabled}
+            onClick={() => {
+              handled.second = (handled.second ?? 0) + 1;
+            }}
+          >
+            second
+          </button>
+        </>
+      );
+    }
+
+    beforeEach(() => {
+      handled = {};
+    });
+
+    it('runs both clicks on one button within one act, before the re-render', () => {
+      act(() => root.render(<RaceProbe />));
+      const button = container.querySelector('button')!;
+      act(() => {
+        button.click();
+        expect(button.disabled).toBe(false);
+        button.click();
+      });
+      expect(handled.one).toBe(2);
+      expect(button.disabled).toBe(true);
+    });
+
+    it('runs the second button’s handler within one act although the first disables it', () => {
+      act(() => root.render(<TwoButtonProbe />));
+      const [first, second] = [...container.querySelectorAll('button')];
+      act(() => {
+        first!.click();
+        expect(second!.disabled).toBe(false);
+        second!.click();
+      });
+      expect(handled.second).toBe(1);
+      expect(second!.disabled).toBe(true);
+    });
+  });
+
+  describe('race matrix', () => {
+    type Spy = 'cancel' | 'invoice' | 'paid' | 'price' | 'reject' | 'start' | 'weigh';
+
+    function spyCalls(spy: Spy): number {
+      switch (spy) {
+        case 'cancel':
+          return page.lifecycle.cancelLaundryOrder!.fn.mock.calls.length;
+        case 'invoice':
+          return page.invoice.mock.calls.length;
+        case 'paid':
+          return page.paid.mock.calls.length;
+        case 'price':
+          return page.price.mock.calls.length;
+        case 'reject':
+          return page.lifecycle.rejectLaundryOrder!.fn.mock.calls.length;
+        case 'start':
+          return page.lifecycle[START]!.fn.mock.calls.length;
+        case 'weigh':
+          return page.weigh.mock.calls.length;
+      }
+    }
+
+    function expectSpy(spy: Spy) {
+      if (spy === 'cancel') page.lifecycleExpected.add('cancelLaundryOrder');
+      if (spy === 'reject') page.lifecycleExpected.add('rejectLaundryOrder');
+      if (spy === 'start') page.lifecycleExpected.add(START);
+      if (spy === 'paid') page.paymentExpected = true;
+      if (spy === 'weigh') page.weighExpected = true;
+      if (spy === 'invoice') page.invoiceExpected = true;
+    }
+
+    const T = (owner: LaundryMutationOwner, granted: boolean): LockRecord => ({ granted, op: 'tryAcquire', owner });
+    const H = (held: boolean): LockRecord => ({ held, op: 'isHeld' });
+
+    const controls = {
+      confirmCancel: () => dialogButton('Cancel order'),
+      confirmPrice: () => confirmButton(),
+      confirmReject: () => dialogButton('Reject order'),
+      generate: () => buttonIn('invoice', 'Generate invoice')!,
+      markPaid: () => buttonIn('invoice', 'Mark paid')!,
+      recordWeight: () => buttonIn('weighing', 'Record weight')!,
+      startProcessing: () => buttonIn('actions', 'Start processing')!,
+    };
+
+    // How each winner settles, by row outcome, then its refetch with the
+    // order unchanged, so the loser's control is still offered after.
+    async function settleWinner(spy: Spy, outcome: 'errors' | 'missing' | 'rejection' | 'success', status: string) {
+      const lists: Record<Spy, unknown[]> = {
+        cancel: page.lifecycle.cancelLaundryOrder!.list,
+        invoice: page.invoices,
+        paid: page.paids,
+        price: page.prices,
+        reject: page.lifecycle.rejectLaundryOrder!.list,
+        start: page.lifecycle[START]!.list,
+        weigh: page.weighs,
+      };
+      const fields: Record<Spy, string> = {
+        cancel: 'cancelLaundryOrder',
+        invoice: 'generateInvoiceFromOrder',
+        paid: 'markLaundryOrderPaid',
+        price: 'priceLaundryOrder',
+        reject: 'rejectLaundryOrder',
+        start: START,
+        weigh: 'weighLaundryOrder',
+      };
+      const value =
+        outcome === 'success'
+          ? { data: { [fields[spy]]: { id: page.id } } }
+          : outcome === 'errors'
+            ? { errors: [{ message: 'Conflict' }] }
+            : outcome === 'missing'
+              ? { data: {} }
+              : new Error('network down');
+      await finish(lists[spy] as Deferred[], 0, outcome === 'rejection' ? 'reject' : 'resolve', value);
+      if (spy === 'invoice') await settleInvoiceRefetch(0, { nodes: [] });
+      // A failed weigh does not reload the order (#155).
+      else if (!(spy === 'weigh' && outcome !== 'success')) await settleRefetch(0, { order: at(status) });
+      await settle(3);
+    }
+
+    interface Row {
+      row: string;
+      status: string;
+      role: string;
+      weight?: boolean;
+      estimate?: boolean;
+      dialog?: 'Cancel order' | 'Reject order';
+      first: keyof typeof controls;
+      second: keyof typeof controls;
+      winner: Spy;
+      loser: Spy;
+      outcome: 'errors' | 'missing' | 'rejection' | 'success';
+      log: LockRecord[];
+    }
+
+    const ROWS: Row[] = [
+      { dialog: 'Cancel order', first: 'confirmCancel', log: [H(false), T('transition', true)], loser: 'paid', outcome: 'success', role: 'OPS_MANAGER', row: 'M1', second: 'markPaid', status: 'PRICED', winner: 'cancel' },
+      { dialog: 'Cancel order', first: 'markPaid', log: [T('transition', true), H(true)], loser: 'cancel', outcome: 'errors', role: 'OPS_MANAGER', row: 'M2', second: 'confirmCancel', status: 'PRICED', winner: 'paid' },
+      { dialog: 'Reject order', first: 'confirmReject', log: [H(false), T('transition', true), H(true)], loser: 'weigh', outcome: 'rejection', role: 'OPS_MANAGER', row: 'M3', second: 'recordWeight', status: 'RECEIVED', weight: true, winner: 'reject' },
+      { dialog: 'Cancel order', first: 'recordWeight', log: [H(false), T('weigh', true), H(true)], loser: 'cancel', outcome: 'success', role: 'OPS_MANAGER', row: 'M4', second: 'confirmCancel', status: 'RECEIVED', weight: true, winner: 'weigh' },
+      { dialog: 'Cancel order', estimate: true, first: 'confirmCancel', log: [H(false), T('transition', true), T('price', false)], loser: 'price', outcome: 'missing', role: 'OPS_MANAGER', row: 'M5', second: 'confirmPrice', status: 'WEIGHED', winner: 'cancel' },
+      { dialog: 'Reject order', estimate: true, first: 'confirmPrice', log: [T('price', true), H(true)], loser: 'reject', outcome: 'success', role: 'OPS_MANAGER', row: 'M6', second: 'confirmReject', status: 'WEIGHED', winner: 'price' },
+      { first: 'startProcessing', log: [T('transition', true), T('generateInvoice', false)], loser: 'invoice', outcome: 'success', role: 'TENANT_OWNER', row: 'M7', second: 'generate', status: 'PAID', winner: 'start' },
+      { first: 'generate', log: [T('generateInvoice', true), T('transition', false)], loser: 'start', outcome: 'errors', role: 'TENANT_OWNER', row: 'M8', second: 'startProcessing', status: 'PAID', winner: 'invoice' },
+      { first: 'startProcessing', log: [T('transition', true)], loser: 'start', outcome: 'success', role: 'TENANT_OWNER', row: 'M9', second: 'startProcessing', status: 'PAID', winner: 'start' },
+      { first: 'markPaid', log: [T('transition', true), T('generateInvoice', false)], loser: 'invoice', outcome: 'success', role: 'TENANT_OWNER', row: 'M10', second: 'generate', status: 'PRICED', winner: 'paid' },
+      { estimate: true, first: 'recordWeight', log: [H(false), T('weigh', true), T('price', false)], loser: 'price', outcome: 'success', role: 'OPS_MANAGER', row: 'M11', second: 'confirmPrice', status: 'WEIGHED', weight: true, winner: 'weigh' },
+      { estimate: true, first: 'confirmPrice', log: [T('price', true), H(true)], loser: 'weigh', outcome: 'rejection', role: 'OPS_MANAGER', row: 'M12', second: 'recordWeight', status: 'WEIGHED', weight: true, winner: 'price' },
+    ];
+
+    it.each(ROWS)('$row: $first wins over $second', async (r) => {
+      expectSpy(r.winner);
+      expectSpy(r.loser);
+      // Step 1: arrange.
+      page.role = r.role;
+      page.order = at(r.status);
+      if (r.estimate) await readyWithWash();
+      else mount();
+      if (r.weight) weightRow('3');
+      if (r.dialog) act(() => buttonIn('actions', r.dialog!)!.click());
+      // Step 2: both controls present and enabled.
+      const first = controls[r.first]();
+      const second = controls[r.second]();
+      expect(first.disabled).toBe(false);
+      expect(second.disabled).toBe(false);
+      // Step 3: the race, in one act.
+      probe.log.length = 0;
+      const shared = r.winner === r.loser;
+      const before = { loser: spyCalls(r.loser), winner: spyCalls(r.winner) };
+      let dispatched = 0;
+      second.addEventListener('click', () => (dispatched += 1), { capture: true });
+      act(() => {
+        first.click();
+        expect(second.disabled).toBe(false);
+        second.click();
+      });
+      // Step 4: record the race observation before any assertion.
+      const calls = shared
+        ? { [r.winner]: spyCalls(r.winner) - before.winner }
+        : { [r.loser]: spyCalls(r.loser) - before.loser, [r.winner]: spyCalls(r.winner) - before.winner };
+      const observation = { calls, lockLog: [...probe.log], row: r.row };
+      console.info(`[race-observation] ${JSON.stringify(observation)}`);
+      if (shared) {
+        expect(calls[r.winner]).toBe(1);
+        expect(dispatched).toBe(2);
+      } else {
+        expect(calls[r.winner]).toBe(1);
+        expect(calls[r.loser]).toBe(0);
+        expect(dispatched).toBe(1);
+      }
+      expect(observation.lockLog).toEqual(r.log);
+      if (r.loser === 'price') expect(document.body.textContent).not.toContain('Confirming…');
+      if (r.loser === 'invoice') expect(document.body.textContent).not.toContain('Generating…');
+      if (r.winner === 'price') expect(document.body.textContent).toContain('Confirming…');
+      if (r.winner === 'invoice') expect(document.body.textContent).toContain('Generating…');
+      // The winner's lock now disables the loser's control, except a losing
+      // dialog Confirm: its dialog stays open and cancellable (rule 6).
+      if (r.second === 'confirmCancel' || r.second === 'confirmReject') {
+        expect(second.disabled).toBe(false);
+        expect(dialogButton('Cancel').disabled).toBe(false);
+      } else {
+        expect(second.disabled).toBe(true);
+      }
+      // Step 5: the winner settles.
+      await settleWinner(r.winner, r.outcome, r.status);
+      // Step 6: released; a fresh click on the second control sends.
+      if (r.estimate && r.second === 'confirmPrice') await settle(3);
+      const again = controls[r.second]();
+      expect(again.disabled).toBe(false);
+      const loserBefore = spyCalls(r.loser);
+      act(() => again.click());
+      expect(spyCalls(r.loser)).toBe(loserBefore + 1);
     });
   });
 });

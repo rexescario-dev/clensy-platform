@@ -5,6 +5,7 @@ import { useClensyTranslations } from '@clensy/web';
 import { useRef, useState } from 'react';
 import { graphQLErrorMessage } from './graphql-error-message';
 import type { LaundryServiceSelection } from './laundry-service-selection';
+import type { LaundryMutationLock } from './use-laundry-mutation-lock';
 
 export interface LaundryPriceConfirmFailure {
   message: string;
@@ -26,12 +27,15 @@ export interface UseConfirmLaundryPriceOptions {
   // Reloads the order. On success the status becomes PRICED; on failure it
   // shows whatever the order now is (owner decision 6.5).
   refetch: () => Promise<unknown>;
+  // The order page's shared mutation lock (#165). Without it, the hook's
+  // own guard is the only one, as before.
+  lock?: LaundryMutationLock;
 }
 
 // `priceLaundryOrder`, once per Confirm (§8.4.4). The input is the previewed
 // one, unchanged (owner decision 6.1). It never calls an invoice or payment
 // mutation (issue Confirm behavior).
-export function useConfirmLaundryPrice({ refetch }: UseConfirmLaundryPriceOptions): ConfirmLaundryPriceState {
+export function useConfirmLaundryPrice({ lock, refetch }: UseConfirmLaundryPriceOptions): ConfirmLaundryPriceState {
   const t = useClensyTranslations('laundry');
   const toast = useToast();
   const [price] = usePriceLaundryOrderMutation();
@@ -43,6 +47,9 @@ export function useConfirmLaundryPrice({ refetch }: UseConfirmLaundryPriceOption
 
   async function confirm(input: PriceLaundryOrderInput, selection: LaundryServiceSelection) {
     if (inFlight.current) return;
+    // The page lock (#165 Rules item 2): refused before any state changes.
+    const lease = lock ? lock.tryAcquire('price') : undefined;
+    if (lease === null) return;
     inFlight.current = true;
     setConfirming(true);
     setFailure(null);
@@ -70,6 +77,7 @@ export function useConfirmLaundryPrice({ refetch }: UseConfirmLaundryPriceOption
     } finally {
       inFlight.current = false;
       setConfirming(false);
+      if (lease) lock?.release(lease);
     }
   }
 

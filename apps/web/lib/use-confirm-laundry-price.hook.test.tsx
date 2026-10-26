@@ -5,6 +5,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EMPTY_LAUNDRY_SERVICE_SELECTION, type LaundryServiceSelection } from './laundry-service-selection';
+import { useLaundryMutationLock, type LaundryMutationLease, type LaundryMutationLock } from './use-laundry-mutation-lock';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -188,4 +189,84 @@ describe('useConfirmLaundryPrice', () => {
     expect(latest.failure).toBeNull();
     expect(api.price).toHaveBeenCalledTimes(2);
   });
+});
+
+describe('useConfirmLaundryPrice with the page lock (#165)', () => {
+  let lock: LaundryMutationLock;
+
+  function LockProbe() {
+    lock = useLaundryMutationLock();
+    latest = useConfirmLaundryPrice({ lock, refetch: api.refetch });
+    return null;
+  }
+
+  beforeEach(() => {
+    act(() =>
+      root.render(
+        <ToastProvider>
+          <LockProbe />
+        </ToastProvider>,
+      ),
+    );
+  });
+
+  it('acquires as price before the first await', () => {
+    act(() => {
+      void latest.confirm(INPUT, SELECTION);
+      expect(lock.isHeld()).toBe(true);
+    });
+  });
+
+  it.each([
+    ['success', 'resolve', PRICED, 'resolve'],
+    ['a rejection', 'reject', serverError('Laundry order is not WEIGHED'), 'resolve'],
+    ['GraphQL errors', 'resolve', { errors: [{ message: 'Conflict' }] }, 'resolve'],
+    ['a missing payload', 'resolve', { data: {} }, 'resolve'],
+    ['a rejected refetch', 'resolve', PRICED, 'reject'],
+  ] as const)('holds the lock until the refetch settles, then releases it, after %s', async (_label, how, value, refetch) => {
+    act(() => {
+      void latest.confirm(INPUT, SELECTION);
+    });
+    await settle(api.prices, 0, how, value);
+    expect(lock.isHeld()).toBe(true);
+    await settle(api.refetches, 0, refetch, refetch === 'reject' ? new Error('reload failed') : undefined);
+    expect(lock.isHeld()).toBe(false);
+    expect(lock.held).toBe(false);
+  });
+
+  it.each(['weigh', 'price'] as const)(
+    'refuses while a %s lease holds the lock, changes nothing, and does not release it',
+    async (owner) => {
+      act(() => {
+        void latest.confirm(INPUT, SELECTION);
+      });
+      await settle(api.prices, 0, 'reject', serverError('Laundry order is not WEIGHED'));
+      await settle(api.refetches, 0, 'resolve', undefined);
+      expect(latest.failure?.message).toBe('Laundry order is not WEIGHED');
+      api.price.mockClear();
+      api.refetch.mockClear();
+
+      let lease: LaundryMutationLease | null = null;
+      act(() => {
+        lease = lock.tryAcquire(owner);
+      });
+      await act(async () => {
+        await latest.confirm(INPUT, SELECTION);
+      });
+      expect(api.price).not.toHaveBeenCalled();
+      expect(api.refetch).not.toHaveBeenCalled();
+      expect(document.body.textContent).not.toContain('Price confirmed.');
+      expect(latest.confirming).toBe(false);
+      expect(latest.failure?.message).toBe('Laundry order is not WEIGHED');
+      expect(lock.isHeld()).toBe(true);
+
+      act(() => {
+        lock.release(lease!);
+      });
+      act(() => {
+        void latest.confirm(INPUT, SELECTION);
+      });
+      expect(api.price).toHaveBeenCalledTimes(1);
+    },
+  );
 });

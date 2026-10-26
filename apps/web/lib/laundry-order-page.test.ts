@@ -5,6 +5,7 @@ import {
   LAUNDRY_ORDER_SECTIONS,
   LAUNDRY_PRICED_STATUSES,
   currentLaundryOrderSection,
+  formatLaundryOrderTime,
   laundryDetailRedirectHref,
   laundryLifecycleVerbs,
   laundryLineQuantity,
@@ -31,8 +32,17 @@ describe('isUuid', () => {
 });
 
 describe('laundry order sections', () => {
-  it('lists the six sections in page order', () => {
-    expect(LAUNDRY_ORDER_SECTIONS).toEqual(['overview', 'weighing', 'services', 'price', 'invoice', 'actions']);
+  // #165 (U3): Activity is last, after Actions.
+  it('lists the seven sections in page order', () => {
+    expect(LAUNDRY_ORDER_SECTIONS).toEqual([
+      'overview',
+      'weighing',
+      'services',
+      'price',
+      'invoice',
+      'actions',
+      'activity',
+    ]);
   });
 
   it('gives each section a stable element id', () => {
@@ -105,6 +115,38 @@ describe('currentLaundryOrderSection', () => {
     ['CANCELLED', 'TENANT_OWNER', false, null],
   ])('%s as %s, invoice exists %s → %s', (status, role, invoiceExists, expected) => {
     expect(current(status, role, invoiceExists)).toBe(expected);
+  });
+
+  // #165: Activity states facts, not a next step, so the nav never marks it.
+  it('never marks Activity', () => {
+    const roles: (AdminRole | undefined)[] = [
+      'TENANT_OWNER',
+      'OPS_MANAGER',
+      'SCHEDULER',
+      'FINANCE',
+      'CUSTOMER_SUPPORT',
+      'ANALYST',
+      undefined,
+    ];
+    for (const status of LAUNDRY_ORDER_STATUSES) {
+      for (const role of roles) {
+        for (const invoiceExists of [true, false, undefined]) {
+          expect(current(status, role, invoiceExists)).not.toBe('activity');
+        }
+      }
+    }
+  });
+});
+
+describe('formatLaundryOrderTime', () => {
+  // The list's Created column rule (#165 decision h).
+  it('formats an ISO timestamp as the locale date and time', () => {
+    const value = '2026-10-15T09:00:00.000Z';
+    expect(formatLaundryOrderTime(value)).toBe(new Date(value).toLocaleString());
+  });
+
+  it('shows an unparsable value as it is', () => {
+    expect(formatLaundryOrderTime('not a date')).toBe('not a date');
   });
 });
 

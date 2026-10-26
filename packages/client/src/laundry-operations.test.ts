@@ -1,6 +1,22 @@
 import { print, visit, type DocumentNode } from 'graphql';
 import { describe, expect, it } from 'vitest';
-import { InvoiceForOrderDocument, LaundryOrderDocument, PreviewLaundryOrderPriceDocument } from './generated/graphql';
+import {
+  InvoiceForOrderDocument,
+  LaundryOrderDocument,
+  LaundryOrdersDocument,
+  PreviewLaundryOrderPriceDocument,
+} from './generated/graphql';
+
+// Every field name selected anywhere in a document, fragments included.
+function fieldNames(document: DocumentNode): string[] {
+  const found: string[] = [];
+  visit(document, {
+    Field(node) {
+      found.push(node.name.value);
+    },
+  });
+  return found;
+}
 
 // The arguments of every `lines` field in a document, printed.
 function linesArguments(document: DocumentNode): string[] {
@@ -70,6 +86,18 @@ describe('laundry operations', () => {
         'minimumChargeApplied',
       ],
     ]);
+  });
+
+  // #165: the order page's Activity section shows when the order last
+  // changed. Only the detail fragment needs it; the list payload is unchanged.
+  it('selects updatedAt on the order detail, not on the list', () => {
+    const detail = LaundryOrderDocument.definitions.find(
+      (definition) => definition.kind === 'FragmentDefinition' && definition.name.value === 'LaundryOrderDetail',
+    );
+    expect(detail?.kind === 'FragmentDefinition' ? detail.selectionSet.selections.map(print) : []).toContain(
+      'updatedAt',
+    );
+    expect(fieldNames(LaundryOrdersDocument)).not.toContain('updatedAt');
   });
 
   // #166: the order page's Invoice card shows terms; one invoice per order
