@@ -11,6 +11,7 @@ import {
   laundryLineQuantity,
   laundryOrderHref,
   laundryOrderSectionId,
+  laundryRoleLookup,
   laundryWeighingView,
   resolvedInvoiceNodes,
   resolvedQueryData,
@@ -261,5 +262,25 @@ describe('laundryWeighingView', () => {
   it.each(['CANCELLED', 'REJECTED'] as const)('never locks %s', (status) => {
     expect(view(status, 'TENANT_OWNER')).toBe('readOnly');
     expect(view(status, 'ANALYST')).toBe('readOnly');
+  });
+});
+
+// #211: the role lookup's three states. A present role wins, even beside an
+// error; an error with no role is failed; otherwise it is still loading.
+describe('laundryRoleLookup', () => {
+  it('resolves a role without an error', () => {
+    expect(laundryRoleLookup({ error: undefined, role: 'TENANT_OWNER' })).toBe('resolved');
+  });
+
+  it('resolves a role alongside an error', () => {
+    expect(laundryRoleLookup({ error: new Error('x'), role: 'ANALYST' })).toBe('resolved');
+  });
+
+  it('fails on an error without a role', () => {
+    expect(laundryRoleLookup({ error: new Error('x'), role: undefined })).toBe('failed');
+  });
+
+  it('loads with neither a role nor an error', () => {
+    expect(laundryRoleLookup({ error: undefined, role: undefined })).toBe('loading');
   });
 });

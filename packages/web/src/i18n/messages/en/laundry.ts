@@ -56,6 +56,8 @@ export const laundry = {
   },
   empty: 'No laundry orders.',
   error: {
+    // #211: the order page's one alert when the role lookup fails.
+    account: 'Unable to load your account.',
     list: 'Unable to load laundry orders.',
     order: 'Unable to load laundry order.',
   },
