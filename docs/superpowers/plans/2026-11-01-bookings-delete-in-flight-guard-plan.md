@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 2)** at M5, 2026-11-01 ([M5 decision](#m5-decision)). M6 **Complete**, uncommitted ([Execution record (M6)](#execution-record-m6)). M7 **Approved** on 2026-11-01, on a fresh independent review ([M7 decision](#m7-decision)). M8 **N/A**, M9 **Complete**, M10 **does not apply** ([M8](#m8--not-applicable), [M9](#m9--documentation-2026-11-01), [M10](#m10--not-applicable)). **Ready for closeout.** On 2026-11-01 the owner authorized committing, pushing and opening the PR ("push, make PR"). Merging and closing #205 are not yet authorized. Drafted at M4 on 2026-11-01. Revision 1 was returned by an independent M5 review (**Request changes**, 2026-11-01); revision 2 addresses it ([Revision 2 changes](#revision-2-changes)). At M4 and M5 nothing in this plan had been run against the repository: every `Expected:` line was a prediction. |
+| Status | **Accepted (revision 2)** at M5, 2026-11-01 ([M5 decision](#m5-decision)). M6 **Complete**, uncommitted ([Execution record (M6)](#execution-record-m6)). M7 **Approved** on 2026-11-01, on a fresh independent review ([M7 decision](#m7-decision)). M8 **N/A**, M9 **Complete**, M10 **does not apply** ([M8](#m8--not-applicable), [M9](#m9--documentation-2026-11-01), [M10](#m10--not-applicable)). **Slice complete**: merged in PR [#216](https://github.com/rexescario-dev/clensy-platform/pull/216) (`9f78240`, 2026-11-01), and #205 closed. See [Closeout](#closeout-2026-11-01). Drafted at M4 on 2026-11-01. Revision 1 was returned by an independent M5 review (**Request changes**, 2026-11-01); revision 2 addresses it ([Revision 2 changes](#revision-2-changes)). At M4 and M5 nothing in this plan had been run against the repository: every `Expected:` line was a prediction. |
 | Tracking issue | [#205](https://github.com/rexescario-dev/clensy-platform/issues/205) "Prevent a second Bookings delete while one is in progress". Follow-up from [#194](https://github.com/rexescario-dev/clensy-platform/issues/194) (PR #203). |
 | Relies on (Accepted) | [Dashboard UX Foundation](../specs/2026-08-17-dashboard-ux-foundation-design.md) §4.4 (`ConfirmDialog`: `confirming` is caller-owned) and Amendment #194 §9.3 (a confirming `ConfirmDialog` refuses user dismissal). Neither is changed. |
 | Spec amendment | **None needed.** §9.7 records the Bookings trigger as caller-side duplicate-action hardening, to be done, "if wanted, [as] a separate issue", and §9.5 says that is each caller's responsibility. §9.7's "No change to any `ConfirmDialog` caller, including the Bookings 'Delete booking' trigger, which stays enabled while a delete runs" describes #194's own scope. This slice is the separate issue §9.7 anticipated and does not reopen #194. Issue #205's acceptance criteria are the requirements; the [owner decision](#owner-decision) settles the one UI choice they leave open. |
@@ -170,6 +170,82 @@ No workflow asset under `docs/workflows/`, and no installer-managed file (`workf
 ### Next Gate
 
 **Closeout**: commit (`feat(205)` and `docs(205)`), push, open one PR for #205, merge, and close #205. Each step needs the owner's authorization.
+
+## Closeout (2026-11-01)
+
+**Merge check (§2.12, before the merge).** Each applicable stage was checked in order. Every one had a recorded outcome. No stage was skipped or overridden.
+
+| Gate | Outcome |
+| --- | --- |
+| M1 | Installed prompt library present |
+| M2 | No new specification or amendment. Accepted Amendment #194 §9.7 leaves this caller-side hardening to a separate issue, and issue #205 is the requirement |
+| M3 | Spec already Accepted |
+| M4 | Plan drafted (revisions 1–2) |
+| M5 | Plan Accepted (revision 2, owner, after a fresh independent review gave Approve) |
+| M6 | Complete |
+| M7 | Approved for merge (fresh independent review) |
+| M8 | N/A |
+| M9 | Complete |
+| M10 | Does not apply (no workflow assets changed) |
+
+**Commit, PR and merge.**
+- **Authorization.** The owner authorized commit, push and PR ("push, make PR"), then merge and closeout ("merge, closeout").
+- **Commits.** Two commits with no attribution lines, per the owner's global instructions:
+  - `7833aca`: Tasks 1 and 2;
+  - `3cc3575`: this plan and the README.
+- **PR.** [#216](https://github.com/rexescario-dev/clensy-platform/pull/216), `Closes #205`. CI passed on head `3cc3575`: Lint, Test, API e2e and Release gate all `pass`.
+- **Merge.** A merge commit, made with `gh pr merge 216 --merge`. The branch was deleted right after, locally and on the remote, as for #211.
+
+**Verification.**
+- PR #216 shows `MERGED`, with merge commit `9f78240`, at 2026-11-01T12:37:30Z (UTC).
+- `3cc3575`, the reviewed head, is an ancestor of `origin/main`, and `git diff 3cc3575 9f78240` is empty.
+- Local `main` is at `9f78240`.
+- #205 closed automatically, at 2026-11-01T12:37:31Z.
+
+**Post-merge cleanup.**
+- `feat/205-bookings-delete-guard` was deleted locally and on the remote.
+- The executor's git-ignored workspace (`.superpowers/sdd/2026-11-01-bookings-delete-in-flight-guard-plan/`, holding the ledger and the break-run logs) is deleted at closeout; the record now lives in this plan and in git.
+- No test accounts, data or running services were created.
+
+**Final M7 position.** Approved for merge, with no blockers and no required corrections.
+
+**Follow-ups.** None filed. The two deferred M7 test-file tidy-ups ([M7 decision](#m7-decision)) were not judged worth an issue.
+
+## Final Slice Completion Report
+
+| Field | Result |
+| --- | --- |
+| Slice | #205: one Bookings delete at a time |
+| Tracking | https://github.com/rexescario-dev/clensy-platform/issues/205 |
+| M4 | Plan **Accepted** |
+| M5 | Review **Accepted** (revision 2) |
+| M6 | **Complete** |
+| M7 | **Approved** (fresh independent review) |
+| M8 | **N/A** |
+| M9 | **Complete** |
+| Branch | `feat/205-bookings-delete-guard` (merged, deleted) |
+| PR | https://github.com/rexescario-dev/clensy-platform/pull/216 |
+| Status | **Slice complete** |
+
+### Shipped
+
+- In the booking drawer, at most one `removeBooking` runs at a time. A handler-level in-flight guard blocks a second activation, even one that lands before React re-renders.
+- While a delete runs, "Delete booking" is disabled and reads "Deleting…" until the mutation settles. The confirmation stays confirming for the same period.
+- Failure and retry behavior and success behavior are unchanged. The first Bookings page test (8 cases, break runs K1–K9) pins them.
+
+### Validation
+
+| Check | Result |
+| --- | --- |
+| Tests | **Passed**: 58 files, 2551 tests locally; CI Test `pass` |
+| Typecheck | **Passed** (`tsc --noEmit`, `apps/web`) |
+| Lint | **Passed**: locally and CI Lint |
+| Build | Skipped: not named in the plan. CI Release gate and API e2e `pass` |
+| Package validation | N/A |
+
+### Next Gate
+
+**None**: the slice is complete.
 
 ## Owner decision
 
