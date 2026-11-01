@@ -80,6 +80,9 @@ const page = vi.hoisted(() => ({
   previewQuery: vi.fn(),
   priceMutationCalls: [] as unknown[],
   role: 'TENANT_OWNER' as string | undefined,
+  // #211: the currentAdmin query's error and loading flag.
+  roleError: undefined as Error | undefined,
+  roleLoading: false,
   servicesCalls: [] as unknown[],
 }));
 
@@ -105,6 +108,8 @@ vi.mock('@clensy/client', () => ({
   useCompleteLaundryOrderMutation: () => [() => Promise.resolve({ data: {} }), { loading: false }],
   useCurrentAdminQuery: () => ({
     data: page.role === undefined ? undefined : { currentAdmin: { role: page.role } },
+    error: page.roleError,
+    loading: page.roleLoading,
   }),
   // The Invoice and payment section's mutations (#166); never called by a
   // static render.
@@ -185,6 +190,14 @@ function section(html: string, name: string): string {
 
 const BACK_LINK = 'href="/app/laundry"';
 
+// #211: the one page-level alert for a failed role lookup, between the
+// summary and the section links.
+const ACCOUNT_ALERT = '<p role="alert" class="text-sm text-red-600">Unable to load your account.</p>';
+const ACCOUNT_TEXT = 'Unable to load your account.';
+const SUMMARY_END_TO_NAV = `</dl>${ACCOUNT_ALERT}<nav aria-label="Order sections">`;
+// The body of a section that renders nothing: only its heading.
+const EMPTY_BODY = /<\/h2><div[^>]*><\/div><\/section>$/;
+
 beforeEach(() => {
   page.id = ID;
   page.invoiceError = undefined;
@@ -203,6 +216,8 @@ beforeEach(() => {
   page.servicesCalls.length = 0;
   page.priceMutationCalls.length = 0;
   page.role = 'TENANT_OWNER';
+  page.roleError = undefined;
+  page.roleLoading = false;
 });
 
 describe('laundry order page', () => {
@@ -1016,5 +1031,189 @@ describe('order page lifecycle actions (#165)', () => {
     for (const action of ['laundry_order.received', 'laundry_order.weighed', 'laundry_order.priced', 'laundry_order.cancelled']) {
       expect(activity).not.toContain(action);
     }
+  });
+});
+
+describe('order page role-lookup failure (#211)', () => {
+  // Failed: the lookup errored and no role is available. Loading: no role
+  // and no error. `beforeEach` sets TENANT_OWNER, so both clear the role.
+  const failed = () => {
+    page.role = undefined;
+    page.roleError = new Error('network');
+  };
+  const loading = () => {
+    page.role = undefined;
+    page.roleError = undefined;
+  };
+  const scoped = ['actions', 'services', 'price'] as const;
+
+  it('case 1: failed WEIGHED shows one alert before the section links', async () => {
+    failed();
+    page.order = order({ status: 'WEIGHED', totalMinorUnits: null });
+    const html = await renderPage();
+    expect(count(html, ACCOUNT_TEXT)).toBe(1);
+    expect(html).toContain(SUMMARY_END_TO_NAV);
+    for (const name of scoped) expect(section(html, name)).not.toContain(ACCOUNT_TEXT);
+    expect(section(html, 'services')).toMatch(EMPTY_BODY);
+    expect(section(html, 'price')).toMatch(EMPTY_BODY);
+    const actions = section(html, 'actions');
+    expect(actions).not.toContain('<button');
+    expect(actions).not.toContain('No further actions for this order.');
+    expect(html).not.toContain('aria-current="true"');
+    expect(page.previewQuery).not.toHaveBeenCalled();
+  });
+
+  it('case 2: failed RECEIVED shows one alert and keeps Weighing and Services', async () => {
+    failed();
+    page.order = order({ status: 'RECEIVED', totalMinorUnits: null, weightGrams: null });
+    const html = await renderPage();
+    expect(count(html, ACCOUNT_TEXT)).toBe(1);
+    expect(html).toContain(SUMMARY_END_TO_NAV);
+    expect(section(html, 'services')).toContain('Weigh the order before choosing services.');
+    expect(section(html, 'price')).toMatch(EMPTY_BODY);
+    const weighing = section(html, 'weighing');
+    expect(weighing).toContain('Not weighed yet.');
+    expect(weighing).not.toContain('<input');
+    for (const name of [...scoped, 'weighing']) expect(section(html, name)).not.toContain(ACCOUNT_TEXT);
+  });
+
+  it('case 3: failed PRICED with a total shows one alert and the final price', async () => {
+    failed();
+    page.order = order({
+      lines: { nodes: [line('l1', 'PER_KG', 2505, 45000)], pageInfo: { hasNextPage: false } },
+      status: 'PRICED',
+      totalMinorUnits: 45000,
+    });
+    const html = await renderPage();
+    expect(count(html, ACCOUNT_TEXT)).toBe(1);
+    expect(html).toContain(SUMMARY_END_TO_NAV);
+    expect(section(html, 'services')).toContain('Services are locked because this order has been priced.');
+    expect(section(html, 'price')).toContain('Final price');
+    expect(section(html, 'invoice')).not.toContain('<button');
+    for (const name of [...scoped, 'invoice']) expect(section(html, name)).not.toContain(ACCOUNT_TEXT);
+  });
+
+  it('case 4: failed CANCELLED without a total shows one alert', async () => {
+    failed();
+    page.order = order({ status: 'CANCELLED', totalMinorUnits: null });
+    const html = await renderPage();
+    expect(count(html, ACCOUNT_TEXT)).toBe(1);
+    expect(html).toContain(SUMMARY_END_TO_NAV);
+    expect(section(html, 'price')).toContain('This order was not priced.');
+    expect(section(html, 'actions')).not.toContain('<button');
+  });
+
+  it('case 5: failed WEIGHED roleLoading=true shows one alert', async () => {
+    failed();
+    page.roleLoading = true;
+    page.order = order({ status: 'WEIGHED', totalMinorUnits: null });
+    const html = await renderPage();
+    expect(count(html, ACCOUNT_TEXT)).toBe(1);
+    expect(html).toContain(SUMMARY_END_TO_NAV);
+  });
+
+  // Characterization. The fields are set because both helpers check the
+  // total before the role, so a default total would hide Services and Price.
+  it.each([
+    ['RECEIVED', { status: 'RECEIVED', totalMinorUnits: null, weightGrams: null }],
+    ['WEIGHED', { status: 'WEIGHED', totalMinorUnits: null }],
+    ['PAID', { status: 'PAID' }],
+  ] as const)('case 6: %s sections match loading', async (_status, fields) => {
+    page.order = order(fields);
+    loading();
+    const whileLoading = await renderPage();
+    failed();
+    const whenFailed = await renderPage();
+    for (const name of ['weighing', 'invoice', 'actions', 'services', 'price']) {
+      expect(section(whenFailed, name)).toBe(section(whileLoading, name));
+    }
+  });
+
+  it('case 7a: order error wins over a failed role lookup', async () => {
+    failed();
+    page.orderError = new Error('boom');
+    const html = await renderPage();
+    expect(html).toContain('Unable to load laundry order.');
+    expect(html).not.toContain('<section');
+    expect(html).not.toContain(ACCOUNT_TEXT);
+  });
+
+  it('case 7b: order loading wins over a failed role lookup', async () => {
+    failed();
+    page.orderLoading = true;
+    const html = await renderPage();
+    expect(html).toContain('role="status"');
+    expect(html).not.toContain('<section');
+    expect(html).not.toContain(ACCOUNT_TEXT);
+  });
+
+  // Characterization. Rows are [status, roleLoading] tuples.
+  it.each([
+    ['WEIGHED', true],
+    ['WEIGHED', false],
+    ['RECEIVED', true],
+    ['RECEIVED', false],
+    ['PAID', true],
+    ['PAID', false],
+  ] as const)('case 8: %s roleLoading=%s shows no alert', async (status, roleLoading) => {
+    loading();
+    page.roleLoading = roleLoading;
+    page.order =
+      status === 'WEIGHED'
+        ? order({ status, totalMinorUnits: null })
+        : status === 'RECEIVED'
+          ? order({ status, totalMinorUnits: null, weightGrams: null })
+          : order({ status });
+    const html = await renderPage();
+    expect(html).not.toContain(ACCOUNT_TEXT);
+    const actions = section(html, 'actions');
+    expect(actions).not.toContain('<button');
+    expect(actions).not.toContain('No further actions for this order.');
+    if (status === 'WEIGHED') {
+      expect(section(html, 'services')).toMatch(EMPTY_BODY);
+      expect(section(html, 'price')).toMatch(EMPTY_BODY);
+    } else if (status === 'RECEIVED') {
+      expect(section(html, 'services')).toContain('Weigh the order before choosing services.');
+      expect(section(html, 'price')).toMatch(EMPTY_BODY);
+    } else {
+      expect(section(html, 'services')).toContain('Services are locked because this order has been priced.');
+      expect(section(html, 'price')).toContain('Final price');
+    }
+  });
+
+  it('case 9: ANALYST on PAID shows no alert', async () => {
+    page.role = 'ANALYST';
+    page.order = order({ status: 'PAID' });
+    const html = await renderPage();
+    expect(html).not.toContain(ACCOUNT_TEXT);
+    expect(section(html, 'actions')).toContain('No further actions for this order.');
+  });
+
+  it.each(['CUSTOMER_SUPPORT', 'FINANCE', 'ANALYST', 'SUPER_ADMIN'])('case 9: %s on WEIGHED shows no alert', async (role) => {
+    page.role = role;
+    page.order = order({ status: 'WEIGHED', totalMinorUnits: null });
+    const html = await renderPage();
+    expect(html).not.toContain(ACCOUNT_TEXT);
+    expect(section(html, 'services')).toContain('No services selected yet.');
+    expect(section(html, 'price')).toContain('Price is available after the order is weighed and services are chosen.');
+  });
+
+  it('case 10a: TENANT_OWNER on PAID shows its buttons and no alert', async () => {
+    page.order = order({ status: 'PAID' });
+    const html = await renderPage();
+    expect(html).not.toContain(ACCOUNT_TEXT);
+    const actions = section(html, 'actions');
+    expect(actions).toMatch(/<button[^>]*>Start processing<\/button>/);
+    expect(actions).toMatch(/<button[^>]*>Refund order<\/button>/);
+  });
+
+  it('case 10b: TENANT_OWNER with a retained role and an error shows no alert', async () => {
+    page.roleError = new Error('network');
+    page.order = order({ status: 'PAID' });
+    const html = await renderPage();
+    expect(html).not.toContain(ACCOUNT_TEXT);
+    const actions = section(html, 'actions');
+    expect(actions).toMatch(/<button[^>]*>Start processing<\/button>/);
+    expect(actions).toMatch(/<button[^>]*>Refund order<\/button>/);
   });
 });

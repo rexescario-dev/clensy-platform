@@ -33,6 +33,7 @@ import {
   currentLaundryOrderSection,
   formatLaundryOrderTime,
   laundryOrderSectionId,
+  laundryRoleLookup,
   laundryWeighingView,
   resolvedInvoiceNodes,
   type LaundryOrderSection,
@@ -83,8 +84,12 @@ function LaundryOrderWorkspace({ id }: { id: string }) {
     skip: !validId,
     variables: { laundryOrderId: id },
   });
-  const { data: adminData } = useCurrentAdminQuery();
+  const { data: adminData, error: adminError } = useCurrentAdminQuery();
   const role = adminData?.currentAdmin.role;
+  // #211, owner decision 2026-11-01: a failed lookup with no role shows one
+  // page-level alert; Actions, Services and Price stay as they are while the
+  // role loads.
+  const roleLookup = laundryRoleLookup({ error: adminError, role });
   // The page's one mutation lock (#165, U5). Every mutation owner below
   // takes it before it starts, so two mutations never overlap; it lives in
   // this workspace, which is keyed by order id, so each order has its own.
@@ -176,6 +181,12 @@ function LaundryOrderWorkspace({ id }: { id: string }) {
           {order.totalMinorUnits === null ? '—' : formatMinorUnits(order.totalMinorUnits)}
         </SummaryItem>
       </dl>
+
+      {roleLookup === 'failed' ? (
+        <p role="alert" className="text-sm text-red-600">
+          {t('error.account')}
+        </p>
+      ) : null}
 
       <nav aria-label={t('order.sectionsLabel')}>
         <ul className="flex gap-3 overflow-x-auto">
