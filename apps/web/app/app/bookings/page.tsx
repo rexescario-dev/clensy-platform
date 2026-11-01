@@ -27,7 +27,7 @@ import {
   useToast,
 } from '@clensy/ui';
 import { BookingDataTable, type Booking } from '@clensy/web';
-import { type ChangeEvent, type FormEvent, Suspense, useState } from 'react';
+import { type ChangeEvent, type FormEvent, Suspense, useRef, useState } from 'react';
 import { resolveBookingNavigationPagination } from '../../../lib/booking-navigation-pagination';
 import { formatMinorUnits } from '../../../lib/format-price';
 import { useDetailDrawer } from '../../../lib/use-detail-drawer';
@@ -375,6 +375,13 @@ function BookingDetailDrawer({
 
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | undefined>(undefined);
+  // The in-flight guard (#205): set synchronously before `removeBooking` is
+  // called, so a second activation that lands before React re-renders (when
+  // the buttons are still enabled in the DOM) starts no second delete. It,
+  // not the trigger's `disabled`, is what prevents a duplicate; `deleting`
+  // mirrors it for rendering.
+  const deletingRef = useRef(false);
+  const [deleting, setDeleting] = useState(false);
   const [jobError, setJobError] = useState<string | undefined>(undefined);
 
   const booking = data?.booking;
@@ -413,7 +420,9 @@ function BookingDetailDrawer({
   }
 
   async function handleConfirmDelete() {
-    if (!booking) return;
+    if (!booking || deletingRef.current) return;
+    deletingRef.current = true;
+    setDeleting(true);
     setDeleteError(undefined);
     try {
       await removeBooking({ variables: { id: booking.id } });
@@ -424,6 +433,8 @@ function BookingDetailDrawer({
       // here (matching admin/page.tsx's precedent), failure surfaces below.
       setDeleteError('Unable to delete booking.');
     } finally {
+      deletingRef.current = false;
+      setDeleting(false);
       setConfirmDeleteOpen(false);
     }
   }
@@ -444,6 +455,10 @@ function BookingDetailDrawer({
       setJobError('Unable to create job.');
     }
   }
+
+  // Until the mutation settles, including after `finally` has closed the
+  // dialog but before Apollo clears `loading` (owner decision, #205).
+  const deleteInProgress = deleting || removing;
 
   const title = booking ? `${booking.customer.fullName} — ${booking.service.name}` : 'Booking';
 
@@ -551,9 +566,13 @@ function BookingDetailDrawer({
             <Button
               type="button"
               variant="destructive"
-              onClick={() => setConfirmDeleteOpen(true)}
+              disabled={deleteInProgress}
+              onClick={() => {
+                if (deletingRef.current) return;
+                setConfirmDeleteOpen(true);
+              }}
             >
-              Delete booking
+              {deleteInProgress ? 'Deleting…' : 'Delete booking'}
             </Button>
             {deleteError ? <p className="mt-2 text-sm text-red-600">{deleteError}</p> : null}
           </div>
@@ -565,7 +584,7 @@ function BookingDetailDrawer({
             title="Delete this booking?"
             description={`This will permanently delete the booking for ${booking.customer.fullName} (${booking.service.name}). This cannot be undone.`}
             confirmLabel="Delete"
-            confirming={removing}
+            confirming={deleteInProgress}
           />
         </div>
       )}
