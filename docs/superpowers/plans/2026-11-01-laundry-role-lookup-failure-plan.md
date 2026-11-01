@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 5)** at M5, 2026-11-01 ([M5 decision](#m5-decision)). M6 **Complete** ([Execution record (M6)](#execution-record-m6)). M7 **Accepted** on 2026-11-01, on a fresh independent review (**Approve**) ([M7 decision](#m7-decision)). M8 **N/A**, M9 **Complete**, M10 **does not apply** ([M8](#m8--not-applicable), [M9](#m9--documentation-2026-11-01), [M10](#m10--not-applicable)). **Ready for closeout**, pending the owner's authorization to commit, push and open the PR. Drafted at M4 on 2026-11-01. Revision 1 was returned by an independent M5 review (**Request changes**, 2026-11-01); revision 2 addressed it ([Revision 2 changes](#revision-2-changes)). Revision 2 was returned by a fresh independent M5 review (**Request changes**, 2026-11-01); revision 3 addressed it ([Revision 3 changes](#revision-3-changes)). Revision 3 was returned by a fresh independent M5 review (**Request changes**, 2026-11-01); revision 4 addressed it ([Revision 4 changes](#revision-4-changes)). Revision 4 was returned by a fresh independent M5 review (**Request changes**, 2026-11-01); revision 5 addresses it ([Revision 5 changes](#revision-5-changes)). Revision 5 was approved by a fresh independent M5 review with no blockers and no required corrections, and the owner accepted it. At M4 and M5, nothing had been run against this repository: every `Expected:` line was a prediction, not a result, and the evidence behind the plan was of two kinds, kept apart: source-level inspection of the code and tests (read-only), and shell-mechanics runs of the break-run blocks in throwaway git repositories with a stub test command ([Break runs](#break-runs)). Neither was an application test result. The actual results, from M6, are in the [Execution record (M6)](#execution-record-m6), and the M7 reviewer re-ran the gates ([M7 decision](#m7-decision)). |
+| Status | **Accepted (revision 5)** at M5, 2026-11-01 ([M5 decision](#m5-decision)). M6 **Complete** ([Execution record (M6)](#execution-record-m6)). M7 **Accepted** on 2026-11-01, on a fresh independent review (**Approve**) ([M7 decision](#m7-decision)). M8 **N/A**, M9 **Complete**, M10 **does not apply** ([M8](#m8--not-applicable), [M9](#m9--documentation-2026-11-01), [M10](#m10--not-applicable)). **Slice complete**: merged in PR [#214](https://github.com/rexescario-dev/clensy-platform/pull/214) (`d23a5c9`, 2026-11-01), and #211 closed. See [Closeout](#closeout-2026-11-01). Drafted at M4 on 2026-11-01. Revision 1 was returned by an independent M5 review (**Request changes**, 2026-11-01); revision 2 addressed it ([Revision 2 changes](#revision-2-changes)). Revision 2 was returned by a fresh independent M5 review (**Request changes**, 2026-11-01); revision 3 addressed it ([Revision 3 changes](#revision-3-changes)). Revision 3 was returned by a fresh independent M5 review (**Request changes**, 2026-11-01); revision 4 addressed it ([Revision 4 changes](#revision-4-changes)). Revision 4 was returned by a fresh independent M5 review (**Request changes**, 2026-11-01); revision 5 addresses it ([Revision 5 changes](#revision-5-changes)). Revision 5 was approved by a fresh independent M5 review with no blockers and no required corrections, and the owner accepted it. At M4 and M5, nothing had been run against this repository: every `Expected:` line was a prediction, not a result, and the evidence behind the plan was of two kinds, kept apart: source-level inspection of the code and tests (read-only), and shell-mechanics runs of the break-run blocks in throwaway git repositories with a stub test command ([Break runs](#break-runs)). Neither was an application test result. The actual results, from M6, are in the [Execution record (M6)](#execution-record-m6), and the M7 reviewer re-ran the gates ([M7 decision](#m7-decision)). |
 | Tracking issue | [#211](https://github.com/rexescario-dev/clensy-platform/issues/211) "Laundry order page: show a message when the role lookup fails (Actions section)". It follows up [#165](https://github.com/rexescario-dev/clensy-platform/issues/165), which deferred it by owner decision U2 (PR #210). |
 | Implements (Accepted) | [Laundry Orders & Lifecycle](../specs/2026-09-06-laundry-orders-lifecycle-design.md) §8.4.4. That section covers role-based actions and says nothing about a failed role lookup, so **no spec amendment** is needed. |
 | M5 decision | **Accepted** on 2026-11-01, revision 5, by the owner, on a fresh independent review (**Approve**). See [M5 decision](#m5-decision). |
@@ -13,6 +13,7 @@
 | M8 | **N/A** (2026-11-01). See [M8](#m8--not-applicable). |
 | M9 | **Complete** (2026-11-01). See [M9](#m9--documentation-2026-11-01). |
 | M10 | **Does not apply**: no workflow asset changed. See [M10](#m10--not-applicable). |
+| Merge and closeout | Merged in PR [#214](https://github.com/rexescario-dev/clensy-platform/pull/214) (`d23a5c9`, 2026-11-01). #211 closed. See [Closeout](#closeout-2026-11-01). |
 | Authority | Where this plan and the Accepted spec disagree, the **spec wins** and this plan must be revised; this plan never overrides it. Issue #211 refines §8.4.4 for one state the spec does not address (a failed role lookup), and its acceptance criterion 1 is applied as changed by the owner ([owner decision](#211-acceptance-criterion-1-owner-decision)). File names, helper names (`laundryRoleLookup`, `LaundryRoleLookup`), message-key names (`laundry.error.account`), test-constant names and task order are planning decisions, not product behavior requirements. The product behavior is: the wording, the placement, the condition and the unchanged section bodies (decisions a–g). |
 | Commits | M6 stages and commits **only** with the owner's explicit authorization to commit for this slice, recorded in the M6 execution record. Two commits are planned, one for Task 1 and one for Task 2. Both are made only in Task 2 Step 9, **after** every break run has been restored and verified and the final check has passed, so a failed break run, restore or test prevents any commit. Task 3 makes no commit. Committing this plan and its M5 record also needs that authorization. Without it, the work stays uncommitted and the record says so. The [break runs](#break-runs) never depend on a commit. |
 | Extends (Accepted plans) | [#156 order page](2026-10-14-laundry-order-page-plan.md): "nothing while the role loads" in Actions. [#158 services](2026-10-15-laundry-services-selection-plan.md) and [#162 price review](2026-10-15-laundry-price-review-plan.md): `roleResolved` and the `'hidden'` view. Their code is **not changed**. The meaning of `'hidden'` widens from "the role is loading" to "**no role is available: loading or failed**", and the new page-level alert tells the two apart. |
@@ -288,6 +289,101 @@ No workflow asset under `docs/workflows/`, and no installer-managed file (`workf
 **Closeout:** commit, push, open the PR, then merge.
 
 Each step needs the owner's explicit authorization. Posting the #211 clarification comment is a separate decision.
+
+## Closeout (2026-11-01)
+
+**Merge check (§2.12, before the merge).** Each applicable stage was checked in order. Every one had a recorded outcome. No stage was skipped or overridden.
+
+| Gate | Outcome |
+| --- | --- |
+| M1 | Installed prompt library present |
+| M2 | No new specification or amendment; the Accepted lifecycle spec (§8.4.4) governs and is silent on a failed role lookup |
+| M3 | Spec already Accepted |
+| M4 | Plan drafted (revisions 1–5) |
+| M5 | Plan Accepted (revision 5, owner, after a fresh independent review gave Approve) |
+| M6 | Complete, including the browser check (webpack run) |
+| M7 | Approved for merge (fresh independent review) |
+| M8 | N/A |
+| M9 | Complete |
+| M10 | Does not apply (no workflow assets changed) |
+
+**Commit, PR and merge.**
+- **Authorization.** The owner authorized commit, push and PR ("make PR"), then merge and closeout ("merge, closeout").
+- **Commits.** Three commits with no attribution lines, per the owner's global instructions:
+  - `3544466`: Task 1;
+  - `c5cf3eb`: Task 2;
+  - `af287a7`: this plan and the README.
+
+  Before the push, the branch diff was checked against the test account's credential file, and the password did not occur in it.
+- **PR.** [#214](https://github.com/rexescario-dev/clensy-platform/pull/214), `Closes #211`. CI passed on head `af287a7`: Lint, Test, API e2e and Release gate all `pass`.
+- **Merge.** A merge commit, made with `gh pr merge 214 --merge --delete-branch`, as for #210.
+
+**Verification.**
+- PR #214 shows `MERGED`, with merge commit `d23a5c9`, at 2026-11-01T09:31:38Z (UTC).
+- `af287a7`, the reviewed head, is an ancestor of `origin/main`, and `git diff af287a7 d23a5c9` is empty.
+- Local `main` is at `d23a5c9`.
+- #211 closed automatically, at 2026-11-01T09:31:39Z.
+
+**Post-merge cleanup.**
+- `--delete-branch` removed `feat/211-role-lookup-failure` from the remote and locally. The project defines no other cleanup policy.
+- **Left in the local environment from the M6 browser check:**
+  - the OPS_MANAGER test account `m6-211-ops@example.test`. Its password appeared once in a session tool output and is stored in two session-scratchpad files. **The owner should disable or remove the account, or rotate its password, and delete those files.**
+  - the break-run scratch folders, the diagnostic `.next` caches and the scratch scripts, all in the session scratchpad;
+  - the two screenshots and a console log in the gitignored `.playwright-mcp/`.
+
+  No orders were created, and `clensy-platform-web-1` and `apps/web/.next` are as they were before M6.
+
+**Final M7 position.** Approved for merge, with no blockers and no code corrections. Its three record corrections were made before the commit.
+
+**Follow-ups.**
+
+| Item | Outcome |
+| --- | --- |
+| #211 clarification comment (criterion 1 changed by the owner) | Drafted in [#211 acceptance criterion 1: owner decision](#211-acceptance-criterion-1-owner-decision). **Not posted**: it needs the owner's approval. PR #214's body states the change. |
+| Test-account credential exposure | For the owner, as above. Not filed. |
+| Older `.playwright-mcp/*.yml` snapshots with the seeded demo password (pre-existing) | Reported at M7. Not filed. |
+| Retry control on a failed lookup | Deferred (plan concern 4). Not filed. |
+| Weighing's read-only view on `RECEIVED` during a failed lookup | Deferred (plan concern 5). Not filed. |
+| Recovery not unit-tested; no `error: null` case (M7 non-blocking) | Recorded. Not filed. |
+| Turbopack `next dev` fails to resolve modules in this environment; webpack works | Environment only. Not filed. |
+| #161 cutover (the list's drawer has no link to the order page) | Already tracked as #161. |
+
+## Slice Completion Report (final)
+
+| Field | Result |
+| --- | --- |
+| Slice | #211: laundry order page, one page-level alert when the role lookup fails |
+| Tracking | https://github.com/rexescario-dev/clensy-platform/issues/211 |
+| M4 | Plan **Accepted** (revision 5) |
+| M5 | Review **Accepted** (owner, 2026-11-01) |
+| M6 | **Complete** |
+| M7 | **Approved** (fresh independent review) |
+| M8 | **N/A** |
+| M9 | **Complete** |
+| Branch | `feat/211-role-lookup-failure` (merged and deleted) |
+| PR | https://github.com/rexescario-dev/clensy-platform/pull/214 |
+| Status | **Slice complete** |
+
+### Shipped
+
+- **One page-level alert:** when the current admin's role lookup fails and no role is available, the laundry order page shows "Unable to load your account." once, between the order summary and the section links, for any order status.
+- **Four distinct states:** loading, failed, resolved without permission and resolved with permission. A retained role wins over an error.
+- **Sections unchanged:** Actions, Services and Price render as they do while the role loads, and Weighing and Invoice and payment are unchanged.
+- **Docs:** the web README documents the role-lookup states and the alert.
+
+### Validation
+
+| Check | Result |
+| --- | --- |
+| Tests | **Passed**: `web` 2543/2543, `@clensy/web` 418/418; K1–K6 MATCH; CI Test and API e2e pass |
+| Typecheck | **Passed** |
+| Lint | **Passed** (local and CI) |
+| Build | **Passed** |
+| Package validation | **Passed**: browser check; CI Release gate pass |
+
+### Next Gate
+
+None.
 
 ## Revision 5 changes
 
