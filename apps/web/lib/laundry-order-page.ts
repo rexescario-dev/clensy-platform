@@ -150,6 +150,17 @@ export function laundryWeighingView(
   return 'readOnly';
 }
 
+// #211: whether the current admin's role is available. A role that is
+// present wins, even beside an error (retained or later data); an error
+// with no role is a failed lookup, even while a refetch is loading (the
+// page-visibility gate's precedence); otherwise it is still loading.
+export type LaundryRoleLookup = 'failed' | 'loading' | 'resolved';
+
+export function laundryRoleLookup({ error, role }: { error: unknown; role: string | undefined }): LaundryRoleLookup {
+  if (role !== undefined) return 'resolved';
+  return error === undefined || error === null ? 'loading' : 'failed';
+}
+
 export type LaundryLineQuantity = { kind: 'items' | 'weight'; value: string } | null;
 
 // Lifecycle spec §8.4.4: a PER_KG line shows weight, a PER_ITEM line an
