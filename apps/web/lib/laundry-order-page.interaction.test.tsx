@@ -987,6 +987,22 @@ describe('order page lifecycle actions (#165)', () => {
     expect(section('actions').textContent).toContain('No further actions for this order.');
   });
 
+  it('case 4b (#161): cancel from PRICED shows the plain-language dialog, then the terminal progress sentence', async () => {
+    const cancel = lifecycle('cancelLaundryOrder');
+    start('PRICED', 'OPS_MANAGER');
+    act(() => buttonIn('actions', 'Cancel order')!.click());
+    expect(dialog()?.textContent).toContain(
+      'Cancel this order? It will be called off before payment. This cannot be undone.',
+    );
+    act(() => dialogButton('Cancel order').click());
+    expect(cancel.fn).toHaveBeenCalledTimes(1);
+    await finish(cancel.list, 0, 'resolve', { data: { cancelLaundryOrder: { id: page.id } } });
+    await settleRefetch(0, { order: at('CANCELLED') });
+    expect(dialog()).toBeNull();
+    expect(container.textContent).toContain('This order was cancelled before payment.');
+    expect(container.querySelector('[aria-label="Order progress"]')).toBeNull();
+  });
+
   it('case 5: a failure with a server message shows it in Actions, and the status stays as refetched', async () => {
     const reject = lifecycle('rejectLaundryOrder');
     start('RECEIVED', 'OPS_MANAGER');
