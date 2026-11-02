@@ -368,6 +368,15 @@ export class Fixtures {
         type: PaymentType.PAYMENT,
       }),
     );
+    // Spec §4.4: the invoice's derived pair always equals its net paid
+    // (500 of 2000 → PARTIALLY_PAID).
+    await this.dataSource.getRepository(InvoiceEntity).update(
+      { id: world.invoiceId, tenantId: world.tenantId },
+      {
+        amountPaidMinorUnits: 500,
+        paymentStatus: InvoicePaymentStatus.PARTIALLY_PAID,
+      },
+    );
     return payment.id;
   }
 
