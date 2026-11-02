@@ -47,6 +47,8 @@ const page = vi.hoisted(() => ({
   // Set by the #166 cases that generate an invoice on purpose.
   invoiceExpected: false,
   invoiceNodes: [] as unknown[],
+  // #39: set by the cases that record an invoice payment on purpose.
+  invoicePaymentExpected: false,
   invoiceRefetch: vi.fn(),
   invoiceRefetches: [] as Deferred[],
   invoices: [] as Deferred[],
@@ -79,6 +81,9 @@ const page = vi.hoisted(() => ({
   previewFail: null as unknown,
   price: vi.fn(),
   prices: [] as Deferred[],
+  // #39: the payments panel's record mutation.
+  recordPayment: vi.fn(),
+  recordPayments: [] as Deferred[],
   refetch: vi.fn(),
   refetches: [] as Deferred[],
   role: 'OPS_MANAGER',
@@ -128,6 +133,7 @@ function catalogQuery(entries: CatalogEntry[], listKey: 'addOns' | 'services') {
 vi.mock('@clensy/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@clensy/client')>()),
   useAddOnsQuery: (options: never) => catalogQuery(ADD_ONS, 'addOns')(options),
+  useAdminsQuery: () => ({ data: undefined }),
   useCancelLaundryOrderMutation: () => [page.lifecycle.cancelLaundryOrder!.fn, { loading: false }],
   useCompleteLaundryOrderMutation: () => [page.lifecycle.completeLaundryOrder!.fn, { loading: false }],
   useCurrentAdminQuery: () => ({ data: { currentAdmin: { role: page.role } } }),
@@ -138,6 +144,30 @@ vi.mock('@clensy/client', async (importOriginal) => ({
     loading: false,
     refetch: page.invoiceRefetch,
   }),
+  // #39 Task 9: the Invoice card mounts the real payments panel. Its query
+  // reads `invoiceNodes[0]` (this hoisted factory cannot reach the
+  // describe-local `INVOICE`); paid defaults to 0 and due to the total.
+  useInvoicePaymentsQuery: () => {
+    const node = page.invoiceNodes[0] as
+      { amountDueMinorUnits?: number; amountPaidMinorUnits?: number; id: string; paymentStatus: string; totalMinorUnits: number } | undefined;
+    return {
+      data: node
+        ? {
+            invoice: {
+              id: node.id,
+              amountDueMinorUnits: node.amountDueMinorUnits ?? node.totalMinorUnits,
+              amountPaidMinorUnits: node.amountPaidMinorUnits ?? 0,
+              payments: { nodes: [], pageInfo: { hasNextPage: false } },
+              paymentStatus: node.paymentStatus,
+              totalMinorUnits: node.totalMinorUnits,
+            },
+          }
+        : undefined,
+      error: undefined,
+      loading: false,
+      refetch: () => Promise.resolve(),
+    };
+  },
   useLaundryOrderQuery: () => ({
     data: { laundryOrder: page.order },
     error: page.orderError,
@@ -152,6 +182,8 @@ vi.mock('@clensy/client', async (importOriginal) => ({
   useMarkLaundryOrderPaidMutation: () => [page.paid, { loading: false }],
   useMarkLaundryOrderReadyMutation: () => [page.lifecycle.markLaundryOrderReady!.fn, { loading: false }],
   usePriceLaundryOrderMutation: () => [page.price, { loading: false }],
+  useRecordInvoicePaymentMutation: () => [page.recordPayment, { loading: false }],
+  useRefundInvoicePaymentMutation: () => [vi.fn(), { loading: false }],
   useRefundLaundryOrderMutation: () => [page.lifecycle.refundLaundryOrder!.fn, { loading: false }],
   useRejectLaundryOrderMutation: () => [page.lifecycle.rejectLaundryOrder!.fn, { loading: false }],
   useServicesQuery: (options: never) => catalogQuery(SERVICES, 'services')(options),
@@ -294,6 +326,10 @@ beforeEach(() => {
   page.invoiceNodes = [];
   page.invoiceError = undefined;
   page.invoiceExpected = false;
+  page.invoicePaymentExpected = false;
+  page.recordPayments.length = 0;
+  page.recordPayment.mockReset();
+  page.recordPayment.mockImplementation(deferred(page.recordPayments));
   page.paymentExpected = false;
   page.weigh.mockReset();
   page.weigh.mockImplementation(deferred(page.weighs));
@@ -324,6 +360,7 @@ afterEach(() => {
     expect(page.awaiting).not.toHaveBeenCalled();
   }
   if (!page.weighExpected) expect(page.weigh).not.toHaveBeenCalled();
+  if (!page.invoicePaymentExpected) expect(page.recordPayment).not.toHaveBeenCalled();
   for (const [field, { fn }] of Object.entries(page.lifecycle)) {
     if (!page.lifecycleExpected.has(field)) expect(fn).not.toHaveBeenCalled();
   }
@@ -749,6 +786,49 @@ describe('order page invoice and payment (#166)', () => {
       expect(invoiceText()).not.toContain('Unable to generate invoice.');
       expect(container.querySelector('h1')?.textContent).toBe('Ana Reyes');
       expect(container.querySelector('#laundry-order-actions')).not.toBeNull();
+    });
+  });
+
+  // #39 Task 9: the payments panel inside the Invoice card shares the
+  // page lock and refetches the order's invoice after a write.
+  describe('invoice payments panel', () => {
+    function recordButton(): HTMLButtonElement | undefined {
+      return [...section('invoice').querySelectorAll('button')].find((candidate) => candidate.textContent === 'Record payment');
+    }
+
+    it('disables Record payment while a payment verb holds the page lock', async () => {
+      page.paymentExpected = true;
+      page.invoiceNodes = [INVOICE];
+      start();
+      expect(recordButton()!.disabled).toBe(false);
+      act(() => button('invoice', 'Mark paid')!.click());
+      expect(probe.log).toContainEqual({ granted: true, op: 'tryAcquire', owner: 'transition' });
+      expect(recordButton()!.disabled).toBe(true);
+      await finish(page.paids, 0, 'resolve', { data: { markLaundryOrderPaid: { id: page.id } } });
+      await settleRefetch(0, { order: priced('PAID') });
+      expect(recordButton()!.disabled).toBe(false);
+    });
+
+    it('a successful payment refetches InvoiceForOrder once', async () => {
+      page.invoicePaymentExpected = true;
+      page.invoiceNodes = [INVOICE];
+      start();
+      act(() => recordButton()!.click());
+      const form = document.body.querySelector<HTMLFormElement>('[role="dialog"] form');
+      expect(form).not.toBeNull();
+      act(() => {
+        form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      });
+      expect(page.recordPayment).toHaveBeenCalledTimes(1);
+      expect(probe.log).toContainEqual({ granted: true, op: 'tryAcquire', owner: 'payment' });
+      expect(page.invoiceRefetch).not.toHaveBeenCalled();
+      await finish(page.recordPayments, 0, 'resolve', { data: { recordInvoicePayment: { id: 'p1' } } });
+      expect(document.body.textContent).toContain('Payment recorded.');
+      expect(page.invoiceRefetch).toHaveBeenCalledTimes(1);
+      await settleInvoiceRefetch(0, { nodes: [{ ...INVOICE, amountDueMinorUnits: 0, amountPaidMinorUnits: 12345, paymentStatus: 'PAID' }] });
+      expect(page.invoiceRefetch).toHaveBeenCalledTimes(1);
+      // The order's status is not touched.
+      expect(page.refetch).not.toHaveBeenCalled();
     });
   });
 

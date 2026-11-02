@@ -1,7 +1,7 @@
 'use client';
 
 import { useCurrentAdminQuery, useInvoiceForOrderQuery, useLaundryOrderQuery } from '@clensy/client';
-import type { InvoiceForOrderQuery, LaundryOrderQuery } from '@clensy/client';
+import type { InvoiceForOrderQuery, LaundryOrderQuery, Role } from '@clensy/client';
 import { ErrorState, LoadingState, PageHeader, StatusBadge } from '@clensy/ui';
 import {
   LAUNDRY_STATUS_TONE,
@@ -237,9 +237,13 @@ function LaundryOrderWorkspace({ id }: { id: string }) {
           invoiceError={Boolean(invoiceQuery.error)}
           invoiceLoading={invoiceQuery.loading}
           invoices={invoices}
+          lock={lock}
           order={order}
+          role={role}
           transition={transition}
           verbs={verbs}
+          viewerId={adminData?.currentAdmin.id}
+          onPaymentsChanged={() => invoiceQuery.refetch()}
         />
       </OrderSection>
 
@@ -543,9 +547,13 @@ function InvoicePaymentBody({
   invoiceError,
   invoiceLoading,
   invoices,
+  lock,
+  onPaymentsChanged,
   order,
+  role,
   transition,
   verbs,
+  viewerId,
 }: {
   // The page lock is held by any mutation (#165): every control here is
   // disabled.
@@ -556,9 +564,15 @@ function InvoicePaymentBody({
   // `resolvedInvoiceNodes`: a node list only from a finished, error-free
   // result that carries the connection.
   invoices: readonly Invoice[] | undefined;
+  // The page lock and the viewer, for the invoice payments panel (#39): its
+  // writes take the lock, and a write refetches `InvoiceForOrder`.
+  lock: LaundryMutationLock;
+  onPaymentsChanged: () => Promise<unknown>;
   order: LaundryOrderDetail;
+  role: Role | undefined;
   transition: LaundryOrderTransitionState;
   verbs: readonly LaundryOrderVerb[];
+  viewerId: string | undefined;
 }) {
   return (
     <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:gap-4">
@@ -567,8 +581,12 @@ function InvoicePaymentBody({
         failed={generateInvoice.failed}
         generating={generateInvoice.generating}
         invoice={invoices?.[0]}
+        lock={lock}
+        role={role}
         view={laundryInvoiceView({ error: invoiceError, invoices, loading: invoiceLoading, verbs })}
+        viewerId={viewerId}
         onGenerate={(paymentTerms) => void generateInvoice.generate(paymentTerms)}
+        onPaymentsChanged={onPaymentsChanged}
       />
       <LaundryOrderPaymentCard
         // `order.status` is read from the order query on every render. The
