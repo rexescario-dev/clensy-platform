@@ -266,6 +266,7 @@ export const laundry = {
     dialog: {
       amountLabel: 'Amount',
       methodLabel: 'Method',
+      methodPlaceholder: 'Choose a method',
       paidAtHelp: 'Leave as now unless the money moved earlier.',
       paidAtLabel: 'Paid at (Manila time)',
       recordSubmit: 'Record payment',
@@ -281,6 +282,8 @@ export const laundry = {
       amountTooLarge: 'That amount is too large.',
       amountZero: 'Enter an amount greater than zero.',
       loadMore: 'Unable to load more payments.',
+      locked: 'Another change to this order is in progress. Try again when it finishes.',
+      methodRequired: 'Choose how the money moved.',
       paidAtFuture: 'Enter a time that is not in the future.',
       recordPayment: 'Unable to record payment.',
       recordRefund: 'Unable to record refund.',

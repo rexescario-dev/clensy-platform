@@ -816,6 +816,12 @@ describe('order page invoice and payment (#166)', () => {
       act(() => recordButton()!.click());
       const form = document.body.querySelector<HTMLFormElement>('[role="dialog"] form');
       expect(form).not.toBeNull();
+      // The method has no default (spec §4.10); choose one.
+      act(() => {
+        const method = form!.querySelector<HTMLSelectElement>('select[name="payment-method"]')!;
+        Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(method, 'CASH');
+        method.dispatchEvent(new Event('change', { bubbles: true }));
+      });
       act(() => {
         form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
       });

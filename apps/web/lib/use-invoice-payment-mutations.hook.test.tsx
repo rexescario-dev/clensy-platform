@@ -189,7 +189,28 @@ describe('useInvoicePaymentMutations with the page lock', () => {
     expect(outcome).toBe(false);
     expect(api.record).not.toHaveBeenCalled();
     expect(latest.pending).toBe(false);
+    expect(latest.error).toBe('Another change to this order is in progress. Try again when it finishes.');
     expect(lock.isHeld()).toBe(true);
+    act(() => lock.release(lease!));
+  });
+
+  it('a refusal replaces an earlier failure message with the lock reason', async () => {
+    act(() => {
+      void latest.record(RECORD);
+    });
+    await act(async () => {
+      api.records[0]!.reject(new Error('network down'));
+    });
+    expect(latest.error).toBe('Unable to record payment.');
+    let lease: ReturnType<Lock['tryAcquire']> = null;
+    act(() => {
+      lease = lock.tryAcquire('transition');
+    });
+    await act(async () => {
+      await latest.record(RECORD);
+    });
+    expect(api.record).toHaveBeenCalledTimes(1);
+    expect(latest.error).toBe('Another change to this order is in progress. Try again when it finishes.');
     act(() => lock.release(lease!));
   });
 

@@ -16,7 +16,8 @@ export interface InvoicePaymentMutations {
   refund: (input: RefundInvoicePaymentInput) => Promise<boolean>;
   // True through the mutation and the refetch that follows a success.
   pending: boolean;
-  // The server message or the fallback copy; cleared when the next write starts.
+  // The server message, the fallback copy, or the lock-refusal reason;
+  // replaced when the next write starts or is refused.
   error: string | null;
 }
 
@@ -46,7 +47,12 @@ export function useInvoicePaymentMutations({ invoiceId, lock, refetch }: UseInvo
   async function run(kind: Kind, send: () => Promise<{ data?: unknown; errors?: readonly unknown[] }>, field: string) {
     if (inFlight.current) return false;
     const lease = lock ? lock.tryAcquire('payment') : undefined;
-    if (lease === null) return false;
+    if (lease === null) {
+      // Another order action holds the page lock: say so now, so the dialog
+      // never re-shows an earlier attempt's message.
+      setError(t('payments.error.locked'));
+      return false;
+    }
     inFlight.current = true;
     setPending(true);
     setError(null);

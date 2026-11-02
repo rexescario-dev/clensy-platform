@@ -255,6 +255,12 @@ describe('/app/billing invoice drawer', () => {
     const dialogs = document.body.querySelectorAll('[role="dialog"]');
     const form = dialogs[dialogs.length - 1]?.querySelector('form');
     expect(form, 'record form').not.toBeNull();
+    // The method has no default (spec §4.10); choose one.
+    act(() => {
+      const method = form!.querySelector<HTMLSelectElement>('select[name="payment-method"]')!;
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(method, 'CASH');
+      method.dispatchEvent(new Event('change', { bubbles: true }));
+    });
     act(() => {
       form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     });

@@ -219,7 +219,6 @@ export function InvoicePaymentsPanel({ invoiceId, lock, onChanged, role, viewerI
               ? recordAmountPrefill(invoice.amountDueMinorUnits)
               : toEditableAmount(dialog.payment.refundableMinorUnits ?? 0)
           }
-          initialMethod={dialog.kind === 'record' ? 'CASH' : dialog.payment.method}
           maxMinorUnits={dialog.kind === 'record' ? MAX_MINOR_UNITS : (dialog.payment.refundableMinorUnits ?? 0)}
           now={dialog.now}
           refund={dialog.kind === 'refund'}
@@ -249,7 +248,6 @@ function Amount({ children, label, testId }: { children: ReactNode; label: strin
 // it (spec §4.5), so client clock skew cannot reject a "now" payment.
 function PaymentDialog({
   initialAmount,
-  initialMethod,
   maxMinorUnits,
   now,
   onClose,
@@ -260,7 +258,6 @@ function PaymentDialog({
   t,
 }: {
   initialAmount: string;
-  initialMethod: PaymentMethod;
   maxMinorUnits: number;
   now: Date;
   onClose: () => void;
@@ -271,12 +268,15 @@ function PaymentDialog({
   t: Translate;
 }) {
   const nowLocal = toManilaDateTimeLocal(now);
-  const [method, setMethod] = useState<PaymentMethod>(initialMethod);
+  // No default: the user states how the money moved, for a refund too
+  // (spec §3, §4.10 "method (required)").
+  const [method, setMethod] = useState<PaymentMethod | ''>('');
   const [amount, setAmount] = useState(initialAmount);
   const [reference, setReference] = useState('');
   const [paidAt, setPaidAt] = useState(nowLocal);
   const [paidAtEdited, setPaidAtEdited] = useState(false);
   const [amountError, setAmountError] = useState<string | undefined>(undefined);
+  const [methodMissing, setMethodMissing] = useState(false);
   const [paidAtInvalid, setPaidAtInvalid] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -300,7 +300,8 @@ function PaymentDialog({
     const paidAtBad = paidAtEdited && paidAtIso === null;
     setAmountError(parsed.ok ? undefined : amountMessage(parsed));
     setPaidAtInvalid(paidAtBad);
-    if (!parsed.ok || paidAtBad) return;
+    setMethodMissing(method === '');
+    if (method === '' || !parsed.ok || paidAtBad) return;
     setFailed(false);
     const trimmed = reference.trim();
     const ok = await onSubmit({
@@ -333,15 +334,31 @@ function PaymentDialog({
           name="payment-method"
           required
           value={method}
-          onChange={(event) => setMethod(event.target.value as PaymentMethod)}
-          className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+          aria-invalid={methodMissing ? true : undefined}
+          aria-describedby={methodMissing ? 'payment-method-error' : undefined}
+          onChange={(event) => {
+            setMethod(event.target.value as PaymentMethod);
+            setMethodMissing(false);
+          }}
+          className={[
+            'rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400',
+            methodMissing ? 'border-red-500' : 'border-slate-300',
+          ].join(' ')}
         >
+          <option value="" disabled>
+            {t('payments.dialog.methodPlaceholder')}
+          </option>
           {METHODS.map((value) => (
             <option key={value} value={value}>
               {t(`payments.method.${value}`)}
             </option>
           ))}
         </select>
+        {methodMissing ? (
+          <p id="payment-method-error" className="text-sm text-red-600">
+            {t('payments.error.methodRequired')}
+          </p>
+        ) : null}
       </div>
       <FormField
         label={t('payments.dialog.amountLabel')}

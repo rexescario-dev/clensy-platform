@@ -46,6 +46,8 @@ vi.mock('@clensy/client', async (importOriginal) => ({
 }));
 
 const { InvoicePaymentsPanel } = await import('../components/billing/invoice-payments-panel');
+const { useLaundryMutationLock } = await import('./use-laundry-mutation-lock');
+type Lock = ReturnType<typeof useLaundryMutationLock>;
 
 const INVOICE = 'i1';
 const VIEWER = 'staff-1';
@@ -98,12 +100,23 @@ const P2 = payment({ id: 'p2', amountMinorUnits: 5000, paidAt: '2026-11-01T03:00
 let container: HTMLDivElement;
 let root: Root;
 const onChanged = vi.fn();
+let pageLock: Lock;
 
-function render(role: Role | undefined) {
+// The laundry order page's host: the panel shares the page lock.
+function LockedHost({ role }: { role: Role | undefined }) {
+  pageLock = useLaundryMutationLock();
+  return <InvoicePaymentsPanel invoiceId={INVOICE} lock={pageLock} role={role} viewerId={VIEWER} onChanged={onChanged} />;
+}
+
+function render(role: Role | undefined, options: { withLock?: boolean } = {}) {
   act(() =>
     root.render(
       <ToastProvider>
-        <InvoicePaymentsPanel invoiceId={INVOICE} role={role} viewerId={VIEWER} onChanged={onChanged} />
+        {options.withLock ? (
+          <LockedHost role={role} />
+        ) : (
+          <InvoicePaymentsPanel invoiceId={INVOICE} role={role} viewerId={VIEWER} onChanged={onChanged} />
+        )}
       </ToastProvider>,
     ),
   );
@@ -144,6 +157,15 @@ function type(selector: string, value: string) {
   act(() => {
     setter.call(input, value);
     input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+
+function choose(method: string) {
+  const select = field<HTMLSelectElement>('select[name="payment-method"]');
+  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!;
+  act(() => {
+    setter.call(select, method);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
   });
 }
 
@@ -292,9 +314,37 @@ describe('InvoicePaymentsPanel record dialog', () => {
     expect(panel.record).not.toHaveBeenCalled();
   });
 
+  it('starts with no method: an empty, disabled "Choose a method" option is selected', () => {
+    render('FINANCE');
+    openRecord();
+    const select = field<HTMLSelectElement>('select[name="payment-method"]');
+    expect(select.value).toBe('');
+    expect(select.options[0]!.value).toBe('');
+    expect(select.options[0]!.disabled).toBe(true);
+    expect(select.options[0]!.textContent).toBe('Choose a method');
+  });
+
+  it('an untouched method shows the inline error and makes no call', () => {
+    render('FINANCE');
+    openRecord();
+    submit();
+    expect(dialog().textContent).toContain('Choose how the money moved.');
+    expect(field<HTMLSelectElement>('select[name="payment-method"]').getAttribute('aria-invalid')).toBe('true');
+    expect(panel.record).not.toHaveBeenCalled();
+  });
+
+  it('sends the chosen method', () => {
+    render('FINANCE');
+    openRecord();
+    choose('GCASH');
+    submit();
+    expect(panel.records[0]!.options.variables.input).toMatchObject({ method: 'GCASH' });
+  });
+
   it('an untouched paid-at sends no paidAt; the caller key is a UUID', () => {
     render('FINANCE');
     openRecord();
+    choose('CASH');
     submit();
     const input = panel.records[0]!.options.variables.input;
     expect(input).not.toHaveProperty('paidAt');
@@ -305,6 +355,7 @@ describe('InvoicePaymentsPanel record dialog', () => {
   it('an edited paid-at is sent as Manila time', () => {
     render('FINANCE');
     openRecord();
+    choose('CASH');
     type('input[name="payment-paid-at"]', '2026-11-01T09:30');
     submit();
     expect(panel.records[0]!.options.variables.input.paidAt).toBe('2026-11-01T09:30:00+08:00');
@@ -332,6 +383,7 @@ describe('InvoicePaymentsPanel record dialog', () => {
   it('a retry keeps the key; after success a reopened dialog has a new key', async () => {
     render('FINANCE');
     openRecord();
+    choose('CASH');
     submit();
     await act(async () => {
       panel.records[0]!.reject({ graphQLErrors: [{ extensions: { originalError: { message: 'Server says no.' } } }] });
@@ -349,6 +401,7 @@ describe('InvoicePaymentsPanel record dialog', () => {
     expect(panel.refetch).toHaveBeenCalled();
     expect(onChanged).toHaveBeenCalledTimes(1);
     openRecord();
+    choose('CASH');
     submit();
     expect(panel.records[2]!.options.variables.input.idempotencyKey).not.toBe(first);
   });
@@ -356,6 +409,7 @@ describe('InvoicePaymentsPanel record dialog', () => {
   it('closing discards the key', async () => {
     render('FINANCE');
     openRecord();
+    choose('CASH');
     submit();
     const first = panel.records[0]!.options.variables.input.idempotencyKey;
     await act(async () => {
@@ -366,6 +420,7 @@ describe('InvoicePaymentsPanel record dialog', () => {
     expect(document.body.querySelector('[role="dialog"]')).toBeNull();
     openRecord();
     expect(dialog().querySelector('[role="alert"]')).toBeNull();
+    choose('CASH');
     submit();
     expect(panel.records[1]!.options.variables.input.idempotencyKey).not.toBe(first);
   });
@@ -395,9 +450,60 @@ describe('InvoicePaymentsPanel refund dialog', () => {
   it('sends the original payment id', () => {
     render('FINANCE');
     openRefund();
+    choose('CASH');
     submit();
     expect(panel.refunds[0]!.options.variables.input).toMatchObject({ amountMinorUnits: 20000, method: 'CASH', paymentId: 'p1' });
     expect(panel.refunds[0]!.options.variables.input).not.toHaveProperty('paidAt');
+  });
+});
+
+describe('InvoicePaymentsPanel refund method', () => {
+  it('an untouched method shows the inline error and makes no call', () => {
+    render('FINANCE');
+    click(buttons('Refund payment')[0]!);
+    expect(field<HTMLSelectElement>('select[name="payment-method"]').value).toBe('');
+    submit();
+    expect(dialog().textContent).toContain('Choose how the money moved.');
+    expect(field<HTMLSelectElement>('select[name="payment-method"]').getAttribute('aria-invalid')).toBe('true');
+    expect(panel.refund).not.toHaveBeenCalled();
+  });
+
+  it('a refund carries its own method, not the original payment method', () => {
+    setInvoice('PAID', { due: 0, paid: 50000, total: 50000 }, [
+      payment({ id: 'g1', amountMinorUnits: 50000, method: 'GCASH', refundableMinorUnits: 50000 }),
+    ]);
+    render('FINANCE');
+    click(buttons('Refund payment')[0]!);
+    expect(field<HTMLSelectElement>('select[name="payment-method"]').value).toBe('');
+    choose('CASH');
+    submit();
+    expect(panel.refunds[0]!.options.variables.input).toMatchObject({ method: 'CASH', paymentId: 'g1' });
+  });
+});
+
+describe('InvoicePaymentsPanel with the page lock', () => {
+  it('a submit refused by the lock shows the lock reason, not a stale error, and sends nothing', async () => {
+    render('FINANCE', { withLock: true });
+    click(buttons('Record payment')[0]!);
+    choose('CASH');
+    submit();
+    await act(async () => {
+      panel.records[0]!.reject({ graphQLErrors: [{ extensions: { originalError: { message: 'Server says no.' } } }] });
+    });
+    expect(dialog().querySelector('[role="alert"]')?.textContent).toBe('Server says no.');
+    let lease: ReturnType<Lock['tryAcquire']> = null;
+    act(() => {
+      lease = pageLock.tryAcquire('transition');
+    });
+    submit();
+    await act(async () => {});
+    expect(panel.record).toHaveBeenCalledTimes(1);
+    const alert = dialog().querySelector('[role="alert"]')?.textContent;
+    expect(alert).toBe('Another change to this order is in progress. Try again when it finishes.');
+    act(() => pageLock.release(lease!));
+    submit();
+    expect(panel.record).toHaveBeenCalledTimes(2);
+    expect(panel.records[1]!.options.variables.input.idempotencyKey).toBe(panel.records[0]!.options.variables.input.idempotencyKey);
   });
 });
 
