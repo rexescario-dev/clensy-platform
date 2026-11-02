@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 2)** at M5, 2026-11-01 ([M5 decision](#m5-decision)). Drafted at M4 on 2026-11-01. Revision 1 was reviewed at M5: **revise before acceptance**, three required corrections. Revision 2 resolves them ([Revision 2 changes](#revision-2-changes)); nothing else changed. When it was Accepted, no command in this plan had been run. M6 is complete, and M7 Approved for merge. M8 is Complete, M9 is Complete and M10 does not apply. Actual results are in the [Execution record (M6)](#execution-record-m6), the [Code review (M7)](#code-review-m7), [Refactoring (M8)](#refactoring-m8) and [Documentation (M9)](#documentation-m9) records. |
+| Status | **Accepted (revision 2)** at M5, 2026-11-01 ([M5 decision](#m5-decision)). Drafted at M4 on 2026-11-01. Revision 1 was reviewed at M5: **revise before acceptance**, three required corrections. Revision 2 resolves them ([Revision 2 changes](#revision-2-changes)); nothing else changed. When it was Accepted, no command in this plan had been run. M6 is complete, and M7 Approved for merge. M8 is Complete, M9 is Complete and M10 does not apply. **Slice complete:** merged in PR [#218](https://github.com/rexescario-dev/clensy-platform/pull/218) (`20cfba7`, 2026-11-02), and #161 is closed. See [Closeout](#closeout-2026-11-02). Actual results are in the [Execution record (M6)](#execution-record-m6), the [Code review (M7)](#code-review-m7), [Refactoring (M8)](#refactoring-m8) and [Documentation (M9)](#documentation-m9) records. |
 | Revision 3 | **Accepted** at M5 by the owner, 2026-11-01: B6 narrowed to the SCHEDULER row only. It was raised at M6 and corrects one Task 1 break assignment ([Revision 3 changes](#revision-3-changes)). Acceptance authorizes no commits (G2) and no later task beyond what the owner approved. |
 | Revision 4 | **Accepted** at M5, 2026-11-02 (third-pass independent review: Accept; owner: accepted with seven notes incorporated, [M5 decision for revision 4](#m5-decision-for-revision-4)), raised at M6 Task 6 (K4 failed). Adds [Task 7: keep focus in the weighing editor after a bag is removed](#task-7-keep-focus-in-the-weighing-editor-after-a-bag-is-removed-type-code-revision-4) and widens the scope to the weighing editor. Two independent M5 reviews returned **Revise** (first pass: two blockers; second pass: one blocker); this pass answers both ([first pass](#m5-review-of-revision-4-first-pass), [second pass](#m5-review-of-revision-4-second-pass)). Implementation needs **both** a fresh independent M5 acceptance **and** the owner's explicit acceptance; either alone is not enough. Revisions 2 and 3 stay Accepted for everything else. |
 | M5 decision | **Accepted**, 2026-11-01, revision 2. Findings 1–3 resolved; decision (e) confirmed against the live #161. Acceptance authorizes no implementation, branch or environment change: M6 stays blocked until the owner authorizes gates G0 and G1. See [M5 decision](#m5-decision). |
@@ -1048,6 +1048,93 @@ Gate: Documentation complete. Code, behavior and contracts unchanged by this sta
 #### Next Gate
 
 **Closeout** (§2.12). It starts with the merge: push and PR (G8), then a merge authorized by the owner.
+
+## Closeout (2026-11-02)
+
+**Authorization.**
+- 2026-11-02, "make PR" (G8): commit the proposed scope, push, and open PR #218.
+- 2026-11-02, "merge, closeout": merge #218 and run closeout.
+
+**M1–M10 check before the merge** (process spec §2.12, step 1):
+
+| Stage | Outcome |
+| --- | --- |
+| M1 | Passed: the installed prompt library is present |
+| M2 / M3 | Passed: the lifecycle spec is Accepted, with Amendment #164 Accepted 2026-10-10 |
+| M4 / M5 | Passed: this plan is Accepted. Revisions 2 and 3 were accepted 2026-11-01, and revision 4 on 2026-11-02 after three independent reviews and the owner's acceptance |
+| M6 | Passed: [Execution record](#execution-record-m6), M6 Slice Completion Report |
+| M7 | Passed: [Approved for merge](#code-review-m7). The post-M7 fix pass also got a [delta review](#code-review-m7-delta-post-m7-fix-pass-and-m8), Approved |
+| M8 | Passed: [Complete](#refactoring-m8) |
+| M9 | Passed: [Complete](#documentation-m9) |
+| M10 | Does not apply ([N/A](#workflow-validation-m10)) |
+
+No applicable stage was missing, so no stage was skipped or overridden.
+
+**Merge verification.**
+- PR #218 was merged with a merge commit at 2026-11-02T02:08:28Z, as `20cfba7`. The head was `17dfbfc`.
+- `17dfbfc` is an ancestor of `main`.
+- #161 is closed (by the PR's "Closes #161").
+- CI on the head passed all four checks: API e2e, Lint, Release gate and Test.
+
+**Post-merge cleanup.**
+- `feat/161-laundry-cutover` was deleted locally and on the remote.
+- **The executor's gitignored workspace is kept**, unlike #205's. `.superpowers/sdd/2026-11-01-laundry-cutover-verification-plan/` holds the browser evidence screenshots, the local `qa161` test credentials and the id list of the e2e-created rows. The owner decides when it goes.
+- **Local data left in place:**
+  - The four G6 orders (H1, F2, DL1, F4).
+  - The five `qa161-*` staff users (G4).
+  - The rows the owner-approved API e2e run created: 6 users, 4 laundry orders, 2 lines, 4 customers, 4 services and 33 audit events ([API e2e records](#api-e2e-records-left-in-the-local-database)).
+
+  All of these are in the local `clensy` database only. Removing them needs a separate owner decision, because it means deleting records, including audit events.
+- **Services:** `clensy-platform-web-1` was restored at Task 6 Step 6. No branch server is running.
+
+**Final M7 position.** Approved for merge, and the delta review Approved. There are no blockers. Every Minor note from M7 was fixed in the post-M7 fix pass. The delta review's three Minor notes need no change.
+
+**Limits that stand** (recorded in M6, not follow-ups):
+- K5 verifies the cancel dialog's keyboard behavior on a Weighed order, not the Received-state workflow.
+- D1 and D2 were checked as OPS_MANAGER, not TENANT_OWNER.
+- Real-phone on-screen keyboard behavior is unverified.
+- The original R1–R4 screenshots were overwritten, so the text record is the evidence.
+
+**Follow-ups.** None filed.
+
+## Final Slice Completion Report
+
+| Field | Result |
+| --- | --- |
+| Slice | #161 Laundry end-to-end verification and drawer cutover |
+| Tracking | https://github.com/rexescario-dev/clensy-platform/issues/161 |
+| M4 | Plan **Accepted** (revision 4) |
+| M5 | Review **Accepted** (revision 4) |
+| M6 | **Complete** |
+| M7 | **Approved**, and the delta review **Approved** |
+| M8 | **Complete** |
+| M9 | **Complete** |
+| Branch | `feat/161-laundry-cutover`, deleted after the merge |
+| PR | https://github.com/rexescario-dev/clensy-platform/pull/218 (merged, `20cfba7`) |
+| Status | **Slice complete** |
+
+### Shipped
+
+- Laundry rows and create success open `/app/laundry/<id>`. The list's detail drawer and its laundry-only history helpers are removed.
+- `/app/laundry?detail=<id>` redirects to the order page. An empty or invalid `detail` is dropped, and the other list params and the hash are kept.
+- Back from an order returns to the list with its filters. The Laundry nav item stays active on order pages.
+- Weighing editor: removing a bag moves focus to the bag above it, or to Add bag when the first or only bag is removed (K4).
+- Characterization and gap tests with recorded break runs. The README, the plan index count and the full M6–M10 record are updated.
+- The browser verification passes of the order flow, at desktop and mobile widths, recorded with their caveats.
+
+### Validation
+
+| Check | Result |
+| --- | --- |
+| Tests | **Passed**: web 2558/2558; `@clensy/web` 431/431; API `laundry.e2e-spec` 5/5; CI Test and API e2e passed |
+| Typecheck | **Passed** |
+| Lint | **Passed** (also in CI) |
+| Build | **Passed**: `web build`, `@clensy/web build` |
+| Package validation | N/A |
+
+### Next Gate
+
+None — slice complete
 
 ## Revision 4 changes
 
