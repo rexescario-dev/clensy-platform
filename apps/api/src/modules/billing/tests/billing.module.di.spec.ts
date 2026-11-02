@@ -14,6 +14,7 @@ import { CustomersService } from '../../customers/application/services/customers
 import { PropertiesService } from '../../customers/application/services/properties.service';
 import { LaundryModule } from '../../laundry/laundry.module';
 import { LaundryOrdersService } from '../../laundry/application/services/laundry-orders.service';
+import { InvoicePaymentWriter } from '../application/services/invoice-payment-writer';
 import { InvoicesService } from '../application/services/invoices.service';
 import { BillingModule } from '../billing.module';
 import { InvoiceEntity } from '../infrastructure/persistence/invoice.entity';
@@ -91,5 +92,14 @@ describe('BillingModule — module-internal DI wiring', () => {
 
   it('resolves AUDIT_LOGGER from the imported AuditModule', () => {
     expect(moduleRef.get(AUDIT_LOGGER)).toBeDefined();
+  });
+
+  it('provides and exports InvoicePaymentWriter', () => {
+    expect(moduleRef.get(InvoicePaymentWriter)).toBeInstanceOf(
+      InvoicePaymentWriter,
+    );
+    expect(
+      Reflect.getMetadata('exports', BillingModule) as unknown[],
+    ).toContain(InvoicePaymentWriter);
   });
 });
