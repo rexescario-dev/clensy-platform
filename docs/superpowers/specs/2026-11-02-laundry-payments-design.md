@@ -1,0 +1,284 @@
+# Laundry Invoice Payments & Refunds — Specification
+
+| Field | Value |
+| --- | --- |
+| **Status** | Draft |
+| **Kind** | Architecture RFC (product behavior and contracts for this slice, not a process specification) |
+| **Date** | 2026-11-02 |
+| **Tracking** | [#39](https://github.com/rexescario-dev/clensy-platform/issues/39) — Payments & Financial Lifecycle for Laundry Invoices |
+| **Depends on** | [Laundry Invoices & Billing Document](2026-09-06-laundry-invoices-design.md) (Accepted, #38). **Extends** it: this ticket is the designated mover of `Invoice.amountPaidMinorUnits` / `paymentStatus`. **Amends** it in place (Amendment #39, Draft — see that document's status rows): the `0 <= amountPaidMinorUnits <= totalMinorUnits` invariant becomes `amountPaidMinorUnits >= 0`, and `InvoicePaymentStatus` gains `OVERPAID` and `REFUNDED` (§4.3, §5 below). Every other #38 contract — the immutable commercial snapshot, generation, eligibility, numbering — is relied upon unchanged. [Multi-Tenant Architecture](2026-09-23-multi-tenant-architecture-design.md) (Accepted). **Constrains** this slice: `Payment` is tenant-owned (§4.4, §4.5 of that RFC); its references are tenant-aware composite FKs. [Laundry Orders & Operational Lifecycle](2026-09-06-laundry-orders-lifecycle-design.md) (Accepted, incl. Amendment #164). **Relied upon, not changed**: no order status, transition or role is altered (§4.8). |
+| **Followed by (informative)** | [#43](https://github.com/rexescario-dev/clensy-platform/issues/43) Laundry Reporting — reads `Payment` rows for reconciliation. [#41](https://github.com/rexescario-dev/clensy-platform/issues/41) Customer History & Loyalty — reads invoice balances. [#40](https://github.com/rexescario-dev/clensy-platform/issues/40) Promotions — unaffected (moves `discountMinorUnits`, which this ticket only reads through `totalMinorUnits`). [#209](https://github.com/rexescario-dev/clensy-platform/issues/209) — browser verification of the invoice/payment UI. |
+| **Governing process** | [Standardized Agent Workflows](../../workflows/specs/agent-workflow-design.md) — stage M2 |
+| **Source-material note** | #39 cites a "Laundry Module Discovery report, §8/§12". As recorded in the Accepted #37 and #38 specifications, that document does not exist as a retrievable artifact. This specification is reconstructed from the #39 ticket body, the Accepted #37/#38/multi-tenant specifications, #154/#166 (which fixed the current invoice/payment UI and deferred money recording to #39), and repository patterns. The owner chose to skip M2 brainstorming questions; every decision not literally in the ticket is an author call, listed in §5.1 for M3 to confirm or overturn. |
+
+---
+
+## 1. Primary question & thesis
+
+**Question:** An `Invoice` (#38) carries `amountPaidMinorUnits` and `paymentStatus`, but nothing records the money movements that should produce them, and nothing may change them. How are payments and refunds recorded against an invoice — one or many, by method, at any time the customer actually pays — so that the invoice's payment figures are always a pure, transaction-safe derivation of those records and can never be set by a client?
+
+**Thesis:** A new `modules/payments` owns a tenant-owned, append-only `Payment` ledger, 1:N against `Invoice`. A row is either a `PAYMENT` (money in) or a `REFUND` (money out) — a discriminator, never a signed amount; `amountMinorUnits` is always a positive integer. A refund is a new row that references the `PAYMENT` it returns money from, and can never return more than that payment's still-unrefunded amount. Two staff commands — `recordInvoicePayment` and `refundInvoicePayment` — each run in one transaction that locks the invoice row, inserts the row, **recomputes** `amountPaidMinorUnits` (net of refunds) and `paymentStatus` from the full set of the invoice's completed rows using the pure function `deriveInvoicePayment`, writes them through a narrow billing port, and emits one audit event. No GraphQL input anywhere carries `paymentStatus` or `amountPaidMinorUnits`. Payment recording is decoupled from the laundry order's operational status: it neither reads nor moves `LaundryOrder.status`. The web gains a shared payments panel (amounts, history, record and refund dialogs) used on the laundry order page and in the billing invoice drawer.
+
+---
+
+## 2. Scope
+
+### In scope (normative)
+
+- **Domain (plain TS, `modules/payments/domain`):** `Payment`; enums `PaymentType`, `PaymentMethod`, `PaymentRecordStatus`; the pure function `deriveInvoicePayment` (§4.3); the refund ceiling rule (§4.2).
+- **Billing changes (`modules/billing`):** `InvoicePaymentStatus` gains `OVERPAID` and `REFUNDED`; a narrow application port that locks an invoice for a payment write and persists the derived pair (§4.1). No change to generation.
+- **Application:** `RecordInvoicePaymentCommand`, `RefundInvoicePaymentCommand`, and a `PaymentsService` implementing them (§4.5, §4.6).
+- **Infrastructure:** `PaymentEntity` (TypeORM) and one migration (§4.9).
+- **Presentation (GraphQL):** `Payment` type, a nested `Invoice.payments` offset connection, two mutations with their inputs, enum registration, allowlist updates (§4.7).
+- **Web:** a shared invoice payments panel on `/app/laundry/[id]` (the existing "Invoice and payment" section) and in the `/app/billing` invoice drawer; new status tones/labels (§4.10).
+- **Tests:** the categories in §7.
+
+### Out of scope (normative)
+
+- **Payment gateways / processors / online or customer-initiated payment.** All v1 rows are staff-entered. `recordedByStaffId` being nullable anticipates a future non-staff actor and nothing else; no v1 path writes `null`.
+- **Coupling to `LaundryOrder.status`.** Recording a payment does not mark the order `PAID`; refunding does not move it to `REFUNDED`; order transitions never write `Payment` rows. Changing the #37 prepaid-processing gate is out of scope (§4.8, §5.2).
+- **Voiding an invoice, and producing `VOID`.** Still a later ticket. This ticket only *refuses writes* against a `VOID` invoice.
+- **Correcting or deleting a mistaken `Payment` row.** Rows are append-only; no edit, delete, or "void entry" operation (§5.1 call 8).
+- **Reconciliation reporting, cash-drawer close-out, receipts/PDF, customer notifications** — #43 and later.
+- **A root `payments` collection query.** Payments are read through `Invoice.payments` only.
+- **Multi-currency.** Single currency, integer minor units (₱ centavos), as in #38.
+- **Changing `paymentTerms` or `dueDate`** after generation, or any terms-based enforcement (§4.8).
+
+---
+
+## 3. Terminology
+
+- **Payment row / `Payment`** — one recorded money movement against one invoice. Append-only: never updated or deleted after insert.
+- **`PaymentType`** — `PAYMENT | REFUND`. `PAYMENT` = money received from the customer. `REFUND` = money returned to the customer.
+- **`PaymentMethod`** — `CASH | GCASH | MAYA | BANK_TRANSFER | CARD | OTHER`. How the money moved. Recorded, never processed. A refund carries its own method (a GCash payment may be refunded in cash).
+- **`PaymentRecordStatus`** — `COMPLETED | PENDING | FAILED`. v1 writes only `COMPLETED`; `PENDING` / `FAILED` are reserved for a future gateway (the #38 precedent of defining `VOID` before its workflow). Only `COMPLETED` rows count toward any derived figure.
+- **Original payment** — the `PAYMENT` row a `REFUND` references through `refundedPaymentId`.
+- **Refundable amount (of a payment)** — `original.amountMinorUnits − Σ amountMinorUnits of COMPLETED REFUND rows referencing it`. Never negative.
+- **Gross paid** — `Σ amountMinorUnits` of the invoice's `COMPLETED` `PAYMENT` rows.
+- **Gross refunded** — `Σ amountMinorUnits` of the invoice's `COMPLETED` `REFUND` rows.
+- **Net paid** — `gross paid − gross refunded`. This is what `Invoice.amountPaidMinorUnits` stores.
+- **Derived pair** — `(amountPaidMinorUnits, paymentStatus)` on `Invoice`. Written only by the payment commands, only from `deriveInvoicePayment`.
+- **`InvoicePaymentStatus`** (amended) — `UNPAID | PARTIALLY_PAID | PAID | OVERPAID | REFUNDED | VOID`. The ticket's `VOIDED` is the existing #38 value `VOID` — not renamed (§5.1 call 2).
+
+---
+
+## 4. Domain and behavioral contracts
+
+### 4.1 Module placement and cross-module rules
+
+- `modules/payments` owns `Payment`, its entity, the two commands, `deriveInvoicePayment`, and the GraphQL `Payment` type and mutations.
+- `modules/billing` remains the **only** writer of `invoice_entity`. It exposes to `payments` one application-level port that, given the caller's transaction manager:
+  1. reads the invoice by `(id, tenantId)` **with a row lock held to commit** (`pessimistic_write`), returning `null` when absent; and
+  2. persists a new derived pair for that locked invoice.
+  The port MUST NOT accept or write any other `Invoice` field. It is not exposed through GraphQL.
+- `Invoice.payments` (the nested read) is resolved in `payments` (or wired from billing to a payments read service — M4's choice); billing's domain object gains **no** payments field.
+- `payments` does not import from `laundry`. Order-related display data on the web comes from existing queries.
+
+### 4.2 Domain object — `Payment`
+
+| Field | Type | Rule |
+| --- | --- | --- |
+| `id` | uuid | PK |
+| `tenantId` | uuid | required; equals the invoice's `tenantId` (composite FK, §4.9) |
+| `invoiceId` | uuid | required; same-tenant composite FK to `invoice_entity (id, tenantId)` |
+| `type` | `PaymentType` | required |
+| `method` | `PaymentMethod` | required |
+| `amountMinorUnits` | integer | required; `1 <= x <= 2147483647`; positive for **both** types |
+| `reference` | string \| null | optional free text (receipt number, GCash reference); trimmed; empty after trim → `null`; max 120 characters |
+| `status` | `PaymentRecordStatus` | required; always `COMPLETED` in v1 |
+| `paidAt` | timestamptz | required; when the money actually moved (for a refund: when it was returned). Defaults to the server's now when the input omits it. MUST NOT be later than the server's now at write. For a `REFUND`, MUST NOT be earlier than the original payment's `paidAt`. May be earlier than the invoice's `issueDate` (money taken at drop-off, invoice generated later). |
+| `refundedPaymentId` | uuid \| null | `null` iff `type = PAYMENT`; for `REFUND`, the original payment, which MUST be a `PAYMENT` row of the **same invoice and tenant** |
+| `recordedByStaffId` | uuid \| null | the acting staff user (`AdminUser`); every v1 write sets it; nullable only for the future non-staff actor |
+| `createdAt` | timestamptz | insert time; the tie-breaker for ordering |
+
+No `updatedAt`: rows are never updated.
+
+**Refund ceiling (domain rule):** a refund's `amountMinorUnits` MUST NOT exceed the original payment's refundable amount, evaluated inside the write transaction under the invoice lock (§4.6). It follows that net paid is never negative. A `REFUND` may not reference a `REFUND`.
+
+### 4.3 Derivation — `deriveInvoicePayment` (pure)
+
+Input: `totalMinorUnits`, the current `paymentStatus`, and the invoice's payment rows (`type`, `status`, `amountMinorUnits`). Output: the derived pair. Integer arithmetic only.
+
+1. Consider only `COMPLETED` rows. `paid` = gross paid, `refunded` = gross refunded, `net = paid − refunded`. `net < 0` is a bug → throw `RangeError`.
+2. If the current status is `VOID` → throw (callers refuse writes against `VOID` before reaching here; §4.5).
+3. `amountPaidMinorUnits = net`.
+4. `paymentStatus`, first match wins:
+   - `net === 0` and `refunded === 0` → `UNPAID`
+   - `net === 0` and `refunded > 0` → `REFUNDED`
+   - `net < totalMinorUnits` → `PARTIALLY_PAID`
+   - `net === totalMinorUnits` → `PAID`
+   - `net > totalMinorUnits` → `OVERPAID`
+
+Consequences, stated so M4 tests them (§7): one full payment → `PAID`; partials → `PARTIALLY_PAID` then `PAID`; a payment above the balance → `OVERPAID`; refunding the excess of an `OVERPAID` invoice → `PAID`; a partial refund of a `PAID` invoice → `PARTIALLY_PAID`; refunding everything → `REFUNDED`; a new payment after `REFUNDED` → `PARTIALLY_PAID` / `PAID` / `OVERPAID` by the same rules. A zero-total invoice with no rows stays `UNPAID`, matching #38 generation; any payment on it is `OVERPAID`.
+
+The derivation is always from the **full row set**, never incremental (`old + amount`), so a derived pair cannot drift from its rows.
+
+### 4.4 Amended invoice invariants (Amendment #39 to the #38 specification)
+
+- `amountPaidMinorUnits >= 0` and always equals net paid of the invoice's `COMPLETED` rows (replaces `0 <= amountPaidMinorUnits <= totalMinorUnits`). Not a database `CHECK` (the #38 convention), enforced by §4.3 + §4.6.
+- `amountDueMinorUnits` stays derived as `totalMinorUnits − amountPaidMinorUnits` and is **negative** when `OVERPAID` (the credit owed back). It is not clamped; the web labels a negative due as "Overpaid by ₱x" (§4.10).
+- An invoice with zero `Payment` rows has `(0, UNPAID)` — every existing invoice already satisfies this, so no backfill.
+- The commercial snapshot stays immutable; the derived pair is the only mutable surface, and only payment commands move it.
+
+### 4.5 Commands
+
+`RecordInvoicePaymentCommand = { actorId, tenantId, invoiceId, method, amountMinorUnits, reference?, paidAt? }`
+
+`RefundInvoicePaymentCommand = { actorId, tenantId, paymentId, method, amountMinorUnits, reference?, paidAt? }` — the invoice is the original payment's invoice; the caller does not name it.
+
+Validation and error mapping (checked in this order; all before the insert):
+
+| Condition | Error |
+| --- | --- |
+| Invoice (record) / original payment (refund) not found in the caller's tenant | `NotFoundException` (cross-tenant = missing) |
+| Invoice `paymentStatus === VOID` | `BadRequestException` |
+| `amountMinorUnits` not an integer in `[1, 2147483647]` | `BadRequestException` (GraphQL `Int` already rejects non-integers) |
+| `paidAt` after server now | `BadRequestException` |
+| Refund: original is not a `PAYMENT` or not `COMPLETED` | `BadRequestException` |
+| Refund: `paidAt` before original's `paidAt` | `BadRequestException` |
+| Refund: amount > original's refundable amount (evaluated under the lock) | `BadRequestException` naming the refundable amount |
+| `reference` longer than 120 characters after trim | `BadRequestException` |
+
+No `paymentTerms`, due-date or order-status check exists (§4.8). Overpayment is allowed, not rejected (§5.1 call 4).
+
+### 4.6 Transaction, concurrency, and audit
+
+Each command runs in one `dataSource.transaction` + `runAuditInTransaction`:
+
+1. Lock the invoice row via the billing port (§4.1). For a refund, first resolve the original payment's `invoiceId` in the tenant, then lock that invoice, then re-read the original and its refunds under the lock.
+2. Run the §4.5 checks that depend on the invoice or on other rows.
+3. Insert the `Payment` row (`status: COMPLETED`, `recordedByStaffId: actorId`).
+4. Read every `Payment` row of the invoice (same manager), call `deriveInvoicePayment`, persist the derived pair through the port.
+5. Emit one audit event — `payment.recorded` or `payment.refunded`, `entityType: 'payment'`, `entityId: payment.id`, with `tenantAuditTags`.
+6. Return the inserted row.
+
+**Correctness mechanism:** the invoice row lock serializes every payment write for one invoice, so concurrent writes each derive from a row set that includes all previously committed rows, and two concurrent refunds of one payment cannot together exceed its refundable amount. Writes against different invoices do not block each other. Any failure rolls back the row, the derived pair and the audit event together.
+
+### 4.7 GraphQL surface
+
+- **`Payment` type** — every §4.2 field except `tenantId`; `recordedBy` (staff display name) as a batched resolve-field, nullable; `refundableMinorUnits: Int` resolve-field — the refundable amount for a `COMPLETED` `PAYMENT`, `null` for a `REFUND` (batched; mechanism M4). `@Authorize(tenantReadAuthorizer)`; read-only (no nestjs-query create/update/delete).
+- **`Invoice.payments`** — nested offset connection, no `totalCount`, default sort `paidAt ASC, createdAt ASC`, platform paging defaults/max; added to `paginated-collections-allowlist`. Authorized by the root operation that reaches it (multi-tenant RFC §4.2 relation-field rule); the target authorizer re-applies the tenant predicate.
+- **Mutations** (separate resolver class, `AuthGuard` + `@Roles`):
+
+| Mutation | Input | Returns | Roles | Audit |
+| --- | --- | --- | --- | --- |
+| `recordInvoicePayment` | `RecordInvoicePaymentInput { invoiceId: ID!, method: PaymentMethod!, amountMinorUnits: Int!, reference: String, paidAt: DateTime }` | `Payment!` | `TENANT_OWNER`, `OPS_MANAGER`, `FINANCE`, `CUSTOMER_SUPPORT` | `payment.recorded` |
+| `refundInvoicePayment` | `RefundInvoicePaymentInput { paymentId: ID!, method: PaymentMethod!, amountMinorUnits: Int!, reference: String, paidAt: DateTime }` | `Payment!` | `TENANT_OWNER`, `FINANCE` | `payment.refunded` |
+
+  `Payment` exposes an `invoice: Invoice!` relation so a caller can re-read the new derived pair in the same response.
+- **Reads** of `Payment` (via `Invoice`): all six tenant roles (`VIEW_ROLES`), as for invoices.
+- **No client-settable derived pair:** no input type in the schema has a `paymentStatus` or `amountPaidMinorUnits` field, and `Invoice` keeps no nestjs-query create/update mutation. The root-operation authorization metadata guard is updated for the two new mutations.
+- `registerEnumType` for `PaymentType`, `PaymentMethod`, `PaymentRecordStatus`; `InvoicePaymentStatus` gains the two values; `@clensy/client` is regenerated.
+
+### 4.8 Relationship to the laundry order and payment terms
+
+- **Order status is neither read nor written.** A payment may be recorded or refunded whatever the order's status, including `COMPLETED`, `CANCELLED`, or `REFUNDED`. This is what makes pay-later and pay-on-delivery work: money is recorded when it is received, even after the order is delivered.
+- The existing order verbs "Mark awaiting payment" / "Mark paid" / "Refund" are unchanged and remain separate from invoice payments, as #166 established. The UI states this (§4.10).
+- **`paymentTerms` and `dueDate` are informational.** They tell staff when payment is expected; they never block or allow a write. Paying early under `PAY_ON_DELIVERY` is valid; so is paying late under `PAY_NOW`. "Supports pay-now / pay-on-completion / pay-on-delivery" means each term's normal collection moment (at issue, at completion, at delivery) can be recorded, with `paidAt` reflecting when it happened.
+
+### 4.9 Migration
+
+One migration (`up` + `down`):
+
+1. `ALTER TYPE invoice_payment_status_enum ADD VALUE 'OVERPAID'`, then `'REFUNDED'`. (`ADD VALUE` cannot be used in the same transaction that adds it — irrelevant here, as no row uses them during the migration. `down` recreates the enum without them and MUST fail loudly if any row holds either value, rather than rewriting data.)
+2. `ALTER TABLE invoice_entity ADD CONSTRAINT uq_invoice_id_tenant UNIQUE (id, "tenantId")` — the target for the composite FK (it does not exist today).
+3. PG enums `payment_type_enum`, `payment_method_enum`, `payment_record_status_enum` (module-local).
+4. `payment_entity` with the §4.2 columns, and:
+   - FK `("tenantId") → tenant(id)`.
+   - Composite FK `("invoiceId", "tenantId") → invoice_entity(id, "tenantId")` `ON DELETE RESTRICT`.
+   - `UNIQUE (id, "invoiceId", "tenantId")` and a composite FK `("refundedPaymentId", "invoiceId", "tenantId") → payment_entity(id, "invoiceId", "tenantId")` `ON DELETE RESTRICT` — so a refund can only reference a payment of the same invoice and tenant, enforced in the database.
+   - `CHECK ("amountMinorUnits" > 0)`.
+   - `CHECK (("type" = 'REFUND') = ("refundedPaymentId" IS NOT NULL))`.
+   - FK `recordedByStaffId → admin_user_entity(id)` `ON DELETE RESTRICT` (nullable). Whether this must also be tenant-composite is decided in M4 against how other staff references are modelled; it MUST NOT weaken tenant isolation.
+   - Indexes: `("tenantId", "invoiceId", "paidAt")`, `("refundedPaymentId")`.
+5. No data backfill (§4.4).
+
+The new table joins every existing tenant-wide test fixture that enumerates tenant-owned tables: the two-tenant release gate (world, snapshot, probes), test-tenant removal, and the billing test lock helper. `docs/development/database-migrations.md` conventions apply.
+
+### 4.10 Web
+
+A shared **invoice payments panel** (one component, `@clensy/ui` primitives only, i18n per the app's existing message setup) is rendered:
+
+- on `/app/laundry/[id]` inside the existing "Invoice and payment" invoice card, when an invoice exists; and
+- in the `/app/billing` invoice `DetailDrawer`, below the amount block.
+
+Contents:
+
+- **Amounts:** total, amount paid (net), and amount due; a negative due renders as "Overpaid by ₱x". Payment status badge.
+- **History:** every row, oldest first: date (`paidAt`), type ("Payment" / "Refund"), method label, amount (refunds shown as money out, e.g. "−₱50.00"), reference, recorded by. A refund row names the payment it refunds.
+- **Record payment** (`FormDialog`): method (required), amount in pesos (required; parsed with the existing `parsePesosToMinorUnits`; pre-filled with the amount due when it is positive), reference (optional), paid at (date-time, defaults to now, cannot be in the future). Shown to the four record roles. Hidden when the invoice is `VOID`.
+- **Refund** (action on each `PAYMENT` row with `refundableMinorUnits > 0`; `FormDialog`): method, amount (pre-filled with and capped in the UI at the refundable amount), reference, paid at. Shown to `TENANT_OWNER` and `FINANCE`. Uses `ConfirmDialog`-level wording only if the existing destructive-verb convention requires it (M4 checks).
+- After a write: success toast, refetch the invoice (derived pair + history). Failure: inline alert with the server message. One in-flight write at a time (reuse the page's shared pending flag on the laundry page).
+- The "Order payment" card's existing copy ("separate from the invoice payment status") stays; no order verb is added or removed.
+- `INVOICE_PAYMENT_STATUS_TONE` gains `OVERPAID: 'warning'` and `REFUNDED: 'neutral'`; human labels are added for all statuses, methods and types.
+
+The server is authoritative for roles and amounts; UI gating is a mirror.
+
+---
+
+## 5. Rationale
+
+- **Separate `modules/payments`, billing as sole invoice writer.** The ticket asks for `modules/payments`, and the #38 rationale already drew this boundary ("#39 has a distinct 1:N payment-event lifecycle"). Keeping billing the only writer of `invoice_entity`, behind a port that accepts only the derived pair, preserves #38's "only the derived pair may move" guarantee by construction rather than by convention.
+- **Type discriminator plus positive amount.** This is the ticket's stated reason, and it also lets a single `CHECK (> 0)` guard every row and keeps report queries free of sign logic.
+- **Recompute from the full row set under an invoice row lock.** An incremental update can drift, and an optimistic retry adds a failure mode staff would see. Pessimistic locking is the established pattern (`LaundryOrdersService` transitions), and one invoice has few payments, so the full recompute is cheap. The lock also makes the refund ceiling race-free without a separate counter.
+- **Append-only rows.** The ticket requires that a refund never mutate the original. Extending the rule to every row gives reporting (#43) an immutable ledger.
+- **Database-enforced same-invoice refunds.** The multi-tenant RFC requires database constraints, not only application checks, for same-tenant references. Including `invoiceId` in the refund's composite FK extends that guarantee to "same invoice" at no extra cost.
+- **No coupling to order status.** The ticket scopes this as money movement "independent of the invoice's own document lifecycle", and #154/#166 deliberately kept the order's "Mark paid" separate. Auto-transitioning orders would change the #37 matrix's actors and audit trail, which needs its own amendment.
+
+### 5.1 Author calls for M3 to confirm (owner skipped M2 questions)
+
+1. **Module split** — `modules/payments` plus a billing write port (above), not payments inside `modules/billing`.
+2. **`VOIDED` → keep the existing `VOID`.** It is already in the Accepted #38 spec, the PG enum, the GraphQL schema and the web tone map, and no row holds it. A rename would be churn with no behavior change.
+3. **Status precedence** (§4.3): `REFUNDED` only when net is zero after at least one refund; a partial refund reads as `PARTIALLY_PAID` (the ticket's own test case).
+4. **Overpayment is accepted and recorded**, not rejected. The ticket defines `OVERPAID`, and change-giving errors happen. It is corrected by refunding the excess.
+5. **Methods** — `CASH | GCASH | MAYA | BANK_TRANSFER | CARD | OTHER`, chosen for a Philippine (₱, Asia/Manila) laundry shop.
+6. **Roles** — recording uses the four roles that already "Mark paid" at the counter. Refunding (money out) is restricted to `TENANT_OWNER` and `FINANCE`.
+7. **`PaymentRecordStatus`** — defined with `PENDING` / `FAILED` reserved; v1 writes only `COMPLETED` (the #38 `VOID` precedent).
+8. **No correction of mistaken entries in v1.** A mis-keyed overpayment is fixed with a refund of the excess. A proper "void entry" operation is a follow-on if staff need it.
+9. **Terms are informational** (§4.8): there is no enforcement and `dueDate` is never backfilled.
+10. **Payments allowed whatever the order's status**, including on an invoice whose order was later `CANCELLED` (possible because `PRICED → CANCELLED` is legal after invoicing). Voiding such invoices belongs with the future void ticket.
+11. **Negative `amountDueMinorUnits`** when overpaid, not clamped to zero.
+12. **Past-dated `paidAt`** is allowed, so money already taken (orders marked `PAID` before #39 shipped) can be recorded retroactively. Future dates are rejected.
+
+### 5.2 Known tension (informative, not resolved here)
+
+Under #37, `PROCESSING` is reachable only from `PAID`, so a `PAY_ON_COMPLETION` / `PAY_ON_DELIVERY` order must still be marked operationally "paid" before work starts, even though no money has moved yet. This ticket records that money correctly when it arrives, but it does not change the order gate. If the owner wants terms to relax the prepaid gate, that is a #37 amendment and a separate ticket.
+
+---
+
+## 6. Acceptance criteria (for this specification)
+
+This Draft may move to Accepted after M3 when:
+
+- The `Payment` field list (§4.2) and migration (§4.9) are complete enough to write the entity and migration without further design, including every constraint that enforces type/reference consistency, same-tenant and same-invoice references, and positive amounts.
+- `deriveInvoicePayment` (§4.3) is a total, ordered rule over every combination of rows, with `VOID` and negative-net handling stated.
+- The amended #38 invariants (§4.4) are recorded as Amendment #39 in the #38 specification, and that amendment is Accepted together with this document. The rest of #38 is unaffected.
+- The transaction and lock contract (§4.6) names the correctness mechanism for concurrent payments and concurrent refunds.
+- Role gating for both mutations and for reads is explicit (§4.7).
+- The "client cannot set `paymentStatus`" criterion is stated as a schema-level property that can be tested (§4.7).
+- Every author call in §5.1 is confirmed or overturned by the owner.
+- Non-goals (§2) are explicit enough to stop gateway, order-coupling, voiding, entry-correction and reporting work from entering M4–M6.
+
+---
+
+## 7. Tests expected (informative — M4 owns the plan)
+
+- **Unit — `deriveInvoicePayment`:** no rows; a single full payment; multiple partials reaching `PAID`; overpayment; refund of the excess back to `PAID`; partial refund of a `PAID` invoice → `PARTIALLY_PAID`; full refund → `REFUNDED`; a payment after `REFUNDED`; non-`COMPLETED` rows ignored; zero-total invoice; `VOID` throws; negative net throws.
+- **Unit — command validation:** every row of the §4.5 table, including the refund ceiling and the `paidAt` bounds.
+- **e2e — concurrency:** N concurrent `recordInvoicePayment` calls against one invoice end with `amountPaidMinorUnits` equal to the sum of the rows and a status consistent with it. Two concurrent refunds of one payment whose sum exceeds its refundable amount: exactly one succeeds. Deterministic, in the spirit of the `PricingRule` race test (#138): a barrier proves both transactions overlapped. The test must not just fire both calls and hope.
+- **e2e — refund flow:** record a payment → `PAID`, then a partial refund → `PARTIALLY_PAID` with the refund row referencing the original, which is unchanged. Refund the rest → `REFUNDED`. Over-refund → 400.
+- **e2e — derived pair not settable:** schema introspection shows no input field named `paymentStatus` or `amountPaidMinorUnits`; `Invoice` has no create/update mutation.
+- **e2e — authorization:** the role matrix for both mutations (allowed and forbidden roles), reads for all six roles, unauthenticated rejected.
+- **e2e — tenant isolation:** a cross-tenant `invoiceId` / `paymentId` → not found. `Invoice.payments` never returns another tenant's rows. The release gate covers `payment_entity`.
+- **Migration e2e:** up/down, the constraints reject a refund with no original, a `PAYMENT` with an original, a cross-invoice original, and a non-positive amount; `down` refuses when `OVERPAID` / `REFUNDED` rows exist.
+- **Web:** panel render states (no rows, mixed history, overpaid, refunded, void), role gating of both dialogs, amount parsing/pre-fill, refetch after a write, failure alert.
+
+---
+
+## 8. Explicit deferrals / follow-ons
+
+- Payment gateway integration and customer-initiated payment (`recordedByStaffId = null`, `PENDING` / `FAILED`).
+- Voiding an invoice (producing `VOID`) and voiding mistaken payment entries.
+- Any automatic link between invoice payment status and `LaundryOrder.status`, and relaxing the prepaid-processing gate by terms (§5.2).
+- A root `payments` query, reconciliation and cash-drawer reports (#43).
+- Receipts, printing and customer notifications.
