@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { DataSource } from 'typeorm';
+import { DataSource, QueryFailedError } from 'typeorm';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import { AdminScope } from '../../../../platform/auth/domain/admin-scope';
 import { InvoicePaymentWriter } from '../../../billing/application/services/invoice-payment-writer';
@@ -477,6 +477,43 @@ describe('PaymentsService', () => {
       manager.save.mockRejectedValueOnce(failure);
       await expect(service.record(cmd())).rejects.toBe(failure);
     });
+
+    // The real Postgres path: TypeORM wraps the driver error.
+    it('maps a real QueryFailedError on uq_payment_tenant_idempotency_key to ConflictException', async () => {
+      manager.save.mockRejectedValueOnce(
+        new QueryFailedError('INSERT INTO "payment" ...', [], {
+          code: '23505',
+          constraint: 'uq_payment_tenant_idempotency_key',
+        } as unknown as Error),
+      );
+      const attempt = service.record(cmd());
+      await expect(attempt).rejects.toBeInstanceOf(ConflictException);
+      await expect(attempt).rejects.toThrow(CONFLICT_MESSAGE);
+      expect(writer.applyDerivedPayment).not.toHaveBeenCalled();
+      expect(auditLogger.log).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      [
+        'another constraint',
+        { code: '23505', constraint: 'payment_entity_pkey' },
+      ],
+      [
+        'another code',
+        { code: '23503', constraint: 'uq_payment_tenant_idempotency_key' },
+      ],
+    ])(
+      'rethrows a real QueryFailedError on %s unchanged',
+      async (_label, driverError) => {
+        const failure = new QueryFailedError(
+          'INSERT INTO "payment" ...',
+          [],
+          driverError as unknown as Error,
+        );
+        manager.save.mockRejectedValueOnce(failure);
+        await expect(service.record(cmd())).rejects.toBe(failure);
+      },
+    );
   });
 
   describe('refund', () => {

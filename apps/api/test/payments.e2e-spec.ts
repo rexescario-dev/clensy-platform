@@ -9,6 +9,7 @@ import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../src/app/app.module';
 import { InvoicesService } from '../src/modules/billing/application/services/invoices.service';
+import { InvoicePaymentStatus } from '../src/modules/billing/domain/invoice-payment-status';
 import { InvoicePaymentTerms } from '../src/modules/billing/domain/invoice-payment-terms';
 import { InvoiceEntity } from '../src/modules/billing/infrastructure/persistence/invoice.entity';
 import { AddOnsService } from '../src/modules/catalog/application/services/add-ons.service';
@@ -845,6 +846,58 @@ describe('Payments (e2e)', () => {
         'Only a completed payment can be refunded.',
       );
       expect(await paymentRows(invoiceId)).toHaveLength(1);
+    }, 30_000);
+  });
+
+  // No #39 operation produces VOID (spec §3); the repository sets it, as a
+  // future invoice-lifecycle write would.
+  describe('VOID invoice (B3)', () => {
+    const VOID_MESSAGE =
+      'Payments cannot be recorded or refunded on a void invoice.';
+
+    async function voidInvoice(invoiceId: string): Promise<void> {
+      await dataSource
+        .getRepository(InvoiceEntity)
+        .update(
+          { id: invoiceId, tenantId: tenantA },
+          { paymentStatus: InvoicePaymentStatus.VOID },
+        );
+    }
+
+    it('record on a VOID invoice -> 400, no row, derived pair unchanged, no audit', async () => {
+      const { invoiceId } = await freshInvoice();
+      await voidInvoice(invoiceId);
+      const before = await invoicePair(invoiceId);
+      expect(before.paymentStatus).toBe(InvoicePaymentStatus.VOID);
+      const audits = await paymentAuditCount();
+      const res = await gql(
+        cookies[Role.TENANT_OWNER],
+        RECORD,
+        recordInput(invoiceId, 500),
+      );
+      expect(errorStatus(res)).toBe(400);
+      expect(errorMessage(res)).toBe(VOID_MESSAGE);
+      expect(await paymentRows(invoiceId)).toHaveLength(0);
+      expect(await invoicePair(invoiceId)).toEqual(before);
+      expect(await paymentAuditCount()).toBe(audits);
+    }, 30_000);
+
+    it('refund of a COMPLETED payment on a VOID invoice -> 400, nothing written', async () => {
+      const { invoiceId } = await freshInvoice();
+      const payment = await record(invoiceId, 1000);
+      await voidInvoice(invoiceId);
+      const before = await invoicePair(invoiceId);
+      const audits = await paymentAuditCount();
+      const res = await gql(
+        cookies[Role.TENANT_OWNER],
+        REFUND,
+        refundInput(payment.id, 100),
+      );
+      expect(errorStatus(res)).toBe(400);
+      expect(errorMessage(res)).toBe(VOID_MESSAGE);
+      expect(await paymentRows(invoiceId)).toHaveLength(1);
+      expect(await invoicePair(invoiceId)).toEqual(before);
+      expect(await paymentAuditCount()).toBe(audits);
     }, 30_000);
   });
 
