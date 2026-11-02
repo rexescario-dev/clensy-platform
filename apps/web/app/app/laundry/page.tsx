@@ -38,15 +38,17 @@ export default function LaundryPage() {
 // (lifecycle spec §8.4.4): the list is not mounted, so its query never runs
 // and no native list write can land over the redirect.
 function LaundryRoute() {
-  const redirectHref = laundryDetailRedirectHref(useSearchParams());
-  return redirectHref === null ? <LaundryPageContent /> : <LaundryDetailRedirect href={redirectHref} />;
+  const search = useSearchParams().toString();
+  return laundryDetailRedirectHref(search) === null ? <LaundryPageContent /> : <LaundryDetailRedirect search={search} />;
 }
 
-function LaundryDetailRedirect({ href }: { href: string }) {
+// The hash is read here, in the browser: `useSearchParams` has none.
+function LaundryDetailRedirect({ search }: { search: string }) {
   const router = useRouter();
   useEffect(() => {
-    router.replace(href);
-  }, [router, href]);
+    const href = laundryDetailRedirectHref(search, window.location.hash);
+    if (href !== null) router.replace(href);
+  }, [router, search]);
   return <LoadingState />;
 }
 

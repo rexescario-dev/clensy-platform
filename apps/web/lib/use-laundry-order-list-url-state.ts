@@ -159,7 +159,7 @@ export function useLaundryOrderListUrlState() {
     [hrefFor],
   );
 
-  return { hrefFor, setState, state };
+  return { setState, state };
 }
 
 // Applies a search, filter or sort change. Any real change returns to page

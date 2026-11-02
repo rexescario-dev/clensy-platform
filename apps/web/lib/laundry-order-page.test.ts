@@ -78,6 +78,17 @@ describe('laundryDetailRedirectHref', () => {
   it('accepts URLSearchParams', () => {
     expect(laundryDetailRedirectHref(new URLSearchParams({ detail: ID }))).toBe(`/app/laundry/${ID}`);
   });
+
+  // #161 M7: the list keeps the hash, as the list's own writes do; the order
+  // page is a different page, so the list's hash does not follow it.
+  it.each([
+    ['status=PAID&detail=not-an-id', '#orders', '/app/laundry?status=PAID#orders'],
+    ['detail=', '#orders', '/app/laundry#orders'],
+    [`detail=${ID}`, '#orders', `/app/laundry/${ID}`],
+    ['status=PAID', '#orders', null],
+  ])('%j with hash %j → %j', (search, hash, expected) => {
+    expect(laundryDetailRedirectHref(search, hash)).toBe(expected);
+  });
 });
 
 describe('currentLaundryOrderSection', () => {

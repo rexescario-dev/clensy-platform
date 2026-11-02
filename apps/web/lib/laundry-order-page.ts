@@ -36,16 +36,18 @@ export function laundryOrderHref(id: string): string {
 
 // Where `/app/laundry?<search>` should go (lifecycle spec §8.4.4): `null`
 // with no `detail` param; the order page for a UUID-shaped `detail`; and
-// otherwise the list without `detail`, keeping every other list param.
-// Not wired in yet: #161 replaces the drawer with this at cutover.
-export function laundryDetailRedirectHref(search: URLSearchParams | string): string | null {
+// otherwise the list without `detail`, keeping every other list param and
+// `hash`, as the list's own URL writes do. The order page is another page,
+// so the list's hash does not follow it. The laundry list route redirects
+// with this (#161).
+export function laundryDetailRedirectHref(search: URLSearchParams | string, hash = ''): string | null {
   const params = new URLSearchParams(search);
   if (!params.has('detail')) return null;
   const id = params.get('detail') ?? '';
   if (isUuid(id)) return laundryOrderHref(id);
   params.delete('detail');
   const rest = params.toString();
-  return rest === '' ? '/app/laundry' : `/app/laundry?${rest}`;
+  return `${rest === '' ? '/app/laundry' : `/app/laundry?${rest}`}${hash}`;
 }
 
 // A query's data only once it has finished without an error. Apollo can

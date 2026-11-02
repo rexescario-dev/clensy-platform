@@ -346,6 +346,7 @@ describe('/app/laundry list interactions', () => {
     expect(nav.entries).toHaveLength(1); // list updates replace; they add no entry
     expect(nav.routerCalls).toEqual([]);
   });
+
   it('commits a waiting search to the list entry, then opens the order page; nothing applies later', () => {
     start('status=READY&offset=20');
     act(() => typeSearch('ana'));
@@ -373,6 +374,11 @@ describe('/app/laundry list interactions', () => {
   it('replaces an invalid detail with the list, keeping every other param', () => {
     start('status=PAID&detail=not-a-uuid&q=ana');
     expect(nav.routerCalls).toEqual(['replace /app/laundry?status=PAID&q=ana']);
+  });
+
+  it('keeps the hash when it replaces an invalid detail with the list (#161 M7)', () => {
+    start('status=PAID&detail=not-a-uuid&q=ana', '#orders');
+    expect(nav.routerCalls).toEqual(['replace /app/laundry?status=PAID&q=ana#orders']);
   });
 
   it('replaces an empty detail with the list', () => {

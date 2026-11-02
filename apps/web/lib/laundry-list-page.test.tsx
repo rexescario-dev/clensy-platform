@@ -148,9 +148,11 @@ describe('/app/laundry list', () => {
     const source = readFileSync(new URL('../app/app/laundry/page.tsx', import.meta.url), 'utf8');
     expect(source).not.toMatch(/\bDetailDrawer\b/);
     expect(source).not.toMatch(/\buseDetailDrawer\b/);
+    // The drawer's single-order query went with it (#161 M7).
+    expect(source).not.toMatch(/\buseLaundryOrderQuery\b/);
   });
 
-  it("renders no list and no order query for ?detail=, only the redirect's loading state", async () => {
+  it("renders no list and no list query for ?detail=, only the redirect's loading state", async () => {
     page.search = `q=ana&detail=${order.id}`;
     const html = await renderPage();
     expect(page.ordersQueryOptions).toEqual([]);
