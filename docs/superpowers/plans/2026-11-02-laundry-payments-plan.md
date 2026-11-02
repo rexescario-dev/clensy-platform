@@ -756,3 +756,23 @@ Executed on branch `feat/39-laundry-payments` (base `f937355`), tasks 1 to 10, w
 ### Next Gate
 
 **M7 — Code Review.** This slice changes application code, authorization, tenant isolation and the schema, so `CLAUDE.md` requires a fresh, independent reviewer on the most capable model that did not implement the change, given the Accepted spec, the Accepted plan and the branch diff. The M7 record must cite that review.
+
+### M6 final whole-branch review (after Task 10)
+
+A fresh reviewer on the most capable model reviewed `d9a7c54..4f553a8` (read-only, nothing executed): **Ready to merge — with fixes**. It confirmed lock coverage, the §4.5 check order, money range and derivation, idempotency, authorization, tenant isolation and migration safety, and agreed with all four controller rulings (gate-world derived pair; barrier waiter match; `InvoiceFilter.paymentStatus` pin; pre-selected payment method).
+
+One Important finding: the B6, B7 and A2 server messages named amounts as "N minor units", which the panel shows verbatim, so staff could misread a refundable amount by a factor of 100. Fixed in `0610d2e` with three small minors in the same commit:
+
+| Finding | Fix |
+| --- | --- |
+| Important — "minor units" in server messages | Payments-domain `formatPesos` (integer-only, unit-tested); messages now read e.g. "…refundable amount of ₱50.00."; A2 reads "The amount must be from ₱0.01 to ₱21474836.47." |
+| Over-refund e2e assertion was `toContain('500')` | Exact message asserted |
+| Edited paid-at invalid or in the future showed only a red help text | Field error "Enter a time that is not in the future." (`payments.error.paidAtFuture`), render test |
+| Empty actions column header | Visually hidden "Actions" (`payments.actionsHeader`) |
+| `down()` silently drops payment rows | Documented in `database-migrations.md` and above `down()`; behaviour unchanged |
+
+Fix-wave verification (`DB_NAME=clensy_e2e` for e2e): API `tsc` clean; payments unit 134 passed; payments e2e 50 passed; web 2677 passed; web `tsc` and lint clean; `@clensy/web` 431 passed. A scoped re-review verdicted all five findings ADDRESSED with no new breakage.
+
+Not changed, for the owner: the billing drawer shows total, paid, due and status twice (decision o, spec-literal; raise at #209); the method field is a native `<select>` as the plan specified; the payment method is pre-selected (CASH for a record, the original's method for a refund). Twenty-nine deferred minors from the task reviews were triaged as safe to follow after merge.
+
+Status remains **Ready for M7**.
