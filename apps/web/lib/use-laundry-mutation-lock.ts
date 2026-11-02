@@ -1,9 +1,10 @@
 'use client';
 import { useRef, useState } from 'react';
 
-// The four places on the order page that send a mutation (#165 plan,
-// "Entry points traced"). Payment and lifecycle verbs share `transition`.
-export type LaundryMutationOwner = 'generateInvoice' | 'price' | 'transition' | 'weigh';
+// The places on the order page that send a mutation (#165 plan, "Entry
+// points traced"). Order payment and lifecycle verbs share `transition`;
+// `payment` is the invoice payments panel's record/refund (#39 decision i).
+export type LaundryMutationOwner = 'generateInvoice' | 'payment' | 'price' | 'transition' | 'weigh';
 
 // A new object per successful acquire. `owner` is for debugging and tests;
 // release compares the object, never the owner.
