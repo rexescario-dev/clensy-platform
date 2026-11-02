@@ -36,20 +36,12 @@ import { useCallback, useEffect, useRef } from 'react';
 // docs/superpowers/plans/2026-10-11-drawer-history-entry-marker-plan.md.)
 const DRAWER_ENTRY_KEY = '__clensyDetailDrawer';
 
-// The current entry's drawer marker, or null when it has none. (Its only
-// outside caller, the laundry list's marker copy, went with the laundry
-// drawer in #161.)
-function drawerEntryState(): Record<string, string> | null {
-  const state: unknown = window.history.state;
-  if (typeof state !== 'object' || state === null) return null;
-  const marker = (state as Record<string, unknown>)[DRAWER_ENTRY_KEY];
-  return typeof marker === 'string' ? { [DRAWER_ENTRY_KEY]: marker } : null;
-}
-
 // True when the current history entry is a drawer entry this hook pushed for
-// `paramName`.
+// `paramName`: its `history.state` carries the marker for that param.
 export function isDrawerEntryPushedHere(paramName: string): boolean {
-  return drawerEntryState()?.[DRAWER_ENTRY_KEY] === paramName;
+  const state: unknown = window.history.state;
+  if (typeof state !== 'object' || state === null) return false;
+  return (state as Record<string, unknown>)[DRAWER_ENTRY_KEY] === paramName;
 }
 
 export function useDetailDrawer(paramName = 'detail') {
@@ -90,16 +82,11 @@ export function useDetailDrawer(paramName = 'detail') {
     router.back();
   }, [router]);
 
-  const push = useCallback(
-    (href: string) => window.history.pushState({ [DRAWER_ENTRY_KEY]: paramName }, '', href),
-    [paramName],
-  );
-
   const open = useCallback((id: string) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set(paramName, id);
-    push(`${pathname}?${params.toString()}`);
-  }, [pathname, searchParams, paramName, push]);
+    window.history.pushState({ [DRAWER_ENTRY_KEY]: paramName }, '', `${pathname}?${params.toString()}`);
+  }, [pathname, searchParams, paramName]);
 
   const close = useCallback(() => {
     if (isDrawerEntryPushedHere(paramName)) {
