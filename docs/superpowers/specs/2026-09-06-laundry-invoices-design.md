@@ -397,6 +397,7 @@ Frontend smoke tests cover the billing list render, the detail drawer, and the g
 3. **`amountDueMinorUnits` (§3, §4.7)** keeps its definition `totalMinorUnits − amountPaidMinorUnits`, and is **negative** when the invoice is `OVERPAID`. It is still derived, never stored, and not clamped.
 4. **The derived pair's writer.** `amountPaidMinorUnits` and `paymentStatus` move only through billing's payment-write port, which is called only by the #39 payment commands, inside their transaction, under a row lock on the invoice (#39 §4.1, §4.6).
 5. **Schema (§4.9).** `invoice_entity` gains `UNIQUE (id, "tenantId")` (`uq_invoice_id_tenant`) as the target of the payment table's composite foreign key.
+6. **Web (§4.10).** The payment-status tone list gains `OVERPAID` → warning and `REFUNDED` → neutral. The `/app/billing` list and drawer show translated status labels instead of raw enums, and show a negative amount due as "Overpaid by ₱x" (#39 §4.10).
 
 ### 9.2 What it does not change
 
