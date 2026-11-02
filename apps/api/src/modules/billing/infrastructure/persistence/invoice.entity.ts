@@ -13,6 +13,7 @@ import {
 import { TenantEntity } from '../../../admins/infrastructure/persistence/tenant.entity';
 import { CustomerEntity } from '../../../customers/infrastructure/persistence/customer.entity';
 import { LaundryOrderEntity } from '../../../laundry/infrastructure/persistence/laundry-order.entity';
+import { PaymentEntity } from '../../../payments/infrastructure/persistence/payment.entity';
 import { Invoice } from '../../domain/invoice';
 import { InvoicePaymentStatus } from '../../domain/invoice-payment-status';
 import { InvoicePaymentTerms } from '../../domain/invoice-payment-terms';
@@ -33,7 +34,16 @@ import { InvoiceLineEntity } from './invoice-line.entity';
 // The `laundryOrder` / `customer` `@ManyToOne` relations are persistence
 // metadata only — `BillingModule` MUST NOT register `LaundryOrderEntity` /
 // `CustomerEntity` on any `forFeature` (spec §4.1). There is no relation to
-// any `Payment` / `Promotion` / logistics aggregate.
+// any `Promotion` / logistics aggregate.
+//
+// Payments (#39 spec §4.1, §4.9; planning decision l): `payments` is the
+// inverse of `PaymentEntity.invoice`, relation metadata only — the payment
+// rows' real FK is the hand-written composite `fk_payment_invoice_tenant`
+// (`("invoiceId", "tenantId")` → `(id, "tenantId")`), whose target, the
+// hand-written `uq_invoice_id_tenant` (`UNIQUE (id, "tenantId")`), is added
+// on this table by `CreatePayments`. `BillingModule` does not register
+// `PaymentEntity`; `PaymentsModule` does. Only `amountPaidMinorUnits` /
+// `paymentStatus` are written after generation, by `InvoicePaymentWriter`.
 //
 // Tenant ownership (#87): `tenantId` (the originating order's) +
 // `fk_invoice_tenant` are expressed here; invoice numbers are unique per
@@ -130,6 +140,9 @@ export class InvoiceEntity implements Invoice {
 
   @OneToMany(() => InvoiceLineEntity, (line) => line.invoice)
   lines!: InvoiceLineEntity[];
+
+  @OneToMany(() => PaymentEntity, (p) => p.invoice)
+  payments!: PaymentEntity[];
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;

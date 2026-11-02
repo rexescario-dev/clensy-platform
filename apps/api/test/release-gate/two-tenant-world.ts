@@ -23,6 +23,10 @@ import { LaundryFulfillmentType } from '../../src/modules/laundry/domain/laundry
 import { LaundryOrderStatus } from '../../src/modules/laundry/domain/laundry-order-status';
 import { LaundryOrderLineEntity } from '../../src/modules/laundry/infrastructure/persistence/laundry-order-line.entity';
 import { LaundryOrderEntity } from '../../src/modules/laundry/infrastructure/persistence/laundry-order.entity';
+import { PaymentMethod } from '../../src/modules/payments/domain/payment-method';
+import { PaymentRecordStatus } from '../../src/modules/payments/domain/payment-record-status';
+import { PaymentType } from '../../src/modules/payments/domain/payment-type';
+import { PaymentEntity } from '../../src/modules/payments/infrastructure/persistence/payment.entity';
 import { Role } from '../../src/platform/auth/domain/role';
 import {
   createTestTenant,
@@ -56,6 +60,7 @@ export interface TenantWorld {
   jobItemIds: string[];
   laundryOrderId: string;
   name: 'A' | 'B';
+  paymentId: string;
   pricingRuleId: string;
   principals: Readonly<Record<Role, SeededAdmin>>;
   propertyId: string;
@@ -344,6 +349,28 @@ export class Fixtures {
     return invoice.id;
   }
 
+  // #39 (decision s): one `COMPLETED` `PAYMENT` against the world invoice,
+  // recorded by the world's `TENANT_OWNER`, with a fresh idempotency key.
+  async payment(world: TenantWorld): Promise<string> {
+    const payments = this.dataSource.getRepository(PaymentEntity);
+    const payment = await payments.save(
+      payments.create({
+        invoiceId: world.invoiceId,
+        recordedByStaffId: world.principals[Role.TENANT_OWNER].id,
+        refundedPaymentId: null,
+        tenantId: world.tenantId,
+        amountMinorUnits: 500,
+        idempotencyKey: randomUUID(),
+        method: PaymentMethod.CASH,
+        paidAt: new Date(),
+        reference: null,
+        status: PaymentRecordStatus.COMPLETED,
+        type: PaymentType.PAYMENT,
+      }),
+    );
+    return payment.id;
+  }
+
   async staffAdmin(tenantId: string): Promise<string> {
     return (await seedTenantAdmin(this.dataSource, Role.SCHEDULER, tenantId))
       .id;
@@ -396,6 +423,7 @@ async function buildTenantWorld(
     invoiceId: '',
     jobId: '',
     laundryOrderId: '',
+    paymentId: '',
     pricingRuleId: pricingRuleId as string,
     propertyId,
     serviceId,
@@ -416,6 +444,7 @@ async function buildTenantWorld(
     LaundryOrderStatus.RECEIVED,
   );
   partial.invoiceId = await fixtures.invoice(partial);
+  partial.paymentId = await fixtures.payment(partial);
   return partial;
 }
 

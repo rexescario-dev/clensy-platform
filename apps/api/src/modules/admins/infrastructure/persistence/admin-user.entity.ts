@@ -28,6 +28,13 @@ import { TenantEntity } from './tenant.entity';
 // other hand-added CHECKs in this repo). `scope` uses the shared
 // `admin_scope_enum` type that `AuditEventEntity.scope` also uses, so
 // identity and audit have one scope vocabulary.
+//
+// `uq_admin_user_id_tenant` (`UNIQUE (id, "tenantId")`) is hand-written in
+// `CreatePayments` (#39 planning decision b): it is the target of
+// `payment_entity`'s composite `fk_payment_recorded_by_staff_tenant`
+// (`ON DELETE RESTRICT`), so this table is now referenced — a test that
+// empties it must truncate `payment_entity` in the same statement. NULL
+// `tenantId` (platform admins) rows stay distinct under it.
 @Entity()
 export class AdminUserEntity implements AdminUser {
   @PrimaryGeneratedColumn('uuid')

@@ -46,6 +46,11 @@ export async function createTestTenant(
 // tenant-owned (#86) and deleted by `tenantId`; by the composite
 // `fk_cleaning_job_booking_tenant` / `fk_cleaning_job_team_tenant` FKs a
 // test tenant's job can only reference that tenant's booking and team.
+// Payments (#39) are tenant-owned and deleted first: refunds, then the
+// remaining rows, so the self-referencing `fk_payment_refunded_payment`
+// (RESTRICT) never sees an original deleted while its refund exists. They
+// go before invoices (`fk_payment_invoice_tenant`, RESTRICT) and before the
+// tenant's admins (`fk_payment_recorded_by_staff_tenant`, RESTRICT).
 export async function removeTestTenants(
   dataSource: DataSource,
   tenantIds: readonly string[],
@@ -54,7 +59,15 @@ export async function removeTestTenants(
   if (ids.length === 0) {
     return;
   }
-  // Invoices first: `fk_invoice_laundry_order_tenant` / `_customer_tenant`
+  await dataSource.query(
+    `DELETE FROM "payment_entity" WHERE "tenantId" = ANY($1) AND "type" = 'REFUND'`,
+    [ids],
+  );
+  await dataSource.query(
+    `DELETE FROM "payment_entity" WHERE "tenantId" = ANY($1)`,
+    [ids],
+  );
+  // Then invoices: `fk_invoice_laundry_order_tenant` / `_customer_tenant`
   // are ON DELETE RESTRICT (their lines go by `fk_invoice_line_invoice`
   // CASCADE). Then laundry orders (lines CASCADE via
   // `fk_laundry_order_line_order_tenant`; the line → service/add-on FKs are

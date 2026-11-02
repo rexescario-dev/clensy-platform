@@ -79,6 +79,8 @@ const CUSTOM_SURFACE_ENTITIES: Record<string, string> = {
   AuditEventEntity: 'Not exposed through GraphQL.',
   LaundryOrderLineEntity:
     'Child rows of LaundryOrder; read only via LaundryOrder.lines and LaundryOrdersService (#87).',
+  PaymentEntity:
+    'Read only via Invoice.payments (nested connection, tenantReadAuthorizer on Payment) and Payment.invoice; no read resolver or root query (#39).',
   PricingRuleEntity:
     'Read only via `activePricing` (query and Service.activePricing loader); PricingRulesService scopes by tenant (#84).',
 };

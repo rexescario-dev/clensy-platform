@@ -22,12 +22,16 @@ const BOOTSTRAP_COUNTED = [
   'invoice_entity',
   'invoice_line_entity',
   'invoice_number_counter',
+  'payment_entity',
 ] as const;
 
 // #87 Task 1 Step 5 (F8): `removeTestTenants` removes a test tenant's whole
 // laundry/billing graph — order, lines, invoice, invoice lines and counter
 // row — without a RESTRICT FK blocking it, and never touches the bootstrap
-// tenant's rows.
+// tenant's rows. #39 (decision s): the graph includes a `COMPLETED`
+// `PAYMENT` and a `REFUND` of it, recorded by the tenant's own admin, which
+// exercises `fk_payment_refunded_payment`, `fk_payment_invoice_tenant` and
+// `fk_payment_recorded_by_staff_tenant` (all RESTRICT) during removal.
 describe('removeTestTenants — laundry & billing rows (#87)', () => {
   let dataSource: DataSource;
   let billingLock: BillingDbTestLock;
@@ -73,7 +77,7 @@ describe('removeTestTenants — laundry & billing rows (#87)', () => {
     return { counter, counts };
   };
 
-  it('removes the tenant’s orders, lines, invoices, invoice lines and counter row', async () => {
+  it('removes the tenant’s orders, lines, invoices, invoice lines, counter row, payments and refunds', async () => {
     const before = await bootstrapState();
 
     const tenantId = await createTestTenant(dataSource);
@@ -82,6 +86,9 @@ describe('removeTestTenants — laundry & billing rows (#87)', () => {
     const addOn = randomUUID();
     const order = randomUUID();
     const invoice = randomUUID();
+    const staff = randomUUID();
+    const payment = randomUUID();
+    const refund = randomUUID();
     await dataSource.query(
       `INSERT INTO "customer_entity" ("id", "tenantId", "fullName", "email", "phone") VALUES ($1, $2, 'Cleanup Customer', $3, '555-0100')`,
       [customer, tenantId, `cleanup-${customer}@example.com`],
@@ -119,6 +126,19 @@ describe('removeTestTenants — laundry & billing rows (#87)', () => {
       `INSERT INTO "invoice_number_counter" ("tenantId", "lastValue") VALUES ($1, 1)`,
       [tenantId],
     );
+    await dataSource.query(
+      `INSERT INTO "admin_user_entity" ("id", "email", "passwordHash", "role", "scope", "tenantId") VALUES ($1, $2, 'x', 'FINANCE', 'TENANT', $3)`,
+      [staff, `cleanup-${staff}@example.com`, tenantId],
+    );
+    for (const [id, type, refundedPaymentId] of [
+      [payment, 'PAYMENT', null],
+      [refund, 'REFUND', payment],
+    ]) {
+      await dataSource.query(
+        `INSERT INTO "payment_entity" ("id", "tenantId", "invoiceId", "type", "method", "amountMinorUnits", "status", "paidAt", "refundedPaymentId", "recordedByStaffId", "idempotencyKey") VALUES ($1, $2, $3, $4, 'CASH', 500, 'COMPLETED', now(), $5, $6, $7)`,
+        [id, tenantId, invoice, type, refundedPaymentId, staff, randomUUID()],
+      );
+    }
 
     await expect(
       removeTestTenants(dataSource, [tenantId]),
@@ -143,6 +163,14 @@ describe('removeTestTenants — laundry & billing rows (#87)', () => {
       ],
       [
         `SELECT COUNT(*)::int AS "count" FROM "invoice_number_counter" WHERE "tenantId" = $1`,
+        [tenantId],
+      ],
+      [
+        `SELECT COUNT(*)::int AS "count" FROM "payment_entity" WHERE "tenantId" = $1 OR "id" = ANY($2)`,
+        [tenantId, [payment, refund]],
+      ],
+      [
+        `SELECT COUNT(*)::int AS "count" FROM "admin_user_entity" WHERE "tenantId" = $1`,
         [tenantId],
       ],
       [

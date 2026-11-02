@@ -69,7 +69,16 @@ describe('AdminsService.disable — last-active-Tenant-Owner race (real Postgres
 
   beforeEach(async () => {
     await dataSourceA.getRepository(AuditEventEntity).clear();
-    await dataSourceA.getRepository(AdminUserEntity).clear();
+    // #39 planning decision m: `fk_payment_recorded_by_staff_tenant` makes
+    // `admin_user_entity` a referenced table, and PostgreSQL refuses to
+    // TRUNCATE a referenced table unless every referencing table is in the
+    // same statement (the `cleaners-teams.service.e2e-spec.ts` precedent).
+    // Explicit list, no CASCADE: a future table referencing admins makes
+    // this fail loudly instead of being silently emptied. Every admin goes,
+    // so every payment would have a dangling recorder anyway.
+    await dataSourceA.query(
+      'TRUNCATE TABLE "payment_entity", "admin_user_entity"',
+    );
 
     const noopAuditLogger = {
       log: jest.fn().mockResolvedValue(undefined),
