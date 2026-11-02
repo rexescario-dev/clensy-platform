@@ -319,6 +319,16 @@ describe('InvoicePaymentsPanel record dialog', () => {
     expect(field<HTMLInputElement>('input[name="payment-paid-at"]').getAttribute('aria-invalid')).toBe('true');
   });
 
+  it('an edited paid-at in the future shows an error message and sends nothing', () => {
+    render('FINANCE');
+    openRecord();
+    type('input[name="payment-paid-at"]', '2026-11-03T09:30');
+    submit();
+    expect(panel.record).not.toHaveBeenCalled();
+    expect(dialog().textContent).toContain('Enter a time that is not in the future.');
+    expect(field<HTMLInputElement>('input[name="payment-paid-at"]').getAttribute('aria-invalid')).toBe('true');
+  });
+
   it('a retry keeps the key; after success a reopened dialog has a new key', async () => {
     render('FINANCE');
     openRecord();

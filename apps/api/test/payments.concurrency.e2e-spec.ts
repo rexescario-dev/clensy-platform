@@ -507,7 +507,7 @@ describe('PaymentsService concurrency (real Postgres)', () => {
     expect(rejected).toHaveLength(1);
     expect(rejected[0].reason).toBeInstanceOf(BadRequestException);
     expect((rejected[0].reason as Error).message).toContain(
-      'refundable amount of 300',
+      'refundable amount of ₱3.00.',
     );
 
     const refunds = (await rowsOf(invoiceId)).filter(

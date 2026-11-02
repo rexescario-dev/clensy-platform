@@ -155,7 +155,9 @@ export function InvoicePaymentsPanel({ invoiceId, lock, onChanged, role, viewerI
               <TableHead className="text-right">{t('payments.columns.amount')}</TableHead>
               <TableHead>{t('payments.columns.reference')}</TableHead>
               <TableHead>{t('payments.columns.recordedBy')}</TableHead>
-              <TableHead />
+              <TableHead>
+                <span className="sr-only">{t('payments.actionsHeader')}</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -367,15 +369,15 @@ function PaymentDialog({
           max={nowLocal}
           required
           value={paidAt}
-          aria-invalid={paidAtInvalid ? true : undefined}
-          aria-describedby="payment-paid-at-help"
+          error={paidAtInvalid ? t('payments.error.paidAtFuture') : undefined}
+          aria-describedby={paidAtInvalid ? 'payment-paid-at-error payment-paid-at-help' : 'payment-paid-at-help'}
           onChange={(event) => {
             setPaidAt(event.target.value);
             setPaidAtEdited(true);
             setPaidAtInvalid(false);
           }}
         />
-        <p id="payment-paid-at-help" className={`text-sm ${paidAtInvalid ? 'text-red-600' : 'text-slate-600'}`}>
+        <p id="payment-paid-at-help" className="text-sm text-slate-600">
           {t('payments.dialog.paidAtHelp')}
         </p>
       </div>

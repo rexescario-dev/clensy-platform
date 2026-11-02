@@ -251,6 +251,7 @@ export const laundry = {
     PAY_ON_DELIVERY: 'Pay on delivery',
   },
   payments: {
+    actionsHeader: 'Actions',
     amountDue: 'Amount due',
     amountPaid: 'Amount paid',
     columns: {
@@ -280,6 +281,7 @@ export const laundry = {
       amountTooLarge: 'That amount is too large.',
       amountZero: 'Enter an amount greater than zero.',
       loadMore: 'Unable to load more payments.',
+      paidAtFuture: 'Enter a time that is not in the future.',
       recordPayment: 'Unable to record payment.',
       recordRefund: 'Unable to record refund.',
       refundExceeds: 'A refund cannot exceed {amount}.',

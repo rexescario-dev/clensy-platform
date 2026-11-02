@@ -447,7 +447,9 @@ describe('Payments (e2e)', () => {
       refundInput(p1.id, 501),
     );
     expect(errorStatus(over)).toBe(400);
-    expect(errorMessage(over)).toContain('500');
+    expect(errorMessage(over)).toBe(
+      "This refund is more than the payment's refundable amount of ₱5.00.",
+    );
     expect(await paymentRows(invoiceId)).toEqual(rowsBefore);
     expect(await invoicePair(invoiceId)).toEqual(pairBefore);
     expect(await paymentAuditCount()).toBe(auditBefore);
@@ -619,7 +621,7 @@ describe('Payments (e2e)', () => {
       recordInput(invoiceId, 1),
     );
     expect(errorStatus(tooMuch)).toBe(400);
-    expect(errorMessage(tooMuch)).toContain('0 minor units');
+    expect(errorMessage(tooMuch)).toContain('is ₱0.00.');
     expect(await paymentRows(invoiceId)).toEqual(rowsBefore);
     expect(await invoicePair(invoiceId)).toEqual(pairBefore);
     expect(await paymentAuditCount()).toBe(auditBefore);

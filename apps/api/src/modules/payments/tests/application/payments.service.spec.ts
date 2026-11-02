@@ -343,7 +343,9 @@ describe('PaymentsService', () => {
         rows.push(aRow({ amountMinorUnits: MAX_MINOR_UNITS - 1 }));
         const attempt = service.record(cmd({ amountMinorUnits: 2 }));
         await expect(attempt).rejects.toBeInstanceOf(BadRequestException);
-        await expect(attempt).rejects.toThrow(/\b1\b/);
+        await expect(attempt).rejects.toThrow(
+          /largest amount that can still be recorded is ₱0\.01\./,
+        );
         expectNoWrite();
       });
 
@@ -368,7 +370,7 @@ describe('PaymentsService', () => {
           service.record(
             cmd({ idempotencyKey: OTHER_KEY, amountMinorUnits: 1 }),
           ),
-        ).rejects.toThrow(/\b0\b/);
+        ).rejects.toThrow(/₱0\.00\./);
       });
     });
 
@@ -672,7 +674,7 @@ describe('PaymentsService', () => {
       );
       const attempt = service.refund(cmd({ amountMinorUnits: 301 }));
       await expect(attempt).rejects.toBeInstanceOf(BadRequestException);
-      await expect(attempt).rejects.toThrow(/\b300\b/);
+      await expect(attempt).rejects.toThrow(/refundable amount of ₱3\.00\./);
       expectNoWrite();
 
       await expect(

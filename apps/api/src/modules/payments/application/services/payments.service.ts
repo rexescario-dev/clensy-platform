@@ -17,6 +17,7 @@ import { isCanonicalUuid } from '../../domain/idempotency-key';
 import { MAX_MINOR_UNITS } from '../../domain/money-limits';
 import { Payment } from '../../domain/payment';
 import { PaymentMethod } from '../../domain/payment-method';
+import { formatPesos } from '../../domain/format-pesos';
 import { PaymentRecordStatus } from '../../domain/payment-record-status';
 import { PaymentType } from '../../domain/payment-type';
 import { refundableMinorUnits } from '../../domain/refundable-amount';
@@ -107,7 +108,7 @@ export class PaymentsService {
         const net = netPaid(completed);
         if (net + command.amountMinorUnits > MAX_MINOR_UNITS) {
           throw new BadRequestException(
-            `This payment would take the amount paid above the supported maximum. The largest amount that can still be recorded is ${MAX_MINOR_UNITS - net} minor units.`,
+            `This payment would take the amount paid above the supported maximum. The largest amount that can still be recorded is ${formatPesos(MAX_MINOR_UNITS - net)}.`,
           );
         }
 
@@ -202,7 +203,7 @@ export class PaymentsService {
         );
         if (command.amountMinorUnits > refundable) {
           throw new BadRequestException(
-            `This refund is more than the payment's refundable amount of ${refundable} minor units.`,
+            `This refund is more than the payment's refundable amount of ${formatPesos(refundable)}.`,
           );
         }
 
@@ -296,7 +297,7 @@ export class PaymentsService {
       command.amountMinorUnits > MAX_MINOR_UNITS
     ) {
       throw new BadRequestException(
-        `The amount must be a whole number of minor units from 1 to ${MAX_MINOR_UNITS}.`,
+        `The amount must be from ${formatPesos(1)} to ${formatPesos(MAX_MINOR_UNITS)}.`,
       );
     }
 

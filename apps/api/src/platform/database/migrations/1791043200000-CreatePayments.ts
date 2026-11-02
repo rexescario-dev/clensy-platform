@@ -78,6 +78,10 @@ export class CreatePayments1791043200000 implements MigrationInterface {
     );
   }
 
+  // Behaviour note: besides the refusal above, `down()` drops `payment_entity`
+  // even when payment rows exist. All payment rows are lost, and invoices keep
+  // their `amountPaidMinorUnits` / `paymentStatus` (`PARTIALLY_PAID` / `PAID`)
+  // unchanged, with no ledger behind them.
   public async down(queryRunner: QueryRunner): Promise<void> {
     const [{ count }] = (await queryRunner.query(
       `SELECT COUNT(*)::int AS "count" FROM "invoice_entity" WHERE "paymentStatus" IN ('OVERPAID', 'REFUNDED')`,
