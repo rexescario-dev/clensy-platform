@@ -6,9 +6,11 @@
 // everywhere (spec §4.5/§2) — these are purely UI input/display affordances.
 
 export function formatMinorUnits(minorUnits: number): string {
-  const whole = Math.trunc(minorUnits / 100);
-  const fraction = String(minorUnits % 100).padStart(2, '0');
-  return `₱${whole}.${fraction}`;
+  const sign = minorUnits < 0 ? '\u2212' : '';
+  const absolute = Math.abs(minorUnits);
+  const whole = Math.trunc(absolute / 100);
+  const fraction = String(absolute % 100).padStart(2, '0');
+  return `${sign}₱${whole}.${fraction}`;
 }
 
 export function parsePesosToMinorUnits(input: string): number {

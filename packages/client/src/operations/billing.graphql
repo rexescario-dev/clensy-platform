@@ -69,6 +69,7 @@ query InvoiceForOrder($laundryOrderId: ID!) {
       id
       invoiceNumber
       totalMinorUnits
+      amountPaidMinorUnits
       amountDueMinorUnits
       paymentStatus
       paymentTerms
@@ -82,5 +83,62 @@ mutation GenerateInvoiceFromOrder($input: GenerateInvoiceFromOrderInput!) {
     invoiceNumber
     totalMinorUnits
     paymentStatus
+  }
+}
+
+fragment PaymentRow on Payment {
+  id
+  invoiceId
+  type
+  method
+  amountMinorUnits
+  reference
+  status
+  paidAt
+  refundedPaymentId
+  recordedByStaffId
+  createdAt
+  refundableMinorUnits
+}
+
+query InvoicePayments($id: ID!, $offset: Int!) {
+  invoice(id: $id) {
+    id
+    totalMinorUnits
+    amountPaidMinorUnits
+    amountDueMinorUnits
+    paymentStatus
+    payments(paging: { limit: 100, offset: $offset }) {
+      nodes {
+        ...PaymentRow
+      }
+      pageInfo {
+        hasNextPage
+      }
+    }
+  }
+}
+
+mutation RecordInvoicePayment($input: RecordInvoicePaymentInput!) {
+  recordInvoicePayment(input: $input) {
+    ...PaymentRow
+    invoice {
+      id
+      amountPaidMinorUnits
+      amountDueMinorUnits
+      paymentStatus
+    }
+  }
+}
+
+mutation RefundInvoicePayment($input: RefundInvoicePaymentInput!) {
+  refundInvoicePayment(input: $input) {
+    ...PaymentRow
+    invoice {
+      id
+      amountPaidMinorUnits
+      amountDueMinorUnits
+      paymentStatus
+    }
   }
 }

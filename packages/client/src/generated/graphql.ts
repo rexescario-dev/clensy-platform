@@ -312,8 +312,10 @@ export type IdFilterComparison = {
 };
 
 export type InvoicePaymentStatus =
+  | 'OVERPAID'
   | 'PAID'
   | 'PARTIALLY_PAID'
+  | 'REFUNDED'
   | 'UNPAID'
   | 'VOID';
 
@@ -467,6 +469,23 @@ export type OffsetPaging = {
   offset?: number | null | undefined;
 };
 
+export type PaymentMethod =
+  | 'BANK_TRANSFER'
+  | 'CARD'
+  | 'CASH'
+  | 'GCASH'
+  | 'MAYA'
+  | 'OTHER';
+
+export type PaymentRecordStatus =
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'PENDING';
+
+export type PaymentType =
+  | 'PAYMENT'
+  | 'REFUND';
+
 export type PriceLaundryOrderInput = {
   addOns: Array<LaundryOrderAddOnInput>;
   baseQuantity?: number | null | undefined;
@@ -492,6 +511,24 @@ export type PropertyFilter = {
 export type ReceiveLaundryOrderInput = {
   customerId: string | number;
   fulfillmentType: LaundryFulfillmentType;
+};
+
+export type RecordInvoicePaymentInput = {
+  amountMinorUnits: number;
+  idempotencyKey: string | number;
+  invoiceId: string | number;
+  method: PaymentMethod;
+  paidAt?: unknown;
+  reference?: string | null | undefined;
+};
+
+export type RefundInvoicePaymentInput = {
+  amountMinorUnits: number;
+  idempotencyKey: string | number;
+  method: PaymentMethod;
+  paidAt?: unknown;
+  paymentId: string | number;
+  reference?: string | null | undefined;
 };
 
 export type Role =
@@ -673,7 +710,7 @@ export type InvoiceForOrderQueryVariables = Exact<{
 }>;
 
 
-export type InvoiceForOrderQuery = { invoices: { nodes: Array<{ id: string, invoiceNumber: string, totalMinorUnits: number, amountDueMinorUnits: number, paymentStatus: InvoicePaymentStatus, paymentTerms: InvoicePaymentTerms }> } };
+export type InvoiceForOrderQuery = { invoices: { nodes: Array<{ id: string, invoiceNumber: string, totalMinorUnits: number, amountPaidMinorUnits: number, amountDueMinorUnits: number, paymentStatus: InvoicePaymentStatus, paymentTerms: InvoicePaymentTerms }> } };
 
 export type GenerateInvoiceFromOrderMutationVariables = Exact<{
   input: GenerateInvoiceFromOrderInput;
@@ -681,6 +718,30 @@ export type GenerateInvoiceFromOrderMutationVariables = Exact<{
 
 
 export type GenerateInvoiceFromOrderMutation = { generateInvoiceFromOrder: { id: string, invoiceNumber: string, totalMinorUnits: number, paymentStatus: InvoicePaymentStatus } };
+
+export type PaymentRowFragment = { id: string, invoiceId: string, type: PaymentType, method: PaymentMethod, amountMinorUnits: number, reference: string | null, status: PaymentRecordStatus, paidAt: unknown, refundedPaymentId: string | null, recordedByStaffId: string | null, createdAt: unknown, refundableMinorUnits: number | null };
+
+export type InvoicePaymentsQueryVariables = Exact<{
+  id: string | number;
+  offset: number;
+}>;
+
+
+export type InvoicePaymentsQuery = { invoice: { id: string, totalMinorUnits: number, amountPaidMinorUnits: number, amountDueMinorUnits: number, paymentStatus: InvoicePaymentStatus, payments: { nodes: Array<{ id: string, invoiceId: string, type: PaymentType, method: PaymentMethod, amountMinorUnits: number, reference: string | null, status: PaymentRecordStatus, paidAt: unknown, refundedPaymentId: string | null, recordedByStaffId: string | null, createdAt: unknown, refundableMinorUnits: number | null }>, pageInfo: { hasNextPage: boolean | null } } } | null };
+
+export type RecordInvoicePaymentMutationVariables = Exact<{
+  input: RecordInvoicePaymentInput;
+}>;
+
+
+export type RecordInvoicePaymentMutation = { recordInvoicePayment: { id: string, invoiceId: string, type: PaymentType, method: PaymentMethod, amountMinorUnits: number, reference: string | null, status: PaymentRecordStatus, paidAt: unknown, refundedPaymentId: string | null, recordedByStaffId: string | null, createdAt: unknown, refundableMinorUnits: number | null, invoice: { id: string, amountPaidMinorUnits: number, amountDueMinorUnits: number, paymentStatus: InvoicePaymentStatus } } };
+
+export type RefundInvoicePaymentMutationVariables = Exact<{
+  input: RefundInvoicePaymentInput;
+}>;
+
+
+export type RefundInvoicePaymentMutation = { refundInvoicePayment: { id: string, invoiceId: string, type: PaymentType, method: PaymentMethod, amountMinorUnits: number, reference: string | null, status: PaymentRecordStatus, paidAt: unknown, refundedPaymentId: string | null, recordedByStaffId: string | null, createdAt: unknown, refundableMinorUnits: number | null, invoice: { id: string, amountPaidMinorUnits: number, amountDueMinorUnits: number, paymentStatus: InvoicePaymentStatus } } };
 
 export type BookingsQueryVariables = Exact<{
   paging?: OffsetPaging | null | undefined;
@@ -1134,6 +1195,22 @@ export const InvoiceDetailFragmentDoc = gql`
   }
 }
     ${InvoiceRowFragmentDoc}`;
+export const PaymentRowFragmentDoc = gql`
+    fragment PaymentRow on Payment {
+  id
+  invoiceId
+  type
+  method
+  amountMinorUnits
+  reference
+  status
+  paidAt
+  refundedPaymentId
+  recordedByStaffId
+  createdAt
+  refundableMinorUnits
+}
+    `;
 export const JobFieldsFragmentDoc = gql`
     fragment JobFields on CleaningJob {
   id
@@ -1498,6 +1575,7 @@ export const InvoiceForOrderDocument = gql`
       id
       invoiceNumber
       totalMinorUnits
+      amountPaidMinorUnits
       amountDueMinorUnits
       paymentStatus
       paymentTerms
@@ -1577,6 +1655,140 @@ export function useGenerateInvoiceFromOrderMutation(baseOptions?: Apollo.Mutatio
 export type GenerateInvoiceFromOrderMutationHookResult = ReturnType<typeof useGenerateInvoiceFromOrderMutation>;
 export type GenerateInvoiceFromOrderMutationResult = Apollo.MutationResult<GenerateInvoiceFromOrderMutation>;
 export type GenerateInvoiceFromOrderMutationOptions = Apollo.BaseMutationOptions<GenerateInvoiceFromOrderMutation, GenerateInvoiceFromOrderMutationVariables>;
+export const InvoicePaymentsDocument = gql`
+    query InvoicePayments($id: ID!, $offset: Int!) {
+  invoice(id: $id) {
+    id
+    totalMinorUnits
+    amountPaidMinorUnits
+    amountDueMinorUnits
+    paymentStatus
+    payments(paging: { limit: 100, offset: $offset }) {
+      nodes {
+        ...PaymentRow
+      }
+      pageInfo {
+        hasNextPage
+      }
+    }
+  }
+}
+    ${PaymentRowFragmentDoc}`;
+
+/**
+ * __useInvoicePaymentsQuery__
+ *
+ * To run a query within a React component, call `useInvoicePaymentsQuery` and pass it any options that fit your needs.
+ * When your component renders, `useInvoicePaymentsQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useInvoicePaymentsQuery({
+ *   variables: {
+ *      id: // value for 'id'
+ *      offset: // value for 'offset'
+ *   },
+ * });
+ */
+export function useInvoicePaymentsQuery(baseOptions: Apollo.QueryHookOptions<InvoicePaymentsQuery, InvoicePaymentsQueryVariables> & ({ variables: InvoicePaymentsQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<InvoicePaymentsQuery, InvoicePaymentsQueryVariables>(InvoicePaymentsDocument, options);
+      }
+export function useInvoicePaymentsLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<InvoicePaymentsQuery, InvoicePaymentsQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<InvoicePaymentsQuery, InvoicePaymentsQueryVariables>(InvoicePaymentsDocument, options);
+        }
+// @ts-ignore
+export function useInvoicePaymentsSuspenseQuery(baseOptions?: Apollo.SuspenseQueryHookOptions<InvoicePaymentsQuery, InvoicePaymentsQueryVariables>): Apollo.UseSuspenseQueryResult<InvoicePaymentsQuery, InvoicePaymentsQueryVariables>;
+export function useInvoicePaymentsSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<InvoicePaymentsQuery, InvoicePaymentsQueryVariables>): Apollo.UseSuspenseQueryResult<InvoicePaymentsQuery | undefined, InvoicePaymentsQueryVariables>;
+export function useInvoicePaymentsSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<InvoicePaymentsQuery, InvoicePaymentsQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<InvoicePaymentsQuery, InvoicePaymentsQueryVariables>(InvoicePaymentsDocument, options);
+        }
+export type InvoicePaymentsQueryHookResult = ReturnType<typeof useInvoicePaymentsQuery>;
+export type InvoicePaymentsLazyQueryHookResult = ReturnType<typeof useInvoicePaymentsLazyQuery>;
+export type InvoicePaymentsSuspenseQueryHookResult = ReturnType<typeof useInvoicePaymentsSuspenseQuery>;
+export type InvoicePaymentsQueryResult = Apollo.QueryResult<InvoicePaymentsQuery, InvoicePaymentsQueryVariables>;
+export const RecordInvoicePaymentDocument = gql`
+    mutation RecordInvoicePayment($input: RecordInvoicePaymentInput!) {
+  recordInvoicePayment(input: $input) {
+    ...PaymentRow
+    invoice {
+      id
+      amountPaidMinorUnits
+      amountDueMinorUnits
+      paymentStatus
+    }
+  }
+}
+    ${PaymentRowFragmentDoc}`;
+export type RecordInvoicePaymentMutationFn = Apollo.MutationFunction<RecordInvoicePaymentMutation, RecordInvoicePaymentMutationVariables>;
+
+/**
+ * __useRecordInvoicePaymentMutation__
+ *
+ * To run a mutation, you first call `useRecordInvoicePaymentMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useRecordInvoicePaymentMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [recordInvoicePaymentMutation, { data, loading, error }] = useRecordInvoicePaymentMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useRecordInvoicePaymentMutation(baseOptions?: Apollo.MutationHookOptions<RecordInvoicePaymentMutation, RecordInvoicePaymentMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<RecordInvoicePaymentMutation, RecordInvoicePaymentMutationVariables>(RecordInvoicePaymentDocument, options);
+      }
+export type RecordInvoicePaymentMutationHookResult = ReturnType<typeof useRecordInvoicePaymentMutation>;
+export type RecordInvoicePaymentMutationResult = Apollo.MutationResult<RecordInvoicePaymentMutation>;
+export type RecordInvoicePaymentMutationOptions = Apollo.BaseMutationOptions<RecordInvoicePaymentMutation, RecordInvoicePaymentMutationVariables>;
+export const RefundInvoicePaymentDocument = gql`
+    mutation RefundInvoicePayment($input: RefundInvoicePaymentInput!) {
+  refundInvoicePayment(input: $input) {
+    ...PaymentRow
+    invoice {
+      id
+      amountPaidMinorUnits
+      amountDueMinorUnits
+      paymentStatus
+    }
+  }
+}
+    ${PaymentRowFragmentDoc}`;
+export type RefundInvoicePaymentMutationFn = Apollo.MutationFunction<RefundInvoicePaymentMutation, RefundInvoicePaymentMutationVariables>;
+
+/**
+ * __useRefundInvoicePaymentMutation__
+ *
+ * To run a mutation, you first call `useRefundInvoicePaymentMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useRefundInvoicePaymentMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [refundInvoicePaymentMutation, { data, loading, error }] = useRefundInvoicePaymentMutation({
+ *   variables: {
+ *      input: // value for 'input'
+ *   },
+ * });
+ */
+export function useRefundInvoicePaymentMutation(baseOptions?: Apollo.MutationHookOptions<RefundInvoicePaymentMutation, RefundInvoicePaymentMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<RefundInvoicePaymentMutation, RefundInvoicePaymentMutationVariables>(RefundInvoicePaymentDocument, options);
+      }
+export type RefundInvoicePaymentMutationHookResult = ReturnType<typeof useRefundInvoicePaymentMutation>;
+export type RefundInvoicePaymentMutationResult = Apollo.MutationResult<RefundInvoicePaymentMutation>;
+export type RefundInvoicePaymentMutationOptions = Apollo.BaseMutationOptions<RefundInvoicePaymentMutation, RefundInvoicePaymentMutationVariables>;
 export const BookingsDocument = gql`
     query Bookings($paging: OffsetPaging, $filter: BookingFilter, $sorting: [BookingSort!]) {
   bookings(paging: $paging, filter: $filter, sorting: $sorting) {

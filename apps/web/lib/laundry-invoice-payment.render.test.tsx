@@ -7,6 +7,7 @@ import type { LaundryInvoiceView, LaundryPaymentVerb, LaundryPaymentView } from 
 const INVOICE = {
   id: 'i1',
   amountDueMinorUnits: 45000,
+  amountPaidMinorUnits: 0,
   invoiceNumber: 'INV-2026-000001',
   paymentStatus: 'UNPAID',
   paymentTerms: 'PAY_ON_DELIVERY',

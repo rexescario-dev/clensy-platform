@@ -3,6 +3,9 @@ import type {
   InvoicePaymentTerms,
   LaundryFulfillmentType as ClientFulfillmentType,
   LaundryOrderStatus as ClientStatus,
+  PaymentMethod,
+  PaymentRecordStatus,
+  PaymentType,
   Role,
 } from '@clensy/client';
 import {
@@ -43,6 +46,9 @@ describe('laundry presentation contract with the generated client', () => {
     };
     expect([...LAUNDRY_ORDER_STATUSES].sort()).toEqual(Object.keys(everyStatus).sort());
     expectTypeOf<keyof LaundryMessages['invoicePaymentStatus']>().toEqualTypeOf<InvoicePaymentStatus>();
+    expectTypeOf<keyof LaundryMessages['payments']['status']>().toEqualTypeOf<PaymentRecordStatus>();
+    expectTypeOf<keyof LaundryMessages['payments']['method']>().toEqualTypeOf<PaymentMethod>();
+    expectTypeOf<keyof LaundryMessages['payments']['type']>().toEqualTypeOf<PaymentType>();
     expectTypeOf<keyof LaundryMessages['paymentTerms']>().toEqualTypeOf<InvoicePaymentTerms>();
     expectTypeOf<keyof LaundryMessages['status']>().toEqualTypeOf<ClientStatus>();
     expectTypeOf<keyof LaundryMessages['fulfillment']>().toEqualTypeOf<ClientFulfillmentType>();
