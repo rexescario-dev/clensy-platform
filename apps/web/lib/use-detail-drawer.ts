@@ -15,8 +15,7 @@ import { useCallback, useEffect, useRef } from 'react';
 // semantics. But if the drawer's URL was reached directly (a shared link, a
 // bookmark, a new tab), there is no guaranteed list-page entry to go back
 // to; `router.back()` could leave the app. So that case replaces the entry
-// instead (`router.replace()` in `close`, a native `replaceState` in
-// `closeWithHref`).
+// instead (`router.replace()` in `close`).
 //
 // The "pushed here" fact lives on the history entry itself, as a marker in
 // `history.state`, not in component memory (#173). A memory flag is lost or
@@ -37,23 +36,12 @@ import { useCallback, useEffect, useRef } from 'react';
 // docs/superpowers/plans/2026-10-11-drawer-history-entry-marker-plan.md.)
 const DRAWER_ENTRY_KEY = '__clensyDetailDrawer';
 
-// The current entry's drawer marker, as a fresh state object for a native
-// `replaceState` of the same entry, or null when it has none. A list update
-// made while a drawer entry is current must keep the marker, or closing
-// would take the replace branch. (Pass a fresh object: Next.js copies its
-// own keys into it, and an object that already carries them skips Next's
-// URL sync.)
-export function drawerEntryState(): Record<string, string> | null {
-  const state: unknown = window.history.state;
-  if (typeof state !== 'object' || state === null) return null;
-  const marker = (state as Record<string, unknown>)[DRAWER_ENTRY_KEY];
-  return typeof marker === 'string' ? { [DRAWER_ENTRY_KEY]: marker } : null;
-}
-
 // True when the current history entry is a drawer entry this hook pushed for
-// `paramName`.
+// `paramName`: its `history.state` carries the marker for that param.
 export function isDrawerEntryPushedHere(paramName: string): boolean {
-  return drawerEntryState()?.[DRAWER_ENTRY_KEY] === paramName;
+  const state: unknown = window.history.state;
+  if (typeof state !== 'object' || state === null) return false;
+  return (state as Record<string, unknown>)[DRAWER_ENTRY_KEY] === paramName;
 }
 
 export function useDetailDrawer(paramName = 'detail') {
@@ -94,16 +82,11 @@ export function useDetailDrawer(paramName = 'detail') {
     router.back();
   }, [router]);
 
-  const push = useCallback(
-    (href: string) => window.history.pushState({ [DRAWER_ENTRY_KEY]: paramName }, '', href),
-    [paramName],
-  );
-
   const open = useCallback((id: string) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set(paramName, id);
-    push(`${pathname}?${params.toString()}`);
-  }, [pathname, searchParams, paramName, push]);
+    window.history.pushState({ [DRAWER_ENTRY_KEY]: paramName }, '', `${pathname}?${params.toString()}`);
+  }, [pathname, searchParams, paramName]);
 
   const close = useCallback(() => {
     if (isDrawerEntryPushedHere(paramName)) {
@@ -116,24 +99,5 @@ export function useDetailDrawer(paramName = 'detail') {
     router.replace(query ? `${pathname}?${query}` : pathname);
   }, [back, router, pathname, searchParams, paramName]);
 
-  // Laundry list only (#163): open and close with an exact URL the caller
-  // built from the live `window.location`, written with the native History
-  // API, which Next.js syncs into `useSearchParams`. Separate names, not an
-  // optional argument on `open`/`close`: other pages pass `close` straight
-  // to `onClose`, so `DetailDrawer`'s × button calls it with a click event,
-  // and that must keep meaning "close", never "go to this URL".
-  const openWithHref = useCallback((href: string) => push(href), [push]);
-
-  // A drawer entry pushed here closes with `router.back()`, as `close` does.
-  // One reached directly replaces the entry with `href`, which must not
-  // carry `<paramName>`.
-  const closeWithHref = useCallback((href: string) => {
-    if (isDrawerEntryPushedHere(paramName)) {
-      back();
-      return;
-    }
-    window.history.replaceState(null, '', href);
-  }, [back, paramName]);
-
-  return { activeId, close, closeWithHref, open, openWithHref };
+  return { activeId, close, open };
 }

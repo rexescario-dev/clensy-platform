@@ -119,6 +119,14 @@ function click(name: string) {
   act(() => button(name).click());
 }
 
+// A keyboard user activates Remove while it has focus. jsdom then moves
+// focus to <body> when the button's row is removed, so focus after the
+// remove is whatever the editor chooses (#161 K4).
+function removeByKeyboard(name: string) {
+  act(() => button(name).focus());
+  act(() => button(name).click());
+}
+
 function alertText(): string | null {
   return container.querySelector('[role="alert"]')?.textContent ?? null;
 }
@@ -201,6 +209,56 @@ describe('laundry weighing editor', () => {
     expect(inputs().map((input) => input.value)).toEqual(['1', '0.45']);
     expect([...container.querySelectorAll('button')].map((b) => b.textContent)).toContain('Remove bag 2');
     expect([...container.querySelectorAll('button')].map((b) => b.textContent)).not.toContain('Remove bag 3');
+  });
+
+  // #161 K4: after a remove, focus goes to the bag above, or to Add bag when
+  // the first or only bag is removed (one rule for keyboard, mouse and touch).
+  it('focuses the previous bag after removing a middle bag (#161 K4)', async () => {
+    await enterThreeBags();
+    removeByKeyboard('Remove bag 2');
+    expect(inputs().map((input) => input.value)).toEqual(['1.25', '0.45']);
+    expect(document.activeElement).toBe(inputs()[0]);
+  });
+
+  it('focuses the previous bag after removing the last bag (#161 K4)', async () => {
+    await enterThreeBags();
+    removeByKeyboard('Remove bag 3');
+    expect(inputs().map((input) => input.value)).toEqual(['1.25', '0.80']);
+    expect(document.activeElement).toBe(inputs()[1]);
+  });
+
+  it('focuses Add bag after removing the first bag (#161 K4)', async () => {
+    await enterThreeBags();
+    removeByKeyboard('Remove bag 1');
+    expect(inputs().map((input) => input.value)).toEqual(['0.80', '0.45']);
+    expect(document.activeElement).toBe(button('Add bag'));
+  });
+
+  it('focuses Add bag after removing the only bag (#161 K4)', async () => {
+    await mount(null);
+    removeByKeyboard('Remove bag 1');
+    expect(inputs()).toEqual([]);
+    expect(document.activeElement).toBe(button('Add bag'));
+  });
+
+  it('focuses the same previous bag again on a second remove below it (#161 K4)', async () => {
+    await enterThreeBags();
+    removeByKeyboard('Remove bag 3');
+    act(() => button('Add bag').click());
+    removeByKeyboard('Remove bag 3');
+    expect(document.activeElement).toBe(inputs()[1]);
+  });
+
+  // Characterization guard: passes before and after the fix. Focusing Add
+  // bag blurs the Bag 2 input (focusout -> onBlur -> touchEntry), and typing
+  // re-renders again; neither may pull focus back to the removed row's
+  // neighbour. Proved by the plan's Task 7 Step 4b break run.
+  it('does not pull focus back after the user moves on (#161 K4)', async () => {
+    await enterThreeBags();
+    removeByKeyboard('Remove bag 3');
+    act(() => button('Add bag').focus());
+    type(0, '2.00');
+    expect(document.activeElement).toBe(button('Add bag'));
   });
 
   it.each([

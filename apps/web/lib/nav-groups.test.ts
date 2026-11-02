@@ -70,6 +70,11 @@ describe('findActiveHref', () => {
     expect(findActiveHref('/app/catalog/add-ons')).toBe('/app/catalog/add-ons');
   });
 
+  // Characterization (#161): Laundry stays the active item on an order page.
+  it('keeps Laundry active on an order page (#161)', () => {
+    expect(findActiveHref('/app/laundry/3f2a9c1e-0b7d-4e55-9a10-6c2b8d4e7f01')).toBe('/app/laundry');
+  });
+
   it('returns undefined outside the app navigation', () => {
     expect(findActiveHref('/login')).toBeUndefined();
     expect(findActiveHref(PLATFORM_HOME_HREF)).toBeUndefined();

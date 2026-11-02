@@ -33,7 +33,6 @@ const DRAWER_PAGES = [
   'apps/web/app/app/cleaners/teams/page.tsx',
   'apps/web/app/app/customers/page.tsx',
   'apps/web/app/app/jobs/page.tsx',
-  'apps/web/app/app/laundry/page.tsx',
 ];
 
 const FORBIDDEN_IDENTIFIERS = new Map([

@@ -78,6 +78,10 @@ export function LaundryWeighingEditor({
   // The row to focus after a blocked submit has rendered its error. A new
   // object per submit, so a repeat submit on the same row focuses it again.
   const [focusRow, setFocusRow] = useState<{ key: number } | null>(null);
+  // Where focus goes once a removed row has left the DOM (#161 K4). A new
+  // object per remove, so a repeat remove with the same target runs again.
+  const [focusAfterRemove, setFocusAfterRemove] = useState<{ add: true } | { key: number } | null>(null);
+  const addRef = useRef<HTMLButtonElement>(null);
   const summary = summarizeWeightEntries(entries.map((row) => row.text));
   // A save in flight or a price being confirmed (#162).
   const locked = pending || disabled;
@@ -103,6 +107,16 @@ export function LaundryWeighingEditor({
     if (focusRow) document.getElementById(entryInputId(focusRow.key))?.focus();
   }, [focusRow]);
 
+  // Removing a row removes its focused Remove button, and a browser drops
+  // focus to <body>. Once the row is gone, focus moves to the bag above it,
+  // or to Add bag when the first or only bag was removed (#161 K4). Every
+  // way of pressing Remove (keyboard, mouse, touch) gets the same rule.
+  useEffect(() => {
+    if (!focusAfterRemove) return;
+    if ('key' in focusAfterRemove) document.getElementById(entryInputId(focusAfterRemove.key))?.focus();
+    else addRef.current?.focus();
+  }, [focusAfterRemove]);
+
   function takeKey(): number {
     const key = nextKey.current;
     nextKey.current += 1;
@@ -117,6 +131,11 @@ export function LaundryWeighingEditor({
   }
 
   function removeEntry(key: number) {
+    // The rendered `entries` are the rows the user clicked on: React commits
+    // each click before the next, so this matches the list being filtered.
+    // A key that is not found (index -1) goes to Add bag, which always exists.
+    const index = entries.findIndex((row) => row.key === key);
+    setFocusAfterRemove(index > 0 ? { key: entries[index - 1]!.key } : { add: true });
     setFailure(undefined);
     setEntries((current) => current.filter((row) => row.key !== key));
   }
@@ -216,7 +235,14 @@ export function LaundryWeighingEditor({
           </div>
         );
       })}
-      <Button type="button" variant="secondary" disabled={locked} onClick={addEntry} className="self-start">
+      <Button
+        ref={addRef}
+        type="button"
+        variant="secondary"
+        disabled={locked}
+        onClick={addEntry}
+        className="self-start"
+      >
         {t('order.weighing.add')}
       </Button>
       <div className="rounded-md border border-slate-200 bg-slate-50 p-3">

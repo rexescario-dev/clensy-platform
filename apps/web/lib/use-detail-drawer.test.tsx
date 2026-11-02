@@ -63,23 +63,6 @@ function BookingsLikePage() {
   );
 }
 
-// Wired like the laundry list: the named entry points, with exact URLs.
-function LaundryLikePage() {
-  const { activeId, closeWithHref, openWithHref } = useDetailDrawer();
-  return (
-    <>
-      <button type="button" onClick={() => openWithHref('/app/bookings?status=A&detail=o1')}>
-        Open o1
-      </button>
-      {activeId ? (
-        <DetailDrawer open onClose={() => closeWithHref('/app/bookings?status=A')} title="Order">
-          <p>{activeId}</p>
-        </DetailDrawer>
-      ) : null}
-    </>
-  );
-}
-
 const nativeReplaceState = window.history.replaceState.bind(window.history);
 
 let container: HTMLDivElement;
@@ -186,15 +169,6 @@ describe('useDetailDrawer: direct links never go Back', () => {
     expect(nav.back).not.toHaveBeenCalled();
     expect(nav.replace).toHaveBeenCalledWith('/app/bookings?status=A');
   });
-
-  it('closeWithHref replaces an entry it did not push', () => {
-    start('/app/bookings?status=A&detail=o1', ['/app/jobs']);
-    act(() => root.render(<LaundryLikePage />));
-    act(() => button('Close').click());
-    expect(nav.back).not.toHaveBeenCalled();
-    expect(window.history.replaceState).toHaveBeenCalledWith(null, '', '/app/bookings?status=A');
-    expect(nav.entries).toEqual(['/app/jobs', '/app/bookings?status=A']);
-  });
 });
 
 describe('useDetailDrawer: entries this page pushed go Back to the list entry behind them', () => {
@@ -279,19 +253,6 @@ describe('useDetailDrawer: entries this page pushed go Back to the list entry be
     expect(nav.back).toHaveBeenCalledTimes(2);
     expect(window.location.pathname + window.location.search).toBe('/app/bookings?status=B');
   });
-
-  it('closeWithHref goes Back for an entry it pushed, after Forward too, and never replaces it', () => {
-    start('/app/bookings?status=A');
-    act(() => root.render(<LaundryLikePage />));
-    act(() => button('Open o1').click());
-    expect(window.history.pushState).toHaveBeenCalledWith({ __clensyDetailDrawer: 'detail' }, '', '/app/bookings?status=A&detail=o1');
-    act(() => button('Close').click());
-    traverse(1);
-    act(() => button('Close').click());
-    expect(nav.back).toHaveBeenCalledTimes(2);
-    expect(window.history.replaceState).not.toHaveBeenCalled();
-    expect(nav.entries).toEqual(['/app/bookings?status=A', '/app/bookings?status=A&detail=o1']);
-  });
 });
 
 // #173 M7 P3-1: `router.back()` lands asynchronously, and until `popstate`
@@ -347,19 +308,5 @@ describe('useDetailDrawer: a second close before the Back lands is ignored', () 
     act(() => button('Close').click());
     expect(nav.back).toHaveBeenCalledTimes(2);
     expect(nav.replace).not.toHaveBeenCalled();
-  });
-
-  it('closeWithHref goes Back once for × then × again, and never replaces the entry', () => {
-    start('/app/bookings?status=A', ['/app/jobs']);
-    act(() => root.render(<LaundryLikePage />));
-    act(() => button('Open o1').click());
-    deferBack();
-    act(() => button('Close').click());
-    act(() => button('Close').click());
-    expect(nav.back).toHaveBeenCalledTimes(1);
-    expect(window.history.replaceState).not.toHaveBeenCalled();
-    traverse(-1);
-    expect(nav.entries).toEqual(['/app/jobs', '/app/bookings?status=A', '/app/bookings?status=A&detail=o1']);
-    expect(nav.index).toBe(1);
   });
 });

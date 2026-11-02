@@ -187,6 +187,7 @@ describe('LaundryCustomerPicker interactions', () => {
 
   it('selects an option by click, keeping focus in the input', () => {
     render();
+    act(() => field().focus());
     type('b');
     const option = container.querySelector<HTMLElement>('#customer-option-c3')!;
     let notCancelled = true;
@@ -197,6 +198,9 @@ describe('LaundryCustomerPicker interactions', () => {
     act(() => option.click());
     expect(selected).toEqual(['c3']);
     expect(field().value).toBe('Ben Cruz');
+    // #160 M7 T3-b (#161): a click selection also closes the list, as Enter does.
+    expect(field().getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(field());
   });
 
   it('cancels a mousedown anywhere on the popup, so the input keeps focus', () => {

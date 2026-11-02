@@ -38,12 +38,11 @@ const nav = vi.hoisted(() => ({
   // A pattern with no entry is still in flight, as in Apollo.
   customerResults: {} as Record<string, CustomerResult>,
   entries: [] as string[],
-  // `history.state` per entry, parallel to `entries` (#173: the drawer marker).
+  // `history.state` per entry, parallel to `entries` (list writes pass `null`).
   entryStates: [] as unknown[],
   holdRenders: false,
   index: 0,
   listeners: new Set<() => void>(),
-  orderQueryIds: [] as string[],
   queryVariables: [] as { filter?: unknown; paging: unknown; sorting: unknown }[],
   // Every `receiveLaundryOrder` input, in call order.
   receiveCalls: [] as unknown[],
@@ -81,8 +80,6 @@ vi.mock('next/navigation', () => ({
 }));
 
 vi.mock('@clensy/client', () => {
-  const idle = () => [vi.fn(), { loading: false }];
-  const query = () => ({ data: undefined, error: undefined, loading: false, refetch: vi.fn() });
   const row = {
     id: ORDER_ID,
     createdAt: '2026-10-01T09:00:00.000Z',
@@ -93,8 +90,6 @@ vi.mock('@clensy/client', () => {
     weightGrams: 2500,
   };
   return {
-    useCancelLaundryOrderMutation: idle,
-    useCompleteLaundryOrderMutation: idle,
     useCurrentAdminQuery: () => ({ data: { currentAdmin: { role: nav.role, scope: 'TENANT' } } }),
     useCustomersQuery: (options: CustomerQueryOptions) => {
       nav.customerQueries.push(options);
@@ -108,12 +103,6 @@ vi.mock('@clensy/client', () => {
         loading: false,
       };
     },
-    useGenerateInvoiceFromOrderMutation: idle,
-    useInvoiceForOrderQuery: query,
-    useLaundryOrderQuery: (options: { variables: { id: string } }) => {
-      nav.orderQueryIds.push(options.variables.id);
-      return query();
-    },
     useLaundryOrdersQuery: (options: { variables: (typeof nav.queryVariables)[number] }) => {
       nav.queryVariables.push(options.variables);
       return {
@@ -126,14 +115,6 @@ vi.mock('@clensy/client', () => {
         },
       };
     },
-    useMarkLaundryOrderAwaitingDeliveryMutation: idle,
-    useMarkLaundryOrderAwaitingPaymentMutation: idle,
-    useMarkLaundryOrderAwaitingPickupMutation: idle,
-    useMarkLaundryOrderDamagedMutation: idle,
-    useMarkLaundryOrderLostMutation: idle,
-    useMarkLaundryOrderPaidMutation: idle,
-    useMarkLaundryOrderReadyMutation: idle,
-    usePriceLaundryOrderMutation: idle,
     useReceiveLaundryOrderMutation: () => [
       (options: { variables: { input: unknown } }) => {
         nav.receiveCalls.push(options.variables.input);
@@ -145,11 +126,6 @@ vi.mock('@clensy/client', () => {
       },
       { loading: false },
     ],
-    useRefundLaundryOrderMutation: idle,
-    useRejectLaundryOrderMutation: idle,
-    useServicesQuery: query,
-    useStartLaundryProcessingMutation: idle,
-    useWeighLaundryOrderMutation: idle,
   };
 });
 
@@ -247,8 +223,7 @@ function statusSelect(): string {
   return container.querySelector<HTMLSelectElement>('#laundry-order-status-filter')!.value;
 }
 
-// The intake dialog (the one with a form); the detail drawer is also a
-// `role="dialog"` and opens after a create.
+// The intake dialog (the one with a form).
 function dialog(): HTMLElement | null {
   return [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].find((d) => d.querySelector('form')) ?? null;
 }
@@ -322,7 +297,6 @@ beforeEach(() => {
     '%zz%': { nodes: [] },
   };
   nav.holdRenders = false;
-  nav.orderQueryIds = [];
   nav.queryVariables = [];
   nav.receiveCalls = [];
   nav.refetch = () => Promise.resolve();
@@ -373,149 +347,63 @@ describe('/app/laundry list interactions', () => {
     expect(nav.routerCalls).toEqual([]);
   });
 
-  it('commits a waiting search to the list entry, then pushes the drawer; nothing applies later', () => {
+  it('commits a waiting search to the list entry, then opens the order page; nothing applies later', () => {
     start('status=READY&offset=20');
     act(() => typeSearch('ana'));
     act(() => vi.advanceTimersByTime(100));
     act(() => clickRow());
-    act(() => vi.advanceTimersByTime(1000)); // the debounce would have fired by now
-    expect(nav.entries).toHaveLength(2);
+    act(() => vi.advanceTimersByTime(1000));
+    expect(nav.entries).toHaveLength(1);
     const listEntry = new URLSearchParams(nav.entries[0].split('?')[1]);
-    expect({ detail: listEntry.get('detail'), q: listEntry.get('q') }).toEqual({ detail: null, q: 'ana' });
-    expect(url().get('detail')).toBe(ORDER_ID);
-    expect(url().get('q')).toBe('ana');
-    expect(url().get('status')).toBe('READY');
-    expect(url().get('offset')).toBe('0');
-    expect(nav.orderQueryIds.at(-1)).toBe(ORDER_ID);
-    expect(nav.routerCalls).toEqual([]);
-  });
-
-  it('returns to the list as typed when the drawer is closed with Back', () => {
-    start();
-    act(() => typeSearch('ana'));
-    act(() => clickRow());
-    goBack();
-    expect(url().get('q')).toBe('ana');
-    expect(url().has('detail')).toBe(false);
-    expect(searchBox()).toBe('ana');
-  });
-
-  it('keeps detail for a list update made right after opening, before React re-renders', () => {
-    start();
-    act(() => {
-      clickRow();
-      selectStatus('READY');
+    expect({ detail: listEntry.get('detail'), q: listEntry.get('q'), status: listEntry.get('status') }).toEqual({
+      detail: null,
+      q: 'ana',
+      status: 'READY',
     });
-    expect(url().get('detail')).toBe(ORDER_ID);
-    expect(url().get('status')).toBe('READY');
+    expect(nav.routerCalls).toEqual([`push /app/laundry/${ORDER_ID}`]);
   });
 
-  it('keeps the hash and every unrelated param when opening the drawer and on list updates', () => {
+  it('replaces ?detail=<uuid> with the order page and mounts no list', () => {
+    start(`status=PAID&detail=${ORDER_ID}`);
+    expect(nav.routerCalls).toEqual([`replace /app/laundry/${ORDER_ID}`]);
+    expect(nav.queryVariables).toEqual([]);
+    expect(container.querySelector('table')).toBeNull();
+    expect(container.querySelector('[role="status"]')).not.toBeNull();
+  });
+
+  it('replaces an invalid detail with the list, keeping every other param', () => {
+    start('status=PAID&detail=not-a-uuid&q=ana');
+    expect(nav.routerCalls).toEqual(['replace /app/laundry?status=PAID&q=ana']);
+  });
+
+  it('keeps the hash when it replaces an invalid detail with the list (#161 M7)', () => {
+    start('status=PAID&detail=not-a-uuid&q=ana', '#orders');
+    expect(nav.routerCalls).toEqual(['replace /app/laundry?status=PAID&q=ana#orders']);
+  });
+
+  it('replaces an empty detail with the list', () => {
+    start('detail=');
+    expect(nav.routerCalls).toEqual(['replace /app/laundry']);
+  });
+
+  it('keeps the hash and every unrelated param on list updates', () => {
     start('utm_source=mail&tab=a&tab=b', '#orders');
     act(() => selectStatus('READY'));
     expect(window.location.hash).toBe('#orders');
     expect(url().getAll('tab')).toEqual(['a', 'b']);
-    act(() => clickRow());
-    expect(nav.entries.at(-1)).toMatch(new RegExp(`^/app/laundry\\?utm_source=mail&tab=a&tab=b&.*detail=${ORDER_ID}#orders$`));
-  });
-
-  it('opens the new order after create with the live list URL, natively, before React re-renders', async () => {
-    start('tab=a&status=PAID', '#orders');
-    openCreate();
-    chooseCustomer();
-    await submitCreate();
-    expect(nav.receiveCalls).toHaveLength(1);
-    // The filter changes the URL, and the create request settles, before
-    // React renders the new filter. The drawer URL must come from the live
-    // URL, not from the last rendered `searchParams` (still PAID).
-    nav.holdRenders = true;
-    act(() => selectStatus('READY'));
-    expect(nav.queryVariables.at(-1)).toMatchObject({ filter: { status: { eq: 'PAID' } } }); // not re-rendered
-    expect(url().get('status')).toBe('READY');
-    await act(async () => nav.resolveReceive('new-order'));
-    expect(nav.queryVariables.at(-1)).toMatchObject({ filter: { status: { eq: 'PAID' } } }); // still not re-rendered
-    nav.holdRenders = false;
-    act(() => notify());
-    expect(nav.entries).toHaveLength(2);
-    expect(url().get('detail')).toBe('new-order');
-    expect(url().get('status')).toBe('READY');
-    expect(url().get('tab')).toBe('a');
-    expect(window.location.hash).toBe('#orders');
     expect(nav.routerCalls).toEqual([]);
   });
 
-  it('closes a drawer reached by a direct link with the live list URL, natively', () => {
-    start(`tab=a&status=PAID&detail=${ORDER_ID}`, '#orders');
-    act(() => {
-      selectStatus('READY'); // a list update React has not rendered yet
-      button('Close').click();
-    });
-    expect(url().has('detail')).toBe(false);
-    expect(url().get('status')).toBe('READY');
-    expect(url().get('tab')).toBe('a');
-    expect(window.location.hash).toBe('#orders');
-    expect(nav.entries).toHaveLength(1); // replaced, not pushed
-    expect(nav.routerCalls).toEqual([]);
-  });
-
-  it('leaves no empty "?" when closing a direct-link drawer removes the last param', () => {
-    start(`detail=${ORDER_ID}`, '#x');
-    act(() => button('Close').click());
-    expect(nav.entries).toEqual(['/app/laundry#x']);
-    expect(nav.routerCalls).toEqual([]);
-  });
-
-  it('closes a drawer opened from the list with Back', () => {
-    start('status=PAID');
-    act(() => clickRow());
-    act(() => button('Close').click());
-    expect(nav.index).toBe(0); // went Back to the list entry
-    expect(url().has('detail')).toBe(false);
+  it('lets Back and Forward restore the URL, controls and query of the entry the user goes to', () => {
+    start('status=READY', '', ['status=PAID']);
+    goBack();
     expect(url().get('status')).toBe('PAID');
-    expect(nav.routerCalls).toEqual([]);
-  });
-
-  // #173: the drawer entry carries a history-state marker, so × after Forward goes Back again
-  // instead of replacing the entry with a duplicate list URL.
-  it('goes Back again when the drawer reappears through Forward, leaving no duplicate entry', () => {
-    start('status=PAID');
-    act(() => clickRow());
-    expect(nav.entryStates[1]).toEqual({ __clensyDetailDrawer: 'detail' });
-    act(() => button('Close').click()); // Back
+    expect(statusSelect()).toBe('PAID');
+    expect(nav.queryVariables.at(-1)).toMatchObject({ filter: { status: { eq: 'PAID' } } });
     goForward();
-    expect(url().get('detail')).toBe(ORDER_ID);
-    act(() => button('Close').click()); // Back again, not a replace
-    expect(nav.index).toBe(0);
-    expect(nav.entries).toHaveLength(2);
-    expect(new URLSearchParams(nav.entries[1].split('?')[1]).get('detail')).toBe(ORDER_ID); // the drawer entry survives
-    expect(nav.routerCalls).toEqual([]);
-  });
-
-  it('keeps the drawer marker through a list update made while the drawer is open', () => {
-    start('status=PAID');
-    act(() => clickRow());
-    act(() => selectStatus('READY')); // replaceState on the drawer entry
-    expect(nav.entryStates[1]).toEqual({ __clensyDetailDrawer: 'detail' });
-    act(() => button('Close').click());
-    expect(nav.index).toBe(0); // went Back, not replaced
-    expect(nav.entries).toHaveLength(2);
-  });
-
-  it('lets Back and Forward restore the URL, controls, query and drawer of the entry the user goes to', () => {
-    start('status=PAID');
-    act(() => selectStatus('READY'));
-    act(() => clickRow());
-    expect(nav.entries).toHaveLength(2);
-
-    goBack(); // closes the drawer: the list entry, with its filter
     expect(url().get('status')).toBe('READY');
-    expect(url().has('detail')).toBe(false);
     expect(statusSelect()).toBe('READY');
     expect(nav.queryVariables.at(-1)).toMatchObject({ filter: { status: { eq: 'READY' } } });
-
-    goForward(); // the drawer entry again
-    expect(url().get('detail')).toBe(ORDER_ID);
-    expect(nav.orderQueryIds.at(-1)).toBe(ORDER_ID);
     expect(nav.routerCalls).toEqual([]);
   });
 
@@ -730,6 +618,17 @@ describe('/app/laundry intake modal', () => {
     expect(document.activeElement).toBe(customerField());
   });
 
+  // #160 M7 T5-c (#161): the guard is released after a submit that fails validation too.
+  it('releases the submit guard after a validation failure: choosing a customer then submitting sends exactly one create', async () => {
+    start();
+    openCreate();
+    await submitCreate();
+    expect(nav.receiveCalls).toEqual([]);
+    chooseCustomer();
+    await submitCreate();
+    expect(nav.receiveCalls).toEqual([{ customerId: 'c1', fulfillmentType: 'PICKUP' }]);
+  });
+
   it('clears the selection when the text changes after choosing', async () => {
     start();
     openCreate();
@@ -744,8 +643,7 @@ describe('/app/laundry intake modal', () => {
     expect(nav.receiveCalls).toEqual([]);
   });
 
-  it('creates with the chosen customer and fulfillment, toasts, and opens the drawer on the returned id without waiting for the refresh', async () => {
-    nav.refetch = () => new Promise(() => {}); // the list refresh never settles
+  it('creates with the chosen customer and fulfillment, toasts, and opens the new order page', async () => {
     start('status=PAID');
     openCreate();
     expect(dialog()!.textContent).toContain('New laundry order');
@@ -757,13 +655,10 @@ describe('/app/laundry intake modal', () => {
     await act(async () => nav.resolveReceive('new-order'));
     expect(dialog()).toBeNull();
     expect(document.body.textContent).toContain('Laundry order created.');
-    // Until #161, the new order opens in the drawer so it can be weighed.
-    expect(url().get('detail')).toBe('new-order');
-    expect(url().get('status')).toBe('PAID');
-    expect(nav.orderQueryIds.at(-1)).toBe('new-order');
-    expect(nav.refetchCalls).toBe(1);
+    expect(nav.routerCalls).toEqual(['push /app/laundry/new-order']);
+    expect(nav.refetchCalls).toBe(0);
+    expect(nav.entries).toHaveLength(1);
     expect(nav.receiveCalls).toHaveLength(1);
-    expect(nav.routerCalls).toEqual([]);
   });
 
   it('sends one mutation for two submits fired in the same turn', async () => {

@@ -10,11 +10,10 @@ import {
 } from '@clensy/web';
 import { useSearchParams } from 'next/navigation';
 import { useCallback } from 'react';
-import { drawerEntryState } from './use-detail-drawer';
 
 // `/app/laundry` list state, kept in the URL so a refresh, or back from an
 // order, restores it (lifecycle spec §8.4.4). Params the list does not own,
-// such as the drawer's `detail`, and the hash are carried through untouched.
+// and the hash, are carried through untouched.
 export interface LaundryOrderListState {
   fulfillment: LaundryFulfillmentType | null;
   offset: number;
@@ -29,13 +28,6 @@ export type LaundryOrderListFilterChange = Partial<
 >;
 
 export type LaundryOrderListUpdate = (current: LaundryOrderListState) => LaundryOrderListState;
-
-// Params outside the list state that a URL also sets or removes: the
-// drawer's `detail` on open, and its removal on close.
-export interface LaundryOrderHrefParams {
-  remove?: readonly string[];
-  set?: Readonly<Record<string, string>>;
-}
 
 export const LAUNDRY_ORDER_PAGE_SIZE = 20;
 // `OffsetPaging.offset` is a GraphQL `Int` (32-bit signed); the API rejects
@@ -131,37 +123,27 @@ export function serializeLaundryOrderListState(
 //
 // - List updates (search, filters, sort, page) `replaceState`: they add no
 //   history entry, as with the bookings list's `router.replace`.
-// - Opening the drawer, from a row or after creating an order,
-//   `pushState`s the same kind of URL plus `detail`
-//   (`useDetailDrawer().openWithHref(href)`), so Back, and the drawer's
-//   own `router.back()`, return to the list. That entry carries the drawer
-//   marker in `history.state` (#173); list updates keep it.
-// - Closing a drawer whose entry has no marker, one reached by a direct
-//   link, `replaceState`s the URL without `detail`
-//   (`useDetailDrawer().closeWithHref(href)`); a marked entry, including
-//   after Forward or a refresh, goes Back. The page therefore makes no
-//   `router.push` or `router.replace` of its own, so no async router
-//   navigation can land over a native write.
+// - Opening an order (a row, or after a create) is the page's
+//   `router.push` to `/app/laundry/<id>`, made after any waiting search is
+//   written here, so the list entry behind it is as the user left it
+//   (#161). The page leaves, so no list write follows that push.
 // - Back and Forward are the browser's: the URL, and therefore the list
 //   state, is whatever entry the user went to.
 export function useLaundryOrderListUrlState() {
   const searchParams = useSearchParams();
   const state = parseLaundryOrderListState(searchParams);
 
-  // The exact URL for `update`, plus `set` and minus `remove` params (the
-  // drawer's `detail`), built on the live URL: same pathname, every param
-  // the list does not own, and the hash. Always a URL, so every caller
+  // The exact URL for `update`, built on the live URL: same pathname, every
+  // param the list does not own, and the hash. Always a URL, so every caller
   // writes natively. `setState` skips the write only when the URL string is
   // identical; an equivalent URL in another encoding (`a%20b` vs `a+b`) is
   // rewritten, which is harmless because `replaceState` adds no entry.
   const hrefFor = useCallback(
-    (update: LaundryOrderListUpdate, { remove = [], set = {} }: LaundryOrderHrefParams = {}): string => {
+    (update: LaundryOrderListUpdate): string => {
       const base = new URLSearchParams(window.location.search);
       const current = parseLaundryOrderListState(base);
       const next = update(current);
       const params = next === current ? new URLSearchParams(base) : serializeLaundryOrderListState(next, base);
-      for (const [key, value] of Object.entries(set)) params.set(key, value);
-      for (const key of remove) params.delete(key);
       const query = params.toString();
       return `${window.location.pathname}${query === '' ? '' : `?${query}`}${window.location.hash}`;
     },
@@ -172,14 +154,12 @@ export function useLaundryOrderListUrlState() {
     (update: LaundryOrderListUpdate) => {
       const href = hrefFor(update);
       const live = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-      // Keeps a drawer entry's marker (#173), so a list update made while the
-      // drawer is open does not turn its × into a replace.
-      if (href !== live) window.history.replaceState(drawerEntryState(), '', href);
+      if (href !== live) window.history.replaceState(null, '', href);
     },
     [hrefFor],
   );
 
-  return { hrefFor, setState, state };
+  return { setState, state };
 }
 
 // Applies a search, filter or sort change. Any real change returns to page

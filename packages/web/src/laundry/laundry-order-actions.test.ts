@@ -7,7 +7,7 @@ import {
   canReceiveLaundryOrder,
   laundryOrderActions,
 } from './laundry-order-actions';
-import { LAUNDRY_ORDER_STATUSES, type LaundryOrderStatus } from './laundry-order-status';
+import { LAUNDRY_ORDER_STATUSES, type LaundryFulfillmentType, type LaundryOrderStatus } from './laundry-order-status';
 import type { LaundryOrderVerb } from './laundry-order-actions';
 import type { AdminRole } from '../roles/admin-roles';
 
@@ -176,5 +176,40 @@ describe('laundry verb copy', () => {
 
   it('has confirmation copy for exactly the destructive verbs', () => {
     expect(Object.keys(laundry.confirm).sort()).toEqual([...LAUNDRY_DESTRUCTIVE_VERBS].sort());
+  });
+});
+
+// #161: the verbs each role is offered at each step of the three laundry
+// journeys, exactly. Characterization of `laundryOrderActions` on main.
+describe('laundry journeys (#161)', () => {
+  type Row = [LaundryOrderStatus, LaundryFulfillmentType, AdminRole, LaundryOrderVerb[]];
+
+  it.each<Row>([
+    ['RECEIVED', 'PICKUP', 'SCHEDULER', ['weigh']],
+    ['WEIGHED', 'PICKUP', 'SCHEDULER', ['weigh', 'price']],
+    ['PRICED', 'PICKUP', 'FINANCE', ['markAwaitingPayment', 'markPaid', 'generateInvoice']],
+    // Processing is not offered before PAID.
+    ['PRICED', 'PICKUP', 'SCHEDULER', []],
+    ['PAID', 'PICKUP', 'SCHEDULER', ['startProcessing']],
+    ['PROCESSING', 'PICKUP', 'SCHEDULER', ['markReady']],
+    ['READY', 'PICKUP', 'SCHEDULER', ['markAwaitingPickup']],
+    ['AWAITING_PICKUP', 'PICKUP', 'SCHEDULER', ['complete']],
+  ])('happy pickup: %s %s as %s', (status, fulfillment, role, expected) => {
+    expect(laundryOrderActions(status, fulfillment, role)).toEqual(expected);
+  });
+
+  it.each<Row>([
+    ['PRICED', 'PICKUP', 'CUSTOMER_SUPPORT', ['markAwaitingPayment', 'markPaid', 'cancel']],
+    ['AWAITING_PAYMENT', 'PICKUP', 'CUSTOMER_SUPPORT', ['markPaid', 'cancel']],
+    ['PAID', 'PICKUP', 'SCHEDULER', ['startProcessing']],
+  ])('pay later: %s %s as %s', (status, fulfillment, role, expected) => {
+    expect(laundryOrderActions(status, fulfillment, role)).toEqual(expected);
+  });
+
+  it.each<Row>([
+    ['READY', 'DELIVERY', 'SCHEDULER', ['markAwaitingDelivery']],
+    ['AWAITING_DELIVERY', 'DELIVERY', 'SCHEDULER', ['complete']],
+  ])('delivery: %s %s as %s', (status, fulfillment, role, expected) => {
+    expect(laundryOrderActions(status, fulfillment, role)).toEqual(expected);
   });
 });
