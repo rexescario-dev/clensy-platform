@@ -392,8 +392,8 @@ Frontend smoke tests cover the billing list render, the detail drawer, and the g
 
 ### 9.1 What this amendment changes
 
-1. **`InvoicePaymentStatus` (§3, §4.2, §4.9)** becomes `UNPAID | PARTIALLY_PAID | PAID | OVERPAID | REFUNDED | VOID`. `OVERPAID`: net paid exceeds `totalMinorUnits`. `REFUNDED`: net paid is zero after at least one refund. The PostgreSQL `invoice_payment_status_enum` gains both values. `VOID` keeps its name and its meaning. It is still not produced by any operation.
-2. **The `amountPaidMinorUnits` invariant (§3, §4.2 table, §4.5, §6)** `0 <= amountPaidMinorUnits <= totalMinorUnits` is replaced by: `amountPaidMinorUnits >= 0`, always equal to the invoice's net paid (completed payments minus completed refunds), as defined in the #39 specification §4.3–§4.4. It is still not a database `CHECK`.
+1. **`InvoicePaymentStatus` (§3, §4.2, §4.9)** becomes `UNPAID | PARTIALLY_PAID | PAID | OVERPAID | REFUNDED | VOID`. `OVERPAID`: net paid exceeds `totalMinorUnits`. `REFUNDED`: net paid is zero after at least one refund. The PostgreSQL `invoice_payment_status_enum` gains both values. `VOID` keeps its name and its meaning. It is still not produced by any operation. **Ownership (replaces §3's "#39 owns the transitions among the first three"):** #39 owns every transition among `UNPAID`, `PARTIALLY_PAID`, `PAID`, `OVERPAID` and `REFUNDED`. `VOID` remains an invoice-lifecycle state, outside #39: no #39 operation enters or leaves it.
+2. **The `amountPaidMinorUnits` invariant (§3, §4.2 table, §4.5, §6)** `0 <= amountPaidMinorUnits <= totalMinorUnits` is replaced by: `0 <= amountPaidMinorUnits <= 2147483647` (`MAX_MINOR_UNITS`, the column's PostgreSQL `integer` maximum), always equal to the invoice's net paid (completed payments minus completed refunds), as defined in the #39 specification §4.3–§4.4. A payment that would push net paid above the maximum is rejected (#39 §4.5 B7). It is still not a database `CHECK`.
 3. **`amountDueMinorUnits` (§3, §4.7)** keeps its definition `totalMinorUnits − amountPaidMinorUnits`, and is **negative** when the invoice is `OVERPAID`. It is still derived, never stored, and not clamped.
 4. **The derived pair's writer.** `amountPaidMinorUnits` and `paymentStatus` move only through billing's payment-write port, which is called only by the #39 payment commands, inside their transaction, under a row lock on the invoice (#39 §4.1, §4.6).
 5. **Schema (§4.9).** `invoice_entity` gains `UNIQUE (id, "tenantId")` (`uq_invoice_id_tenant`) as the target of the payment table's composite foreign key.
@@ -402,6 +402,8 @@ Frontend smoke tests cover the billing list render, the detail drawer, and the g
 ### 9.2 What it does not change
 
 Generation (§4.3–§4.6), the immutable commercial snapshot, numbering, eligibility, the generation invariants (`amountPaid = 0`, `paymentStatus = UNPAID` at generation), the GraphQL read surface and its roles, and the `generateInvoiceFromOrder` mutation are all unchanged. Acceptance criteria in §6 other than the `amountPaid <= total` bullet are unaffected. Existing invoices need no backfill: with no payment rows, their `(0, UNPAID)` already satisfies the amended invariant.
+
+**Role identifiers (informative, no change).** §4.7 and §4.10 name the pre-tenancy role `OWNER`. The Accepted [multi-tenant RFC](2026-09-23-multi-tenant-architecture-design.md) §4.3 already replaced it with `TENANT_OWNER` in every module role list, and the code on `main` uses `TENANT_OWNER`. This amendment does not restate those lists. It records only that #39 uses the platform identifiers.
 
 ### 9.3 Acceptance for this amendment
 
