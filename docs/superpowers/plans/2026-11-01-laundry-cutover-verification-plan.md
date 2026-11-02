@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 2)** at M5, 2026-11-01 ([M5 decision](#m5-decision)). Drafted at M4 on 2026-11-01. Revision 1 was reviewed at M5: **revise before acceptance**, three required corrections. Revision 2 resolves them ([Revision 2 changes](#revision-2-changes)); nothing else changed. When it was Accepted, no command in this plan had been run. M6 has since started; actual results are in the [Execution record (M6)](#execution-record-m6), and every `Expected:` line not recorded there is still a prediction. |
+| Status | **Accepted (revision 2)** at M5, 2026-11-01 ([M5 decision](#m5-decision)). Drafted at M4 on 2026-11-01. Revision 1 was reviewed at M5: **revise before acceptance**, three required corrections. Revision 2 resolves them ([Revision 2 changes](#revision-2-changes)); nothing else changed. When it was Accepted, no command in this plan had been run. M6 is complete, and M7 Approved for merge. M8 is Complete, M9 is Complete and M10 does not apply. Actual results are in the [Execution record (M6)](#execution-record-m6), the [Code review (M7)](#code-review-m7), [Refactoring (M8)](#refactoring-m8) and [Documentation (M9)](#documentation-m9) records. |
 | Revision 3 | **Accepted** at M5 by the owner, 2026-11-01: B6 narrowed to the SCHEDULER row only. It was raised at M6 and corrects one Task 1 break assignment ([Revision 3 changes](#revision-3-changes)). Acceptance authorizes no commits (G2) and no later task beyond what the owner approved. |
 | Revision 4 | **Accepted** at M5, 2026-11-02 (third-pass independent review: Accept; owner: accepted with seven notes incorporated, [M5 decision for revision 4](#m5-decision-for-revision-4)), raised at M6 Task 6 (K4 failed). Adds [Task 7: keep focus in the weighing editor after a bag is removed](#task-7-keep-focus-in-the-weighing-editor-after-a-bag-is-removed-type-code-revision-4) and widens the scope to the weighing editor. Two independent M5 reviews returned **Revise** (first pass: two blockers; second pass: one blocker); this pass answers both ([first pass](#m5-review-of-revision-4-first-pass), [second pass](#m5-review-of-revision-4-second-pass)). Implementation needs **both** a fresh independent M5 acceptance **and** the owner's explicit acceptance; either alone is not enough. Revisions 2 and 3 stay Accepted for everything else. |
 | M5 decision | **Accepted**, 2026-11-01, revision 2. Findings 1–3 resolved; decision (e) confirmed against the live #161. Acceptance authorizes no implementation, branch or environment change: M6 stays blocked until the owner authorizes gates G0 and G1. See [M5 decision](#m5-decision). |
@@ -118,14 +118,14 @@ Five groups of tests, each pinning behavior that is already correct on `main`, s
 
 **Interfaces:** Consumes the existing harness helpers named below. Produces nothing later tasks use.
 
-- [ ] **Step 1: #160 gap T3-b, click selection closes the list.** In `selects an option by click, keeping focus in the input`, focus the input before typing (`act(() => field().focus())`). After the click, add:
+- [x] **Step 1: #160 gap T3-b, click selection closes the list.** In `selects an option by click, keeping focus in the input`, focus the input before typing (`act(() => field().focus())`). After the click, add:
 
   ```ts
   expect(field().getAttribute('aria-expanded')).toBe('false');
   expect(document.activeElement).toBe(field());
   ```
 
-- [ ] **Step 2: #160 gap T5-c, the submit guard is released after a validation failure.** New test in `/app/laundry intake modal`:
+- [x] **Step 2: #160 gap T5-c, the submit guard is released after a validation failure.** New test in `/app/laundry intake modal`:
 
   ```ts
   it('releases the submit guard after a validation failure: choosing a customer then submitting sends exactly one create', async () => {
@@ -139,7 +139,7 @@ Five groups of tests, each pinning behavior that is already correct on `main`, s
   });
   ```
 
-- [ ] **Step 3: Laundry stays active on the detail URL.** In `findActiveHref`:
+- [x] **Step 3: Laundry stays active on the detail URL.** In `findActiveHref`:
 
   ```ts
   it('keeps Laundry active on an order page (#161)', () => {
@@ -147,7 +147,7 @@ Five groups of tests, each pinning behavior that is already correct on `main`, s
   });
   ```
 
-- [ ] **Step 4: Cancel from `PRICED`.** New test in the Actions describe, next to case 4, built with that describe's `lifecycle`, `start`, `buttonIn`, `dialog`, `dialogButton`, `finish`, `settleRefetch` and `at`:
+- [x] **Step 4: Cancel from `PRICED`.** New test in the Actions describe, next to case 4, built with that describe's `lifecycle`, `start`, `buttonIn`, `dialog`, `dialogButton`, `finish`, `settleRefetch` and `at`:
 
   ```ts
   it('case 4b (#161): cancel from PRICED shows the plain-language dialog, then the terminal progress sentence', async () => {
@@ -167,7 +167,7 @@ Five groups of tests, each pinning behavior that is already correct on `main`, s
   });
   ```
 
-- [ ] **Step 5: Journey helper tests.** In `laundry-order-actions.test.ts`, add `describe('laundry journeys (#161)')` with one `it.each` per journey, each row asserting `laundryOrderActions(status, fulfillment, role)` `toEqual` the exact list. The expected values below come from `LEGAL_VERBS`, `VERB_ROLES` and `LAUNDRY_ORDER_VERBS` order on `main`:
+- [x] **Step 5: Journey helper tests.** In `laundry-order-actions.test.ts`, add `describe('laundry journeys (#161)')` with one `it.each` per journey, each row asserting `laundryOrderActions(status, fulfillment, role)` `toEqual` the exact list. The expected values below come from `LEGAL_VERBS`, `VERB_ROLES` and `LAUNDRY_ORDER_VERBS` order on `main`:
 
   | Journey | Status | Fulfillment | Role | Expected |
   | --- | --- | --- | --- | --- |
@@ -187,7 +187,7 @@ Five groups of tests, each pinning behavior that is already correct on `main`, s
 
   If a row disagrees with `main` when first run, **stop**. The table, not the helper, is then suspect. Record the actual value and ask the owner before changing either.
 
-- [ ] **Step 6: Run and expect PASS** (characterization tests pin current behavior):
+- [x] **Step 6: Run and expect PASS** (characterization tests pin current behavior):
 
   ```bash
   pnpm --filter web exec vitest run lib/laundry-customer-picker.interaction.test.tsx lib/laundry-list-page.interaction.test.tsx lib/nav-groups.test.ts lib/laundry-order-page.interaction.test.tsx
@@ -195,7 +195,7 @@ Five groups of tests, each pinning behavior that is already correct on `main`, s
   ```
   Expected: all pass.
 
-- [ ] **Step 7: Break runs (outside the commit, not committed).** For each break, M6 picks the source edit that produces the named behavior, runs the named test file, records the failing test names and assertion, then restores the file and confirms `git status` shows only this task's test changes.
+- [x] **Step 7: Break runs (outside the commit, not committed).** For each break, M6 picks the source edit that produces the named behavior, runs the named test file, records the failing test names and assertion, then restores the file and confirms `git status` shows only this task's test changes.
 
   | Break (behavior) | Run | Expected to fail |
   | --- | --- | --- |
@@ -207,7 +207,7 @@ Five groups of tests, each pinning behavior that is already correct on `main`, s
   | B6: `startProcessing` is legal from `PRICED` | `laundry-order-actions.test.ts` | the `happy pickup` `PRICED`/`SCHEDULER` row (revision 3: the `PRICED`/`FINANCE` row is no longer assigned; see [Revision 3 changes](#revision-3-changes)) |
   | B7: the fulfillment branch filter is ignored (both pickup and delivery are offered from `READY`) | `laundry-order-actions.test.ts` | both `READY` rows, and the existing `never offers both pickup and delivery` |
 
-- [ ] **Step 8: Commit, owner-approval gate G2** (only the five test files). Without approval, leave the changes uncommitted and continue:
+- [x] **Step 8: Commit, owner-approval gate G2** (only the five test files). Without approval, leave the changes uncommitted and continue:
 
   ```bash
   git commit -m "test(161): pin the #160 gaps, nav, cancel-from-PRICED and the laundry journeys"
@@ -225,7 +225,7 @@ Implements §8.4.4's row, create-success and redirect sentences. The drawer code
 - Consumes: `laundryOrderHref(id: string): string` and `laundryDetailRedirectHref(search: URLSearchParams | string): string | null` from `apps/web/lib/laundry-order-page.ts`; `useRouter` from `next/navigation`.
 - Produces: in `page.tsx`, `function LaundryDetailRedirect({ href }: { href: string })` (renders `LoadingState`, calls `router.replace(href)` once in an effect), and `openOrder(id: string): void` inside `LaundryPageContent`.
 
-- [ ] **Step 1: Write the failing tests** in `laundry-list-page.interaction.test.tsx` `/app/laundry list interactions`. Replace the drawer-specific tests (listed in Step 2) with these:
+- [x] **Step 1: Write the failing tests** in `laundry-list-page.interaction.test.tsx` `/app/laundry list interactions`. Replace the drawer-specific tests (listed in Step 2) with these:
 
   ```ts
   it('commits a waiting search to the list entry, then opens the order page; nothing applies later', () => {
@@ -270,7 +270,7 @@ Implements §8.4.4's row, create-success and redirect sentences. The drawer code
 
   In `lib/laundry-list-page.test.tsx`, replace `keeps the drawer for ?detail= until the order page cutover, loading that order` with `renders no list and no order query for ?detail=, only the redirect's loading state`: with `page.search = \`q=ana&detail=${order.id}\``, `page.ordersQueryOptions` and `page.orderQueryOptions` stay empty and the HTML contains `role="status"`. That file's `next/navigation` mock already provides `useRouter`. `renderToStaticMarkup` runs no effects, so the redirect's `replace` is asserted only in the interaction test.
 
-- [ ] **Step 2: Remove the drawer-only tests** from `/app/laundry list interactions`. Each one asserts drawer behavior that §8.4.4 retires:
+- [x] **Step 2: Remove the drawer-only tests** from `/app/laundry list interactions`. Each one asserts drawer behavior that §8.4.4 retires:
   - `commits a waiting search to the list entry, then pushes the drawer; nothing applies later` (replaced by the first test above)
   - `returns to the list as typed when the drawer is closed with Back`
   - `keeps detail for a list update made right after opening, before React re-renders`
@@ -285,14 +285,14 @@ Implements §8.4.4's row, create-success and redirect sentences. The drawer code
   - `keeps the hash and every unrelated param when opening the drawer and on list updates` becomes `keeps the hash and every unrelated param on list updates`. Drop the row click and the last assertion.
   - `lets Back and Forward restore the URL, controls, query and drawer of the entry the user goes to` becomes `lets Back and Forward restore the URL, controls and query of the entry the user goes to`, with `start('status=READY', '', ['status=PAID'])`. `goBack()` gives status `PAID` in the URL, the select and the last query variables. `goForward()` gives `READY` in all three. `nav.routerCalls` stays `[]`.
 
-- [ ] **Step 3: Run to verify the new tests fail.**
+- [x] **Step 3: Run to verify the new tests fail.**
 
   ```bash
   pnpm --filter web exec vitest run lib/laundry-list-page.interaction.test.tsx lib/laundry-list-page.test.tsx
   ```
   Expected: FAIL. The row click gives an entry count of 2 and no router call. The `?detail=` tests see no `replace` and a list render. The create test sees no `push`.
 
-- [ ] **Step 4: Implement in `page.tsx`.**
+- [x] **Step 4: Implement in `page.tsx`.**
   - `LaundryPage` keeps its `Suspense`, now around a new `LaundryRoute` that reads `useSearchParams()`. When `laundryDetailRedirectHref(searchParams)` is non-null, `LaundryRoute` renders `<LaundryDetailRedirect href={…} />`. Otherwise it renders `<LaundryPageContent />`.
   - `LaundryDetailRedirect`: `useRouter()`, then `useEffect(() => router.replace(href), [router, href])`, and render `<LoadingState />`.
   - `openOrder(id)`: `const pending = search.takePending(); if (pending !== undefined) setListState((c) => withLaundryFilterChange(c, { search: pending }));` then `router.push(laundryOrderHref(id))`.
@@ -301,7 +301,7 @@ Implements §8.4.4's row, create-success and redirect sentences. The drawer code
   - Replace the two `// Until the order page cutover (#161)…` comments with one comment on `openOrder` saying why the waiting search is committed first: so Back returns to the list as typed.
   - Update the comment above `useDetailDrawer()`. It is now only used to read `activeId` until Task 4 deletes it.
 
-- [ ] **Step 5: Run to verify the tests pass.** Same command as Step 3. Expected: PASS. Then:
+- [x] **Step 5: Run to verify the tests pass.** Same command as Step 3. Expected: PASS. Then:
 
   ```bash
   pnpm --filter web exec tsc --noEmit
@@ -309,7 +309,7 @@ Implements §8.4.4's row, create-success and redirect sentences. The drawer code
   ```
   Expected: exit 0 for both.
 
-- [ ] **Step 6: Commit, owner-approval gate G2.** Without approval, leave the changes uncommitted and continue.
+- [x] **Step 6: Commit, owner-approval gate G2.** Without approval, leave the changes uncommitted and continue.
 
   ```bash
   git commit -m "feat(161): open laundry orders on their page and redirect ?detail="
@@ -321,9 +321,9 @@ Implements "once the order page is verified" (§8.4.4). This task runs on the Ta
 
 **Environment** (each step that changes the environment or data names its [owner-approval gate](#owner-approval-gates)):
 
-- [ ] **Step 1: Prepare the stack.** `docker compose ps -a` shows Postgres healthy, `migrate` exited 0 and `api` running. **Gate G3** before stopping `clensy-platform-web-1`. The API's CORS allows only `http://localhost:3001`, which is why the branch must be served there. Then run `pnpm --filter web build` and serve the branch on 3001 with `next start` (as in the #165 M6 record). If `next dev` is used instead and fails on the file-watch limit, fall back to build + start.
-- [ ] **Step 2: Prepare data.** Sign in as the seeded TENANT_OWNER. **Gate G4** before creating one staff user each for CUSTOMER_SUPPORT, SCHEDULER, FINANCE, OPS_MANAGER and ANALYST through `/app/admin`. Check `/app/catalog` for an active service with a `PER_KG` pricing rule; if there is none, **gate G5** before creating one. **Gate G6** before the first order is created; that one approval covers the four orders this pass creates (H1, F2, F4, DL1). Passwords stay out of the record.
-- [ ] **Step 3: Run the rows below at 1280×800** with the browser tool. Record a GIF for H1–H6 (`laundry_161_happy_path.gif`) and one for DL1–DL3 (`laundry_161_delivery.gif`), and screenshots for the rest. Collect request evidence by the evidence rule below.
+- [x] **Step 1: Prepare the stack.** `docker compose ps -a` shows Postgres healthy, `migrate` exited 0 and `api` running. **Gate G3** before stopping `clensy-platform-web-1`. The API's CORS allows only `http://localhost:3001`, which is why the branch must be served there. Then run `pnpm --filter web build` and serve the branch on 3001 with `next start` (as in the #165 M6 record). If `next dev` is used instead and fails on the file-watch limit, fall back to build + start.
+- [x] **Step 2: Prepare data.** Sign in as the seeded TENANT_OWNER. **Gate G4** before creating one staff user each for CUSTOMER_SUPPORT, SCHEDULER, FINANCE, OPS_MANAGER and ANALYST through `/app/admin`. Check `/app/catalog` for an active service with a `PER_KG` pricing rule; if there is none, **gate G5** before creating one. **Gate G6** before the first order is created; that one approval covers the four orders this pass creates (H1, F2, F4, DL1). Passwords stay out of the record.
+- [x] **Step 3: Run the rows below at 1280×800** with the browser tool. Record a GIF for H1–H6 (`laundry_161_happy_path.gif`) and one for DL1–DL3 (`laundry_161_delivery.gif`), and screenshots for the rest. Collect request evidence by the evidence rule below.
 
 **Evidence rule.** A row is **Pass** only when its evidence is recorded. Request evidence (the operation name, the count, and the variables) is required for H2 (`weighLaundryOrder` ×1, `weightGrams: 2500`), H3 (`previewLaundryOrderPrice` ≥1, then `priceLaundryOrder` ×1), H4 (`generateInvoiceFromOrder` ×1, `paymentTerms: PAY_ON_COMPLETION`), H5 (`markLaundryOrderPaid` ×1) and F4 (`cancelLaundryOrder` ×1). These are the schema's root fields. The request's `operationName` is the matching PascalCase document name, for example `MarkLaundryOrderPaid`; record both. Collect it in this order:
 
@@ -378,7 +378,7 @@ Rows without request evidence need a screenshot (or a GIF frame) showing the exp
 | R3 | TENANT_OWNER | On `/app/laundry/<id>`, inspect the sidebar. | The Laundry item is current (`aria-current="page"`). |
 | R4 | TENANT_OWNER | Load `/app/laundry?detail=nope&status=PAID`. | URL becomes `/app/laundry?status=PAID`, and the list shows that filter. |
 
-- [ ] **Step 4: Gate.** Every row (H, DL, F, R) is Pass with its evidence, and the console shows no errors other than a known `favicon.ico` 404. A row that is **Not verified** blocks the gate just as a Fail does. Record the M6 "order page verified" line with the date. On any Fail, stop (decision d).
+- [x] **Step 4: Gate.** Every row (H, DL, F, R) is Pass with its evidence, and the console shows no errors other than a known `favicon.ico` 404. A row that is **Not verified** blocks the gate just as a Fail does. Record the M6 "order page verified" line with the date. On any Fail, stop (decision d).
 
 ## Task 4: Delete the laundry drawer and its laundry-only plumbing (type: `code`)
 
@@ -394,7 +394,7 @@ Implements the §8.4.4 removal and the #173 follow-up.
 **Interfaces:**
 - Produces: `useDetailDrawer(paramName?)` returns `{ activeId, close, open }`. `drawerEntryState` is module-private. `useLaundryOrderListUrlState()` returns `{ hrefFor, setState, state }` with `hrefFor(update: LaundryOrderListUpdate): string`. `LaundryOrderHrefParams` is removed.
 
-- [ ] **Step 1: Write the failing test** in `laundry-list-page.test.tsx`:
+- [x] **Step 1: Write the failing test** in `laundry-list-page.test.tsx`:
 
   ```ts
   it('is the list and the create modal only: no drawer, no drawer hook (#161)', () => {
@@ -406,26 +406,26 @@ Implements the §8.4.4 removal and the #173 follow-up.
 
   In `use-detail-drawer.guard.test.ts`, remove `'apps/web/app/app/laundry/page.tsx'` from `DRAWER_PAGES`. Its test `usingHook … toEqual([...DRAWER_PAGES])` then fails until the page stops calling the hook.
 
-- [ ] **Step 2: Run to verify it fails.**
+- [x] **Step 2: Run to verify it fails.**
 
   ```bash
   pnpm --filter web exec vitest run lib/laundry-list-page.test.tsx lib/use-detail-drawer.guard.test.ts
   ```
   Expected: FAIL on both new expectations.
 
-- [ ] **Step 3: Delete from `page.tsx`:** `LaundryDetailDrawer`, `InvoiceSection`, `STATUS_TONE`, `MATRIX`, `RefVerb`, `TARGET_TO_VERB`, `DESTRUCTIVE`, `VERB_LABEL`, `formatWeight`, `BILLABLE_STATUSES`, `INVOICE_ROLES`, `PAYMENT_TERMS`, the `useDetailDrawer` call and the `{activeId ? …}` mount, plus every import that is then unused (the mutation hooks, `useLaundryOrderQuery`, `useServicesQuery`, `useInvoiceForOrderQuery`, `ConfirmDialog`, `DetailDrawer`, `ErrorState`, `StatusBadge`, `StatusTone`, `LaundryOrderStatus`, `Link`, `useDetailDrawer`). `hrefFor` is no longer destructured. Keep `useToast`, `PageHeader`, `Button`, `LoadingState`, the list and the dialog.
+- [x] **Step 3: Delete from `page.tsx`:** `LaundryDetailDrawer`, `InvoiceSection`, `STATUS_TONE`, `MATRIX`, `RefVerb`, `TARGET_TO_VERB`, `DESTRUCTIVE`, `VERB_LABEL`, `formatWeight`, `BILLABLE_STATUSES`, `INVOICE_ROLES`, `PAYMENT_TERMS`, the `useDetailDrawer` call and the `{activeId ? …}` mount, plus every import that is then unused (the mutation hooks, `useLaundryOrderQuery`, `useServicesQuery`, `useInvoiceForOrderQuery`, `ConfirmDialog`, `DetailDrawer`, `ErrorState`, `StatusBadge`, `StatusTone`, `LaundryOrderStatus`, `Link`, `useDetailDrawer`). `hrefFor` is no longer destructured. Keep `useToast`, `PageHeader`, `Button`, `LoadingState`, the list and the dialog.
 
-- [ ] **Step 4: Trim the hooks.**
+- [x] **Step 4: Trim the hooks.**
   - `use-detail-drawer.ts`: delete `openWithHref`, `closeWithHref` and their comment block. Drop `export` from `drawerEntryState` (its last outside importer goes in the next bullet). Change the return to `{ activeId, close, open }`. In the header comment, replace the `closeWithHref` mention with the `close` path only.
   - `use-laundry-order-list-url-state.ts`: remove the `drawerEntryState` import, and write `window.history.replaceState(null, '', href)` in `setState`. Delete `LaundryOrderHrefParams` and the `set`/`remove` options of `hrefFor`. Rewrite the native-history comment block so it describes list updates (`replaceState`), Back/Forward, and navigation to an order through `router.push` from the page. Remove the "drawer's `detail`" wording in the two type comments; `detail` is now just a param the list does not own and carries through.
   - **Grep check:** `grep -rn "openWithHref\|closeWithHref\|drawerEntryState\|LaundryOrderHrefParams" apps/web packages --include=*.ts --include=*.tsx | grep -v node_modules` returns only the private `drawerEntryState` inside `use-detail-drawer.ts`.
 
-- [ ] **Step 5: Trim the tests.**
+- [x] **Step 5: Trim the tests.**
   - `use-detail-drawer.test.tsx`: delete `LaundryLikePage` and its three tests, `closeWithHref replaces an entry it did not push`, `closeWithHref goes Back for an entry it pushed, after Forward too, and never replaces it` and `closeWithHref goes Back once for × then × again, and never replaces the entry`. Every `open`/`close` test stays.
   - `laundry-list-page.interaction.test.tsx`: remove the mocks the page no longer imports (the 14 lifecycle/weigh/price mutation hooks, `useGenerateInvoiceFromOrderMutation`, `useInvoiceForOrderQuery`, `useLaundryOrderQuery`, `useServicesQuery`) and `nav.orderQueryIds`. Fix the `dialog()` helper comment, which no longer has a drawer to tell apart. Keep `nav.entryStates`: list writes now pass `null`, and the existing `showEntry` still reads it.
   - `laundry-list-page.test.tsx`: remove the same now-unused mocks and `page.orderQueryOptions`, where present.
 
-- [ ] **Step 6: Run to verify everything passes.**
+- [x] **Step 6: Run to verify everything passes.**
 
   ```bash
   pnpm --filter web test
@@ -434,7 +434,7 @@ Implements the §8.4.4 removal and the #173 follow-up.
   ```
   Expected: all exit 0. `use-detail-drawer.guard.test.ts` passes with eight drawer pages.
 
-- [ ] **Step 7: Commit, owner-approval gate G2.** Without approval, leave the changes uncommitted and continue.
+- [x] **Step 7: Commit, owner-approval gate G2.** Without approval, leave the changes uncommitted and continue.
 
   ```bash
   git commit -m "feat(161): remove the laundry drawer and its laundry-only history helpers"
@@ -446,23 +446,23 @@ TDD does not apply. Verification: the grep and read-through below.
 
 **Files:** Modify `apps/web/README.md` ("Laundry list", "Laundry intake").
 
-- [ ] **Step 1:** In **Native history writes**, keep the list-update and Back/Forward bullets. Replace the "Opening the drawer", "Closing the drawer" and "List updates made while a drawer is open" bullets with one bullet: a row opens `/app/laundry/[id]` with `router.push`, after committing a waiting search to the list entry, so Back returns to the list as typed. Replace "The page makes no `router.push` or `router.replace` of its own." with a sentence saying the only router calls are that push and the `?detail=` redirect's `replace`, made when the list is leaving or not mounted. Add: `/app/laundry?detail=<id>` replaces to the order page (`laundryDetailRedirectHref`); an empty or invalid `detail` replaces to the list without it.
-- [ ] **Step 2:** In **Drawer hook**, delete the sentence about the two laundry-only methods, and say the hook serves the eight drawer pages with `open` and `close`. Delete the line "Until #161, a row opens the drawer…".
-- [ ] **Step 3:** In **Laundry intake → Success**, say the page closes the dialog, toasts "Laundry order created." and opens `/app/laundry/<id>`. Delete "Until #161…".
-- [ ] **Step 4: Verify.** `grep -n "openWithHref\|closeWithHref\|Until \[#161\]\|Until #161" apps/web/README.md` prints nothing. `grep -rn "#161" docs/features/laundry.md` gets checked, and any "until #161" wording there gets the same fix.
-- [ ] **Step 5: Commit, owner-approval gate G2.** `git commit -m "docs(161): describe the order-page cutover"`. Without approval, leave the change uncommitted.
+- [x] **Step 1:** In **Native history writes**, keep the list-update and Back/Forward bullets. Replace the "Opening the drawer", "Closing the drawer" and "List updates made while a drawer is open" bullets with one bullet: a row opens `/app/laundry/[id]` with `router.push`, after committing a waiting search to the list entry, so Back returns to the list as typed. Replace "The page makes no `router.push` or `router.replace` of its own." with a sentence saying the only router calls are that push and the `?detail=` redirect's `replace`, made when the list is leaving or not mounted. Add: `/app/laundry?detail=<id>` replaces to the order page (`laundryDetailRedirectHref`); an empty or invalid `detail` replaces to the list without it.
+- [x] **Step 2:** In **Drawer hook**, delete the sentence about the two laundry-only methods, and say the hook serves the eight drawer pages with `open` and `close`. Delete the line "Until #161, a row opens the drawer…".
+- [x] **Step 3:** In **Laundry intake → Success**, say the page closes the dialog, toasts "Laundry order created." and opens `/app/laundry/<id>`. Delete "Until #161…".
+- [x] **Step 4: Verify.** `grep -n "openWithHref\|closeWithHref\|Until \[#161\]\|Until #161" apps/web/README.md` prints nothing. `grep -rn "#161" docs/features/laundry.md` gets checked, and any "until #161" wording there gets the same fix.
+- [x] **Step 5: Commit, owner-approval gate G2.** `git commit -m "docs(161): describe the order-page cutover"`. Without approval, leave the change uncommitted.
 
 ## Task 6: Final verification, browser pass B and gates (type: `code`, verification only)
 
 On the final branch build (rebuild and serve as in Task 3 Step 1, under the same gate G3 approval, or a fresh one if the container was restarted in between). Task 3's evidence rule applies to every row here.
 
-- [ ] **Step 1: Re-run route regression** R1–R4 from Task 3 against the final build, plus:
+- [x] **Step 1: Re-run route regression** R1–R4 from Task 3 against the final build, plus:
 
 | Row | Role | Steps | Expected |
 | --- | --- | --- | --- |
 | R5 | TENANT_OWNER | On a list row, check that no drawer opens anywhere: click a row; load `?detail=<id>`. | Always the order page; no `role="dialog"` drawer on `/app/laundry`. |
 
-- [ ] **Step 2: Mobile pass at 375×812** (below `sm`, 640 px). Use the same record format. Measure horizontal scroll with `document.documentElement.scrollWidth <= window.innerWidth` through the tool's script runner, and screenshot each row.
+- [x] **Step 2: Mobile pass at 375×812** (below `sm`, 640 px). Use the same record format. Measure horizontal scroll with `document.documentElement.scrollWidth <= window.innerWidth` through the tool's script runner, and screenshot each row.
 
 | Row | Role | Steps | Expected |
 | --- | --- | --- | --- |
@@ -471,7 +471,7 @@ On the final branch build (rebuild and serve as in Task 3 Step 1, under the same
 | M3 | CUSTOMER_SUPPORT, then SCHEDULER | Scroll to "+ New Laundry Order" and the dialog's Create order; Record weight; Confirm price on a Weighed order. | Each one fully on screen after scrolling, not clipped. |
 | M4 | SCHEDULER | Read the status badges on the list and the order page. | Each status has a text label, so it is not conveyed by color alone. |
 
-- [ ] **Step 3: Keyboard and focus pass at 1280×800**, keyboard only:
+- [x] **Step 3: Keyboard and focus pass at 1280×800**, keyboard only:
 
 | Row | Role | Steps | Expected |
 | --- | --- | --- | --- |
@@ -483,14 +483,14 @@ On the final branch build (rebuild and serve as in Task 3 Step 1, under the same
 | K6 | any | Tab to the back link on the order page; Enter. | `/app/laundry` opens. |
 | K7 | any | Screenshot a focused input, button and link. | A visible focus ring (`focus:ring-2` or the shared equivalent). |
 
-- [ ] **Step 4: Desktop check at 1280×800.**
+- [x] **Step 4: Desktop check at 1280×800.**
 
 | Row | Role | Steps | Expected |
 | --- | --- | --- | --- |
 | D1 | TENANT_OWNER | `/app/laundry` | A table with its columns. |
 | D2 | TENANT_OWNER | An order page | The summary grid uses more than one column. |
 
-- [ ] **Step 5: Automated gates.**
+- [x] **Step 5: Automated gates.**
 
   ```bash
   pnpm --filter web test
@@ -502,9 +502,9 @@ On the final branch build (rebuild and serve as in Task 3 Step 1, under the same
   ```
   Expected: all exit 0. The last command needs the local Postgres, and it re-runs the two preview tests cited above. If the e2e cannot run (no database), record it as **Not run** with the reason. Do not claim it.
 
-- [ ] **Step 6: Restore the environment.** Stop the branch server, then **gate G7** before starting `clensy-platform-web-1` again. Record the test data left in the local database (order ids, staff users created).
+- [x] **Step 6: Restore the environment.** Stop the branch server, then **gate G7** before starting `clensy-platform-web-1` again. Record the test data left in the local database (order ids, staff users created).
 
-- [ ] **Step 7: M6 record.** Append to this plan: the actual command results, the break-run results (Task 1 Step 7 and Task 7 Step 4b), the build each browser row ran on (the Task 6 build before Task 7, or the rebuild after it), the browser tables from Tasks 3 and 6 with evidence paths, deviations, and the M6 Slice Completion Report. The PR description carries the manual-pass tables (#161 acceptance: "The manual script in the PR records who ran it, the viewport, the role, and the result").
+- [x] **Step 7: M6 record.** Append to this plan: the actual command results, the break-run results (Task 1 Step 7 and Task 7 Step 4b), the build each browser row ran on (the Task 6 build before Task 7, or the rebuild after it), the browser tables from Tasks 3 and 6 with evidence paths, deviations, and the M6 Slice Completion Report. The PR description carries the manual-pass tables (#161 acceptance: "The manual script in the PR records who ran it, the viewport, the role, and the result").
 
 ---
 
@@ -822,6 +822,233 @@ All rows were run by Claude (claude-opus-5-5) through Playwright Chromium and ob
 
 **M7 — Code Review.** It is preceded by the owner's G2 approval of the commit scope. Under CLAUDE.md, a fresh independent reviewer on the most capable model is required, given the Accepted spec, the Accepted plan and the branch diff.
 
+## Code review (M7)
+
+```text
+Decision: Approved for merge
+Subject: branch feat/161-laundry-cutover, 563c855..7bbb0b6 (6703f00 test, dd8d894 fix, 7bbb0b6 docs)
+Accepted specification: docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md (Accepted 2026-09-06; Amendment #164 Accepted 2026-10-10; §8.4.4 governing)
+Accepted implementation plan: docs/superpowers/plans/2026-11-01-laundry-cutover-verification-plan.md (revisions 2, 3, 4 Accepted)
+Reviewer: independent, a fresh agent (Opus) that did not implement the change, given the Accepted spec, the Accepted plan and the branch diff (CLAUDE.md M7 rule: application code changed). Date: 2026-11-02.
+
+Plan tasks reviewed:
+- Task 1 (characterization tests): ✓ (T5-c lives in dd8d894 under the owner-approved G2 regrouping)
+- Task 2 (row/create navigation, ?detail= redirect): ✓
+- Task 3 (browser pass A, order-page verified gate): ✓ (recorded manual evidence; not re-run by the reviewer)
+- Task 4 (drawer and laundry-only plumbing removal): ✓
+- Task 5 (README): ✓
+- Task 6 (browser pass B, gates, restore): ✓ (caveats on K5, D1/D2 and the phone keyboard recorded)
+- Task 7 (rev. 4, K4 focus after remove): ✓
+
+Verification evidence:
+- Reviewer ran: pnpm --filter web test → 58 files, 2553/2553; tsc --noEmit exit 0; web lint exit 0; pnpm --filter @clensy/web test → 431/431.
+- Reviewer ran commit 6703f00 alone (git archive export): web 2523 passed across 57 files; the guard file (30 tests, unchanged in commit 1) cannot run outside a git checkout; packages/web 431/431. Consistent with the M6 record.
+- M6 record reviewed: Task 1 B1–B7 break runs (B6 per revision 3), Task 7 RED 5/59 and the Step 4b break (test 6 failed with focus on #laundry-weight-entry-1), browser passes A/B, API laundry.e2e 5/5.
+
+Review summary: §8.4.4 is met. Rows and create success push /app/laundry/<id>. ?detail=<uuid> is replaced to the order page without mounting the list. An empty or invalid detail is replaced to the list with the other params kept. No drawer remains on the laundry list. The removal touched only laundry-only plumbing: the eight other drawer pages, open/close and the #173 marker guard are unchanged and tested. The K4 focus fix applies the owner rule, re-runs once per remove, does not touch the blocked-submit and save-settle focus effects, and is presentation-only and within scope. Each deleted test covered only removed API. All ten implementer rulings: agreed.
+Blocking findings: None (no merge blockers)
+
+Non-blocking observations (all Minor):
+1. lib/laundry-order-page.ts:40 comment "Not wired in yet" is out of date.
+2. Commit 6703f00 message lists the intake submit-guard test, which is in dd8d894.
+3. lib/laundry-list-page.test.tsx:153 title says "no order query" but asserts it only implicitly.
+4. The invalid/empty-detail redirect drops the URL hash (spec silent).
+5. The hrefFor return of useLaundryOrderListUrlState has no external caller (per plan; M8 candidate).
+6. Lost blank line at lib/laundry-list-page.interaction.test.tsx:349.
+7. Plan step checkboxes left unchecked.
+
+Gate: Merge per human/project norms (G8 push/PR is owner-gated). M8/M9 may follow.
+```
+
+### Post-M7 fix pass (owner: "fix all minor notes, then m8", 2026-11-02)
+
+The owner asked for all seven non-blocking notes to be fixed. **Note 4 changes behavior**, so it is recorded here as a fix pass made test-first, not under M8. The fixes are **uncommitted** until the owner approves the commit scope (G2).
+
+| Note | Fix | Evidence |
+| --- | --- | --- |
+| 1 | The `laundryDetailRedirectHref` comment now says the laundry list route redirects with it | — |
+| 2 | **Correction to the G2 commit map above:** commit 1 holds **only Task 1 tests, but not all of them**. The intake submit-guard test (T5-c, `laundry-list-page.interaction.test.tsx`) is in `dd8d894`, because its file also holds Task 2 tests. The `6703f00` message is wrong on that point. It is left as it is, since the commit was reviewed | The file table above was already correct |
+| 3 | Renamed to "renders no list and no list query for ?detail=…". The drawer-removal test now also asserts that `page.tsx` does not use `useLaundryOrderQuery` | Test passes |
+| 4 | An empty or invalid `detail` redirect now keeps the URL hash, as the list's own writes do. A UUID still goes to the order page without the list's hash. `laundryDetailRedirectHref(search, hash = '')`, and `LaundryDetailRedirect` reads `window.location.hash` in its effect | **RED:** 3 failed / 114 passed. The 2 new helper rows failed with the hash missing (`'/app/laundry?status=PAID'`), and so did the new interaction test `keeps the hash when it replaces an invalid detail with the list`. **GREEN:** 125/125 across the three list/helper files |
+| 5 | `useLaundryOrderListUrlState()` now returns `{ setState, state }`, and `hrefFor` is private to the hook. **Ruling:** this departs from Task 4's Produces line (`{ hrefFor, setState, state }`), on the owner's instruction to fix every note. The hook is internal to the app, and the only caller (`page.tsx`) never used `hrefFor`. *Cost if wrong:* re-export one name | `tsc` exit 0 |
+| 6 | Blank line restored | — |
+| 7 | All 45 step checkboxes ticked. The per-task commit steps ran as the three regrouped G2 commits above, and every deviation is listed in the Task 6 Step 7 summary | — |
+
+**After the fix pass:**
+- web 2558/2558, which is 2553 plus the 5 new hash tests;
+- `tsc` exit 0;
+- lint exit 0.
+
+## Code review (M7), delta: post-M7 fix pass and M8
+
+```text
+Decision: Approved
+Subject: feat/161-laundry-cutover uncommitted working tree vs HEAD 7bbb0b6 (post-M7 fix pass for notes 1–7; M8 use-detail-drawer.ts simplification)
+Accepted specification: docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md (§8.4.4 governing)
+Accepted implementation plan: docs/superpowers/plans/2026-11-01-laundry-cutover-verification-plan.md (revision 4)
+Reviewer: independent, a fresh agent (Opus) that did not implement the change (CLAUDE.md M7 rule: application code changed). Date: 2026-11-02.
+
+Review summary:
+- Note 4 (hash): laundryDetailRedirectHref(search, hash = '') adds the hash only to the empty/invalid-detail list redirect. The UUID path returns the order href before the hash is added. LaundryRoute renders from the search string only, and window.location.hash is read only inside LaundryDetailRedirect's effect, so SSR and hydration are safe. The list target has no detail, so there is no redirect loop. The new interaction test and the two list helper rows fail without the fix (checked by reading; consistent with the recorded RED of 3).
+- Note 5: hrefFor is no longer returned. Its only remaining use is inside the hook, and page.tsx takes { setState, state }. Ruling agreed.
+- Notes 1, 3, 6, 7: correct. The new useLaundryOrderQuery source assertion is a real check.
+- M8: isDrawerEntryPushedHere is equivalent to the old drawerEntryState()?.[KEY] === paramName for every history.state shape (non-object, null, missing key, non-string marker, other paramName → false; matching marker → true). The pushState call in open is identical, and open's dependencies are equivalent. Behavior is preserved for the eight drawer pages and the #173 marker guard.
+Verification evidence (reviewer ran): pnpm --filter web test → 58 files, 2558/2558; tsc --noEmit exit 0; web lint exit 0.
+Blocking findings: None
+Non-blocking (Minor):
+1. apps/web/README.md and docs/superpowers/README.md changed during the review (M9 work, outside this delta). The apps/web/README.md hunks were checked and match the code; docs/superpowers/README.md (plan count) is covered by the M9 record. The G2 commit scope names both files explicitly.
+2. In page.tsx, `if (href !== null)` can never be false. It is harmless and keeps the types honest; left as is.
+3. The redirect effect does not re-run on a change to the hash alone. That cannot matter, because the component redirects at once; left as is.
+Gate: Approved. The G2 commit of the fix pass, M8 and M9 is owner-gated.
+```
+
+## Refactoring (M8)
+
+```text
+Decision: Complete
+Subject: feat/161-laundry-cutover working tree after the post-M7 fix pass
+Scope:
+- apps/web/lib/use-detail-drawer.ts (the slice touched it in Task 4)
+Accepted specification: docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md
+Accepted implementation plan: docs/superpowers/plans/2026-11-01-laundry-cutover-verification-plan.md
+M7 / authorization: Approved for merge (2026-11-02); owner: "fix all minor notes, then m8"
+
+Maintainability goals:
+- Remove indirection left behind when Task 4 deleted openWithHref/closeWithHref and the laundry list's marker copy.
+
+Changes:
+- drawerEntryState() built a fresh { marker } state object only for the deleted replaceState caller. It is removed, and isDrawerEntryPushedHere(paramName) reads the marker from history.state directly, with the same result for every state (non-object, null, missing, non-string or other-param marker → false).
+- The private push helper had one remaining caller. It is inlined into open, with the same pushState call and the same { [DRAWER_ENTRY_KEY]: paramName } state.
+- Considered and left alone: the weighing editor's focusAfterRemove effect next to the focusRow/save-settle effects. Their separation is what M7 relied on to show that they do not interact, so merging them would be risk without benefit. page.tsx, use-laundry-order-list-url-state.ts and laundry-order-page.ts: nothing further worth changing after the fix pass.
+
+Verification:
+Before (after the post-M7 fix pass): pnpm --filter web test → 58 files, 2558/2558; tsc --noEmit exit 0; web lint exit 0.
+After: pnpm --filter web test → 58 files, 2558/2558 (including use-detail-drawer.test.tsx and the #173 guard's 30 tests); tsc --noEmit exit 0; web lint exit 0; pnpm --filter web build exit 0.
+Characterization: no new tests. The drawer's open/close, marker and guard behavior is covered by the existing use-detail-drawer and guard suites, reviewed at M7.
+
+Externally observable behavior changes: None
+
+Gate: Complete — proceed to M9.
+```
+
+### Slice Completion Report (M8)
+
+| Field | Result |
+| --- | --- |
+| Slice | #161 Laundry end-to-end verification and drawer cutover |
+| Tracking | https://github.com/rexescario-dev/clensy-platform/issues/161 |
+| M4 | Plan **Accepted** (revision 4) |
+| M5 | Review **Accepted** (revision 4) |
+| M6 | **Complete** |
+| M7 | **Approved** (independent fresh-agent review). The post-M7 fix pass for its seven notes is above |
+| M8 | **Complete** |
+| M9 | Pending |
+| Branch | `feat/161-laundry-cutover` (`563c855..7bbb0b6`, plus the uncommitted fix pass and M8 change) |
+| PR | None. G8 is owner-gated |
+| Status | **Ready for M9**, after the G2 commit of the fix pass and M8 |
+
+#### Shipped
+
+- The M7 notes are fixed: an empty or invalid `?detail=` redirect now keeps the URL hash; a stale comment and a test name are corrected; the unused `hrefFor` return is gone; the plan is corrected.
+- M8: the shared drawer hook is simpler now that the laundry-only helpers are gone. Behavior is unchanged.
+
+#### Validation
+
+| Check | Result |
+| --- | --- |
+| Tests | **Passed**: web 2558/2558 (`@clensy/web` and API untouched since M6: 431/431, 5/5) |
+| Typecheck | **Passed** |
+| Lint | **Passed** |
+| Build | **Passed**: `web build` exit 0 |
+| Package validation | N/A |
+
+#### Next Gate
+
+**M9 — Documentation**
+
+## Documentation (M9)
+
+```text
+Decision: Complete
+Subject: #161, branch feat/161-laundry-cutover (563c855..7bbb0b6 plus the uncommitted post-M7 fix pass and M8 change)
+Accepted specification: docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md (Amendment #164, §8.4.4)
+Accepted implementation plan: docs/superpowers/plans/2026-11-01-laundry-cutover-verification-plan.md
+M7: Approved for merge (2026-11-02). The post-M7 fix pass gets a delta review under the CLAUDE.md M7 rule; see "Code review (M7), delta" above
+M8: Complete
+
+Documentation scope:
+- apps/web/README.md
+- docs/superpowers/README.md
+- this plan (status line, M9/M10 records)
+Inventoried and left unchanged:
+- docs/features/laundry.md: it describes the API lifecycle and links to the web README for screens, so nothing there changed.
+- docs/history/shipped-slices.md: it notes only slices that changed the API's behavior, and #161 is web-only.
+- docs/README.md: its laundry links are still correct.
+- the spec index row "Laundry orders & lifecycle": still Accepted with Amendment #164. #161 implements it and does not amend it.
+
+Updated artifacts:
+- apps/web/README.md "?detail= redirect" ← post-M7 fix pass, note 4: an empty or invalid detail keeps the other params and the hash, and the hash is not carried to the order page.
+- apps/web/README.md order-page "Cutover helpers" ← note 4: laundryDetailRedirectHref(search, hash).
+- docs/superpowers/README.md plan count 72 → 77 ← this plan (the count was already out of date before it).
+- Plan status line ← the M6–M9 outcomes and M10 N/A.
+(The README's other #161 lines landed in 7bbb0b6 and were checked for accuracy at M7.)
+
+Editorial changes:
+- The M8 Slice Completion Report headings went from #### / ##### to ### / ####, which removes a skipped level under "## Refactoring (M8)".
+Content updates:
+- The README redirect and helper lines, the plan count, and the plan status line, as listed above.
+
+Verification:
+- Links checked: every relative link and in-file anchor in the plan, apps/web/README.md and docs/superpowers/README.md resolves (script check). 0 broken.
+- Heading hierarchy checked: no skipped levels after the fix above.
+- Status consistency checked: the plan header, the M6/M7/M8 reports and this record agree. M6 Complete; M7 Approved; M8 Complete; M9 Complete; M10 N/A; PR none (G8).
+- Cross-references checked: the README names only symbols that exist (laundryDetailRedirectHref, laundryOrderHref, useDetailDrawer open/close). No reference remains to hrefFor, openWithHref, closeWithHref, drawerEntryState or LaundryOrderHrefParams outside the plans.
+- Terminology checked: "order page", "list", "?detail= redirect", "drawer" and "bag" as in §8.4.4 and the existing README.
+- Duplicates and outdated refs checked: the stale "Not wired in yet" code comment was fixed in the fix pass. No contradictory sections found.
+
+Gate: Documentation complete. Code, behavior and contracts unchanged by this stage.
+```
+
+## Workflow validation (M10)
+
+**N/A.** M10 applies only when a slice changes workflow assets (process spec §2.12, step 1). #161 changes no file under `docs/workflows/`, no `workflow.yaml` and no workflow prompt or convention.
+
+### Slice Completion Report (M9)
+
+| Field | Result |
+| --- | --- |
+| Slice | #161 Laundry end-to-end verification and drawer cutover |
+| Tracking | https://github.com/rexescario-dev/clensy-platform/issues/161 |
+| M4 | Plan **Accepted** (revision 4) |
+| M5 | Review **Accepted** (revision 4) |
+| M6 | **Complete** |
+| M7 | **Approved** (independent review). The delta review of the post-M7 fix pass is recorded above: **Approved** |
+| M8 | **Complete** |
+| M9 | **Complete** |
+| Branch | `feat/161-laundry-cutover` |
+| PR | None. G8 (push and PR) is owner-gated |
+| Status | **Ready for closeout**, once the G2 commit of the fix pass, M8 and M9 is approved and G8 is approved |
+
+#### Shipped
+
+- The documentation matches the shipped redirect, including the hash kept on list redirects, and the current helper signature.
+- The plan index count is corrected.
+- The plan records M6–M9, with M10 N/A.
+
+#### Validation
+
+| Check | Result |
+| --- | --- |
+| Tests | **Passed**: web 2558/2558 (no code change at M9) |
+| Typecheck | **Passed** (unchanged since M8) |
+| Lint | **Passed** (unchanged since M8) |
+| Build | **Passed**: `web build` exit 0 (M8) |
+| Package validation | N/A |
+
+#### Next Gate
+
+**Closeout** (§2.12). It starts with the merge: push and PR (G8), then a merge authorized by the owner.
+
 ## Revision 4 changes
 
 **Status: Accepted** at M5 on 2026-11-02 ([M5 decision for revision 4](#m5-decision-for-revision-4)). Raised at M6 Task 6 Step 3, 2026-11-01. Revised twice after independent M5 reviews, then accepted on the third pass. It goes to a **fresh** independent M5 reviewer. That acceptance is necessary but not sufficient: the owner must also explicitly accept this plan before Task 7 starts. **No code for it has been written.** The owner directed that K4 stays **Fail** until the behavior below is implemented and K4 is re-run.
@@ -870,7 +1097,7 @@ Runs only after **both** a fresh independent M5 reviewer accepts revision 4 **an
 
 **Interfaces:** Consumes nothing from earlier tasks. Produces no exported symbol; the editor's props are unchanged.
 
-- [ ] **Step 1: Write the tests** (five failing-first regression tests and one characterization guard). Tests 1–5 each focus the Remove button first, the way a keyboard user activates it, then clicks it. jsdom moves focus to `<body>` when the focused element is removed (the file's `submitFromRecordWeight` helper relies on the same jsdom behavior), so today each test ends with `<body>` focused.
+- [x] **Step 1: Write the tests** (five failing-first regression tests and one characterization guard). Tests 1–5 each focus the Remove button first, the way a keyboard user activates it, then clicks it. jsdom moves focus to `<body>` when the focused element is removed (the file's `submitFromRecordWeight` helper relies on the same jsdom behavior), so today each test ends with `<body>` focused.
 
   ```ts
   function removeByKeyboard(name: string) {
@@ -927,21 +1154,21 @@ Runs only after **both** a fresh independent M5 reviewer accepts revision 4 **an
 
   Test 5 pins the "new object per remove" requirement: two removes in a row choose the same target, so the effect must run again.
 
-- [ ] **Step 2: Run them and confirm they fail for the right reason.**
+- [x] **Step 2: Run them and confirm they fail for the right reason.**
 
   ```bash
   pnpm --filter web exec vitest run lib/laundry-weighing-editor.interaction.test.tsx
   ```
   Expected: tests 1–5 FAIL. The value assertions pass; each fails on `activeElement`, which is `<body>` instead of the input or "Add bag". Test 6 and all existing tests in the file pass.
 
-- [ ] **Step 3: Implement in `laundry-weighing-editor.tsx`.**
+- [x] **Step 3: Implement in `laundry-weighing-editor.tsx`.**
   - Add `const addRef = useRef<HTMLButtonElement>(null);` and pass `ref={addRef}` to the "Add bag" `Button`.
   - Add `const [focusAfterRemove, setFocusAfterRemove] = useState<{ key: number } | { add: true } | null>(null);`. Set it to a new object on every remove.
   - In `removeEntry(key)`, find the removed row's index in the rendered `entries`. If the index is > 0, set `{ key: entries[index - 1].key }`; otherwise (index 0, or −1 if the key is not found) set `{ add: true }`. Sending a not-found key to Add bag is deliberate: Add bag always exists and is enabled. The existing `setFailure(undefined)` and the functional filter stay unchanged. Add a one-line comment: reading the rendered `entries` is safe because React commits each click before the next one, so the list the user clicked on is the list being filtered.
   - Add a `useEffect` on `[focusAfterRemove]`: for `{ key }`, focus `document.getElementById(entryInputId(key))` if it exists; for `{ add: true }`, focus `addRef.current`. Give it a comment in the file's style citing #161 K4.
   - Do not change `focusRow`, the save-settle effect, `addEntry`, `changeEntry`, `touchEntry` or `handleSubmit`.
 
-- [ ] **Step 4: Run and confirm they pass.** Same command as Step 2. Expected: every test in the file passes, including the six new ones. Then:
+- [x] **Step 4: Run and confirm they pass.** Same command as Step 2. Expected: every test in the file passes, including the six new ones. Then:
 
   ```bash
   pnpm --filter web exec vitest run lib/laundry-order-page.interaction.test.tsx lib/laundry-order-page.render.test.tsx
@@ -950,7 +1177,7 @@ Runs only after **both** a fresh independent M5 reviewer accepts revision 4 **an
   ```
   Expected: all pass and exit 0. The order page mounts this editor, so its suites are the regression check.
 
-- [ ] **Step 4b: Break run for test 6 (characterization), outside the commit.**
+- [x] **Step 4b: Break run for test 6 (characterization), outside the commit.**
   - **Behavior broken:** the remove-focus rule runs on every render instead of once per remove. Make it so by deleting the `[focusAfterRemove]` dependency list from the new effect, and nothing else.
   - **Tests covered by the break:** test 6, `does not pull focus back after the user moves on (#161 K4)`.
   - **Run:** the Step 2 command. Expected: test 6 **FAILS** on its `activeElement` assertion, with focus on **the Bag 2 input** (`#laundry-weight-entry-<key>`) instead of "Add bag". The mechanism is the one in Step 1: the blur re-render from `button('Add bag').focus()` (`focusout` → `onBlur` → `touchEntry`) runs the dependency-free effect, which takes focus back before `type` runs. Record the actual focused element from the failure message (its tag and id). Also record every other test that fails under the break; that is information, not a condition.
@@ -958,16 +1185,16 @@ Runs only after **both** a fresh independent M5 reviewer accepts revision 4 **an
   - **Fail closed.** The break run is successful **only** if test 6 fails with focus on the Bag 2 input. If test 6 passes, or fails with `<body>` or any other element focused, the break run is unsuccessful: stop, and the plan returns to M4/M5 (the M6 rule already applied in Task 1).
   - The M6 record notes the break, the command, and the result.
 
-- [ ] **Step 5: README.** In `apps/web/README.md`, in the weighing "Editor" bullet's focus sentences, add: "Removing a bag moves focus to the bag above it, or to Add bag when the first bag is removed." Verify with `grep -n "Removing a bag moves focus" apps/web/README.md`, which prints one line.
+- [x] **Step 5: README.** In `apps/web/README.md`, in the weighing "Editor" bullet's focus sentences, add: "Removing a bag moves focus to the bag above it, or to Add bag when the first bag is removed." Verify with `grep -n "Removing a bag moves focus" apps/web/README.md`, which prints one line.
 
-- [ ] **Step 6: Commit, owner-approval gate G2.** Without approval, leave the changes uncommitted and continue. Proposed, if and when G2 is approved (recording it here does not authorize it):
+- [x] **Step 6: Commit, owner-approval gate G2.** Without approval, leave the changes uncommitted and continue. Proposed, if and when G2 is approved (recording it here does not authorize it):
 
   ```bash
   git add apps/web/components/laundry/laundry-weighing-editor.tsx apps/web/lib/laundry-weighing-editor.interaction.test.tsx apps/web/README.md
   git commit -m "fix(161): keep focus in the weighing editor after a bag is removed"
   ```
 
-- [ ] **Step 7: Resume Task 6 at K4.** Rebuild (`pnpm --filter web build`) and restart the branch server on 3001 under the existing G3 approval. That approval holds only while `clensy-platform-web-1` has stayed stopped since it was given. If the container has been restarted in the meantime, a **fresh G3 approval** is needed before the branch is served again. Re-run K4 at 1280×800 as SCHEDULER on F2. F2 is Weighed, so it offers the editor for a re-weigh. **No weight is recorded:** the K4 re-run touches only Add bag and Remove, so F2's data does not change.
+- [x] **Step 7: Resume Task 6 at K4.** Rebuild (`pnpm --filter web build`) and restart the branch server on 3001 under the existing G3 approval. That approval holds only while `clensy-platform-web-1` has stayed stopped since it was given. If the container has been restarted in the meantime, a **fresh G3 approval** is needed before the branch is served again. Re-run K4 at 1280×800 as SCHEDULER on F2. F2 is Weighed, so it offers the editor for a re-weigh. **No weight is recorded:** the K4 re-run touches only Add bag and Remove, so F2's data does not change.
 
   | Check | Expected |
   | --- | --- |

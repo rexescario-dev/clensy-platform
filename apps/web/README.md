@@ -45,7 +45,7 @@ The laundry order list ([#163](https://github.com/rexescario-dev/clensy-platform
 
 Its only router calls are that push and the `?detail=` redirect's `replace`; each is made as the list leaves or before it mounts, so no native list write can land over one.
 
-**`?detail=` redirect.** `/app/laundry?detail=<id>` links from the drawer era keep working ([lifecycle spec](../../docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md) Amendment #164 §8.4.4). A UUID-shaped `detail` replaces to `/app/laundry/<id>`; an empty or invalid one replaces to the list without `detail`, keeping every other param (`laundryDetailRedirectHref` in `lib/laundry-order-page.ts`). The list and its query are not mounted while it redirects.
+**`?detail=` redirect.** `/app/laundry?detail=<id>` links from the drawer era keep working ([lifecycle spec](../../docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md) Amendment #164 §8.4.4). A UUID-shaped `detail` replaces to `/app/laundry/<id>`; an empty or invalid one replaces to the list without `detail`, keeping every other param and the hash, as the list's own writes do (`laundryDetailRedirectHref` in `lib/laundry-order-page.ts`). The hash is not carried to the order page. The list and its query are not mounted while it redirects.
 
 **Drawer hook.** `lib/use-detail-drawer.ts` serves the eight drawer pages (billing, bookings, catalog, add-ons, cleaners, teams, customers, jobs) with `open` and `close`. Laundry has no drawer since #161.
 - **Opening** pushes the drawer entry natively, with a marker in `history.state` (`__clensyDetailDrawer: <param>`). Next.js keeps that marker across Back, Forward and refresh ([#173](https://github.com/rexescario-dev/clensy-platform/issues/173)).
@@ -110,7 +110,7 @@ Its only router calls are that push and the `?detail=` redirect's `replace`; eac
 
   When the lookup has **failed**, one page-level alert, `<p role="alert" className="text-sm text-red-600">` "Unable to load your account." (`laundry.error.account`), sits between the summary `dl` and the section nav, for any order status. It is never repeated inside a section, and never shown with the order's own `LoadingState` or error state. Actions, Services and Price render exactly as they do while the role loads, and Weighing and Invoice and payment are unchanged. While loading, and for a resolved role (with or without permission for an action), there is no alert. The alert goes away once a later `currentAdmin` read succeeds, for example after `SessionGuard`'s check on navigation. The page-visibility gate and `SessionGuard` are unchanged.
 - **Current section:** `currentLaundryOrderSection` marks the next step forward from `laundryOrderActions`: Weighing for `RECEIVED`, Services when pricing is offered, Invoice and payment when an invoice can be generated and none exists or when Mark paid or Mark awaiting payment is offered, otherwise Actions; none when the role has nothing to do, is still loading, or its lookup failed.
-- **Cutover helpers:** `laundryOrderHref(id)` and `laundryDetailRedirectHref(search)` send list rows, post-create navigation and `?detail=` links here ([#161](https://github.com/rexescario-dev/clensy-platform/issues/161)); the laundry drawer is gone.
+- **Cutover helpers:** `laundryOrderHref(id)` and `laundryDetailRedirectHref(search, hash)` send list rows, post-create navigation and `?detail=` links here ([#161](https://github.com/rexescario-dev/clensy-platform/issues/161)); the laundry drawer is gone.
 
 ## i18n
 
