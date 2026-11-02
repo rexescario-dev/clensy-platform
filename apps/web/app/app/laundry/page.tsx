@@ -1,52 +1,20 @@
 'use client';
 
-import {
-  useCancelLaundryOrderMutation,
-  useCompleteLaundryOrderMutation,
-  useCurrentAdminQuery,
-  useGenerateInvoiceFromOrderMutation,
-  useInvoiceForOrderQuery,
-  useLaundryOrderQuery,
-  useLaundryOrdersQuery,
-  useMarkLaundryOrderAwaitingDeliveryMutation,
-  useMarkLaundryOrderAwaitingPaymentMutation,
-  useMarkLaundryOrderAwaitingPickupMutation,
-  useMarkLaundryOrderDamagedMutation,
-  useMarkLaundryOrderLostMutation,
-  useMarkLaundryOrderPaidMutation,
-  useMarkLaundryOrderReadyMutation,
-  usePriceLaundryOrderMutation,
-  useRefundLaundryOrderMutation,
-  useRejectLaundryOrderMutation,
-  useServicesQuery,
-  useStartLaundryProcessingMutation,
-  useWeighLaundryOrderMutation,
-} from '@clensy/client';
-import type { LaundryOrderStatus } from '@clensy/client';
-import {
-  Button,
-  ConfirmDialog,
-  DetailDrawer,
-  ErrorState,
-  LoadingState,
-  PageHeader,
-  StatusBadge,
-  useToast,
-} from '@clensy/ui';
-import type { StatusTone } from '@clensy/ui';
+import { useCurrentAdminQuery, useLaundryOrdersQuery } from '@clensy/client';
+import { Button, LoadingState, PageHeader, useToast } from '@clensy/ui';
 import {
   LaundryOrderDataTable,
   canReceiveLaundryOrder,
   useClensyTranslations,
   type LaundryOrderRow,
 } from '@clensy/web';
-import Link from 'next/link';
-import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
 import { CreateLaundryOrderDialog } from '../../../components/laundry/create-laundry-order-dialog';
 import { formatMinorUnits } from '../../../lib/format-price';
 import { laundryOrdersQueryVariables } from '../../../lib/laundry-order-list-query';
+import { laundryDetailRedirectHref, laundryOrderHref } from '../../../lib/laundry-order-page';
 import { canViewPath } from '../../../lib/nav-groups';
-import { useDetailDrawer } from '../../../lib/use-detail-drawer';
 import {
   LAUNDRY_ORDER_PAGE_SIZE,
   hasActiveLaundryFilters,
@@ -58,121 +26,33 @@ import {
 } from '../../../lib/use-laundry-order-list-url-state';
 import { useLaundrySearchDraft } from '../../../lib/use-laundry-search-draft';
 
-const STATUS_TONE: Record<LaundryOrderStatus, StatusTone> = {
-  AWAITING_DELIVERY: 'warning',
-  AWAITING_PAYMENT: 'neutral',
-  AWAITING_PICKUP: 'warning',
-  CANCELLED: 'danger',
-  COMPLETED: 'success',
-  DAMAGED: 'danger',
-  LOST: 'danger',
-  PAID: 'warning',
-  PRICED: 'neutral',
-  PROCESSING: 'warning',
-  READY: 'warning',
-  RECEIVED: 'neutral',
-  REFUNDED: 'danger',
-  REJECTED: 'danger',
-  WEIGHED: 'neutral',
-};
-
-// Client mirror of the spec §4.3 transition matrix, for presentation only.
-// The server re-checks every transition (spec §4.9).
-const MATRIX: Record<LaundryOrderStatus, LaundryOrderStatus[]> = {
-  AWAITING_DELIVERY: ['COMPLETED', 'LOST', 'DAMAGED', 'REFUNDED'],
-  AWAITING_PAYMENT: ['PAID', 'CANCELLED'],
-  AWAITING_PICKUP: ['COMPLETED', 'LOST', 'DAMAGED', 'REFUNDED'],
-  CANCELLED: [],
-  COMPLETED: ['REFUNDED'],
-  DAMAGED: ['REFUNDED'],
-  LOST: ['REFUNDED'],
-  PAID: ['PROCESSING', 'REFUNDED'],
-  PRICED: ['AWAITING_PAYMENT', 'PAID', 'CANCELLED'],
-  PROCESSING: ['READY', 'LOST', 'DAMAGED', 'REFUNDED'],
-  READY: ['AWAITING_PICKUP', 'AWAITING_DELIVERY', 'LOST', 'DAMAGED', 'REFUNDED'],
-  RECEIVED: ['WEIGHED', 'REJECTED', 'CANCELLED'],
-  REFUNDED: [],
-  REJECTED: [],
-  WEIGHED: ['PRICED', 'REJECTED', 'CANCELLED'],
-};
-
-type RefVerb =
-  'cancel' | 'complete' | 'markAwaitingDelivery' | 'markAwaitingPayment' | 'markAwaitingPickup' | 'markDamaged' | 'markLost' | 'markPaid' | 'markReady' | 'refund' | 'reject' | 'startProcessing';
-
-const TARGET_TO_VERB: Partial<Record<LaundryOrderStatus, RefVerb>> = {
-  AWAITING_DELIVERY: 'markAwaitingDelivery',
-  AWAITING_PAYMENT: 'markAwaitingPayment',
-  AWAITING_PICKUP: 'markAwaitingPickup',
-  CANCELLED: 'cancel',
-  COMPLETED: 'complete',
-  DAMAGED: 'markDamaged',
-  LOST: 'markLost',
-  PAID: 'markPaid',
-  PROCESSING: 'startProcessing',
-  READY: 'markReady',
-  REFUNDED: 'refund',
-  REJECTED: 'reject',
-};
-
-const DESTRUCTIVE: ReadonlySet<RefVerb> = new Set([
-  'cancel',
-  'reject',
-  'markLost',
-  'markDamaged',
-  'refund',
-]);
-
-const VERB_LABEL: Record<RefVerb, string> = {
-  cancel: 'Cancel order',
-  complete: 'Complete order',
-  markAwaitingDelivery: 'Mark awaiting delivery',
-  markAwaitingPayment: 'Mark awaiting payment',
-  markAwaitingPickup: 'Mark awaiting pickup',
-  markDamaged: 'Mark damaged',
-  markLost: 'Mark lost',
-  markPaid: 'Mark paid',
-  markReady: 'Mark ready',
-  refund: 'Refund order',
-  reject: 'Reject order',
-  startProcessing: 'Start processing',
-};
-
-function formatWeight(grams: number | null): string {
-  return grams === null ? '—' : `${(grams / 1000).toFixed(2)} kg`;
-}
-
-// Client mirror of the #38 spec §4.3 eligibility range (PRICED..COMPLETED
-// minus the exceptional exits), presentation only. The server re-checks.
-const BILLABLE_STATUSES: ReadonlySet<LaundryOrderStatus> = new Set<LaundryOrderStatus>(
-  [
-    'PRICED',
-    'AWAITING_PAYMENT',
-    'PAID',
-    'PROCESSING',
-    'READY',
-    'AWAITING_PICKUP',
-    'AWAITING_DELIVERY',
-    'COMPLETED',
-  ],
-);
-const INVOICE_ROLES: ReadonlySet<string> = new Set(['FINANCE', 'TENANT_OWNER']);
-const PAYMENT_TERMS = [
-  'PAY_NOW',
-  'PAY_ON_COMPLETION',
-  'PAY_ON_DELIVERY',
-] as const;
-
 export default function LaundryPage() {
   return (
     <Suspense fallback={<LoadingState />}>
-      <LaundryPageContent />
+      <LaundryRoute />
     </Suspense>
   );
 }
 
+// `/app/laundry?detail=<id>` links from before the order page keep working
+// (lifecycle spec §8.4.4): the list is not mounted, so its query never runs
+// and no native list write can land over the redirect.
+function LaundryRoute() {
+  const redirectHref = laundryDetailRedirectHref(useSearchParams());
+  return redirectHref === null ? <LaundryPageContent /> : <LaundryDetailRedirect href={redirectHref} />;
+}
+
+function LaundryDetailRedirect({ href }: { href: string }) {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace(href);
+  }, [router, href]);
+  return <LoadingState />;
+}
+
 function LaundryPageContent() {
   const t = useClensyTranslations('laundry');
-  const { hrefFor, setState: setListState, state: listState } = useLaundryOrderListUrlState();
+  const { setState: setListState, state: listState } = useLaundryOrderListUrlState();
   const ordersQuery = useLaundryOrdersQuery({
     fetchPolicy: 'network-only',
     notifyOnNetworkStatusChange: true,
@@ -182,30 +62,27 @@ function LaundryPageContent() {
   const canCreate = canReceiveLaundryOrder(adminData?.currentAdmin.role);
   const principal = adminData?.currentAdmin;
   const toast = useToast();
+  const router = useRouter();
 
   const search = useLaundrySearchDraft(listState.search, (text) =>
     setListState((current) => withLaundryFilterChange(current, { search: text })),
   );
-  // Only the History-API entry points: `open`/`close` would route through
-  // `router.push`/`router.replace`, which the list never mixes with its
-  // native URL writes.
-  const { activeId, closeWithHref, openWithHref } = useDetailDrawer();
 
   function handleClearFilters() {
     search.reset();
     setListState(laundryListFiltersCleared);
   }
 
-  // Until the order page cutover (#161), a row opens the drawer, so
-  // weighing, pricing and lifecycle actions stay reachable. A search still
-  // waiting to commit is committed to the list entry first, so it is not
-  // applied later over the drawer and Back returns to the list as typed.
-  function handleRowClick(row: LaundryOrderRow) {
+  // A row and a successful create open the order page (lifecycle spec
+  // §8.4.4). A search still waiting to commit is written to the list entry
+  // first, natively, so it never applies after the page has left and Back
+  // returns to the list as typed.
+  function openOrder(id: string) {
     const pendingSearch = search.takePending();
     if (pendingSearch !== undefined) {
       setListState((current) => withLaundryFilterChange(current, { search: pendingSearch }));
     }
-    openWithHref(hrefFor((current) => current, { set: { detail: row.id } }));
+    router.push(laundryOrderHref(id));
   }
 
   const [formOpen, setFormOpen] = useState(false);
@@ -218,18 +95,13 @@ function LaundryPageContent() {
     setFormOpen(true);
   }
 
-  // Until the order page cutover (#161), a new order opens in the drawer,
-  // so it can still be weighed; #161 sends it to `/app/laundry/[id]`. It
-  // opens at once, with the id the mutation returned. The list refresh runs
-  // behind it and is not awaited, so a slow or failed refresh cannot keep
-  // it closed; the list shows its own error. Only the destination URL is
-  // built here (live list state, hash, `detail`), so this open is a native
-  // write like the rest of the list.
+  // The new order opens at once, with the id the mutation returned. The
+  // list is left, and its `network-only` query runs again on Back, so it
+  // is not refreshed here (#161 plan decision c).
   function handleCreated(orderId: string) {
     setFormOpen(false);
     toast.success(t('create.success'));
-    openWithHref(hrefFor((current) => current, { set: { detail: orderId } }));
-    void ordersQuery.refetch().catch(() => undefined);
+    openOrder(orderId);
   }
 
   // Rows stay on screen while a new page, sort or filter loads, and after
@@ -256,7 +128,7 @@ function LaundryPageContent() {
         loading={ordersQuery.loading && !effectiveData}
         refreshing={ordersQuery.loading && Boolean(effectiveData)}
         hasError={Boolean(ordersQuery.error)}
-        onRowClick={handleRowClick}
+        onRowClick={(row: LaundryOrderRow) => openOrder(row.id)}
         filters={{ fulfillment: listState.fulfillment, search: search.draft, status: listState.status }}
         filtersActive={hasActiveLaundryFilters(listState) || search.draft.trim() !== ''}
         onSearchChange={search.change}
@@ -283,416 +155,6 @@ function LaundryPageContent() {
         showAddCustomerLink={principal ? canViewPath(principal, '/app/customers') : false}
       />
 
-      {activeId ? (
-        <LaundryDetailDrawer
-          id={activeId}
-          // A drawer entry this page pushed (marked in `history.state`,
-          // #173) closes with `router.back()`, also after Forward or a
-          // refresh. One reached by a direct link closes with a native
-          // write of the live URL without `detail`.
-          onClose={() => closeWithHref(hrefFor((current) => current, { remove: ['detail'] }))}
-          onChanged={() => void ordersQuery.refetch()}
-        />
-      ) : null}
-    </div>
-  );
-}
-
-function LaundryDetailDrawer({
-  id,
-  onClose,
-  onChanged,
-}: {
-  id: string;
-  onClose: () => void;
-  onChanged: () => void;
-}) {
-  const { data, loading, error, refetch } = useLaundryOrderQuery({
-    fetchPolicy: 'network-only',
-    variables: { id },
-  });
-  const { data: servicesData } = useServicesQuery({
-    fetchPolicy: 'network-only',
-    variables: { paging: { limit: 100 } },
-  });
-
-  const [weigh] = useWeighLaundryOrderMutation();
-  const [price] = usePriceLaundryOrderMutation();
-  const [markAwaitingPayment] = useMarkLaundryOrderAwaitingPaymentMutation();
-  const [markPaid] = useMarkLaundryOrderPaidMutation();
-  const [startProcessing] = useStartLaundryProcessingMutation();
-  const [markReady] = useMarkLaundryOrderReadyMutation();
-  const [markAwaitingPickup] = useMarkLaundryOrderAwaitingPickupMutation();
-  const [markAwaitingDelivery] = useMarkLaundryOrderAwaitingDeliveryMutation();
-  const [complete] = useCompleteLaundryOrderMutation();
-  const [cancel] = useCancelLaundryOrderMutation();
-  const [reject] = useRejectLaundryOrderMutation();
-  const [markLost] = useMarkLaundryOrderLostMutation();
-  const [markDamaged] = useMarkLaundryOrderDamagedMutation();
-  const [refund] = useRefundLaundryOrderMutation();
-
-  const refRunners: Record<RefVerb, (orderId: string) => Promise<unknown>> = {
-    cancel: (orderId) => cancel({ variables: { input: { orderId } } }),
-    complete: (orderId) => complete({ variables: { input: { orderId } } }),
-    markAwaitingDelivery: (orderId) =>
-      markAwaitingDelivery({ variables: { input: { orderId } } }),
-    markAwaitingPayment: (orderId) =>
-      markAwaitingPayment({ variables: { input: { orderId } } }),
-    markAwaitingPickup: (orderId) =>
-      markAwaitingPickup({ variables: { input: { orderId } } }),
-    markDamaged: (orderId) => markDamaged({ variables: { input: { orderId } } }),
-    markLost: (orderId) => markLost({ variables: { input: { orderId } } }),
-    markPaid: (orderId) => markPaid({ variables: { input: { orderId } } }),
-    markReady: (orderId) => markReady({ variables: { input: { orderId } } }),
-    refund: (orderId) => refund({ variables: { input: { orderId } } }),
-    reject: (orderId) => reject({ variables: { input: { orderId } } }),
-    startProcessing: (orderId) =>
-      startProcessing({ variables: { input: { orderId } } }),
-  };
-
-  const [actionError, setActionError] = useState<string | undefined>(undefined);
-  const [weightKg, setWeightKg] = useState('');
-  const [baseServiceId, setBaseServiceId] = useState('');
-  const [pending, setPending] = useState<RefVerb | null>(null);
-  const [confirmVerb, setConfirmVerb] = useState<RefVerb | null>(null);
-
-  const order = data?.laundryOrder;
-  const services = servicesData?.services.nodes ?? [];
-
-  async function run(fn: () => Promise<unknown>, failMsg: string) {
-    setActionError(undefined);
-    try {
-      await fn();
-      await refetch();
-      onChanged();
-    } catch {
-      setActionError(failMsg);
-    }
-  }
-
-  if (loading) {
-    return (
-      <DetailDrawer open onClose={onClose} title="Laundry order">
-        <LoadingState />
-      </DetailDrawer>
-    );
-  }
-  if (error || !order) {
-    return (
-      <DetailDrawer open onClose={onClose} title="Laundry order">
-        <ErrorState message="Unable to load laundry order." />
-      </DetailDrawer>
-    );
-  }
-
-  const legalTargets = MATRIX[order.status];
-  const refActions = legalTargets
-    .map((target) => TARGET_TO_VERB[target])
-    .filter((v): v is RefVerb => v !== undefined)
-    .filter((v) => {
-      if (v === 'markAwaitingPickup') return order.fulfillmentType === 'PICKUP';
-      if (v === 'markAwaitingDelivery') return order.fulfillmentType === 'DELIVERY';
-      return true;
-    });
-  const canWeigh = order.status === 'RECEIVED' || order.status === 'WEIGHED';
-  const canPrice = order.status === 'WEIGHED';
-
-  return (
-    <DetailDrawer
-      open
-      onClose={onClose}
-      title={`${order.customer.fullName} — Laundry`}
-    >
-      <div className="flex flex-col gap-6">
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-          <dt className="text-slate-500">Customer</dt>
-          <dd className="text-slate-900">{order.customer.fullName}</dd>
-          <dt className="text-slate-500">Fulfillment</dt>
-          <dd className="text-slate-900">{order.fulfillmentType}</dd>
-          <dt className="text-slate-500">Status</dt>
-          <dd>
-            <StatusBadge
-              label={order.status}
-              tone={STATUS_TONE[order.status]}
-            />
-          </dd>
-          <dt className="text-slate-500">Weight</dt>
-          <dd className="text-slate-900">{formatWeight(order.weightGrams)}</dd>
-          <dt className="text-slate-500">Total</dt>
-          <dd className="text-slate-900">
-            {order.totalMinorUnits === null
-              ? '—'
-              : formatMinorUnits(order.totalMinorUnits)}
-          </dd>
-        </dl>
-
-        {order.lines.nodes.length > 0 ? (
-          <div>
-            <h3 className="mb-2 text-sm font-semibold text-slate-900">Lines</h3>
-            <ul className="flex flex-col gap-2 text-sm">
-              {order.lines.nodes.map((line) => (
-                <li
-                  key={line.id}
-                  className="rounded-md border border-slate-200 p-2"
-                >
-                  <div className="text-slate-900">
-                    {line.serviceId ? 'Service' : 'Add-on'} ·{' '}
-                    {line.pricingSnapshot.unit} · qty{' '}
-                    {line.pricingSnapshot.quantity}
-                  </div>
-                  <div className="text-slate-600">
-                    {formatMinorUnits(line.pricingSnapshot.amountMinorUnits)}
-                    {line.pricingSnapshot.minimumChargeApplied
-                      ? ' (minimum charge applied)'
-                      : ''}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-
-        <InvoiceSection
-          orderId={order.id}
-          status={order.status}
-        />
-
-        {canWeigh ? (
-          <div className="flex items-end gap-2">
-            <div className="flex flex-1 flex-col gap-1">
-              <label htmlFor="laundry-weight" className="text-sm font-medium text-slate-700">
-                Weight (kg)
-              </label>
-              <input
-                id="laundry-weight"
-                type="number"
-                min={0}
-                step="0.01"
-                value={weightKg}
-                onChange={(e) => setWeightKg(e.currentTarget.value)}
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-              />
-            </div>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={weightKg === ''}
-              onClick={() =>
-                void run(
-                  () =>
-                    weigh({
-                      variables: {
-                        input: {
-                          orderId: order.id,
-                          weightGrams: Math.round(Number(weightKg) * 1000),
-                        },
-                      },
-                    }),
-                  'Unable to record weight.',
-                )
-              }
-            >
-              Record weight
-            </Button>
-          </div>
-        ) : null}
-
-        {canPrice ? (
-          <div className="flex items-end gap-2">
-            <div className="flex flex-1 flex-col gap-1">
-              <label htmlFor="laundry-service" className="text-sm font-medium text-slate-700">
-                Base service
-              </label>
-              <select
-                id="laundry-service"
-                value={baseServiceId}
-                onChange={(e) => setBaseServiceId(e.currentTarget.value)}
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-              >
-                <option value="">Select a service</option>
-                {services
-                  .filter((s) => s.active)
-                  .map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-              </select>
-            </div>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={baseServiceId === ''}
-              onClick={() =>
-                void run(
-                  () =>
-                    price({
-                      variables: {
-                        input: {
-                          addOns: [],
-                          baseServiceId,
-                          orderId: order.id,
-                        },
-                      },
-                    }),
-                  'Unable to price order.',
-                )
-              }
-            >
-              Price order
-            </Button>
-          </div>
-        ) : null}
-
-        {refActions.length > 0 ? (
-          <div className="flex flex-wrap gap-2">
-            {refActions.map((verb) => (
-              <Button
-                key={verb}
-                type="button"
-                variant={DESTRUCTIVE.has(verb) ? 'secondary' : 'default'}
-                disabled={pending !== null}
-                onClick={() => {
-                  if (DESTRUCTIVE.has(verb)) {
-                    setConfirmVerb(verb);
-                    return;
-                  }
-                  setPending(verb);
-                  void run(
-                    () => refRunners[verb](order.id),
-                    `Unable to ${VERB_LABEL[verb].toLowerCase()}.`,
-                  ).finally(() => setPending(null));
-                }}
-              >
-                {VERB_LABEL[verb]}
-              </Button>
-            ))}
-          </div>
-        ) : null}
-
-        {actionError ? (
-          <p className="text-sm text-red-600">{actionError}</p>
-        ) : null}
-      </div>
-
-      {confirmVerb ? (
-        <ConfirmDialog
-          open
-          onClose={() => setConfirmVerb(null)}
-          onConfirm={async () => {
-            const verb = confirmVerb;
-            setConfirmVerb(null);
-            await run(
-              () => refRunners[verb](order.id),
-              `Unable to ${VERB_LABEL[verb].toLowerCase()}.`,
-            );
-          }}
-          title={VERB_LABEL[confirmVerb]}
-          description={`This will ${VERB_LABEL[
-            confirmVerb
-          ].toLowerCase()}. This cannot be undone.`}
-          confirmLabel={VERB_LABEL[confirmVerb]}
-        />
-      ) : null}
-    </DetailDrawer>
-  );
-}
-
-function InvoiceSection({
-  orderId,
-  status,
-}: {
-  orderId: string;
-  status: LaundryOrderStatus;
-}) {
-  const { data: adminData } = useCurrentAdminQuery();
-  const role = adminData?.currentAdmin.role;
-  const invoiceQuery = useInvoiceForOrderQuery({
-    fetchPolicy: 'network-only',
-    variables: { laundryOrderId: orderId },
-  });
-  const [generate, { loading: generating }] =
-    useGenerateInvoiceFromOrderMutation();
-  const [terms, setTerms] =
-    useState<(typeof PAYMENT_TERMS)[number]>('PAY_ON_COMPLETION');
-  const [error, setError] = useState<string | undefined>(undefined);
-
-  const invoice = invoiceQuery.data?.invoices.nodes[0];
-  const canGenerate =
-    !invoice &&
-    BILLABLE_STATUSES.has(status) &&
-    role !== undefined &&
-    INVOICE_ROLES.has(role);
-
-  async function handleGenerate() {
-    setError(undefined);
-    try {
-      await generate({
-        variables: { input: { laundryOrderId: orderId, paymentTerms: terms } },
-      });
-      await invoiceQuery.refetch();
-    } catch {
-      setError('Unable to generate invoice.');
-    }
-  }
-
-  return (
-    <div>
-      <h3 className="mb-2 text-sm font-semibold text-slate-900">Invoice</h3>
-      {invoice ? (
-        <div className="flex flex-col gap-1 text-sm">
-          <div className="text-slate-900">{invoice.invoiceNumber}</div>
-          <div className="text-slate-600">
-            {formatMinorUnits(invoice.totalMinorUnits)} · {invoice.paymentStatus}
-          </div>
-          <Link
-            className="text-slate-900 underline"
-            href={`/app/billing?detail=${invoice.id}`}
-          >
-            Open invoice
-          </Link>
-        </div>
-      ) : canGenerate ? (
-        <div className="flex items-end gap-2">
-          <div className="flex flex-1 flex-col gap-1">
-            <label
-              htmlFor="invoice-terms"
-              className="text-sm font-medium text-slate-700"
-            >
-              Payment terms
-            </label>
-            <select
-              id="invoice-terms"
-              value={terms}
-              onChange={(e) =>
-                setTerms(
-                  e.currentTarget.value as (typeof PAYMENT_TERMS)[number],
-                )
-              }
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-            >
-              {PAYMENT_TERMS.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </div>
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={generating}
-            onClick={() => void handleGenerate()}
-          >
-            {generating ? 'Generating…' : 'Generate invoice'}
-          </Button>
-        </div>
-      ) : (
-        <p className="text-sm text-slate-500">
-          No invoice yet.
-        </p>
-      )}
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
     </div>
   );
 }

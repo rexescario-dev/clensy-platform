@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { ToastProvider } from '@clensy/ui';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -16,7 +17,6 @@ const order = {
 };
 
 const page = vi.hoisted(() => ({
-  orderQueryOptions: [] as unknown[],
   ordersError: undefined as Error | undefined,
   ordersQueryOptions: [] as unknown[],
   role: 'TENANT_OWNER' as string | undefined,
@@ -32,20 +32,11 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('@clensy/client', () => {
   const idle = () => [vi.fn(), { loading: false }];
-  const query = () => ({ data: undefined, error: undefined, loading: false, refetch: vi.fn() });
   return {
-    useCancelLaundryOrderMutation: idle,
-    useCompleteLaundryOrderMutation: idle,
     useCurrentAdminQuery: () => ({
       data: page.role === undefined ? undefined : { currentAdmin: { role: page.role } },
     }),
     useCustomersQuery: () => ({ data: { customers: { nodes: [] } } }),
-    useGenerateInvoiceFromOrderMutation: idle,
-    useInvoiceForOrderQuery: query,
-    useLaundryOrderQuery: (options: unknown) => {
-      page.orderQueryOptions.push(options);
-      return query();
-    },
     useLaundryOrdersQuery: (options: unknown) => {
       page.ordersQueryOptions.push(options);
       return {
@@ -56,20 +47,7 @@ vi.mock('@clensy/client', () => {
         refetch: vi.fn(),
       };
     },
-    useMarkLaundryOrderAwaitingDeliveryMutation: idle,
-    useMarkLaundryOrderAwaitingPaymentMutation: idle,
-    useMarkLaundryOrderAwaitingPickupMutation: idle,
-    useMarkLaundryOrderDamagedMutation: idle,
-    useMarkLaundryOrderLostMutation: idle,
-    useMarkLaundryOrderPaidMutation: idle,
-    useMarkLaundryOrderReadyMutation: idle,
-    usePriceLaundryOrderMutation: idle,
     useReceiveLaundryOrderMutation: idle,
-    useRefundLaundryOrderMutation: idle,
-    useRejectLaundryOrderMutation: idle,
-    useServicesQuery: query,
-    useStartLaundryProcessingMutation: idle,
-    useWeighLaundryOrderMutation: idle,
   };
 });
 
@@ -83,7 +61,6 @@ async function renderPage(): Promise<string> {
 }
 
 beforeEach(() => {
-  page.orderQueryOptions = [];
   page.ordersError = undefined;
   page.ordersQueryOptions = [];
   page.role = 'TENANT_OWNER';
@@ -167,15 +144,16 @@ describe('/app/laundry list', () => {
     }
   });
 
-  it('keeps the drawer for ?detail= until the order page cutover, loading that order', async () => {
+  it('is the list and the create modal only: no drawer, no drawer hook (#161)', () => {
+    const source = readFileSync(new URL('../app/app/laundry/page.tsx', import.meta.url), 'utf8');
+    expect(source).not.toMatch(/\bDetailDrawer\b/);
+    expect(source).not.toMatch(/\buseDetailDrawer\b/);
+  });
+
+  it("renders no list and no order query for ?detail=, only the redirect's loading state", async () => {
     page.search = `q=ana&detail=${order.id}`;
     const html = await renderPage();
-    expect(page.orderQueryOptions.at(-1)).toMatchObject({ variables: { id: order.id } });
-    // The drawer mounted; its idle mocked query renders the drawer's error state.
-    expect(html).toContain('Unable to load laundry order.');
-    // The list keeps its own filter alongside the drawer.
-    expect(page.ordersQueryOptions.at(-1)).toMatchObject({
-      variables: { filter: { customer: { fullName: { iLike: '%ana%' } } } },
-    });
+    expect(page.ordersQueryOptions).toEqual([]);
+    expect(html).toContain('role="status"');
   });
 });
