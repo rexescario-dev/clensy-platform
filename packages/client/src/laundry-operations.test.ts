@@ -102,9 +102,10 @@ describe('laundry operations', () => {
 
   // #166: the order page's Invoice card shows terms; one invoice per order
   // (uq_invoice_laundry_order), so the query needs no sort.
+  // #39 adds amountPaidMinorUnits for the payments panel.
   it('requests the invoice card fields for the order invoice', () => {
     expect(selectionsUnder(InvoiceForOrderDocument, 'nodes')).toEqual([
-      ['id', 'invoiceNumber', 'totalMinorUnits', 'amountDueMinorUnits', 'paymentStatus', 'paymentTerms'],
+      ['id', 'invoiceNumber', 'totalMinorUnits', 'amountPaidMinorUnits', 'amountDueMinorUnits', 'paymentStatus', 'paymentTerms'],
     ]);
   });
 });

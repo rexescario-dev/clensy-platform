@@ -663,3 +663,96 @@ Per spec §2 and §8: gateways and customer-initiated payment; voiding invoices 
 - **Release-gate fixture check.** The gate fails closed until `payment_entity` is populated in both worlds; the world fixture is added in Task 3, the commit that creates the table (decision s).
 - **Whole-table truncation in some suites.** `admins.service*` (explicitly) and `billing.service` / `laundry.service` (through their existing `CASCADE`) empty `payment_entity` in the e2e database. This matches those suites' existing practice of emptying whole tables; run e2e only against a disposable database, never one holding browser-check data you want to keep.
 - **Intermediate commits.** Each code task names its boot check; if a boot check fails at a commit, fix it in that task rather than deferring to a later one.
+
+## M6 execution record
+
+Executed on branch `feat/39-laundry-payments` (base `f937355`), tasks 1 to 10, with the Accepted spec and the Accepted plan above. Nothing was pushed. All counts below are the actual results recorded by each task.
+
+### Per-task commits and verification
+
+| Task | Commit | Actual verification |
+| --- | --- | --- |
+| 1 Payments domain | `73d181d feat(39): payments domain — derivation, refundable amount, key syntax` | RED: 3 suites failed on missing modules. GREEN: 10 suites, 97 tests. API `tsc` clean. |
+| 2 Billing writer port | `af3a7f3 feat(39): billing InvoicePaymentWriter port` | RED: 2 suites failed on the missing module. GREEN: 8 suites, 74 tests. API `tsc` clean. |
+| 3 Persistence | `8ef509b feat(39): payment_entity, invoice relation and CreatePayments migration`; follow-up `3c71186 test(39): keep the gate-world invoice's derived pair consistent with its payment` | Migration e2e RED on the missing module, then 12/12. `migration:run` executed `CreatePayments1791043200000`. 13 e2e suites, 89 tests. Release gate 12/12. API unit 79 suites, 1106 tests. |
+| 4 PaymentsService | `8bd85c7 feat(39): PaymentsService record/refund with ordered checks under the invoice lock` | RED: 3 suites failed. GREEN: 6 suites, 103 tests. Boot check `billing.e2e` 5 tests. Full API unit 82 suites, 1180 tests. |
+| 5 GraphQL surface | `3696250 feat(39): Payment GraphQL type, Invoice.payments, record/refund mutations` | RED: 3 unit suites failed on missing modules; 5 guard e2e suites failed (7 tests) on stale inventories. GREEN: unit 9 suites, 45 tests; guard e2e 6 suites, 75 tests; release gate 12/12. Full API unit 84 suites, 1204 tests. Full e2e 53 suites, 493 tests. |
+| 6 E2e, race, isolation, gate | `bb5fe19 test(39): payments e2e, lock race, tenant isolation and release-gate coverage` | payments.e2e 31, payments.concurrency 7, payments e2e filter run five times in a row 50/50 each time. Release gate 12/12 (matrix of 67). |
+| 7 Client operations, money, copy | `f50758e feat(39): payment client operations, sign-aware money, Manila time helpers, copy` | RED: format-price negatives (3), manila-time (module missing), tone map case failed; characterization group passed. GREEN: web 60 files, 2568 tests; `@clensy/web` 16 files, 431 tests; `tsc` clean. |
+| 8 Panel and dialogs | `3a292b2 feat(39): invoice payments panel with record and refund dialogs` | RED: 4 new files failed to load. GREEN: web 64 files, 2665 tests; the four new files alone 97 tests. |
+| 9 Page and drawer wiring | `8107827 feat(39): show invoice payments on the laundry order page and billing drawer` | RED: 11 failed, 2665 passed (2676). GREEN: 65 files, 2676 tests, no act or React warnings. |
+| 10 Verification and record | this commit `docs(39): record M6 implementation` | See "Task 10 verification". |
+
+### Characterization evidence
+
+- **Task 7, "positive formatting unchanged" (`0`, `150`, `2147483647`).** The three cases passed on the pre-Step-3 code. Break: `formatMinorUnits` returned `${whole}.${fraction}` without the `₱` sign. Under the break **3 of 3 failed**, each for the missing sign: `expected '0.00' to be '₱0.00'`, `expected '1.50' to be '₱1.50'`, `expected '21474836.47' to be '₱21474836.47'`. (The break also failed 14 pre-existing consumers of the sign in render and page tests, expected collateral.) Reverted with `git checkout`; the diff was 0 bytes before Step 3; never committed.
+- **Task 9, `keeps the Order payment explanation`.** Passed on the pre-implementation code. Break: the `order.payment.explanation` paragraph was deleted from `LaundryOrderPaymentCard`. The test **failed** (`expected '<div class="rounded-md border border-…' to contain 'The order must be marked paid before processing starts. …'`), as did the existing `case 6` for the same cause. Reverted with `git checkout`; the diff was 0 bytes; never committed.
+
+### Deviations and rulings
+
+1. **Task 3, gate-world payment fixture.** The fixture also sets the world invoice's derived pair (500 / `PARTIALLY_PAID`; later re-derived through `deriveInvoicePayment` in Task 5), following spec §4.4 over the brief's insert-only wording.
+2. **Task 5, guard suites and fakes.** `laundry-billing.tenant-isolation` needed both mutations in its `valueRoots` exemption list (exact names, live-checked). `payments.module.di.spec` gained a fake `BillingModule` export. The `refundableMinorUnits` no-guard rule is pinned by a unit test, because the relation-field check covers only object-typed fields. Two stale count comments were corrected.
+3. **Task 6, decision f barrier waiter match.** `pg_stat_activity.query` is truncated at 1 kB, so `FOR UPDATE` is invisible. A waiter is now a backend whose query contains `FROM "invoice_entity"` and that holds a granted `RowShareLock` on `invoice_entity`; the Lock-wait and `pg_blocking_pids` conditions are unchanged. The lock-removal mutation makes both race tests fail.
+4. **Task 6, "no input field named `paymentStatus` / `amountPaidMinorUnits`".** Narrowed: the pre-existing #38 read-only `InvoiceFilter.paymentStatus` is the only such field, pinned by name and type.
+5. **Task 8, method select.** The method select is pre-selected (`CASH` for record; the original's method for refund) because no placeholder copy exists. **Open owner question.**
+6. **Task 9, relocated tests.** Two tests moved from the static render suite to the jsdom interaction suite (lock forwarding; `InvoiceForOrder` refetched once), because `renderToStaticMarkup` cannot click.
+7. **Task 10, stale client test (found by `pnpm test`).** `packages/client/src/laundry-operations.test.ts` ("requests the invoice card fields for the order invoice") still expected the pre-#39 `InvoiceForOrder` selection and failed with `amountPaidMinorUnits` added by Task 7 (planned: "`InvoiceForOrder` adds `amountPaidMinorUnits`"). No earlier task ran that package's tests. The expectation now includes `amountPaidMinorUnits`; the assertion is otherwise unchanged (not loosened).
+8. **Task 10, database used for Step 2.** The brief's commands read `DB_NAME=clensy` from `.env`, which is the dev database that the Docker stack uses, and the e2e suites truncate tables (see the scheduling risk above). Step 2 was run with `DB_NAME=clensy_e2e` (an existing disposable database) instead; no database was deleted or reset. `clensy` already had `CreatePayments1791043200000` applied by Task 3.
+
+### Task 10 verification (repository root unless stated)
+
+| Command | Result |
+| --- | --- |
+| `pnpm lint` | Passed: 6 of 6 tasks, exit 0 |
+| `pnpm --filter api exec tsc --noEmit` | Passed, exit 0 |
+| `pnpm --filter web exec tsc --noEmit` | Passed, exit 0 |
+| `pnpm test` (first run) | **Failed**: `@clensy/client` `laundry-operations.test.ts` > "requests the invoice card fields for the order invoice" (received an extra `amountPaidMinorUnits`). Deviation 7. |
+| `pnpm test` (after the fix) | Passed, 10 of 10 tasks: ui 11 files / 124 tests, validation 6 / 79, client 2 / 15, `@clensy/web` 16 / 431, api 84 suites / 1204, web 65 files / 2676 |
+| `pnpm build` | Passed, 7 of 7 tasks, exit 0 (turbo output-file warnings only) |
+| `pnpm --filter api migration:run` (`DB_NAME=clensy_e2e`) | `CreatePayments1791043200000` executed successfully |
+| `pnpm --filter api test:e2e` (`DB_NAME=clensy_e2e`) | Passed: 55 suites, 531 tests, including the release gate |
+
+### Browser check
+
+**Browser check not performed — the running Docker API does not serve this branch.** `clensy-platform-api-1` runs `node dist/main.js` from an image started 2026-11-01, and its live schema rejects `recordInvoicePayment` ("Cannot query field \"recordInvoicePayment\" on type \"Mutation\""). Checking this branch needs the API and web images rebuilt and recreated, which changes the owner's running stack, and no role credentials for `TENANT_OWNER`, `CUSTOMER_SUPPORT` and `ANALYST` were available to this run. Nothing was faked or inferred. The planned scenarios (record ₱10.00 cash to Partially paid; overpay; refund the excess to Paid; refund all to Refunded; list and drawer agreement; translated labels; role visibility of Record and Refund) remain unchecked in a real browser. The same behaviors are covered by the jsdom, render and e2e tests above. #209 remains the owner of the formal browser verification.
+
+## Slice Completion Report
+
+| Field | Result |
+| --- | --- |
+| Slice | Laundry invoice payments (#39) |
+| Tracking | https://github.com/rexescario-dev/clensy-platform/issues/39 |
+| M4 | Plan **Accepted** |
+| M5 | Review **Accepted** (round 4) |
+| M6 | **Complete** |
+| M7 | Pending |
+| M8 | Pending |
+| M9 | Pending |
+| Branch | `feat/39-laundry-payments` |
+| PR | None yet |
+| Status | **Ready for M7** |
+
+### Shipped
+
+- Payments domain: per-invoice `PAYMENT` and `REFUND` entries, derivation of the amount paid and the payment status (now including `OVERPAID` and `REFUNDED`), and the refundable-amount rule.
+- `payment_entity` persistence and the `CreatePayments` migration, with tenant-composite foreign keys and an idempotency key.
+- `PaymentsService` record and refund, run under the invoice lock with ordered validation and replay-safe idempotency.
+- GraphQL surface: `Payment`, `Invoice.payments` (offset connection), `recordInvoicePayment` and `refundInvoicePayment` with their role limits.
+- Web: the invoice payments panel with record and refund dialogs and paged history, on the laundry order page and in the billing drawer.
+- Sign-aware money formatting, Manila time helpers and the payment copy.
+- Coverage: end-to-end, lock-race, tenant-isolation and release-gate suites.
+
+### Validation
+
+| Check | Result |
+| --- | --- |
+| Tests | **Passed** (`pnpm test` 10 of 10 tasks after the Task 10 fix; API e2e 55 suites, 531 tests, including the release gate) |
+| Typecheck | **Passed** (API and web `tsc --noEmit`) |
+| Lint | **Passed** (`pnpm lint`) |
+| Build | **Passed** (`pnpm build`) |
+| Package validation | N/A |
+| Browser check | **Not performed** (running stack does not serve this branch; #209 owns the formal check) |
+
+### Next Gate
+
+**M7 — Code Review.** This slice changes application code, authorization, tenant isolation and the schema, so `CLAUDE.md` requires a fresh, independent reviewer on the most capable model that did not implement the change, given the Accepted spec, the Accepted plan and the branch diff. The M7 record must cite that review.
