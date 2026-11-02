@@ -23,6 +23,7 @@ import { LaundryFulfillmentType } from '../../src/modules/laundry/domain/laundry
 import { LaundryOrderStatus } from '../../src/modules/laundry/domain/laundry-order-status';
 import { LaundryOrderLineEntity } from '../../src/modules/laundry/infrastructure/persistence/laundry-order-line.entity';
 import { LaundryOrderEntity } from '../../src/modules/laundry/infrastructure/persistence/laundry-order.entity';
+import { deriveInvoicePayment } from '../../src/modules/payments/domain/derive-invoice-payment';
 import { PaymentMethod } from '../../src/modules/payments/domain/payment-method';
 import { PaymentRecordStatus } from '../../src/modules/payments/domain/payment-record-status';
 import { PaymentType } from '../../src/modules/payments/domain/payment-type';
@@ -349,17 +350,22 @@ export class Fixtures {
     return invoice.id;
   }
 
-  // #39 (decision s): one `COMPLETED` `PAYMENT` against the world invoice,
-  // recorded by the world's `TENANT_OWNER`, with a fresh idempotency key.
-  async payment(world: TenantWorld): Promise<string> {
+  // #39 (decision s): one `COMPLETED` `PAYMENT` against an invoice (the
+  // world invoice by default), recorded by the world's `TENANT_OWNER`, with a
+  // fresh idempotency key.
+  async payment(
+    world: TenantWorld,
+    invoiceId: string = world.invoiceId,
+    amountMinorUnits = 500,
+  ): Promise<string> {
     const payments = this.dataSource.getRepository(PaymentEntity);
     const payment = await payments.save(
       payments.create({
-        invoiceId: world.invoiceId,
+        invoiceId,
         recordedByStaffId: world.principals[Role.TENANT_OWNER].id,
         refundedPaymentId: null,
         tenantId: world.tenantId,
-        amountMinorUnits: 500,
+        amountMinorUnits,
         idempotencyKey: randomUUID(),
         method: PaymentMethod.CASH,
         paidAt: new Date(),
@@ -368,16 +374,30 @@ export class Fixtures {
         type: PaymentType.PAYMENT,
       }),
     );
-    // Spec §4.4: the invoice's derived pair always equals its net paid
-    // (500 of 2000 → PARTIALLY_PAID).
-    await this.dataSource.getRepository(InvoiceEntity).update(
-      { id: world.invoiceId, tenantId: world.tenantId },
-      {
-        amountPaidMinorUnits: 500,
-        paymentStatus: InvoicePaymentStatus.PARTIALLY_PAID,
-      },
-    );
+    // Spec §4.4: the invoice's derived pair always equals its net paid,
+    // re-derived from every row of the invoice (the world invoice: 500 of
+    // 2000 → PARTIALLY_PAID).
+    const invoices = this.dataSource.getRepository(InvoiceEntity);
+    const invoice = await invoices.findOneByOrFail({
+      id: invoiceId,
+      tenantId: world.tenantId,
+    });
+    const derived = deriveInvoicePayment({
+      currentStatus: invoice.paymentStatus,
+      rows: await payments.findBy({ invoiceId, tenantId: world.tenantId }),
+      totalMinorUnits: invoice.totalMinorUnits,
+    });
+    await invoices.update({ id: invoiceId, tenantId: world.tenantId }, derived);
     return payment.id;
+  }
+
+  // #39 refund probe: a fresh invoice with one `COMPLETED` `PAYMENT` of 1000.
+  async invoiceWithPayment(
+    world: TenantWorld,
+  ): Promise<{ invoiceId: string; paymentId: string }> {
+    const invoiceId = await this.invoice(world);
+    const paymentId = await this.payment(world, invoiceId, 1000);
+    return { invoiceId, paymentId };
   }
 
   async staffAdmin(tenantId: string): Promise<string> {

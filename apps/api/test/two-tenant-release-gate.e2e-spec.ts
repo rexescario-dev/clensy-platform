@@ -144,7 +144,7 @@ describe('Two-tenant isolation release gate (#92)', () => {
       ),
     ];
     expect(failures).toEqual([]);
-    expect(matrixKeys).toHaveLength(65);
+    expect(matrixKeys).toHaveLength(67);
     passed.add('1a');
   });
 

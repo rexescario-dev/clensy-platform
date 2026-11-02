@@ -3,6 +3,7 @@
 // root). Same pattern as #82-#86.
 import { getRelations } from '@ptc-org/nestjs-query-graphql/src/decorators';
 import { CustomerType } from '../../../customers/presentation/graphql/customer.type';
+import { PaymentObjectType } from '../../../payments/presentation/graphql/payment.type';
 import { LaundryOrderLineType } from '../../../laundry/presentation/graphql/laundry-order-line.type';
 import { LaundryOrderType } from '../../../laundry/presentation/graphql/laundry-order.type';
 import { InvoiceLineType } from '../../presentation/graphql/invoice-line.type';
@@ -16,7 +17,8 @@ import { InvoiceType } from '../../presentation/graphql/invoice.type';
 // `auth` on any relation into a laundry/invoice type would bypass the tenant
 // predicate. Planning-time inventory: Invoice.laundryOrder (defers to
 // LaundryOrderType's authorizer), LaundryOrder.lines and Invoice.lines
-// (owned via their authorized parent, slice decision 2). A regression guard
+// (owned via their authorized parent, slice decision 2), Invoice.payments
+// (#39; defers to PaymentObjectType's authorizer). A regression guard
 // on relation configuration, not proof of isolation — that is the
 // two-tenant e2e (Task 6).
 describe('Relations targeting laundry / invoice types (tenant isolation, #87)', () => {
@@ -26,6 +28,7 @@ describe('Relations targeting laundry / invoice types (tenant isolation, #87)', 
       LaundryOrderLineType,
       InvoiceType,
       InvoiceLineType,
+      PaymentObjectType,
     ]);
     const owners = [
       ['LaundryOrder', LaundryOrderType],
@@ -51,6 +54,7 @@ describe('Relations targeting laundry / invoice types (tenant isolation, #87)', 
     expect(found.sort()).toEqual([
       'Invoice.laundryOrder',
       'Invoice.lines',
+      'Invoice.payments',
       'LaundryOrder.lines',
     ]);
   });

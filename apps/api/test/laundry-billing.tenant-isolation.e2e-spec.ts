@@ -451,15 +451,23 @@ describe('Laundry & Billing tenant isolation (e2e)', () => {
         'Invoice.laundryOrder',
         'LaundryOrder.lines',
         'Invoice.lines',
+        'Payment.invoice',
         ...LAUNDRY_MUTATIONS.map((name) => `Mutation.${name}`),
         'Mutation.generateInvoiceFromOrder',
       ];
       expect([...found].sort()).toEqual(expected.sort());
       expect(LAUNDRY_MUTATIONS).toHaveLength(15);
-      // Laundry roots that return no laundry/invoice entity type, so they
-      // are not in `found`: the price preview returns a computed estimate
-      // for the principal tenant's order (#159, Amendment #164 §8.4.5).
-      const valueRoots = ['Query.previewLaundryOrderPrice'];
+      // Laundry/invoice-named roots that return no laundry/invoice entity
+      // type, so they are not in `found`: the price preview returns a
+      // computed estimate for the principal tenant's order (#159, Amendment
+      // #164 §8.4.5); the two #39 payment mutations return `Payment` (its
+      // tenant isolation is pinned by the release-gate probes and the
+      // payments suites; `Payment.invoice` is in `expected` above).
+      const valueRoots = [
+        'Query.previewLaundryOrderPrice',
+        'Mutation.recordInvoicePayment',
+        'Mutation.refundInvoicePayment',
+      ];
       // Each exemption must name a live root field, so a renamed or removed
       // root cannot leave a stale entry behind.
       for (const valueRoot of valueRoots) {

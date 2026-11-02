@@ -280,6 +280,12 @@ describe('Relation-field authorization (#106, RFC §4.2)', () => {
       'customer_entity',
     ],
     [
+      'invoice.payments (nestjs-query nested connection, #39)',
+      `query ($id: ID!) { invoice(id: $id) { payments { nodes { id } } } }`,
+      'invoiceId',
+      'payment_entity',
+    ],
+    [
       'booking.team (nestjs-query)',
       `query ($id: ID!) { booking(id: $id) { team { id } } }`,
       'bookingId',
@@ -384,6 +390,8 @@ describe('Relation-field authorization (#106, RFC §4.2)', () => {
         'Cleaner.team',
         'Invoice.customer',
         'Customer.properties',
+        'Invoice.payments',
+        'Payment.invoice',
       ]),
     );
     expect(

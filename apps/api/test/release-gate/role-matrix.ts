@@ -153,6 +153,14 @@ const INVOICE_VIEW: RoleMatrixEntry = {
   ],
   source: `Laundry Invoices §4.7 "VIEW roles"; ${RFC}`,
 };
+const PAYMENT_RECORD: RoleMatrixEntry = {
+  allowed: [TENANT_OWNER, OPS_MANAGER, FINANCE, CUSTOMER_SUPPORT],
+  source: `Laundry Invoice Payments §4.7 "recordInvoicePayment" (#39); ${RFC}`,
+};
+const PAYMENT_REFUND: RoleMatrixEntry = {
+  allowed: [TENANT_OWNER, FINANCE],
+  source: `Laundry Invoice Payments §4.7 "refundInvoicePayment" (#39); ${RFC}`,
+};
 const REST_BOOKING_WRITE: RoleMatrixEntry = {
   allowed: [TENANT_OWNER, OPS_MANAGER, SCHEDULER, CUSTOMER_SUPPORT],
   source:
@@ -171,7 +179,7 @@ const REST_BOOKING_VIEW: RoleMatrixEntry = {
     'REST: Booking tenant isolation plan #85 (Accepted) — BookingController per-route @Roles(...VIEW_ROLES); RFC §4.5; #91 slice decision 1',
 };
 
-// Keys sorted (lint). 59 GraphQL + 5 REST = 64.
+// Keys sorted (lint). 62 GraphQL + 5 REST = 67.
 export const ROLE_MATRIX: Readonly<Record<string, RoleMatrixEntry>> = {
   'DELETE /bookings/:id': REST_BOOKING_WRITE,
   'GET /bookings': REST_BOOKING_VIEW,
@@ -245,6 +253,8 @@ export const ROLE_MATRIX: Readonly<Record<string, RoleMatrixEntry>> = {
     SCHEDULER,
     CUSTOMER_SUPPORT,
   ]),
+  'Mutation.recordInvoicePayment': PAYMENT_RECORD,
+  'Mutation.refundInvoicePayment': PAYMENT_REFUND,
   'Mutation.refundLaundryOrder': laundryVerb('refundLaundryOrder', [
     TENANT_OWNER,
     OPS_MANAGER,

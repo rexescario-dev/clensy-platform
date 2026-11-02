@@ -7,7 +7,7 @@ export type RootClass = 'AUTHENTICATED' | 'PUBLIC' | 'TENANT';
 
 // PUBLIC: RFC §4.2 (only login/logout). AUTHENTICATED: any role
 // (Admin Foundation §4.9). TENANT: tenant business and tenant staff
-// administration — 21 queries and 38 mutations. Keys sorted (lint).
+// administration — 22 queries and 40 mutations. Keys sorted (lint).
 export const ROOT_OPERATION_CLASSIFICATION: Readonly<
   Record<string, RootClass>
 > = {
@@ -40,6 +40,8 @@ export const ROOT_OPERATION_CLASSIFICATION: Readonly<
   'Mutation.markLaundryOrderReady': 'TENANT',
   'Mutation.priceLaundryOrder': 'TENANT',
   'Mutation.receiveLaundryOrder': 'TENANT',
+  'Mutation.recordInvoicePayment': 'TENANT',
+  'Mutation.refundInvoicePayment': 'TENANT',
   'Mutation.refundLaundryOrder': 'TENANT',
   'Mutation.rejectLaundryOrder': 'TENANT',
   'Mutation.removeBooking': 'TENANT',

@@ -100,6 +100,8 @@ const CUSTOM_OBJECT_FIELDS: Record<string, string> = {
   'LaundryPricePreview.lines':
     'Plain value list returned by previewLaundryOrderPrice, which LaundryOrdersService computes for the principal tenant (#159); no resolver of its own.',
   'LoginResult.admin': "The caller's own principal, returned by login.",
+  'Payment.invoice':
+    'PaymentResolver @ResolveField via InvoicesService.getInvoice keyed by the principal tenant (#39).',
   'Service.activePricing':
     'ServiceResolver @ResolveField via request-scoped ActivePricingLoader keyed by the principal tenant (#84).',
   'TenantLabelOverrides.roles':
