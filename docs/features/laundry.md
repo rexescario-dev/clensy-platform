@@ -44,7 +44,7 @@ Not drawn, to keep the diagram readable:
 
 On the order page, the Actions section offers these transitions as buttons from `laundryOrderActions` (the same matrix intersected with the fulfillment branch and the caller's role). Cancel, reject, lost, damaged and refund are confirmed first. The server re-checks every transition, and the page shows its refusal message when it rejects one. The page's Activity section shows only the order's created and updated times and status: audit rows are written for each transition but no API reads them, so there is no history view (#165).
 
-Which roles may call each mutation is pinned in [`role-matrix.ts`](../../apps/api/test/release-gate/role-matrix.ts). Invoices are generated from an order with `generateInvoiceFromOrder` (module `billing`).
+Which roles may call each mutation is pinned in [`role-matrix.ts`](../../apps/api/test/release-gate/role-matrix.ts). Invoices are generated from an order with `generateInvoiceFromOrder` (module `billing`); money is recorded against them as described under [Payments and refunds](#payments-and-refunds-39).
 
 ## Weighing
 
@@ -73,6 +73,17 @@ sequenceDiagram
 - **The snapshot is authoritative** for what was charged. `pricingSnapshotPricingRuleId` is a soft pointer with no FK.
 - Lines priced before migration `1790956800000-AddLaundryLineDescription` carry the name as it was when the migration ran, not when they were priced. See [database migrations](../development/database-migrations.md#1790956800000-addlaundrylinedescription).
 - **Guards.** The preview query is classified in the root-operation inventory, the release-gate role matrix and probes, the tenant-read authorizer sweep, and the laundry/billing schema guard. The release-gate outcome classifier has one rule limited to `previewLaundryOrderPrice`: it reads each line's single `serviceId`/`addOnId` target and never treats the money total as a count.
+
+## Payments and refunds (#39)
+
+Staff record payments and refunds against an invoice; the binding contract is the Accepted [laundry payments spec](../superpowers/specs/2026-11-02-laundry-payments-design.md) and Amendment #39 (§9) to the [laundry invoices spec](../superpowers/specs/2026-09-06-laundry-invoices-design.md#9-amendment-39--payment-recording). This section records the behavior that is easy to get wrong; the spec has the rules and worked examples.
+
+- **Ledger.** Module `payments` owns an append-only `Payment` ledger per invoice. A row is a `PAYMENT` (money in) or a `REFUND` (money out) with a positive amount in minor units; there is no edit or delete. A refund references the payment it returns and cannot exceed that payment's refundable amount.
+- **Derived figures.** `Invoice.amountPaidMinorUnits` and `paymentStatus` are never set by a client. They are re-derived from all `COMPLETED` rows inside the write transaction, under a lock on the invoice. The status can now be `UNPAID`, `PARTIALLY_PAID`, `PAID`, `OVERPAID` (net paid above the total) or `REFUNDED` (everything refunded); `VOID` invoices refuse writes.
+- **Mutations and roles.** `recordInvoicePayment` is for `TENANT_OWNER`, `OPS_MANAGER`, `FINANCE` and `CUSTOMER_SUPPORT`; `refundInvoicePayment` is for `TENANT_OWNER` and `FINANCE`. Payments are read through the nested `Invoice.payments` connection (oldest first) by all six tenant roles.
+- **Idempotency.** Each write carries a client-made UUID `idempotencyKey`, unique per tenant. A replay of the same write returns the existing row; the same key with different content is a conflict.
+- **No order coupling.** Recording or refunding a payment does not change the laundry order's status, and order transitions write no payment rows (the order's `PAID` and `REFUNDED` statuses are separate from the invoice's payment status).
+- **Web.** One payments panel shows the figures, status, history (with "Load more") and the Record and Refund dialogs on the order page's Invoice and payment section and in the `/app/billing` invoice drawer; see [`apps/web/README.md`](../../apps/web/README.md#invoice-payments-panel). The schema is in [database migrations](../development/database-migrations.md#1791043200000-createpayments).
 
 ## Tenancy
 
