@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted** (M5), 2026-11-02 — M4 revision 4, with the round 4 non-blocking notes folded in (wording and test-setup clarifications only). **Delivery state (2026-11-03):** M6 Complete; M7 Approved for merge (round 1 REQUEST CHANGES at `41eec67`; fix round `8d7abf8`/`73e324e`; re-check APPROVE at `73e324e`, 2026-11-03); M8 Complete (`c063368`); M9 Complete; M10 N/A. Not merged; PR none (push and PR are owner-gated). |
+| Status | **Accepted** (M5), 2026-11-02 — M4 revision 4, with the round 4 non-blocking notes folded in (wording and test-setup clarifications only). **Delivery state (2026-11-03):** M6 Complete; M7 Approved for merge (round 1 REQUEST CHANGES at `41eec67`; fix round `8d7abf8`/`73e324e`; re-check APPROVE at `73e324e`, 2026-11-03); M8 Complete (`c063368`); M9 Complete; M10 N/A. **Slice complete:** merged in PR [#220](https://github.com/rexescario-dev/clensy-platform/pull/220) (`75cdab4`, 2026-11-03), and #39 is closed. See [Closeout](#closeout-2026-11-03). |
 | M5 history | **Round 1** (2026-11-02, fresh independent reviewer, read-only, nothing executed): **REVISE**. Three blockers: (1) the new staff/invoice references break `admins.service*.e2e-spec.ts` (bare `TRUNCATE` of a referenced table) and `billing.service.e2e-spec.ts` (explicit entity list), and the Task 3 commit would not boot; (2) "Load more" would not append rows under Apollo 3.14 with no merge policy, and the planned test could not detect it; (3) already-passing `formatMinorUnits` cases were not labelled characterization tests. Decisions b, c, l accepted; f accepted with amendments; j accepted with the rationale corrected. Revision 2 resolves all three blockers, both amendments and the non-blocking notes — see the [M5 round 1 resolution table](#m5-round-1-resolution). **Round 2** (2026-11-02, a different fresh independent reviewer, read-only, nothing executed): **REVISE**. Confirmed the three round 1 blockers resolved and decisions f and j accepted. Two new blockers: (N1) Task 5 adds a GraphQL type, a custom object field and two root mutations but no task updated the guard suites that pin the live surface (`tenant-read-authorizers`, `laundry-billing.tenant-isolation`, and the hard-coded counts in `root-operation-authorization` and `two-tenant-release-gate`); (N2) the Task 7 characterization break ("lose centavos padding") fails only the `0` case. Seven non-blocking notes. Revision 3 resolves both blockers and all seven notes — see the [M5 round 2 resolution table](#m5-round-2-resolution). **Round 3** (2026-11-02, focused re-check by a third fresh independent reviewer, read-only, nothing executed): **REVISE**. N1, N2 and the seven round 2 notes confirmed resolved, with evidence; decisions b, c, l, f, j unchanged; no spec contradiction. One blocker present in every revision: (B1) existing `apps/web` suites broken by Tasks 7 and 9 and named by no task — the four-entry tone test, the laundry page interaction suite, and stubbing/case-5 changes in two Task 9 files. Four non-blocking notes. Revision 4 resolves B1 and the four notes — see the [M5 round 3 resolution table](#m5-round-3-resolution). **Round 4** (2026-11-02, focused B1 re-check by a fourth fresh independent reviewer on the most capable model, read-only, nothing executed; it diffed revision 4 against revision 3 and read the affected web, API and release-gate sources): **ACCEPT**. B1(a), B1(b), B1(c) and the four round 3 notes resolved with file:line evidence; no new blocker; no contradiction with spec §4.10. Five non-blocking notes, folded in after acceptance (see the [M5 round 4 notes](#m5-round-4-notes)). **M5 decision:** Accepted by the project owner, 2026-11-02. **Evidence limitation:** every review round was read-only; no plan step or `Expected:` line has been executed — they remain predictions until M6 records actual results. |
 | Date | 2026-11-02 |
 | Tracking issue | [#39](https://github.com/rexescario-dev/clensy-platform/issues/39) "Payments & Financial Lifecycle for Laundry Invoices" |
@@ -957,3 +957,86 @@ Gate: Documentation complete. Code, behavior and contracts unchanged by this sta
 ## Workflow validation (M10)
 
 **N/A.** M10 applies only when a slice changes workflow assets (process spec §2.12, step 1). #39 changes no file under `docs/workflows/`, no `workflow.yaml` and no workflow prompt or convention (verified: `git diff --name-only d9a7c54..HEAD -- docs/workflows workflow.yaml` is empty).
+
+## Closeout (2026-11-03)
+
+**Authorization.**
+- 2026-11-03, "make PR": push `feat/39-laundry-payments` and open PR #220.
+- 2026-11-03, "merge, closeout": merge #220 and run closeout.
+
+**M1–M10 check before the merge** (process spec §2.12, step 1):
+
+| Stage | Outcome |
+| --- | --- |
+| M1 | Passed: the installed prompt library is present |
+| M2 / M3 | Passed: the payments spec and Amendment #39 are Accepted (2026-11-02), with the M3 evidence limitation recorded in the spec |
+| M4 / M5 | Passed: this plan is Accepted (revision 4, 2026-11-02) after four read-only rounds by fresh independent reviewers |
+| M6 | Passed: [M6 execution record](#m6-execution-record) and its Slice Completion Report, including the M6 final whole-branch review and fix wave `0610d2e` |
+| M7 | Passed: [Approved for merge](#code-review-m7-record). Round 1 requested changes; fix round `8d7abf8` / `73e324e`; the fresh re-check approved at `73e324e` |
+| M8 | Passed: [Complete](#refactoring-m8) (`c063368`); a fresh delta review confirmed behavior is preserved |
+| M9 | Passed: [Complete](#documentation-m9) (`2bf489e`, corrections `22122b8`), confirmed by a scoped re-check |
+| M10 | Does not apply ([N/A](#workflow-validation-m10)) |
+
+No applicable stage was missing, so no stage was skipped or overridden.
+
+**Merge verification.**
+- PR #220 was merged with a merge commit at 2026-11-03T01:56:31Z, as `75cdab4`. The head was `22122b8`.
+- `22122b8` is an ancestor of `main`.
+- #39 is closed (by the PR's "Closes #39").
+- CI on the head passed all four checks: API e2e, Lint, Release gate and Test. This was the first full run of every check on the final commit; locally only targeted suites ran after `0610d2e`.
+
+**Post-merge cleanup.**
+- `feat/39-laundry-payments` was deleted locally and on the remote. The local `docs/39-laundry-payments-spec` branch (its commits are in `main`) was deleted. It was never pushed.
+- **The executor's gitignored workspace is kept.** `.superpowers/sdd/2026-11-02-laundry-payments-plan/` holds the per-task briefs and reports, the review packages and the progress ledger with every deferred minor finding and ruling. It is not in git.
+- **Local data:** the local `clensy` database holds only rows created on 2026-11-02 at 09:40 UTC (2 tenant owners, 1 tenant, 5 customers, 5 laundry orders, 5 invoices, no payments). Earlier e2e runs in M6 probably used this database (the `.env` default) instead of a disposable one, so older local data may have been replaced. This is inferred, not proven, and nothing was done to the database. Later runs used `clensy_e2e`.
+- **Services:** the Docker `clensy-platform-api-1` container was not rebuilt and still serves pre-#39 code. No branch server is running.
+
+**Final M7 position.** Approved for merge. No blockers remain.
+
+**Limits that stand:**
+- No browser check was made; #209 owns it.
+- The full CI set was not rerun locally after `0610d2e`; CI on PR #220 passed on the final commit.
+
+**Follow-ups** (not filed as issues; for #209 and later work):
+- #209: the browser's own "Please select an item" bubble may appear before the inline "Choose how the money moved."; an older server error can stay visible beside a new validation error; refund buttons share one accessible name; the billing drawer shows total, paid, due and status twice (decision o, spec-literal).
+- `modules/jobs` and `modules/catalog` still carry their own copies of the Postgres unique-violation helper (a possible later M8 item).
+- The remaining deferred minor findings are listed in the progress ledger and triaged as safe to follow.
+
+## Final Slice Completion Report
+
+| Field | Result |
+| --- | --- |
+| Slice | #39 Payments & Financial Lifecycle for Laundry Invoices |
+| Tracking | https://github.com/rexescario-dev/clensy-platform/issues/39 |
+| M4 | Plan **Accepted** (revision 4) |
+| M5 | Review **Accepted** (round 4) |
+| M6 | **Complete** |
+| M7 | **Approved** (re-check after round 1) |
+| M8 | **Complete** |
+| M9 | **Complete** |
+| Branch | `feat/39-laundry-payments`, deleted after the merge |
+| PR | https://github.com/rexescario-dev/clensy-platform/pull/220 (merged, `75cdab4`) |
+| Status | **Slice complete** |
+
+### Shipped
+
+- An append-only payment ledger per laundry invoice (`PAYMENT` and `REFUND`), with tenant-composite foreign keys, a per-tenant idempotency key and the `CreatePayments` migration.
+- `recordInvoicePayment` and `refundInvoicePayment` with ordered checks under an invoice lock, replay-safe retries and audit; the invoice's amount paid and status (now including `OVERPAID` and `REFUNDED`) derived from the ledger.
+- `Invoice.payments` and `Payment.refundableMinorUnits` on the GraphQL surface, covered by the guard suites and the two-tenant release gate.
+- The invoice payments panel on the laundry order page and in the billing drawer: explicit method choice, Manila-time paid-at, history with Load more, translated status labels and "Overpaid by ₱x".
+- Docs: the laundry feature guide, the web README, the spec index and the shipped-slices history.
+
+### Validation
+
+| Check | Result |
+| --- | --- |
+| Tests | **Passed**: CI Test and API e2e on `22122b8`; locally (M6) API 1204, web 2676, `@clensy/web` 431, client 15, API e2e 55 suites / 531 tests |
+| Typecheck | **Passed** |
+| Lint | **Passed** (also in CI) |
+| Build | **Passed** (M6) |
+| Release gate | **Passed** (CI) |
+| Package validation | N/A |
+
+### Next Gate
+
+None — slice complete
