@@ -2,14 +2,16 @@ import { QueryFailedError } from 'typeorm';
 
 const POSTGRES_UNIQUE_VIOLATION = '23505';
 
-// Constraint-scoped unique-violation check shared by billing and payments
-// (`catalog` and `jobs` still carry their own copies). Accepts a
-// `{ code, constraint }` driver shape so unit tests do not reconstruct a
-// TypeORM `QueryFailedError`; also unwraps `QueryFailedError.driverError` for the real Postgres path.
+// Constraint-scoped unique-violation check shared across modules (billing
+// and payments use it; `catalog` and `jobs` still carry their own copies).
+// Accepts a `{ code, constraint }` driver shape so unit tests do not
+// reconstruct a TypeORM `QueryFailedError`; also unwraps
+// `QueryFailedError.driverError` for the real Postgres path.
 //
-// `generateInvoiceFromOrder` uses this ONLY for `uq_invoice_laundry_order`
-// (an expected race -> `ConflictException`). A `uq_invoice_number` violation
-// is an integrity failure, never a business conflict, and is rethrown as-is.
+// Callers match one named constraint, so only an expected race becomes a
+// business conflict (for example `uq_invoice_laundry_order`); any other
+// unique violation, such as `uq_invoice_number`, is an integrity failure and
+// is rethrown as-is.
 export function isPostgresUniqueViolation(
   error: unknown,
   constraint: string,

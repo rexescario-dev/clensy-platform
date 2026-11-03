@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted** (M5), 2026-11-02 — M4 revision 4, with the round 4 non-blocking notes folded in (wording and test-setup clarifications only). **Delivery state (2026-11-03):** M6 Complete; M7 Approved for merge (round 1 REQUEST CHANGES, fix round `8d7abf8`/`73e324e`, re-check APPROVE, 2026-11-03); M8 Complete (`c063368`); M9 Complete; M10 N/A. Not merged; PR none (push and PR are owner-gated). |
+| Status | **Accepted** (M5), 2026-11-02 — M4 revision 4, with the round 4 non-blocking notes folded in (wording and test-setup clarifications only). **Delivery state (2026-11-03):** M6 Complete; M7 Approved for merge (round 1 REQUEST CHANGES at `41eec67`; fix round `8d7abf8`/`73e324e`; re-check APPROVE at `73e324e`, 2026-11-03); M8 Complete (`c063368`); M9 Complete; M10 N/A. Not merged; PR none (push and PR are owner-gated). |
 | M5 history | **Round 1** (2026-11-02, fresh independent reviewer, read-only, nothing executed): **REVISE**. Three blockers: (1) the new staff/invoice references break `admins.service*.e2e-spec.ts` (bare `TRUNCATE` of a referenced table) and `billing.service.e2e-spec.ts` (explicit entity list), and the Task 3 commit would not boot; (2) "Load more" would not append rows under Apollo 3.14 with no merge policy, and the planned test could not detect it; (3) already-passing `formatMinorUnits` cases were not labelled characterization tests. Decisions b, c, l accepted; f accepted with amendments; j accepted with the rationale corrected. Revision 2 resolves all three blockers, both amendments and the non-blocking notes — see the [M5 round 1 resolution table](#m5-round-1-resolution). **Round 2** (2026-11-02, a different fresh independent reviewer, read-only, nothing executed): **REVISE**. Confirmed the three round 1 blockers resolved and decisions f and j accepted. Two new blockers: (N1) Task 5 adds a GraphQL type, a custom object field and two root mutations but no task updated the guard suites that pin the live surface (`tenant-read-authorizers`, `laundry-billing.tenant-isolation`, and the hard-coded counts in `root-operation-authorization` and `two-tenant-release-gate`); (N2) the Task 7 characterization break ("lose centavos padding") fails only the `0` case. Seven non-blocking notes. Revision 3 resolves both blockers and all seven notes — see the [M5 round 2 resolution table](#m5-round-2-resolution). **Round 3** (2026-11-02, focused re-check by a third fresh independent reviewer, read-only, nothing executed): **REVISE**. N1, N2 and the seven round 2 notes confirmed resolved, with evidence; decisions b, c, l, f, j unchanged; no spec contradiction. One blocker present in every revision: (B1) existing `apps/web` suites broken by Tasks 7 and 9 and named by no task — the four-entry tone test, the laundry page interaction suite, and stubbing/case-5 changes in two Task 9 files. Four non-blocking notes. Revision 4 resolves B1 and the four notes — see the [M5 round 3 resolution table](#m5-round-3-resolution). **Round 4** (2026-11-02, focused B1 re-check by a fourth fresh independent reviewer on the most capable model, read-only, nothing executed; it diffed revision 4 against revision 3 and read the affected web, API and release-gate sources): **ACCEPT**. B1(a), B1(b), B1(c) and the four round 3 notes resolved with file:line evidence; no new blocker; no contradiction with spec §4.10. Five non-blocking notes, folded in after acceptance (see the [M5 round 4 notes](#m5-round-4-notes)). **M5 decision:** Accepted by the project owner, 2026-11-02. **Evidence limitation:** every review round was read-only; no plan step or `Expected:` line has been executed — they remain predictions until M6 records actual results. |
 | Date | 2026-11-02 |
 | Tracking issue | [#39](https://github.com/rexescario-dev/clensy-platform/issues/39) "Payments & Financial Lifecycle for Laundry Invoices" |
@@ -773,7 +773,7 @@ One Important finding: the B6, B7 and A2 server messages named amounts as "N min
 
 Fix-wave verification (`DB_NAME=clensy_e2e` for e2e): API `tsc` clean; payments unit 134 passed; payments e2e 50 passed; web 2677 passed; web `tsc` and lint clean; `@clensy/web` 431 passed. A scoped re-review verdicted all five findings ADDRESSED with no new breakage.
 
-Not changed, for the owner: the billing drawer shows total, paid, due and status twice (decision o, spec-literal; raise at #209); the method field is a native `<select>` as the plan specified; the payment method is pre-selected (CASH for a record, the original's method for a refund). Twenty-nine deferred minors from the task reviews were triaged as safe to follow after merge.
+Not changed, for the owner: the billing drawer shows total, paid, due and status twice (decision o, spec-literal; raise at #209); the method field is a native `<select>` as the plan specified; the payment method is pre-selected (CASH for a record, the original's method for a refund) (Superseded at M7: B1, fixed in `8d7abf8`; the method now has no default). Twenty-nine deferred minors from the task reviews were triaged as safe to follow after merge.
 
 Status remains **Ready for M7**.
 
@@ -781,10 +781,31 @@ Status remains **Ready for M7**.
 
 A fresh independent reviewer on the most capable model (`CLAUDE.md` rule) reviewed the Accepted spec, this plan and the branch diff.
 
-- **Round 1: REQUEST CHANGES.** The M6 final-review fix wave `0610d2e` (refund and limit amounts named in pesos; paid-at error and table header copy) and the fix round `8d7abf8` (require an explicit payment method; show a current reason when a payment is refused) and `73e324e` (VOID refusal e2e and duplicate-key conflict unit test) addressed the findings.
-- **Re-check (fresh independent, 2026-11-03): APPROVE.** Approved for merge.
+- **Round 1 (at `41eec67`): REQUEST CHANGES.** One blocker, B1: the payment method was pre-selected (CASH for a record, the original's method for a refund), so the spec's "method (required)" was never checked. Non-blocking: (1) a refused submit (page lock held by another action) showed no error or a stale one; (2) repeated "Refund payment" accessible names (→ #209); (3) the VOID refusal was only unit-tested; (4) the duplicate-key 409 path was untested with a real `QueryFailedError`; (5) a malformed `paidAt` is caught by `@IsDate` at the boundary (info); (6) migration `down()` drops ledger rows (info; documented). The billing drawer's duplicated figures were judged not a spec violation (UX note for #209); the `paymentStatus` filter check was judged correct.
+- **Fix round:** `8d7abf8` (require an explicit payment method; show a current reason when a payment is refused) resolved B1 and finding 1; `73e324e` (VOID refusal e2e; duplicate-key conflict unit test with a real `QueryFailedError`) resolved findings 3 and 4. Finding 2 is deferred to #209; findings 5 and 6 needed no change. (`0610d2e` is the M6 final-review fix wave recorded above, not an M7 fix.)
+- **Re-check (fresh independent, 2026-11-03, at `73e324e`): APPROVE** — Approved for merge. B1 and findings 1, 3 and 4 confirmed resolved. The reviewer ran four web test files (107 tests) and the payments service spec (71 tests).
 - **Two non-blocking notes, for #209:** (1) the native `required` on the method `<select>` likely shows the browser's own bubble before the inline "Choose how the money moved."; (2) an earlier server alert can stay visible beside a new inline validation error.
-- **Verification gaps, stated honestly:** the full CI suite was not rerun after `0610d2e`, `8d7abf8` and `73e324e` (targeted suites only); no browser check was made (#209).
+- **Verification gaps, stated honestly:** the full CI suite was not rerun after `0610d2e`, `8d7abf8`, `73e324e`, `c063368` or the M9 docs commits (targeted suites only); no browser check was made (#209); a possible dev-database data loss is inferred, not proven.
+
+### Slice Completion Report (M7)
+
+| Field | Result |
+| --- | --- |
+| Slice | #39 Laundry invoice payments & refunds |
+| Tracking | https://github.com/rexescario-dev/clensy-platform/issues/39 |
+| M4 | Plan **Accepted** |
+| M5 | Review **Accepted** (round 4) |
+| M6 | **Complete** |
+| M7 | **Approved** (fresh independent re-check, 2026-11-03) |
+| M8 | Pending |
+| M9 | Pending |
+| Branch | `feat/39-laundry-payments` |
+| PR | None |
+| Status | **Ready for M8** |
+
+#### Next Gate
+
+**M8 — Refactoring**
 
 ## Refactoring (M8)
 
@@ -814,6 +835,7 @@ Before: api tsc --noEmit exit 0; api jest src/modules/payments src/modules/billi
 After: api tsc --noEmit exit 0; same api jest: 36 suites, 295 tests passed; same web vitest: 114 passed; eslint (api: the three changed files; web: the test file) exit 0; prettier --check clean on the api files. No e2e, migration or database run.
 
 Externally observable behavior changes: None
+Delta review: confirmed behavior-preserving.
 
 Gate: Complete — proceed to M9.
 ```
@@ -886,19 +908,17 @@ Content updates:
 - As listed above.
 
 Verification:
-- Links checked: every relative link and in-file anchor in the touched files resolves (script check, see the run in the report).
+- Links checked: 0 broken relative links or anchors in the touched files (script check).
 - Heading hierarchy checked: new sections are ## with no skipped level; the plan's M8/M9 reports use ### and ####.
 - Status consistency checked: Accepted specs and plan; M7 Approved for merge; not merged; PR none.
 - Cross-references checked: the web README names only symbols that exist; migration anchor #1791043200000-createpayments exists.
 - Terminology checked: payment, refund, ledger, amount paid, amount due, OVERPAID, REFUNDED as in spec §3.
 - Duplicates / outdated refs checked: none found.
 
+The delta review's corrections (web README payments section, M7 record, M10 placement, helper comment) were applied in the follow-up docs commit.
+
 Gate: Documentation complete. Code, behavior and contracts unchanged by this stage.
 ```
-
-## Workflow validation (M10)
-
-**N/A.** M10 applies only when a slice changes workflow assets (process spec §2.12, step 1). #39 changes no file under `docs/workflows/`, no `workflow.yaml` and no workflow prompt or convention (verified: `git diff --name-only d9a7c54..HEAD -- docs/workflows workflow.yaml` is empty).
 
 ### Slice Completion Report (M9)
 
@@ -934,3 +954,6 @@ Gate: Documentation complete. Code, behavior and contracts unchanged by this sta
 
 **Closeout** (§2.12), beginning with the owner-gated push and PR, then a merge the owner authorizes.
 
+## Workflow validation (M10)
+
+**N/A.** M10 applies only when a slice changes workflow assets (process spec §2.12, step 1). #39 changes no file under `docs/workflows/`, no `workflow.yaml` and no workflow prompt or convention (verified: `git diff --name-only d9a7c54..HEAD -- docs/workflows workflow.yaml` is empty).
