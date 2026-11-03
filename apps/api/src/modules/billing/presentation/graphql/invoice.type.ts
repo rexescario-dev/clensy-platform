@@ -17,6 +17,7 @@ import { tenantReadAuthorizer } from '../../../../platform/auth/authorization/te
 import { Role } from '../../../../platform/auth/domain/role';
 import { CustomerType } from '../../../customers/presentation/graphql/customer.type';
 import { LaundryOrderType } from '../../../laundry/presentation/graphql/laundry-order.type';
+import { PaymentObjectType } from '../../../payments/presentation/graphql/payment.type';
 import { InvoicePaymentStatus } from '../../domain/invoice-payment-status';
 import { InvoicePaymentTerms } from '../../domain/invoice-payment-terms';
 import { InvoiceLineType } from './invoice-line.type';
@@ -87,6 +88,24 @@ const relationReadOpts = {
   maxResultsSize: PLATFORM_PAGE_MAX,
   nullable: false,
   relationName: 'lines',
+  remove: { enabled: false },
+  update: { enabled: false },
+})
+// #39 spec §4.7: the invoice's payments and refunds, oldest first; `id`
+// makes the order total. Authorized by the root operation that reaches it;
+// `PaymentObjectType`'s tenant-read authorizer re-applies the tenant
+// predicate (decision l: no `auth` override here).
+@OffsetConnection('payments', () => PaymentObjectType, {
+  defaultResultSize: PLATFORM_PAGE_DEFAULT,
+  defaultSort: [
+    { direction: SortDirection.ASC, field: 'paidAt' },
+    { direction: SortDirection.ASC, field: 'createdAt' },
+    { direction: SortDirection.ASC, field: 'id' },
+  ],
+  enableTotalCount: false,
+  maxResultsSize: PLATFORM_PAGE_MAX,
+  nullable: false,
+  relationName: 'payments',
   remove: { enabled: false },
   update: { enabled: false },
 })

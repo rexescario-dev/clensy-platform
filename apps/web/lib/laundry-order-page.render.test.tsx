@@ -60,6 +60,8 @@ function order(overrides: Record<string, unknown> = {}) {
 
 const page = vi.hoisted(() => ({
   id: '',
+  // #39: `currentAdmin.id`, the payments panel's viewer.
+  viewerId: 'staff-1',
   // Every call of the catalog pickers and of the pricing mutation.
   addOnsCalls: [] as unknown[],
   invoiceError: undefined as Error | undefined,
@@ -76,6 +78,8 @@ const page = vi.hoisted(() => ({
   orderOptions: [] as Array<{ fetchPolicy?: string; skip?: boolean; variables?: unknown }>,
   // Apollo keeps an earlier order's data while the query reloads or after it fails.
   orderRetained: false,
+  // #39: the payments panel's history rows for `invoiceNodes[0]`.
+  paymentNodes: [] as unknown[],
   // The preview request of `useLaundryServiceSelection`; a static render sends none.
   previewQuery: vi.fn(),
   priceMutationCalls: [] as unknown[],
@@ -99,15 +103,19 @@ vi.mock('@apollo/client', async (importOriginal) => ({
 }));
 
 vi.mock('@clensy/client', () => ({
+  // #39 Task 9: the Invoice card mounts the real payments panel; its client
+  // hooks read `invoiceNodes[0]`. Never written by a static render.
+  InvoicePaymentsDocument: {},
   PreviewLaundryOrderPriceDocument: {},
   useAddOnsQuery: (options: unknown) => {
     page.addOnsCalls.push(options);
     return { data: undefined, error: undefined, loading: false };
   },
+  useAdminsQuery: () => ({ data: undefined }),
   useCancelLaundryOrderMutation: () => [() => Promise.resolve({ data: {} }), { loading: false }],
   useCompleteLaundryOrderMutation: () => [() => Promise.resolve({ data: {} }), { loading: false }],
   useCurrentAdminQuery: () => ({
-    data: page.role === undefined ? undefined : { currentAdmin: { role: page.role } },
+    data: page.role === undefined ? undefined : { currentAdmin: { id: page.viewerId, role: page.role } },
     error: page.roleError,
     loading: page.roleLoading,
   }),
@@ -128,6 +136,27 @@ vi.mock('@clensy/client', () => ({
       error: page.invoiceError,
       loading: page.invoiceLoading,
       refetch,
+    };
+  },
+  useInvoicePaymentsQuery: () => {
+    const node = page.invoiceNodes[0] as
+      { amountDueMinorUnits?: number; amountPaidMinorUnits?: number; id: string; paymentStatus: string; totalMinorUnits: number } | undefined;
+    return {
+      data: node
+        ? {
+            invoice: {
+              id: node.id,
+              amountDueMinorUnits: node.amountDueMinorUnits ?? node.totalMinorUnits,
+              amountPaidMinorUnits: node.amountPaidMinorUnits ?? 0,
+              payments: { nodes: page.paymentNodes, pageInfo: { hasNextPage: false } },
+              paymentStatus: node.paymentStatus,
+              totalMinorUnits: node.totalMinorUnits,
+            },
+          }
+        : undefined,
+      error: undefined,
+      loading: false,
+      refetch: () => Promise.resolve(),
     };
   },
   useLaundryOrderQuery: (options: { fetchPolicy?: string; skip?: boolean; variables?: unknown }) => {
@@ -155,6 +184,8 @@ vi.mock('@clensy/client', () => ({
     },
     { loading: false },
   ],
+  useRecordInvoicePaymentMutation: () => [vi.fn(), { loading: false }],
+  useRefundInvoicePaymentMutation: () => [vi.fn(), { loading: false }],
   useRefundLaundryOrderMutation: () => [() => Promise.resolve({ data: {} }), { loading: false }],
   useRejectLaundryOrderMutation: () => [() => Promise.resolve({ data: {} }), { loading: false }],
   useServicesQuery: (options: unknown) => {
@@ -180,11 +211,13 @@ function count(html: string, needle: string): number {
   return html.split(needle).length - 1;
 }
 
-// The markup of one section, from its opening tag to the next section.
+// The markup of one section, from its opening tag to the next order
+// section. The payments panel is a nested `<section>` (#39), so only an
+// order section ends one.
 function section(html: string, name: string): string {
   const start = html.indexOf(`id="laundry-order-${name}"`);
   expect(start).toBeGreaterThan(-1);
-  const end = html.indexOf('<section', start);
+  const end = html.indexOf('<section id="laundry-order-', start);
   return html.slice(start, end === -1 ? undefined : end);
 }
 
@@ -211,6 +244,8 @@ beforeEach(() => {
   page.orderLoading = false;
   page.orderOptions.length = 0;
   page.orderRetained = false;
+  page.paymentNodes = [];
+  page.viewerId = 'staff-1';
   page.previewQuery.mockReset();
   page.addOnsCalls.length = 0;
   page.servicesCalls.length = 0;
@@ -815,6 +850,22 @@ describe('order page invoice and payment (#166)', () => {
     return [...html.matchAll(/<button\b[^>]*>(.*?)<\/button>/g)].map((match) => match[1]!);
   }
 
+  function paymentRow(overrides: { id: string; recordedByStaffId: string }) {
+    return {
+      invoiceId: 'i1',
+      refundedPaymentId: null,
+      amountMinorUnits: 10000,
+      createdAt: '2026-11-01T00:00:00.000Z',
+      method: 'CASH',
+      paidAt: '2026-11-01T01:00:00.000Z',
+      reference: null,
+      refundableMinorUnits: 10000,
+      status: 'COMPLETED',
+      type: 'PAYMENT',
+      ...overrides,
+    };
+  }
+
   const INVOICE = {
     id: 'i1',
     amountDueMinorUnits: 45000,
@@ -865,6 +916,32 @@ describe('order page invoice and payment (#166)', () => {
     expect(invoice).toContain('Pay now');
     expect(invoice).toContain('href="/app/billing?detail=i1"');
     expect(invoice).not.toContain('Generate invoice');
+  });
+
+  // #39 Task 9: `InvoicePaymentBody` forwards the role and `currentAdmin.id`
+  // to the card's payments panel.
+  it('forwards the role and viewer id to the payments panel', async () => {
+    page.order = order({ status: 'PRICED' });
+    page.role = 'FINANCE';
+    page.viewerId = 'staff-1';
+    page.invoiceNodes = [INVOICE];
+    page.paymentNodes = [
+      paymentRow({ id: 'p1', recordedByStaffId: 'staff-1' }),
+      paymentRow({ id: 'p2', recordedByStaffId: 'staff-2' }),
+    ];
+    const invoice = section(await renderPage(), 'invoice');
+    expect(invoice).toMatch(/<h4[^>]*>Payments<\/h4>/);
+    expect(buttonLabels(invoice)).toContain('Record payment');
+    // FINANCE may refund each payment.
+    expect(buttonLabels(invoice).filter((label) => label === 'Refund payment')).toHaveLength(2);
+    expect(invoice).toContain('>You<');
+    expect(invoice).toContain('>Staff member<');
+
+    page.role = 'ANALYST';
+    const readOnly = section(await renderPage(), 'invoice');
+    expect(readOnly).toMatch(/<h4[^>]*>Payments<\/h4>/);
+    expect(buttonLabels(readOnly)).not.toContain('Record payment');
+    expect(buttonLabels(readOnly)).not.toContain('Refund payment');
   });
 
   it('case 6: AWAITING_PAYMENT offers Mark paid only', async () => {

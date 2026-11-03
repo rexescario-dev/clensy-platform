@@ -81,6 +81,12 @@ const DEFAULT_SORTS: Array<{
     entityFile: 'catalog/infrastructure/persistence/add-on.entity.ts',
     fields: ['createdAt', 'id'],
   },
+  {
+    collection: 'invoice.payments',
+    dtoFile: 'payments/presentation/graphql/payment.type.ts',
+    entityFile: 'payments/infrastructure/persistence/payment.entity.ts',
+    fields: ['paidAt', 'createdAt', 'id'],
+  },
 ];
 
 function decoratorBlocks(src: string, name: string): string[] {

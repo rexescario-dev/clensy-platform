@@ -20,7 +20,7 @@ pnpm --filter api migration:revert    # roll back the last one
 - `generate` diffs the entities registered in `data-source.ts` against the **actual database**. Run it against a database that has every previous migration applied, never a synchronized or ad-hoc schema, or the diff will be wrong.
 - `apps/api/src/platform/database/data-source.ts` is a plain `DataSource` for the CLI, because the CLI cannot consume `database.module.ts`'s Nest-wrapped, `ConfigService`-driven config. It has its own `tsconfig.cli.json` (forcing `commonjs`/`node` resolution): the TypeORM CLI loads the data source through Node's native ESM resolver, which the project's `nodenext` config does not satisfy for a plain `ts-node` script.
 
-Registered entities: `BookingEntity`, `TenantEntity`, `AdminUserEntity`, `AuditEventEntity`, `CustomerEntity`, `PropertyEntity`, `TeamEntity`, `CleanerEntity`, `ServiceEntity`, `AddOnEntity`, `PricingRuleEntity`, `CleaningJobEntity`, `ChecklistEntity`, `ChecklistItemEntity`, `LaundryOrderEntity`, `LaundryOrderLineEntity`, `InvoiceEntity`, `InvoiceLineEntity`.
+Registered entities: `BookingEntity`, `TenantEntity`, `AdminUserEntity`, `AuditEventEntity`, `CustomerEntity`, `PropertyEntity`, `TeamEntity`, `CleanerEntity`, `ServiceEntity`, `AddOnEntity`, `PricingRuleEntity`, `CleaningJobEntity`, `ChecklistEntity`, `ChecklistItemEntity`, `LaundryOrderEntity`, `LaundryOrderLineEntity`, `InvoiceEntity`, `InvoiceLineEntity`, `PaymentEntity`.
 
 ## Reviewing a generated migration
 
@@ -32,6 +32,7 @@ Many constraints are hand-written because entity metadata cannot express them (c
   - drop/recreate of `fk_cleaning_job_*`, `fk_checklist_job`, `fk_pricing_rule_*`, `uq_pricing_rule_*`, `ck_*`, `UQ_cleaning_job_booking_id`, `UQ_checklist_job_id`, and `pricing_rule_entity."effectiveFrom"`'s `DEFAULT`;
   - creating the shared `admin_scope_enum` type twice (once per column that uses it);
   - re-adding the id-only booking FKs that `AddBookingTenant` replaced.
+  - drop/recreate of the `CreatePayments` hand-written objects: `uq_invoice_id_tenant`, `uq_admin_user_id_tenant`, `uq_payment_id_invoice_tenant` (recreated with its columns reordered), `ck_payment_amount_positive` and `ck_payment_refund_reference` (recreated with extra parentheses and an enum cast), `fk_payment_invoice_tenant`, `fk_payment_refunded_payment`, `fk_payment_recorded_by_staff_tenant`.
 - `generate` will not touch the hand-written indexes, but it will not regenerate them either if they are ever lost.
 
 Several FK columns deliberately have **no** TypeORM relation decorator, or a relation with `createForeignKeyConstraints: false`, because their real constraint is a hand-written composite FK. Do not "fix" that by adding a decorator.
@@ -50,7 +51,7 @@ On a fresh database every migration runs cleanly. On a database with existing da
 
 In timestamp order. No hand-written objects are recorded for migrations not listed here. Recorded no-ops: `AddBookingRelations` and the four `…Inverse` migrations (`1787934015018` to `1787936000000`), which add relation metadata only. `1790870400000-AddTenantLabelOverrides` adds the `tenant_entity."labelOverrides"` `jsonb` column.
 
-Specs referenced: [Customers & Properties](../superpowers/specs/2026-08-15-customers-properties-design.md), [Cleaners & Teams](../superpowers/specs/2026-08-16-cleaners-teams-design.md), [Catalog](../superpowers/specs/2026-08-16-catalog-design.md), [Jobs & Checklists](../superpowers/specs/2026-08-27-jobs-checklists-design.md), [nestjs-query GraphQL reads](../superpowers/specs/2026-08-28-nestjs-query-graphql-reads-design.md), [Laundry catalog foundation](../superpowers/specs/2026-09-06-laundry-catalog-foundation-design.md), [Laundry orders lifecycle](../superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md), [Laundry invoices](../superpowers/specs/2026-09-06-laundry-invoices-design.md), [Multi-tenant architecture](../superpowers/specs/2026-09-23-multi-tenant-architecture-design.md).
+Specs referenced: [Customers & Properties](../superpowers/specs/2026-08-15-customers-properties-design.md), [Cleaners & Teams](../superpowers/specs/2026-08-16-cleaners-teams-design.md), [Catalog](../superpowers/specs/2026-08-16-catalog-design.md), [Jobs & Checklists](../superpowers/specs/2026-08-27-jobs-checklists-design.md), [nestjs-query GraphQL reads](../superpowers/specs/2026-08-28-nestjs-query-graphql-reads-design.md), [Laundry catalog foundation](../superpowers/specs/2026-09-06-laundry-catalog-foundation-design.md), [Laundry orders lifecycle](../superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md), [Laundry invoices](../superpowers/specs/2026-09-06-laundry-invoices-design.md), [Multi-tenant architecture](../superpowers/specs/2026-09-23-multi-tenant-architecture-design.md), [Laundry payments](../superpowers/specs/2026-11-02-laundry-payments-design.md).
 
 ### Pre-tenancy foreign keys and indexes (superseded where noted)
 
@@ -149,3 +150,20 @@ Laundry orders lifecycle spec, Amendment #164 §8.4.2.
 - Adds `laundry_order_line_entity."pricingSnapshotDescription"` (`text`), then fills every existing line with the catalog name **as it is when the migration runs** (`Service.name`, or `AddOn.name || ' (add-on)'`, joined on id and `tenantId`), then sets `NOT NULL`. That is the name at migration time, not at pricing time, which was never stored.
 - The `NOT NULL` step cannot fail: the composite catalog FKs guarantee every line finds its row.
 - `down()` drops only the column. The column is entity metadata on `LaundryOrderLinePricingSnapshotEmbeddable`, so `generate` models it; only the backfill is hand-written.
+
+### `1791043200000-CreatePayments`
+
+Laundry payments spec §4.2, §4.9; laundry invoices spec Amendment #39 (§9.1 items 1, 5). One transaction.
+
+- Adds `OVERPAID` and `REFUNDED` to `invoice_payment_status_enum` (`ADD VALUE IF NOT EXISTS`). This is allowed inside the migration transaction because nothing uses the new values in it. **A later migration must not use `OVERPAID` / `REFUNDED` in the same `migration:run` transaction as this one** (PostgreSQL refuses an enum value added in an uncommitted transaction); put such a migration in a separate run, or give it its own transaction.
+- Creates `payment_entity` and the module-local enums `payment_type_enum`, `payment_method_enum`, `payment_record_status_enum`. No data backfill.
+- Entity metadata on `PaymentEntity`, which `generate` models (not hand-written): the columns, enums, PK, `fk_payment_tenant`, the UNIQUE constraint `uq_payment_tenant_idempotency_key` (`("tenantId", "idempotencyKey")`, a real constraint via `@Unique`), and the indexes `idx_payment_tenant_invoice_paid` (`("tenantId", "invoiceId", "paidAt")`) and `idx_payment_refunded_payment` (`("refundedPaymentId")`).
+- Hand-written:
+  - `uq_invoice_id_tenant` on `invoice_entity` (`UNIQUE (id, "tenantId")`), the target of `fk_payment_invoice_tenant`;
+  - `uq_admin_user_id_tenant` on `admin_user_entity` (`UNIQUE (id, "tenantId")`), the target of `fk_payment_recorded_by_staff_tenant`. Platform admins' NULL `tenantId` rows stay distinct under it;
+  - `uq_payment_id_invoice_tenant` (`UNIQUE (id, "invoiceId", "tenantId")`), the target of `fk_payment_refunded_payment`;
+  - `ck_payment_amount_positive` (`"amountMinorUnits" > 0`) and `ck_payment_refund_reference` (`("type" = 'REFUND') = ("refundedPaymentId" IS NOT NULL)`);
+  - three composite FKs, all `ON DELETE RESTRICT`: `fk_payment_invoice_tenant` (`("invoiceId", "tenantId") → invoice_entity(id, "tenantId")`), `fk_payment_refunded_payment` (`("refundedPaymentId", "invoiceId", "tenantId") → payment_entity(id, "invoiceId", "tenantId")`, so a refund can only reference a payment of the same invoice and tenant), and `fk_payment_recorded_by_staff_tenant` (`("recordedByStaffId", "tenantId") → admin_user_entity(id, "tenantId")`). `MATCH SIMPLE`: a null `refundedPaymentId` / `recordedByStaffId` is not checked.
+- `PaymentEntity.invoice` keeps its relation (the inverse of `InvoiceEntity.payments`) with `createForeignKeyConstraints: false`. `refundedPaymentId` and `recordedByStaffId` deliberately have **no** relation decorator: their real constraints are the composite FKs. That a refund's original is a `COMPLETED` `PAYMENT` is application validation under the invoice lock, not a database constraint.
+- **`admin_user_entity` is now a referenced table.** A test suite that empties it must truncate `payment_entity` in the same statement, with an explicit table list and no `CASCADE` (`TRUNCATE TABLE "payment_entity", "admin_user_entity"`; #39 planning decision m).
+- `down()` first counts invoices whose `paymentStatus` is `OVERPAID` or `REFUNDED` and, if any, refuses with the count before any DDL. It never rewrites data. Otherwise it drops `payment_entity`, its three enums, `uq_admin_user_id_tenant` and `uq_invoice_id_tenant`, and recreates `invoice_payment_status_enum` without the two values (rename, create, `ALTER COLUMN … USING "paymentStatus"::text::…`, drop the old type). **It drops all payment rows** (the refusal only covers `OVERPAID` / `REFUNDED`) and leaves invoices' `amountPaidMinorUnits` and `paymentStatus` (`PARTIALLY_PAID` / `PAID`) as they were, with no ledger behind them.

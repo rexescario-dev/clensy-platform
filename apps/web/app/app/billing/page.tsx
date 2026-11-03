@@ -1,6 +1,6 @@
 'use client';
 
-import { useInvoiceQuery, useInvoicesQuery } from '@clensy/client';
+import { useCurrentAdminQuery, useInvoiceQuery, useInvoicesQuery } from '@clensy/client';
 import type { InvoicePaymentStatus } from '@clensy/client';
 import {
   DataTable,
@@ -11,11 +11,16 @@ import {
   StatusBadge,
 } from '@clensy/ui';
 import type { DataTableColumn } from '@clensy/ui';
+import { useClensyTranslations } from '@clensy/web';
 import Link from 'next/link';
 import { Suspense, useState } from 'react';
+import { InvoicePaymentsPanel } from '../../../components/billing/invoice-payments-panel';
 import { formatMinorUnits } from '../../../lib/format-price';
+import { amountDueView } from '../../../lib/invoice-payments';
 import { INVOICE_PAYMENT_STATUS_TONE } from '../../../lib/invoice-payment-status';
 import { useDetailDrawer } from '../../../lib/use-detail-drawer';
+
+type Translate = (key: string) => string;
 
 type InvoiceRow = {
   id: string;
@@ -33,6 +38,15 @@ function formatDate(value: unknown): string {
   return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleDateString();
 }
 
+// An overpaid invoice's due is negative (#39 spec §4.10): it reads
+// "Overpaid by ₱x", never a bare negative amount.
+function formatAmountDue(amountDueMinorUnits: number, t: Translate): string {
+  const due = amountDueView(amountDueMinorUnits);
+  return due.kind === 'overpaid'
+    ? t('payments.overpaidBy').replace('{amount}', formatMinorUnits(due.minorUnits))
+    : formatMinorUnits(due.minorUnits);
+}
+
 export default function BillingPage() {
   return (
     <Suspense fallback={<LoadingState />}>
@@ -42,6 +56,7 @@ export default function BillingPage() {
 }
 
 function BillingPageContent() {
+  const t = useClensyTranslations('laundry');
   const [page, setPage] = useState(1);
   const pageSize = 20;
   const invoicesQuery = useInvoicesQuery({
@@ -61,14 +76,14 @@ function BillingPageContent() {
     {
       header: 'Amount due',
       key: 'due',
-      render: (r) => formatMinorUnits(r.amountDueMinorUnits),
+      render: (r) => formatAmountDue(r.amountDueMinorUnits, t),
     },
     {
       header: 'Payment',
       key: 'status',
       render: (r) => (
         <StatusBadge
-          label={r.paymentStatus}
+          label={t(`invoicePaymentStatus.${r.paymentStatus}`)}
           tone={INVOICE_PAYMENT_STATUS_TONE[r.paymentStatus]}
         />
       ),
@@ -99,7 +114,11 @@ function BillingPageContent() {
       />
 
       {activeId ? (
-        <InvoiceDetailDrawer id={activeId} onClose={closeDetail} />
+        <InvoiceDetailDrawer
+          id={activeId}
+          onClose={closeDetail}
+          onPaymentsChanged={() => invoicesQuery.refetch()}
+        />
       ) : null}
     </div>
   );
@@ -108,15 +127,25 @@ function BillingPageContent() {
 function InvoiceDetailDrawer({
   id,
   onClose,
+  onPaymentsChanged,
 }: {
   id: string;
   onClose: () => void;
+  // Refetches the list, so its status and amount due follow a payment.
+  onPaymentsChanged: () => Promise<unknown>;
 }) {
-  const { data, loading, error } = useInvoiceQuery({
+  const t = useClensyTranslations('laundry');
+  const { data, loading, error, refetch } = useInvoiceQuery({
     fetchPolicy: 'network-only',
     variables: { id },
   });
+  const { data: adminData } = useCurrentAdminQuery();
   const invoice = data?.invoice;
+
+  // After a payment write: the drawer's invoice and the list (#39).
+  function refetchInvoices() {
+    return Promise.all([refetch(), onPaymentsChanged()]);
+  }
 
   if (loading) {
     return (
@@ -159,7 +188,7 @@ function InvoiceDetailDrawer({
           <dt className="text-slate-500">Payment status</dt>
           <dd>
             <StatusBadge
-              label={invoice.paymentStatus}
+              label={t(`invoicePaymentStatus.${invoice.paymentStatus}`)}
               tone={INVOICE_PAYMENT_STATUS_TONE[invoice.paymentStatus]}
             />
           </dd>
@@ -178,15 +207,23 @@ function InvoiceDetailDrawer({
           <dd className="text-slate-900">
             {formatMinorUnits(invoice.totalMinorUnits)}
           </dd>
-          <dt className="text-slate-500">Paid</dt>
+          <dt className="text-slate-500">Amount paid</dt>
           <dd className="text-slate-900">
             {formatMinorUnits(invoice.amountPaidMinorUnits)}
           </dd>
           <dt className="text-slate-500">Amount due</dt>
           <dd className="text-slate-900">
-            {formatMinorUnits(invoice.amountDueMinorUnits)}
+            {formatAmountDue(invoice.amountDueMinorUnits, t)}
           </dd>
         </dl>
+
+        {/* Below the amount block (#39 spec §4.10, planning decision o). */}
+        <InvoicePaymentsPanel
+          invoiceId={invoice.id}
+          role={adminData?.currentAdmin.role}
+          viewerId={adminData?.currentAdmin.id}
+          onChanged={refetchInvoices}
+        />
 
         <div>
           <h3 className="mb-2 text-sm font-semibold text-slate-900">Lines</h3>

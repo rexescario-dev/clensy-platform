@@ -23,6 +23,7 @@ import { InvoicesService } from '../src/modules/billing/application/services/inv
 import { InvoicePaymentTerms } from '../src/modules/billing/domain/invoice-payment-terms';
 import { InvoiceEntity } from '../src/modules/billing/infrastructure/persistence/invoice.entity';
 import { InvoiceLineEntity } from '../src/modules/billing/infrastructure/persistence/invoice-line.entity';
+import { PaymentEntity } from '../src/modules/payments/infrastructure/persistence/payment.entity';
 import { TenantEntity } from '../src/modules/admins/infrastructure/persistence/tenant.entity';
 import { BOOTSTRAP_TENANT_ID } from '../src/platform/database/bootstrap-tenant';
 import {
@@ -53,6 +54,7 @@ const ENTITIES = [
   CleanerEntity,
   AuditEventEntity,
   TenantEntity, // CustomerEntity#tenant / PropertyEntity#tenant (#82)
+  PaymentEntity, // InvoiceEntity#payments (#39 decision m)
 ];
 
 const makeDataSource = () =>

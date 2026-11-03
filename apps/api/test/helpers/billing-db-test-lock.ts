@@ -3,7 +3,9 @@ import { DataSource } from 'typeorm';
 // Same pattern as `./laundry-db-test-lock.ts` — scoped to the billing e2e
 // spec(s), the only files that create `invoice_line_entity` /
 // `invoice_entity` rows plus the laundry/catalog/customer fixtures they
-// need.
+// need. It also scopes the #39 payments specs (`payments.e2e-spec.ts`,
+// `payments.concurrency.e2e-spec.ts`): `payment_entity` joins this lock
+// (spec §4.9), and both acquire it.
 //
 // New, distinct arbitrary lock key — must never collide with
 // ADMIN_DB_TEST_LOCK_KEY (875_301_442), CUSTOMER_DB_TEST_LOCK_KEY

@@ -6,6 +6,7 @@ import { CustomersModule } from '../modules/customers/customers.module';
 import { JobsModule } from '../modules/jobs/jobs.module';
 import { LaundryModule } from '../modules/laundry/laundry.module';
 import { BillingModule } from '../modules/billing/billing.module';
+import { PaymentsModule } from '../modules/payments/payments.module';
 import { AdminIdentityLookupService } from '../modules/admins/infrastructure/admin-identity-lookup.service';
 import { AdminsModule } from '../modules/admins/admins.module';
 import { AdminResolver } from '../modules/admins/presentation/graphql/admin.resolver';
@@ -50,6 +51,7 @@ import { GraphqlModule } from '../platform/graphql/graphql.module';
     JobsModule,
     LaundryModule,
     BillingModule,
+    PaymentsModule,
   ],
   providers: [AdminResolver],
 })

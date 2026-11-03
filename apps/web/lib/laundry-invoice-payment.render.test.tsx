@@ -1,12 +1,56 @@
+import type { Role } from '@clensy/client';
+import { ToastProvider } from '@clensy/ui';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { LaundryInvoiceCard, LaundryOrderPaymentCard } from '../components/laundry/laundry-invoice-payment';
 import type { LaundryInvoiceView, LaundryPaymentVerb, LaundryPaymentView } from './laundry-invoice-payment';
+import type { LaundryMutationLock } from './use-laundry-mutation-lock';
+
+// The invoice the case passes, read by the payments panel's query stub
+// (#39 Task 9): the card now mounts the real `InvoicePaymentsPanel`, so its
+// client hooks are stubbed here, not the panel.
+const card = vi.hoisted(() => ({
+  invoice: undefined as
+    { amountDueMinorUnits?: number; amountPaidMinorUnits?: number; id: string; paymentStatus: string; totalMinorUnits: number } | undefined,
+}));
+
+vi.mock('@apollo/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@apollo/client')>()),
+  useApolloClient: () => ({ query: vi.fn() }),
+}));
+
+vi.mock('@clensy/client', () => ({
+  InvoicePaymentsDocument: {},
+  useAdminsQuery: () => ({ data: undefined }),
+  useInvoicePaymentsQuery: () => {
+    const invoice = card.invoice;
+    return {
+      data: invoice
+        ? {
+            invoice: {
+              id: invoice.id,
+              amountDueMinorUnits: invoice.amountDueMinorUnits ?? invoice.totalMinorUnits,
+              amountPaidMinorUnits: invoice.amountPaidMinorUnits ?? 0,
+              payments: { nodes: [], pageInfo: { hasNextPage: false } },
+              paymentStatus: invoice.paymentStatus,
+              totalMinorUnits: invoice.totalMinorUnits,
+            },
+          }
+        : undefined,
+      error: undefined,
+      loading: false,
+      refetch: vi.fn(),
+    };
+  },
+  useRecordInvoicePaymentMutation: () => [vi.fn(), { loading: false }],
+  useRefundInvoicePaymentMutation: () => [vi.fn(), { loading: false }],
+}));
 
 // The Invoice and Order payment cards (#166), rendered statically.
 const INVOICE = {
   id: 'i1',
   amountDueMinorUnits: 45000,
+  amountPaidMinorUnits: 0,
   invoiceNumber: 'INV-2026-000001',
   paymentStatus: 'UNPAID',
   paymentTerms: 'PAY_ON_DELIVERY',
@@ -16,18 +60,38 @@ const INVOICE = {
 const EXPLANATION =
   'The order must be marked paid before processing starts. That is separate from the invoice payment status.';
 
+// A lock another mutation holds (#165): the panel's controls are disabled.
+const HELD_BY_TRANSITION: LaundryMutationLock = {
+  held: true,
+  isHeld: () => true,
+  release: () => undefined,
+  tryAcquire: () => null,
+};
+
 function invoiceCard(
   view: LaundryInvoiceView,
-  overrides: { failed?: boolean; generating?: boolean; invoice?: typeof INVOICE } = {},
+  overrides: {
+    failed?: boolean;
+    generating?: boolean;
+    invoice?: typeof INVOICE;
+    lock?: LaundryMutationLock;
+    role?: Role;
+  } = {},
 ): string {
+  card.invoice = overrides.invoice;
   return renderToStaticMarkup(
-    <LaundryInvoiceCard
-      failed={overrides.failed ?? false}
-      generating={overrides.generating ?? false}
-      invoice={overrides.invoice}
-      view={view}
-      onGenerate={() => undefined}
-    />,
+    <ToastProvider>
+      <LaundryInvoiceCard
+        failed={overrides.failed ?? false}
+        generating={overrides.generating ?? false}
+        invoice={overrides.invoice}
+        lock={overrides.lock}
+        role={overrides.role ?? 'ANALYST'}
+        view={view}
+        viewerId="staff-1"
+        onGenerate={() => undefined}
+      />
+    </ToastProvider>,
   );
 }
 
@@ -128,8 +192,24 @@ describe('LaundryInvoiceCard', () => {
   it('two generate forms on one page share no id and no radio group', () => {
     const html = renderToStaticMarkup(
       <>
-        <LaundryInvoiceCard failed={false} generating={false} invoice={undefined} view="generate" onGenerate={() => undefined} />
-        <LaundryInvoiceCard failed={false} generating={false} invoice={undefined} view="generate" onGenerate={() => undefined} />
+        <LaundryInvoiceCard
+          failed={false}
+          generating={false}
+          invoice={undefined}
+          role="TENANT_OWNER"
+          view="generate"
+          viewerId="staff-1"
+          onGenerate={() => undefined}
+        />
+        <LaundryInvoiceCard
+          failed={false}
+          generating={false}
+          invoice={undefined}
+          role="TENANT_OWNER"
+          view="generate"
+          viewerId="staff-1"
+          onGenerate={() => undefined}
+        />
       </>,
     );
     const all = ids(html);
@@ -140,18 +220,40 @@ describe('LaundryInvoiceCard', () => {
     expect(termOptions(html).every((option) => option.help !== undefined && option.label !== undefined)).toBe(true);
   });
 
-  it('case 5: existing invoice shows number, amount, badge, terms and the billing link', () => {
-    const html = invoiceCard('invoice', { invoice: INVOICE });
-    expect(html).toContain('INV-2026-000001');
-    expect(html).toContain('₱450.00');
-    expect(html).toContain('>Unpaid<');
+  it('case 5: existing invoice shows number, terms and the billing link; the payments panel shows the total and badge', () => {
+    const html = invoiceCard('invoice', { invoice: INVOICE, role: 'ANALYST' });
+    const heading = html.search(/<h4[^>]*>Payments<\/h4>/);
+    expect(heading).toBeGreaterThan(-1);
+    const facts = html.slice(0, heading);
+    const panel = html.slice(heading);
+    expect(facts).toContain('INV-2026-000001');
+    expect(facts).toContain('Pay on delivery');
+    expect(facts).toContain('href="/app/billing?detail=i1"');
+    expect(facts).toContain('Open invoice');
+    expect(facts).not.toContain('₱450.00');
+    expect(facts).not.toContain('>Unpaid<');
+    expect(facts).not.toContain('<button');
+    expect(facts).not.toContain('<input');
+    expect(panel).toContain('₱450.00');
+    expect(panel).toContain('>Unpaid<');
     expect(html).not.toContain('>UNPAID<');
-    expect(html).toContain('Pay on delivery');
-    expect(html).toContain('href="/app/billing?detail=i1"');
-    expect(html).toContain('Open invoice');
-    expect(html).not.toContain('<button');
-    expect(html).not.toContain('<input');
-    expect(html).not.toContain('Amount due');
+    expect(html.split('>Unpaid<')).toHaveLength(2);
+    // ANALYST may read payments but neither record nor refund.
+    expect(html).not.toContain('Record payment');
+    expect(html).not.toContain('Refund payment');
+  });
+
+  it('disables Record payment while another mutation holds the page lock', () => {
+    const free = buttons(invoiceCard('invoice', { invoice: INVOICE, role: 'TENANT_OWNER' })).find((button) =>
+      button.includes('Record payment'),
+    );
+    expect(free).toBeDefined();
+    expect(free).not.toContain('disabled=""');
+    const held = buttons(
+      invoiceCard('invoice', { invoice: INVOICE, lock: HELD_BY_TRANSITION, role: 'TENANT_OWNER' }),
+    ).find((button) => button.includes('Record payment'));
+    expect(held).toBeDefined();
+    expect(held).toContain('disabled=""');
   });
 
   it('case 11: no estimate wording', () => {
@@ -194,6 +296,19 @@ describe('LaundryOrderPaymentCard', () => {
       expect(html).toContain(EXPLANATION);
       expect(html).toMatch(/^<div class="rounded-md border border-slate-200 p-4">/);
     }
+  });
+
+  // Characterization (spec §4.10): the card's copy and verbs are unchanged
+  // by the invoice payments panel.
+  it('keeps the Order payment explanation', () => {
+    for (const view of ['choose', 'markPaid', 'paid', 'none'] as const) {
+      expect(paymentCard(view)).toContain(EXPLANATION);
+    }
+    expect(buttons(paymentCard('choose')).map((button) => button.replace(/<[^>]*>/g, ''))).toEqual([
+      'Mark paid',
+      'Mark awaiting payment',
+    ]);
+    expect(buttons(paymentCard('markPaid')).map((button) => button.replace(/<[^>]*>/g, ''))).toEqual(['Mark paid']);
   });
 
   it('case 7: choose offers Mark paid first, then Mark awaiting payment as secondary', () => {

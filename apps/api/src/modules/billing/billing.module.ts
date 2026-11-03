@@ -6,6 +6,7 @@ import { AuditModule } from '../../platform/audit/audit.module';
 import { CatalogModule } from '../catalog/catalog.module';
 import { CustomersModule } from '../customers/customers.module';
 import { LaundryModule } from '../laundry/laundry.module';
+import { InvoicePaymentWriter } from './application/services/invoice-payment-writer';
 import { InvoicesService } from './application/services/invoices.service';
 import { InvoiceEntity } from './infrastructure/persistence/invoice.entity';
 import { InvoiceLineEntity } from './infrastructure/persistence/invoice-line.entity';
@@ -24,7 +25,7 @@ import { InvoiceLineType } from './presentation/graphql/invoice-line.type';
 // `Invoice.lines` offset connection resolves (the `LaundryOrderLine` /
 // `Checklist.items` precedent).
 @Module({
-  exports: [InvoicesService],
+  exports: [InvoicesService, InvoicePaymentWriter],
   imports: [
     TypeOrmModule.forFeature([InvoiceEntity, InvoiceLineEntity]),
     NestjsQueryTypeOrmModule.forFeature([InvoiceEntity, InvoiceLineEntity]),
@@ -36,6 +37,11 @@ import { InvoiceLineType } from './presentation/graphql/invoice-line.type';
     CatalogModule,
     CustomersModule,
   ],
-  providers: [InvoicesService, InvoiceReadResolver, InvoiceResolver],
+  providers: [
+    InvoicesService,
+    InvoicePaymentWriter,
+    InvoiceReadResolver,
+    InvoiceResolver,
+  ],
 })
 export class BillingModule {}

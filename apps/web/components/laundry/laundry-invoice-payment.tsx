@@ -1,13 +1,13 @@
 'use client';
 
-import type { InvoiceForOrderQuery, InvoicePaymentTerms } from '@clensy/client';
-import { Button, LoadingState, StatusBadge } from '@clensy/ui';
+import type { InvoiceForOrderQuery, InvoicePaymentTerms, Role } from '@clensy/client';
+import { Button, LoadingState } from '@clensy/ui';
 import { useClensyTranslations } from '@clensy/web';
 import Link from 'next/link';
 import { useId, useState, type ReactNode } from 'react';
-import { formatMinorUnits } from '../../lib/format-price';
-import { INVOICE_PAYMENT_STATUS_TONE } from '../../lib/invoice-payment-status';
 import type { LaundryInvoiceView, LaundryPaymentVerb, LaundryPaymentView } from '../../lib/laundry-invoice-payment';
+import type { LaundryMutationLock } from '../../lib/use-laundry-mutation-lock';
+import { InvoicePaymentsPanel } from '../billing/invoice-payments-panel';
 
 type Invoice = InvoiceForOrderQuery['invoices']['nodes'][number];
 type Translate = (key: string) => string;
@@ -25,8 +25,16 @@ export interface LaundryInvoiceCardProps {
   generating: boolean;
   // Set when `view` is `invoice`.
   invoice: Invoice | undefined;
+  // The page's shared lock (#39 decision i): the payments panel's writes
+  // take it, and its controls are disabled while another mutation holds it.
+  lock?: LaundryMutationLock;
   onGenerate: (paymentTerms: InvoicePaymentTerms) => void;
+  // Runs after a payment write, so the page refetches `InvoiceForOrder`.
+  onPaymentsChanged?: () => Promise<unknown>;
+  // The viewer's role and `currentAdmin.id`, for the payments panel.
+  role: Role | undefined;
   view: LaundryInvoiceView;
+  viewerId: string | undefined;
 }
 
 export interface LaundryOrderPaymentCardProps {
@@ -39,21 +47,13 @@ export interface LaundryOrderPaymentCardProps {
 }
 
 // The Invoice card (#166): generate with chosen terms, or the existing
-// invoice's facts and a link to the billing drawer, which stays the full
-// invoice view.
-export function LaundryInvoiceCard({ disabled = false, failed, generating, invoice, onGenerate, view }: LaundryInvoiceCardProps) {
+// invoice's facts, a link to the billing drawer, and the invoice payments
+// panel (#39), which shows the amounts and status.
+export function LaundryInvoiceCard(props: LaundryInvoiceCardProps) {
   const t = useClensyTranslations('laundry');
   return (
     <Card title={t('order.invoice.title')}>
-      <InvoiceBody
-        disabled={disabled}
-        failed={failed}
-        generating={generating}
-        invoice={invoice}
-        t={t}
-        view={view}
-        onGenerate={onGenerate}
-      />
+      <InvoiceBody {...props} t={t} />
     </Card>
   );
 }
@@ -164,9 +164,13 @@ function InvoiceBody({
   failed,
   generating,
   invoice,
+  lock,
   onGenerate,
+  onPaymentsChanged,
+  role,
   t,
   view,
+  viewerId,
 }: LaundryInvoiceCardProps & { t: Translate }) {
   switch (view) {
     case 'error':
@@ -174,7 +178,18 @@ function InvoiceBody({
     case 'generate':
       return <GenerateForm disabled={disabled} failed={failed} generating={generating} t={t} onGenerate={onGenerate} />;
     case 'invoice':
-      return invoice ? <InvoiceFacts invoice={invoice} t={t} /> : null;
+      return invoice ? (
+        <div className="mt-3 flex flex-col gap-4">
+          <InvoiceFacts invoice={invoice} t={t} />
+          <InvoicePaymentsPanel
+            invoiceId={invoice.id}
+            lock={lock}
+            role={role}
+            viewerId={viewerId}
+            onChanged={onPaymentsChanged}
+          />
+        </div>
+      ) : null;
     case 'loading':
       return (
         <div className="mt-3">
@@ -188,26 +203,15 @@ function InvoiceBody({
   }
 }
 
+// The invoice's number and terms and the billing link (#166). The total and
+// status are shown by the payments panel below (#39 planning decision o).
 function InvoiceFacts({ invoice, t }: { invoice: Invoice; t: Translate }) {
   return (
-    <div className="mt-3 flex flex-col gap-3">
+    <div className="flex flex-col gap-3">
       <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <div>
           <dt className="text-slate-500">{t('order.invoice.number')}</dt>
           <dd className="font-medium text-slate-900">{invoice.invoiceNumber}</dd>
-        </div>
-        <div>
-          <dt className="text-slate-500">{t('order.invoice.total')}</dt>
-          <dd className="font-medium text-slate-900 tabular-nums">{formatMinorUnits(invoice.totalMinorUnits)}</dd>
-        </div>
-        <div>
-          <dt className="text-slate-500">{t('order.invoice.paymentStatus')}</dt>
-          <dd>
-            <StatusBadge
-              label={t(`invoicePaymentStatus.${invoice.paymentStatus}`)}
-              tone={INVOICE_PAYMENT_STATUS_TONE[invoice.paymentStatus]}
-            />
-          </dd>
         </div>
         <div>
           <dt className="text-slate-500">{t('order.invoice.terms')}</dt>

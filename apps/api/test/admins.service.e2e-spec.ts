@@ -77,7 +77,16 @@ describe('AdminsService (real Postgres)', () => {
 
   beforeEach(async () => {
     await dataSource.getRepository(AuditEventEntity).clear();
-    await dataSource.getRepository(AdminUserEntity).clear();
+    // #39 planning decision m: `fk_payment_recorded_by_staff_tenant` makes
+    // `admin_user_entity` a referenced table, and PostgreSQL refuses to
+    // TRUNCATE a referenced table unless every referencing table is in the
+    // same statement (the `cleaners-teams.service.e2e-spec.ts` precedent).
+    // Explicit list, no CASCADE: a future table referencing admins makes
+    // this fail loudly instead of being silently emptied. Every admin goes,
+    // so every payment would have a dangling recorder anyway.
+    await dataSource.query(
+      'TRUNCATE TABLE "payment_entity", "admin_user_entity"',
+    );
     auditLogger = { log: jest.fn().mockResolvedValue(undefined) };
     service = new AdminsService(dataSource, auditLogger);
   });

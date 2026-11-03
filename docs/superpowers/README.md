@@ -33,7 +33,8 @@ Specifications and implementation plans, produced by the project's [engineering 
 | [Jobs & checklists](specs/2026-08-27-jobs-checklists-design.md) | Accepted |
 | [Laundry architecture & catalog foundation](specs/2026-09-06-laundry-catalog-foundation-design.md) | Accepted |
 | [Laundry orders & lifecycle](specs/2026-09-06-laundry-orders-lifecycle-design.md) | Accepted, with Amendment #164 (order workspace) |
-| [Laundry invoices](specs/2026-09-06-laundry-invoices-design.md) | Accepted |
+| [Laundry invoices](specs/2026-09-06-laundry-invoices-design.md) | Accepted, with Amendment #39 (payment recording) |
+| [Laundry invoice payments & refunds](specs/2026-11-02-laundry-payments-design.md) | Accepted |
 
 ### Web console
 
@@ -57,4 +58,4 @@ Specifications and implementation plans, produced by the project's [engineering 
 
 ## Plans
 
-One plan per delivery slice, 77 so far, in [`plans/`](plans/). The file name gives the date and topic; the plan's header names its GitHub issue and spec. Slices that changed the API's behavior also have a short note in [shipped slices](../history/shipped-slices.md).
+One plan per delivery slice, 78 so far, in [`plans/`](plans/). The file name gives the date and topic; the plan's header names its GitHub issue and spec. Slices that changed the API's behavior also have a short note in [shipped slices](../history/shipped-slices.md).

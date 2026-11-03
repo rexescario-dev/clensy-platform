@@ -30,7 +30,7 @@ import { InvoiceEntity } from '../../infrastructure/persistence/invoice.entity';
 import { allocateInvoiceNumber } from '../../infrastructure/persistence/invoice-number-counter';
 import { InvoiceLineEntity } from '../../infrastructure/persistence/invoice-line.entity';
 import { GenerateInvoiceFromOrderCommand } from '../commands/generate-invoice-from-order.command';
-import { isPostgresUniqueViolation } from './unique-violation';
+import { isPostgresUniqueViolation } from '../../../../platform/database/unique-violation';
 import { tenantAuditTags } from '../../../../platform/audit/application/audit-tags';
 
 const ENTITY_TYPE = 'invoice';

@@ -17,6 +17,7 @@ import { LaundryOrderEntity } from '../../modules/laundry/infrastructure/persist
 import { LaundryOrderLineEntity } from '../../modules/laundry/infrastructure/persistence/laundry-order-line.entity';
 import { InvoiceEntity } from '../../modules/billing/infrastructure/persistence/invoice.entity';
 import { InvoiceLineEntity } from '../../modules/billing/infrastructure/persistence/invoice-line.entity';
+import { PaymentEntity } from '../../modules/payments/infrastructure/persistence/payment.entity';
 import { AuditEventEntity } from '../audit/infrastructure/persistence/audit-event.entity';
 
 // Plain DataSource for the TypeORM CLI (migration:generate/run/revert) — kept
@@ -43,6 +44,7 @@ export default new DataSource({
     LaundryOrderLineEntity,
     InvoiceEntity,
     InvoiceLineEntity,
+    PaymentEntity,
   ],
   host: process.env.DB_HOST ?? 'localhost',
   migrations: [__dirname + '/migrations/*.ts'],

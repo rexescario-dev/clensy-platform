@@ -122,6 +122,12 @@ const NESTED_CONNECTIONS: Array<{
     sortColumns: ['createdAt', 'id'],
     sortFields: 'InvoiceLineSortFields',
   },
+  {
+    field: 'payments',
+    parent: 'Invoice',
+    sortColumns: ['paidAt', 'createdAt', 'id'],
+    sortFields: 'PaymentSortFields',
+  },
 ];
 
 const GENERATED_CRUD = /^(create|update|delete)(One|Many)[A-Z]/;

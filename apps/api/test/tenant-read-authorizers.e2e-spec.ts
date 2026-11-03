@@ -79,6 +79,8 @@ const CUSTOM_SURFACE_ENTITIES: Record<string, string> = {
   AuditEventEntity: 'Not exposed through GraphQL.',
   LaundryOrderLineEntity:
     'Child rows of LaundryOrder; read only via LaundryOrder.lines and LaundryOrdersService (#87).',
+  PaymentEntity:
+    'Read only via Invoice.payments (nested connection, tenantReadAuthorizer on Payment) and Payment.invoice; no read resolver or root query (#39).',
   PricingRuleEntity:
     'Read only via `activePricing` (query and Service.activePricing loader); PricingRulesService scopes by tenant (#84).',
 };
@@ -98,6 +100,8 @@ const CUSTOM_OBJECT_FIELDS: Record<string, string> = {
   'LaundryPricePreview.lines':
     'Plain value list returned by previewLaundryOrderPrice, which LaundryOrdersService computes for the principal tenant (#159); no resolver of its own.',
   'LoginResult.admin': "The caller's own principal, returned by login.",
+  'Payment.invoice':
+    'PaymentResolver @ResolveField via InvoicesService.getInvoice keyed by the principal tenant (#39).',
   'Service.activePricing':
     'ServiceResolver @ResolveField via request-scoped ActivePricingLoader keyed by the principal tenant (#84).',
   'TenantLabelOverrides.roles':

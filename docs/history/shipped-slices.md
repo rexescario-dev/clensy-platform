@@ -141,3 +141,11 @@ Renaming the service or add-on later does not change it. If a name can't be read
 Amendment #164 to the [laundry lifecycle spec](../superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md) (§8.4.1).
 
 `weighLaundryOrder` now rejects a zero weight. `WeighLaundryOrderInput.weightGrams` is `@IsInt() @Min(1)`, and `LaundryOrdersService.weigh` throws `BadRequestException('weightGrams must be a positive integer')` for a non-integer or a value below 1, before it opens a transaction. Roles, the `RECEIVED`/`WEIGHED` status rule and the mutation input are unchanged. There is no migration: `ck_laundry_order_weight_non_negative` stays `>= 0`, and orders already stored with `0` grams are not rewritten. The release-gate and tenant-isolation suites were not changed; no probe weighs `0`.
+
+## Laundry invoice payments & refunds (#39)
+
+Approved for merge at M7 (2026-11-03) on branch `feat/39-laundry-payments`; not merged yet, and no PR yet. It adds an append-only `Payment` ledger per invoice (`PAYMENT` and `REFUND` entries) in a new `payments` module, and the staff mutations `recordInvoicePayment` (`TENANT_OWNER`, `OPS_MANAGER`, `FINANCE`, `CUSTOMER_SUPPORT`) and `refundInvoicePayment` (`TENANT_OWNER`, `FINANCE`). `Invoice.amountPaidMinorUnits` and `paymentStatus` are now derived server-side from the ledger in the write transaction; the status gains `OVERPAID` and `REFUNDED`. Payments are read through the nested `Invoice.payments` connection. Writes carry a per-tenant idempotency key. Recording a payment does not change the laundry order's status. The migration `CreatePayments` adds `payment_entity`, its three enums and the two `invoice_payment_status_enum` values; see [database migrations](../development/database-migrations.md#1791043200000-createpayments).
+
+- Spec (Accepted): [2026-11-02-laundry-payments-design.md](../superpowers/specs/2026-11-02-laundry-payments-design.md), with Amendment #39 in [2026-09-06-laundry-invoices-design.md](../superpowers/specs/2026-09-06-laundry-invoices-design.md#9-amendment-39--payment-recording)
+- Plan (Accepted): [2026-11-02-laundry-payments-plan.md](../superpowers/plans/2026-11-02-laundry-payments-plan.md)
+- Current behavior: [laundry orders](../features/laundry.md#payments-and-refunds-39)

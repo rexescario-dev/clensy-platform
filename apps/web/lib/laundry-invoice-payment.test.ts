@@ -16,10 +16,12 @@ function verbs(status: LaundryOrderStatus, role: AdminRole | undefined) {
 
 describe('INVOICE_PAYMENT_STATUS_TONE', () => {
   // Billing's tones, shared by the billing page and the order page (#166).
-  it('keeps billing tones', () => {
+  it('keeps billing tones and adds OVERPAID and REFUNDED', () => {
     expect(INVOICE_PAYMENT_STATUS_TONE).toEqual({
+      OVERPAID: 'warning',
       PAID: 'success',
       PARTIALLY_PAID: 'warning',
+      REFUNDED: 'neutral',
       UNPAID: 'neutral',
       VOID: 'danger',
     });
