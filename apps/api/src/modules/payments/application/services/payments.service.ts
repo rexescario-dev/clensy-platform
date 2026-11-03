@@ -5,10 +5,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { DataSource, EntityManager, QueryFailedError } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { AUDIT_LOGGER } from '../../../../platform/audit/application/audit-logger.port';
 import type { AuditLogger } from '../../../../platform/audit/application/audit-logger.port';
 import { tenantAuditTags } from '../../../../platform/audit/application/audit-tags';
+import { isPostgresUniqueViolation } from '../../../../platform/database/unique-violation';
 import { runAuditInTransaction } from '../../../../platform/audit/infrastructure/audit-logger.service';
 import { InvoicePaymentWriter } from '../../../billing/application/services/invoice-payment-writer';
 import { InvoicePaymentStatus } from '../../../billing/domain/invoice-payment-status';
@@ -28,7 +29,6 @@ import { RefundInvoicePaymentCommand } from '../commands/refund-invoice-payment.
 const ENTITY_TYPE = 'payment';
 const MAX_REFERENCE_LENGTH = 120;
 const IDEMPOTENCY_CONSTRAINT = 'uq_payment_tenant_idempotency_key';
-const POSTGRES_UNIQUE_VIOLATION = '23505';
 const KEY_REUSED_MESSAGE =
   'This request key was already used for a different entry. Close the dialog and start a new entry.';
 
@@ -437,24 +437,6 @@ export class PaymentsService {
   private paymentNotFound(paymentId: string): NotFoundException {
     return new NotFoundException(`Payment ${paymentId} not found`);
   }
-}
-
-// Constraint-scoped unique-violation check, copied from billing's
-// `unique-violation.ts` (catalog, jobs and billing each carry their own).
-// Accepts a `{ code, constraint }` driver shape so unit tests need no
-// `QueryFailedError`; unwraps `driverError` for the real Postgres path.
-function isPostgresUniqueViolation(
-  error: unknown,
-  constraint: string,
-): boolean {
-  const driver =
-    error instanceof QueryFailedError
-      ? (error.driverError as { code?: string; constraint?: string })
-      : (error as { code?: string; constraint?: string });
-  return (
-    driver?.code === POSTGRES_UNIQUE_VIOLATION &&
-    driver?.constraint === constraint
-  );
 }
 
 function netPaid(rows: readonly PaymentEntity[]): number {

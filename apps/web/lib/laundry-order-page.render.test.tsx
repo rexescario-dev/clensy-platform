@@ -110,8 +110,8 @@ vi.mock('@clensy/client', () => ({
   useAddOnsQuery: (options: unknown) => {
     page.addOnsCalls.push(options);
     return { data: undefined, error: undefined, loading: false };
-  },  useAdminsQuery: () => ({ data: undefined }),
-
+  },
+  useAdminsQuery: () => ({ data: undefined }),
   useCancelLaundryOrderMutation: () => [() => Promise.resolve({ data: {} }), { loading: false }],
   useCompleteLaundryOrderMutation: () => [() => Promise.resolve({ data: {} }), { loading: false }],
   useCurrentAdminQuery: () => ({
