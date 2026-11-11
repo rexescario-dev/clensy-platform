@@ -409,4 +409,145 @@ describe(`e2e static guards ${HYGIENE}`, () => {
       expect(reachers).toEqual(['global-setup.ts', 'support/provision-cli.ts']);
     });
   });
+
+  // Invariant 10, never automatic (characterization). Comments are
+  // stripped first: two src files mention the seeder in comments only.
+  // Breaks (Task 11 Step 5): a prestart script, an import in main.ts, a
+  // Dockerfile RUN line.
+  describe(`invariant 10: seeders are never run automatically ${HYGIENE}`, () => {
+    const repoRoot = resolve(__dirname, '../../..');
+    const apiDir = resolve(__dirname, '..');
+    const references = new RegExp(
+      [
+        ['seed', 'dev', 'owner'].join('-'),
+        ['db', 'seed'].join(':'),
+        ['seed', 'ts'].join('\\.'),
+        ['seed', 'js'].join('\\.'),
+        `/${'seed'}['"]`,
+        `['"][^'"]*${['dev', 'owner'].join('-')}/`,
+      ].join('|'),
+    );
+
+    function withoutComments(text: string): string {
+      const scanner = ts.createScanner(ts.ScriptTarget.Latest, true);
+      scanner.setText(text);
+      const out: string[] = [];
+      for (
+        let token = scanner.scan();
+        token !== ts.SyntaxKind.EndOfFileToken;
+        token = scanner.scan()
+      ) {
+        out.push(scanner.getTokenText());
+      }
+      return out.join(' ');
+    }
+
+    function sourceFilesUnder(dir: string): string[] {
+      return listE2eSourceFiles(dir).filter((file) => file.endsWith('.ts'));
+    }
+
+    it('no startup, build, install, test or CI path references a seeder', () => {
+      const srcDir = join(apiDir, 'src');
+      const exempt = (file: string): boolean =>
+        file.endsWith(join('platform', 'database', 'seed.ts')) ||
+        file.endsWith(
+          join(
+            'platform',
+            'database',
+            `${['seed', 'dev', 'owner'].join('-')}.ts`,
+          ),
+        ) ||
+        file.includes(join('platform', 'database', 'dev-owner')) ||
+        (file.includes(`${join('src')}/`) && file.includes(`${'/tests/'}`));
+      const hits = sourceFilesUnder(srcDir)
+        .filter((file) => !exempt(file))
+        .filter((file) =>
+          references.test(withoutComments(readFileSync(file, 'utf8'))),
+        )
+        .map((file) => file.slice(apiDir.length + 1));
+      const configs = [
+        join(repoRoot, 'Dockerfile'),
+        join(repoRoot, 'Dockerfile.web'),
+        join(repoRoot, 'docker-compose.yml'),
+        join(repoRoot, '.github/workflows/ci.yml'),
+        join(repoRoot, 'turbo.json'),
+        join(apiDir, 'test/setup-e2e-env.ts'),
+        join(apiDir, 'test/global-setup.ts'),
+      ].filter((file) => references.test(readFileSync(file, 'utf8')));
+      const scriptNames = [
+        'start',
+        'start:dev',
+        'start:debug',
+        'start:prod',
+        'prestart',
+        'prestart:dev',
+        'prebuild',
+        'build',
+        'postinstall',
+        'prepare',
+        'dev',
+        'migration:run',
+        'test',
+        'test:e2e',
+        'test:e2e:release-gate',
+      ];
+      const scriptHits: string[] = [];
+      for (const pkg of [
+        join(repoRoot, 'package.json'),
+        join(apiDir, 'package.json'),
+      ]) {
+        const scripts = (
+          JSON.parse(readFileSync(pkg, 'utf8')) as {
+            scripts: Record<string, string>;
+          }
+        ).scripts;
+        for (const name of scriptNames) {
+          if (scripts[name] !== undefined && references.test(scripts[name])) {
+            scriptHits.push(`${pkg.slice(repoRoot.length + 1)}:${name}`);
+          }
+        }
+      }
+      expect({ configs, hits, scriptHits }).toEqual({
+        configs: [],
+        hits: [],
+        scriptHits: [],
+      });
+    });
+
+    it('the dev-owner entrypoint and core import no app module, data source or seed.ts', () => {
+      const banned = /(data-source|app\.module|database\.module|\/seed)['"]/;
+      const devOwnerFiles = [
+        join(
+          apiDir,
+          'src/platform/database',
+          `${['seed', 'dev', 'owner'].join('-')}.ts`,
+        ),
+        ...sourceFilesUnder(join(apiDir, 'src/platform/database/dev-owner')),
+      ];
+      const hits = devOwnerFiles
+        .filter((file) =>
+          banned.test(withoutComments(readFileSync(file, 'utf8'))),
+        )
+        .map((file) => file.slice(apiDir.length + 1));
+      expect(hits).toEqual([]);
+    });
+
+    it('both package.json files define db:seed:dev-owner as planned', () => {
+      const name = ['db', 'seed', 'dev-owner'].join(':');
+      const api = (
+        JSON.parse(readFileSync(join(apiDir, 'package.json'), 'utf8')) as {
+          scripts: Record<string, string>;
+        }
+      ).scripts;
+      const root = (
+        JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')) as {
+          scripts: Record<string, string>;
+        }
+      ).scripts;
+      expect(api[name]).toBe(
+        `ts-node -r tsconfig-paths/register src/platform/database/${['seed', 'dev', 'owner'].join('-')}.ts`,
+      );
+      expect(root[name]).toBe(`pnpm --filter api ${name}`);
+    });
+  });
 });

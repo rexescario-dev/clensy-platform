@@ -8,7 +8,8 @@
     "build": "turbo run build",
     "test": "turbo run test",
     "lint": "turbo run lint",
-    "db:seed": "pnpm --filter api db:seed"
+    "db:seed": "pnpm --filter api db:seed",
+    "db:seed:dev-owner": "pnpm --filter api db:seed:dev-owner"
   },
   "devDependencies": {
     "turbo": "^2.5.4"
