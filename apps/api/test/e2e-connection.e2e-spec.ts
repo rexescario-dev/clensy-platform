@@ -5,11 +5,6 @@ import {
   ScratchDatabases,
   withE2eEnv,
 } from './support/e2e-connection';
-import {
-  publishE2eTarget,
-  readApiEnvFile,
-  resolveE2eTarget,
-} from './support/e2e-target';
 
 // E2E isolation spec §4.2 ("Single connection helper"), §4.5 item 2,
 // invariants 4 and 5. The admin connection is a stub: no database needed.
@@ -33,10 +28,6 @@ function stubAdmin(): StubAdmin {
   } as unknown as DataSource;
   return { admin, calls };
 }
-
-beforeAll(() => {
-  publishE2eTarget(resolveE2eTarget(process.env, readApiEnvFile()));
-});
 
 describe('ScratchDatabases', () => {
   it('generates 54-byte clensy_migration_<hex>_test names, each different', () => {
