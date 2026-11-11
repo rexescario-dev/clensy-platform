@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft** — M4 revision 3, 2026-11-12. Revision 2 was returned by the independent M5 review (findings M5R2-01 to M5R2-18); revision 3 applies them. Awaiting an independent M5 confirmation. Not Accepted. |
+| Status | **Draft** — M4 revision 3a, 2026-11-12. Revision 2 was returned by the independent M5 review (findings M5R2-01 to M5R2-18), and revision 3 applied them. Revision 3a applies the four findings of the M5 confirmation of revision 3 (M5R3-01 to M5R3-04). Awaiting a focused independent M5 confirmation. Not Accepted. |
 | Date | 2026-11-06 (revision 1); 2026-11-12 (revisions 2 and 3) |
 | Tracking issue | [#227](https://github.com/rexescario-dev/clensy-platform/issues/227) "test(api): isolate the e2e database and add a persistent dev TENANT_OWNER seeder" |
 | Branch | **Drafting (M4/M5):** `docs/227-e2e-db-isolation-spec`, which carries the Accepted spec and this plan.<br>**Implementation (M6 on):** `feat/227-e2e-db-isolation-dev-owner`, cut from the head of `docs/227-e2e-db-isolation-spec` after M5 Accepts, with `--no-track` (owner decision D-M5-4).<br>**Deviation from `CONTRIBUTING.md` L16:** that rule says "from `main`". The branch is cut from the spec branch instead, so that one PR carries the spec, the plan and the implementation (process spec §2.8, "prefer one PR"). The owner approved this in D-M5-4. |
@@ -732,8 +732,10 @@ Spec §4.2 ("Single connection helper"), §4.5 item 2, invariants 2, 4, 6, 13 an
     - **How queries are found:** through the TypeScript syntax tree, never the raw text. `ts.createSourceFile` is walked, and every `StringLiteral`, `NoSubstitutionTemplateLiteral` and `TemplateExpression` is collected. A template is taken as its head and span literals joined.
       - Comments are never examined. `payments.concurrency.e2e-spec.ts` L60 and L68 mention `pg_stat_activity` in comments, and they are not queries.
     - **What counts as a query:** a collected literal that contains `pg_stat_activity` or `pg_locks` (case-insensitive) **and** the keyword `select` or `from`.
-    - **The rule:** each such query, taken as a whole, contains a scoping predicate matching `\b(\w+\.)?datname\s*=\s*current_database\s*\(\s*\)`.
-    - **Negation ban, on the `datname` predicate only.** The query fails if it contains `datname\s*(<>|!=)\s*current_database`, or `not\s*\(?\s*(\w+\.)?datname\s*=`.
+    - **Case:** every invariant 6 pattern below, and the `select`/`from` keyword test, uses the `i` flag.
+    - **The rule:** each such query, taken as a whole, contains a scoping predicate matching `/\b(\w+\.)?datname\s*=\s*current_database\s*\(\s*\)/i`.
+    - **Negation ban, on the `datname` predicate only.** The query fails if it contains `/datname\s*(<>|!=)\s*current_database/i`, or `/\bnot\b\s*\(?\s*(\w+\.)?datname\s*=/i`.
+      - **Negative controls** (each must fail the check): an upper-case `NOT datname = current_database()`, and `NOT (a.datname = current_database())`, both assembled from fragments.
       - Other negations are **not** restricted. The legitimate `pid <> pg_backend_pid()` in `catalog.service.e2e-spec.ts:644` and `payments.concurrency.e2e-spec.ts:114`, `:119` must pass.
       - **Positive control:** the query assembled as `select … where datname = current_database() and pid <> pg_backend_pid()` passes.
     - **Exception:** a correlated `pg_locks` subquery is accepted when the enclosing literal, which is the whole query, carries the predicate.
@@ -792,7 +794,7 @@ Spec §4.5 item 1, invariant 3, §9 G6, §7 (Nest retry, note a), Review Focus 1
     - **Forbidden in `jest-e2e.json`:** `resetModules` or `resetMocks` set to `true`.
     - **`apps/api/package.json`:** no `test:e2e*` script passes `--resetModules`.
     - **Not forbidden:** `unstable_mockModule`, `moduleNameMapper` and `requireActual` are not bypasses (Jest 30.4 source).
-    - **Structure:** one `it` per forbidden form, so that each break below is the cause of exactly one failure.
+    - **Structure:** one `it` per bullet above; sub-variants share that bullet's test. For example, `isolateModulesAsync` shares the `isolateModules` test, and `resetMocks` shares the `jest-e2e.json` test. So each break below is the cause of exactly one failure.
     - **Breaks, outside the commit,** one per form. Each is added to a scratch file, or to a temporary copy of the config or script, and must make its own `it` fail:
       - (r1) `jest.resetModules()`;
       - (r2) `jest.isolateModules(() => {})`;
@@ -945,6 +947,7 @@ Spec §4.7 (guard 6, lookup, behaviour table, password check, boundaries, output
       - `mismatch` gives the id, and names each differing attribute as `<attribute> differs`, for example `isActive differs` (spec §6 L455).
       - `not normalised` says `existing account email is not normalised` and gives `count=1`, with no id.
       - `ambiguous` says `ambiguous: <N> accounts match`, with no id.
+      - `tenant missing` says `Bootstrap tenant missing` (guard 6), with no id and no count.
   - **`export function isFailure(result: DevOwnerResult): boolean`:** true for `mismatch`, `not normalised`, `ambiguous` and `tenant missing`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -972,7 +975,11 @@ Spec §4.7 (guard 6, lookup, behaviour table, password check, boundaries, output
     | caller contract | `email: 'Upper@Example.com'` | Throws before any statement. |
 
   - **Unit (`dev-owner-output.spec.ts`).** For every outcome:
-    - the line contains the outcome, the id or count, `database=`, `host=` and both sources;
+    - the line contains the outcome, `database=`, `host=` and both sources;
+    - **what else each outcome carries:**
+      - **an id (`id=`):** `created`, `unchanged`, `password reset` and `mismatch`;
+      - **a count:** `not normalised` and `ambiguous`;
+      - **neither:** `tenant missing`. Its line names the guard, `Bootstrap tenant missing`. The test does not expect an id or a count for it;
     - the sentinel email, the sentinel password and a sample bcrypt hash appear in **no** line;
     - the spec-quoted strings are pinned exactly: the `matches` line `password: matches ADMIN_SEED_PASSWORD`, the `differs` sentence, `existing account email is not normalised`, `ambiguous: 2 accounts match` and `isActive differs`;
     - `not normalised` and `ambiguous` lines contain their count and **no** `id=`; a `mismatch` line contains `id=`.
@@ -1037,7 +1044,8 @@ Spec §4.7 (invocation, "Never automatic", "Effective settings"), §2 (root alia
     | test database | `DB_NAME=clensy_test` | Exit 1; the Test-database refusal text; `count() === 0`. |
     | bad argument | argv `--bogus` | Exit 1; the argument refusal; `count() === 0`. |
     | remote host | `DB_HOST=db.example.com` | Exit 1; the host refusal; no DNS lookup is needed. |
-    | missing email | `ADMIN_SEED_EMAIL` missing from the environment; the temporary `.env` is empty | Exit 1; the credentials refusal; `count() === 0`. |    | every case | — | Output never contains the sentinel email or password. |
+    | missing email | `ADMIN_SEED_EMAIL` missing from the environment; the temporary `.env` is empty | Exit 1; the credentials refusal; `count() === 0`. |
+    | every case | — | Output never contains the sentinel email or password. |
 
     Each refusal text is matched specifically, so a later guard cannot mask an earlier one.
   - **Review Focus 5.** The same invocation, with the temporary directory's `.env` holding only `NODE_ENV=production`, and `NODE_ENV` deleted from the child environment.
