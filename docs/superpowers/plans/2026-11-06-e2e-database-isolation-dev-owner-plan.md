@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft** — M4 revision 3a, 2026-11-12. Revision 2 was returned by the independent M5 review (findings M5R2-01 to M5R2-18), and revision 3 applied them. Revision 3a applies the four findings of the M5 confirmation of revision 3 (M5R3-01 to M5R3-04). Awaiting a focused independent M5 confirmation. Not Accepted. |
+| Status | **Accepted** — 2026-11-12 (M5, owner), content as accepted at SHA-256 `86946361217d5efffeb063353dd65b1fe6b3678fba9d506e66b0c1092bed77b6` (M4 revision 3a, commit `4598433`). The acceptance is recorded under "Gate outcomes". It does not by itself authorise M6. |
 | Date | 2026-11-06 (revision 1); 2026-11-12 (revisions 2 and 3) |
 | Tracking issue | [#227](https://github.com/rexescario-dev/clensy-platform/issues/227) "test(api): isolate the e2e database and add a persistent dev TENANT_OWNER seeder" |
 | Branch | **Drafting (M4/M5):** `docs/227-e2e-db-isolation-spec`, which carries the Accepted spec and this plan.<br>**Implementation (M6 on):** `feat/227-e2e-db-isolation-dev-owner`, cut from the head of `docs/227-e2e-db-isolation-spec` after M5 Accepts, with `--no-track` (owner decision D-M5-4).<br>**Deviation from `CONTRIBUTING.md` L16:** that rule says "from `main`". The branch is cut from the spec branch instead, so that one PR carries the spec, the plan and the implementation (process spec §2.8, "prefer one PR"). The owner approved this in D-M5-4. |
@@ -1325,4 +1325,24 @@ Spec §4.5 item 4 (no observed change; `stopped`/`idle`), §7 (M6 evidence), the
 
 ## Gate outcomes
 
-*(Appended after M5.)*
+**M5 Plan Review: Accepted — 2026-11-12 (owner), content as accepted at SHA-256 `86946361217d5efffeb063353dd65b1fe6b3678fba9d506e66b0c1092bed77b6`** (M4 revision 3a, commit `4598433`), against the Accepted spec at SHA-256 `8885015db1cc2e5e09d0fc6a4b2b5cf71ea637233f07726f56b93271e9ba1ea4`.
+
+| Round | Reviewed | Outcome |
+| --- | --- | --- |
+| Consolidated M5 review, 8 parts | revision 1 (`d72ca10`) | Returned. 2 blockers, 4 spec-level items, 90 plan items. The spec-level items went to M2 revisions 5–5c. |
+| M4 review gate | revision 1 | Revise: findings M4R-01 to M4R-18. |
+| Independent consolidated M5 | revision 2 (`3113bb0`) | Revise: M5R2-01 (blocker) to M5R2-18. |
+| Independent M5 confirmation | revision 3 (`e855ed9`) | Revise (minor): M5R3-01 to M5R3-04. |
+| Focused independent M5 confirmation | revision 3a (`4598433`) | Accept recommended. The owner accepted. |
+
+**Known notes, recorded and not applied (owner decision):**
+- **M5R3a-01:** in Task 7, the first forbidden-form bullet groups `resetModules` with `isolateModules`. The intended reading is a separate test for each, and breaks (r1) and (r2) each make their own test fail.
+- **M5R3a-02:** the header Date row does not mention revision 3a.
+- **M5R3a-03:** limits of the invariant 6 hygiene pattern:
+  - doubled parentheses around a negated `datname` predicate evade the ban;
+  - an outer query passes if its only scoping predicate sits inside a `NOT EXISTS` subquery;
+  - one harmless false positive, which fails closed.
+
+  No repository query has these shapes, and the check is not a security boundary.
+
+The review reports are kept outside the repository. This acceptance does not authorise implementation by itself. M6 starts only after the pre-M6 branch step (§"Implementation sequence and gates", item 2).
