@@ -16,12 +16,13 @@ Run from the repository root.
 | `pnpm --filter api start:dev` | Watch mode on port 3000 (builds GraphiQL first). Needs Postgres and `apps/api/.env`. |
 | `pnpm --filter api build` | Production build to `dist/` (builds GraphiQL first). |
 | `pnpm --filter api test` | Unit tests (Jest). |
-| `pnpm --filter api test:e2e` | Every e2e suite against a real Postgres. Run `pnpm --filter api build:graphiql` once first on a fresh checkout. |
+| `pnpm --filter api test:e2e` | Every e2e suite against a real Postgres, in the Test database `clensy_test` (created and migrated automatically; never `clensy`). Run `pnpm --filter api build:graphiql` once first on a fresh checkout. |
 | `pnpm --filter api test:e2e:release-gate` | The two-tenant release gate only. |
 | `pnpm --filter api lint` | ESLint (with `--fix`). |
 | `pnpm --filter api migration:generate <phrase>` | Diff entities against the database into a new migration. |
 | `pnpm --filter api migration:run` / `migration:revert` | Apply pending migrations / roll back the last one. |
 | `pnpm db:seed` | Upsert fixture data and the optional dev Tenant Owner. See [local development](../../docs/getting-started/local-development.md#seed-data). |
+| `pnpm db:seed:dev-owner [--reset-password]` | Create or verify the one persistent Bootstrap `TENANT_OWNER` from `ADMIN_SEED_*`, changing nothing else. See [the development owner](../../docs/getting-started/local-development.md#the-development-owner-pnpm-dbseeddev-owner). |
 
 The usual way to run the API is the Docker Compose stack in the [root README](../../README.md).
 

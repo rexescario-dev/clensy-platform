@@ -21,12 +21,13 @@ The e2e suites in `apps/api/test/` (`*.e2e-spec.ts`) boot the real API against P
 
 ```bash
 pnpm --filter api build:graphiql     # once on a fresh checkout: app.e2e-spec.ts serves the bundle
-pnpm --filter api migration:run      # the target database must be fully migrated
 pnpm --filter api test:e2e           # every e2e suite, including the release gate
 pnpm --filter api test:e2e:release-gate
 ```
 
-- They connect with the `DB_*` values in `apps/api/.env`, and create their own rows there. The migration suites (`*.migration.e2e-spec.ts`) also create and drop scratch databases through that connection, so the database user needs `CREATE DATABASE`.
+- **Which database.** e2e runs only against a Test database, a name ending in `_test`: `DB_NAME` from the launch environment if it is set, otherwise `clensy_test`. It never takes `DB_NAME` from a file, and fails before connecting if the name does not end in `_test`. Host, port, user and password come from the launch environment, then `apps/api/.env`, then the defaults. See [development and e2e databases](../getting-started/local-development.md#development-and-e2e-databases).
+- **Setup is automatic.** Jest's `globalSetup` creates the Test database if it is missing, runs every pending migration, and confirms that none is pending; there is no manual `migration:run` step. It needs a reachable local Postgres whose user may `CREATE DATABASE`. The migration suites (`*.migration.e2e-spec.ts`) also create and drop scratch databases named `clensy_migration_<32 hex>_test`.
+- **A guard on every connection.** Every `DataSource` in an e2e test is checked before it connects and again after, so no e2e connection can be opened to a database whose name does not end in `_test`. A static test (`e2e-static-guards.e2e-spec.ts`) checks the e2e sources for forbidden patterns; it is hygiene, not a security boundary.
 - No `JWT_SECRET` is needed: under Jest (`NODE_ENV=test`) the auth services fall back to a test-only secret.
 - CI always runs them against a fresh Postgres 16 service container.
 
@@ -38,8 +39,8 @@ pnpm --filter api test:e2e:release-gate
 | --- | --- |
 | **Lint** | `pnpm run lint`, then `tsc --noEmit` for `apps/api` and `apps/web` |
 | **Test** | `pnpm run test` |
-| **Release gate** | Fresh Postgres → `migration:run` → `test:e2e:release-gate` |
-| **API e2e** | Fresh Postgres → `build:graphiql` → `migration:run` → every e2e suite except the release gate |
+| **Release gate** | Fresh Postgres (`clensy_test`) → `migration:run` → `test:e2e:release-gate`, whose `globalSetup` then confirms none pending |
+| **API e2e** | Fresh Postgres (`clensy_test`) → `build:graphiql` → `migration:run` → every e2e suite except the release gate, whose `globalSetup` then confirms none pending |
 
 ### Required checks on `main`
 
