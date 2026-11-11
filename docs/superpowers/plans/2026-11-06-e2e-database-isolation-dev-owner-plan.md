@@ -4,13 +4,13 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft** — M4 revision 2, 2026-11-12. Awaiting a consolidated, independent Plan Review (M5). Not Accepted. |
-| Date | 2026-11-06 (revision 1); 2026-11-12 (revision 2) |
+| Status | **Draft** — M4 revision 3, 2026-11-12. Revision 2 was returned by the independent M5 review (findings M5R2-01 to M5R2-18); revision 3 applies them. Awaiting an independent M5 confirmation. Not Accepted. |
+| Date | 2026-11-06 (revision 1); 2026-11-12 (revisions 2 and 3) |
 | Tracking issue | [#227](https://github.com/rexescario-dev/clensy-platform/issues/227) "test(api): isolate the e2e database and add a persistent dev TENANT_OWNER seeder" |
 | Branch | **Drafting (M4/M5):** `docs/227-e2e-db-isolation-spec`, which carries the Accepted spec and this plan.<br>**Implementation (M6 on):** `feat/227-e2e-db-isolation-dev-owner`, cut from the head of `docs/227-e2e-db-isolation-spec` after M5 Accepts, with `--no-track` (owner decision D-M5-4).<br>**Deviation from `CONTRIBUTING.md` L16:** that rule says "from `main`". The branch is cut from the spec branch instead, so that one PR carries the spec, the plan and the implementation (process spec §2.8, "prefer one PR"). The owner approved this in D-M5-4. |
 | Implements (Accepted) | [E2E Database Isolation & Development Owner Seeder](../specs/2026-11-06-e2e-database-isolation-dev-owner-design.md), **revisions 5 to 5c**: content as accepted at SHA-256 `88d56ee8d004acf0995cb353fbd86d5d3e75429b1aab93e5c4d337f326e93b21` (`fb7e602`). Acceptance recorded in `25af071`; the file is now SHA-256 `8885015d…1ea4`. |
 | Relies on (Accepted) | [Multi-Tenant Architecture](../specs/2026-09-23-multi-tenant-architecture-design.md): Bootstrap tenant, `TENANT` scope, `CHECK` constraints. Unchanged.<br>[Required CI checks](../specs/2026-10-06-required-ci-checks-design.md): job names **Release gate** and **API e2e** are unchanged. |
-| Authority | Where this plan and the Accepted spec disagree, **the spec wins**, and this plan must be revised.<br>**Planning decisions:** file names, helper names, task order and test layout.<br>**Not planning decisions:** output wording that the spec quotes (§4.7 L315–316, L324; §6 L439). That wording is spec-bound, and Task 10 pins it. |
+| Authority | Where this plan and the Accepted spec disagree, **the spec wins**, and this plan must be revised.<br>**Planning decisions:** file names, helper names, task order and test layout.<br>**Not planning decisions:** output wording that the spec quotes (§4.7 L317–318, L326, L329, L337; §6 L455, L457; line numbers at `25af071`). That wording is spec-bound, and Task 10 pins it. |
 | Scope | **`apps/api`:**<br>• `test/` infrastructure and e2e suites;<br>• the pure settings module `src/platform/database/effective-connection-settings.ts`;<br>• seeder files under `src/platform/database/` (`seed-dev-owner.ts`, `dev-owner/**`);<br>• `package.json` scripts.<br>**Elsewhere:** root `package.json` (one alias); `.github/workflows/ci.yml` (two jobs, values only); three docs. |
 | Untouched | `docker-compose.yml`, `Dockerfile`, `Dockerfile.web`, `apps/api/src/platform/database/database.module.ts`, `data-source.ts`, `seed.ts`, every migration, all application modules, every `.env` / `.env.example`, `apps/web`, `packages/*`. Also #209 and its plan. |
 | Pre-validation | **None.** No code in this plan has been run. Every `Expected:` line is a prediction until M6 records the actual result in the M6 evidence record (Task 13). |
@@ -76,7 +76,12 @@ These come from the Accepted spec and the owner's decisions. Every task implicit
 - **Maintenance connection (invariant 1, §4.4 item 2).**
   - **Limit:** one per provisioning run, to database `postgres`. It issues only `SELECT 1 FROM pg_database WHERE datname = $1` and, if absent, `CREATE DATABASE` of that run's target. It is then closed.
   - **Where it opens:** only in `globalSetup`, or in a `provision-cli.ts` child process that a §7 `globalSetup` test spawns. **Never inside a Jest test environment.**
-  - **What may import `pg` directly:** only `test/support/provision-test-database.ts`. No file loaded in a test environment imports it, directly or transitively.
+  - **Source-import rule (not a runtime rule):**
+    - Among the scanned e2e source files (Task 6), only `test/support/provision-test-database.ts` imports `pg` or any `pg-*` package, by static `import`, dynamic `import()` or `require`.
+    - No `*.e2e-spec.ts` file reaches `provision-test-database.ts` through the import graph of the scanned files.
+    - The entrypoints that do reach it, `global-setup.ts` and `provision-cli.ts`, never run inside a test environment.
+    - The rule concerns source imports only. TypeORM's Postgres driver loads `pg` at run time in every test environment, and that is expected.
+    - Anything that needs `pg` itself, such as the `pg.native` pin, runs in a child process.
 - **Invariant 4: database DDL in e2e code.** The invariant applies to **all e2e code**, whatever the scans cover.
   - Scratch `CREATE DATABASE` and `DROP DATABASE` run only through `ScratchDatabases` in `test/support/e2e-connection.ts`, on names that instance generated, that pass the rule and that differ from the E2E target.
   - Scratch names are `clensy_migration_<32 lowercase hex>_test`.
@@ -93,6 +98,7 @@ These come from the Accepted spec and the owner's decisions. Every task implicit
 - **Migration child environment (owner decision on Q4: allowlist).** `migrationCliEnv(target, parentEnv)` builds the CLI child's environment **from nothing**.
   - **Required, always set:** `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, `DB_NAME` (from the target) and `PATH`.
   - **Passed through only if present in the parent:** `HOME`, `TMPDIR`, `LANG`, `LC_ALL`, `CI`, `PNPM_HOME`, `COREPACK_HOME`.
+  - **Optional portability variables, passed through only if present:** `XDG_CACHE_HOME` and `XDG_CONFIG_HOME`. Corepack finds its cache through `COREPACK_HOME`, then `XDG_CACHE_HOME`, then `HOME/.cache`, so a developer who sets `XDG_CACHE_HOME` needs it passed through (finding M5R2-16).
   - **Never passed, among everything else:** `DOTENV_CONFIG_*`, `NODE_OPTIONS`, `NODE_PATH`, `TS_NODE_*`, `PG*`, `DATABASE_URL`, `npm_*`, `npm_config_*`, `JEST_*`.
   - **Missing `PATH`:** the builder throws `ProvisionError` if the parent has no `PATH`.
   - **Why `TS_NODE_PROJECT` can be dropped:** the `typeorm` script sets `TS_NODE_PROJECT=tsconfig.cli.json` inline.
@@ -155,8 +161,9 @@ These are failure modes the spec implies but that no other test would catch. Eac
 | `apps/api/test/support/datasource-guard.ts` (new) | `assertSafeDataSourceOptions`, `assertConnectedDatabase`, `installDataSourceGuard`, `UnsafeDataSourceError`, `GUARD_MARKER`. | 4 |
 | `apps/api/test/datasource-guard.e2e-spec.ts` (new) | Guard tests: stage 1 (zero connections), stage 2, idempotence, `pg.native` pin; then the Task 7 coverage cases. | 4, 7 |
 | `.github/workflows/ci.yml` (modify) | `clensy_test` in **Release gate** and **API e2e**. The `migration:run` steps are kept. | 8 (runs before 5) |
-| `apps/api/test/support/migration-files.ts` (new, **no `pg` import**) | `migrationFileTimestamps`, `migrationNamesFromFiles`, `findPendingMigrations`, `migrationCliEnv`, `MIGRATION_CHILD_ENV_PASSTHROUGH`, `apiRoot`. | 5 |
-| `apps/api/test/support/provision-test-database.ts` (new, the **only** `pg` importer under `test/`) | `provisionTestDatabase`, `runMigrationCli`, `readAppliedMigrations`, `ProvisionError`, `MigrationRunner`, `ProvisionResult`. | 5 |
+| `apps/api/test/support/provision-error.ts` (new, **no `pg` import**) | `ProvisionError`. | 5 |
+| `apps/api/test/support/migration-files.ts` (new, **no `pg` import**) | `migrationFileTimestamps`, `migrationNamesFromFiles`, `findPendingMigrations`, `readAppliedMigrations` (over a minimal `QueryClient` interface), `migrationCliEnv`, `MIGRATION_CHILD_ENV_PASSTHROUGH`, `apiRoot`, `QueryClient`. | 5 |
+| `apps/api/test/support/provision-test-database.ts` (new, the **only** `pg` importer under `test/`) | `provisionTestDatabase`, `runMigrationCli`, `MigrationRunner`, `ProvisionResult`. | 5 |
 | `apps/api/test/support/provision-cli.ts` (new) | Child entrypoint for the `globalSetup` tests. Supports the test-only `--skip-migrations` flag. | 5 |
 | `apps/api/test/setup-e2e-env.ts` (new) | `setupFiles` module: resolve, publish, then install the guard (Task 7). | 5, 7 |
 | `apps/api/test/global-setup.ts` (new) | Jest `globalSetup`: resolve, publish, provision. | 5 |
@@ -203,7 +210,7 @@ These are failure modes the spec implies but that no other test would catch. Eac
 **`nativeDriver` (M3 confirmation note): not rejected; a test pins the evidence.**
 - **Evidence:** `pg-native` is not installed, and TypeORM switches to it only when `pg.native` is non-null (`PostgresDriver.js:1348–1350`). A name that passes the rule cannot be read as a libpq connection string.
 - **Why not reject it:** that would extend the Accepted stage 1 contract.
-- **Pin:** Task 4 asserts `require('pg').native === null`. If that ever fails, this decision returns to **M2, then M3**, as a spec amendment.
+- **Pin:** Task 4 asserts, in a child process, that `require('pg').native === null`. If that ever fails, this decision returns to **M2, then M3**, as a spec amendment.
 
 **Running the seeder against `clensy`** is not part of M6.
 - The owner seeds the development owner after the merge, following the owner check in §"Implementation sequence and gates".
@@ -352,7 +359,7 @@ Spec §4.2 ("Single connection helper"), §4.5 item 2, invariants 4 and 5.
     - `create(admin: DataSource, name: string): Promise<void>`;
     - `drop(admin: DataSource, name: string): Promise<void>` issues `DROP DATABASE IF EXISTS`;
     - both quote the name as an identifier;
-    - both throw **before any statement** unless the name came from this instance's `generate()`, passes the rule, and differs from `e2eTarget().database`;
+    - both throw **before any statement** unless the name came from this instance's `generate()`, passes the rule, and differs from `e2eTarget().database`. Each branch has its own message: `not generated by this registry`, `fails the Test-database rule`, `is the E2E target`;
     - the SQL keywords are assembled from fragments (Global Constraints).
   - **`export async function withE2eEnv<T>(overrides: Readonly<Record<string, string | undefined>>, fn: () => Promise<T> | T): Promise<T>`:**
     - snapshots each overridden key's own-property presence and value;
@@ -366,11 +373,11 @@ Spec §4.2 ("Single connection helper"), §4.5 item 2, invariants 4 and 5.
   - **`generate()`:** matches `^clensy_migration_[0-9a-f]{32}_test$` and is 54 bytes long. Two calls differ.
   - **`create` and `drop` refuse, issuing nothing,** for each of these:
     - a name not generated by this instance;
-    - `clensy_test`, the E2E target: use an instance whose `generate` is spied to return the target name, so that the "differs from the target" branch is the one that fails;
+    - the E2E target. No spy is used: `generate` must still record the name. Generate a name, then publish that same name as the target with `withE2eEnv({ DB_NAME: name }, …)`. The name is recorded and passes the rule, so only the "differs from the target" branch can refuse. Assert the error says the name `is the E2E target`;
     - `clensy`;
     - a `generate()` result from a **different** instance.
 
-    The `admin` is a stub whose `query` records calls; assert zero calls.
+    The `admin` is a stub whose `query` records calls; assert zero calls. Each case also asserts its branch-specific message.
   - **Positive:** for a name this instance generated, `create` issues exactly one statement and `drop` exactly one. Each contains the quoted name. The test assembles the expected keywords from fragments (N1).
   - **`e2eConnectionOptions`:** `e2eConnectionOptions('clensy')` throws; `e2eConnectionOptions()` returns the published target.
   - **`e2eTarget()` throws** when, under `withE2eEnv`:
@@ -445,8 +452,10 @@ Spec §4.5 item 1, invariant 3, §7 (stage 1, stage 2, pass), the M3 `nativeDriv
     - `assertConnectedDatabase('clensy_test', 'clensy')` throws;
     - `('clensy_test', 'clensy_test')` passes;
     - a wrapper whose `destroy` rejects still surfaces `UnsafeDataSourceError`, with the destroy error as `cause`.
-  - **`nativeDriver` pin (characterization):** `expect(require('pg').native).toBeNull()`.
-    - **Break, outside the commit:** stub `pg.native` to a non-null value and expect a fail.
+  - **`nativeDriver` pin (characterization).** The spec file never imports `pg` itself (source-import rule).
+    - **How it runs:** spawn `node -e "process.exit(require('pg').native === null ? 0 : 1)"` with `cwd` = `apps/api` and a 30 s timeout, so that `pg` resolves from `apps/api` as the application's does. Task 4 computes that directory locally, as `resolve(__dirname, '..')`, because `apiRoot` is not produced until Task 5.
+    - **Expected:** exit `0`.
+    - **Break, outside the commit:** spawn the same child with `-e "Object.defineProperty(require('pg'), 'native', { value: {}, configurable: true }); process.exit(require('pg').native === null ? 0 : 1)"`, expecting exit `1`. The property must be redefined **before** anything reads it: after the first read `pg` replaces its getter with a non-configurable, non-writable `null` (`pg/lib/index.js:66–69`). A fresh child guarantees no prior read.
   - **Idempotence**, on a stub class `class Stub { initialize() {} }`:
     - first, `Stub.prototype[GUARD_MARKER]` is undefined;
     - after the first install it is `true`, and `initialize` is wrapped;
@@ -499,6 +508,7 @@ Spec §4.2 (ordering contract), §4.4 items 1–6, invariant 1, §7 (ordering, `
 - Create:
   - `apps/api/test/setup-e2e-env.ts`
   - `apps/api/test/global-setup.ts`
+  - `apps/api/test/support/provision-error.ts`
   - `apps/api/test/support/migration-files.ts`
   - `apps/api/test/support/provision-test-database.ts`
   - `apps/api/test/support/provision-cli.ts`
@@ -515,27 +525,28 @@ Spec §4.2 (ordering contract), §4.4 items 1–6, invariant 1, §7 (ordering, `
   - **`global-setup.ts`:** `export default async function globalSetup(): Promise<void>`.
     - It resolves the target and publishes it into the parent's `process.env`.
     - It calls `provisionTestDatabase(target)` with **exactly one argument**.
-    - It logs `e2e target <db>@<host>:<port>: created=<bool>, applied=<n>, pending=0`.
-  - **`migration-files.ts`** (pure; imports only `node:*`; **no `pg`, no TypeORM**):
+    - It logs `e2e target <db>@<host>:<port>: created=<bool>, applied=<n>, pending=0, unknown=<n>`.
+  - **`provision-error.ts`** (imports nothing but Node built-ins; **no `pg`**): `export class ProvisionError extends Error`. It names the step, the database and the host, and never includes the password.
+  - **`migration-files.ts`** (pure; imports only `node:*`, `./provision-error`, and the **type** `EffectiveConnectionSettings` from Task 1; **no `pg`, no TypeORM**):
+    - `export interface QueryClient { query(sql: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[] }> }` (a `pg.Client` satisfies it);
+    - `export async function readAppliedMigrations(client: QueryClient): Promise<string[]>`:
+      - `SELECT to_regclass('public.migrations') AS t`;
+      - null → `[]`;
+      - otherwise `SELECT name FROM migrations ORDER BY id`;
     - `export const apiRoot: string` (= `resolve(__dirname, '../..')`);
     - `export function migrationFileTimestamps(dir?: string): string[]`;
     - `export function migrationNamesFromFiles(dir?: string): string[]`. It reads each `src/platform/database/migrations/*.ts` file as text and returns `<ClassName><timestamp>`;
     - `export function findPendingMigrations(fileNames: readonly string[], appliedNames: readonly string[]): string[]`;
-    - `export const MIGRATION_CHILD_ENV_PASSTHROUGH = ['HOME', 'TMPDIR', 'LANG', 'LC_ALL', 'CI', 'PNPM_HOME', 'COREPACK_HOME'] as const;`
+    - `export const MIGRATION_CHILD_ENV_PASSTHROUGH = ['HOME', 'TMPDIR', 'LANG', 'LC_ALL', 'CI', 'PNPM_HOME', 'COREPACK_HOME', 'XDG_CACHE_HOME', 'XDG_CONFIG_HOME'] as const;` (the last two are optional portability variables);
     - `export function migrationCliEnv(target: EffectiveConnectionSettings, parentEnv: NodeJS.ProcessEnv): Record<string, string>`. It builds a new object with:
       - the five `DB_*` values from the target;
       - `PATH`, which is required: throw `ProvisionError` if missing;
       - each passthrough key, if present.
 
       Nothing else.
-  - **`provision-test-database.ts`** (the only `pg` importer):
-    - **`export class ProvisionError extends Error`:** names the step, the database and the host; never includes the password.
+  - **`provision-test-database.ts`** (the only `pg` importer; imports `ProvisionError` and the `migration-files.ts` helpers):
     - **`export type MigrationRunner = (target: EffectiveConnectionSettings) => Promise<void>`**
-    - **`export interface ProvisionResult { created: boolean; applied: number; maintenanceStatements: string[] }`**
-    - **`export async function readAppliedMigrations(client: pg.Client): Promise<string[]>`:**
-      - `SELECT to_regclass('public.migrations')`;
-      - null → `[]`;
-      - otherwise `SELECT name FROM migrations ORDER BY id`.
+    - **`export interface ProvisionResult { created: boolean; applied: number; unknown: number; maintenanceStatements: string[] }`**
     - **`export const runMigrationCli: MigrationRunner`:**
       - `spawn('pnpm', ['run', 'migration:run'], { cwd: apiRoot, env: migrationCliEnv(target, process.env) })`;
       - captures stdout and stderr;
@@ -551,7 +562,7 @@ Spec §4.2 (ordering contract), §4.4 items 1–6, invariant 1, §7 (ordering, `
       8. `pending = findPendingMigrations(migrationNamesFromFiles(), after)`. If any are pending, throw `ProvisionError` naming the count and the first names;
       9. close the client.
 
-      **Applied rows with no file** (schema ahead or diverged, spec §9 G7) are reported in the log line as `unknown=<n>` and do **not** fail the run, consistent with G7: documented, not detected.
+      **Applied rows with no file** (schema ahead or diverged, spec §9 G7) are counted in `ProvisionResult.unknown`, reported in the log line as `unknown=<n>`, and do **not** fail the run, consistent with G7: documented, not detected.
   - **`provision-cli.ts`:**
     - resolves from `process.env` plus `readApiEnvFile()`;
     - parses argv: `[]` or `['--skip-migrations']`, anything else exits 2;
@@ -564,11 +575,15 @@ Spec §4.2 (ordering contract), §4.4 items 1–6, invariant 1, §7 (ordering, `
     **Only this child entrypoint parses `--skip-migrations`.**
 
 - [ ] **Step 1: Write the failing tests.**
-  - **In `e2e-isolation.e2e-spec.ts`.** No test in this file opens a maintenance connection or imports `pg`. Every provisioning case runs in a `provision-cli.ts` child (B-01).
+  - **In `e2e-isolation.e2e-spec.ts`.** No test in this file opens a maintenance connection. The file imports only the `pg`-free support modules (`migration-files.ts`, `provision-error.ts`, `e2e-connection.ts`, `counting-listener.ts`), never `provision-test-database.ts` or `pg` (source-import rule). Every provisioning case runs in a `provision-cli.ts` child (B-01).
     - **Ordering** (with Review Focus 3).
-      - **Precondition:** the test writes a temporary `apps/api/.env` saying `DB_NAME=clensy` if none exists (removing it in `afterAll`), or asserts the existing file says so. This holds in CI, which has no `.env`.
+      - **Precondition, established before `AppConfigModule` loads.** `NestConfigModule.forRoot()` reads `.env` when the module is first evaluated, so the order matters.
+        - If `apps/api/.env` does not exist, the test writes one containing `DB_NAME=clensy` and the sentinel `E2E_ORDERING_SENTINEL=present`, and removes it in `afterAll`.
+        - If the file exists, the test asserts that it contains `DB_NAME=clensy`, and writes nothing.
+        - **Only then** does it load the module, by dynamic `await import('../src/platform/config/config.module')` inside the test. A static import would run `forRoot()` before the file exists.
+        - When it wrote the file, it also asserts `ConfigService.get('E2E_ORDERING_SENTINEL') === 'present'`. That proves the file was read, so the precondition is not vacuous in CI, which has no `.env`.
       - **Inside this suite, with `DOTENV_CONFIG_*` deleted through `withE2eEnv`,** each of these equals the published target:
-        - `ConfigService.get('DB_NAME')` from `Test.createTestingModule({ imports: [AppConfigModule] })`;
+        - `ConfigService.get('DB_NAME')` from `Test.createTestingModule({ imports: [AppConfigModule] })`, where `AppConfigModule` is the dynamically imported one;
         - `(await import('../src/platform/database/data-source')).default.options.database`;
         - a helper `DataSource`'s `current_database()`.
     - **`PG*` non-redirection.**
@@ -596,15 +611,23 @@ Spec §4.2 (ordering contract), §4.4 items 1–6, invariant 1, §7 (ordering, `
       - **Cleanup:** `scratch.drop` in `afterAll` (F6).
     - **Unreachable server.** `provision-cli.ts` with `DB_HOST=127.0.0.1` and `DB_PORT=<listener>` gives exit 1, and stderr names the connect step and the host, without the password.
     - **Child environment boundary (Q4 allowlist).**
-      - **Input:** `migrationCliEnv(target, poisonedParent)`, where the parent holds `DOTENV_CONFIG_OVERRIDE='true'`, `DOTENV_CONFIG_PATH='/x/.env'`, `NODE_OPTIONS='--require /x'`, `NODE_PATH='/x'`, `TS_NODE_PROJECT='/x'`, `PGDATABASE='clensy'`, `DATABASE_URL='postgres://x/clensy'`, `npm_config_x='1'`, `DB_NAME='clensy'`, `PATH='/bin'` and `HOME='/h'`.
-      - **Expected output:** exactly the keys `{DB_HOST, DB_PORT, DB_USERNAME, DB_PASSWORD, DB_NAME, PATH, HOME}`, with `DB_NAME === target.database`.
-      - **Missing `PATH`:** a parent without `PATH` throws `ProvisionError`.
+      - **Input:** `migrationCliEnv(target, poisonedParent)`. The parent holds:
+        - **variables that must be excluded:** `DOTENV_CONFIG_OVERRIDE='true'`, `DOTENV_CONFIG_PATH='/x/.env'`, `NODE_OPTIONS='--require /x'`, `NODE_PATH='/x'`, `TS_NODE_PROJECT='/x'`, `PGDATABASE='clensy'`, `DATABASE_URL='postgres://x/clensy'`, `npm_config_x='1'`, `XDG_DATA_HOME='/d'`, `XDG_RUNTIME_DIR='/r'`, `DB_NAME='clensy'`;
+        - **variables that must pass through:** `PATH='/bin'`, `HOME='/h'`, `XDG_CACHE_HOME='/c'`, `XDG_CONFIG_HOME='/g'`.
+      - **Expected output:** exactly the keys `{DB_HOST, DB_PORT, DB_USERNAME, DB_PASSWORD, DB_NAME, PATH, HOME, XDG_CACHE_HOME, XDG_CONFIG_HOME}`, with `DB_NAME === target.database` and the four pass-through values unchanged.
+        - Other XDG variables are **not** passed: the allowlist names two variables, not a prefix.
+        - A second call with `XDG_CACHE_HOME` and `XDG_CONFIG_HOME` absent from the parent returns neither key. Optional variables are never invented.
+      - **The allowlist constant:** `MIGRATION_CHILD_ENV_PASSTHROUGH` equals exactly the nine names listed in Global Constraints.
+      - **Missing `PATH`:** a parent without `PATH` throws `ProvisionError`, imported from `provision-error.ts`.
       - **Static assertion:** `provision-test-database.ts` passes `env: migrationCliEnv(` to `spawn`, and contains no `...process.env`.
     - **Switch confinement (static).**
       - `global-setup.ts` calls `provisionTestDatabase(` with one argument.
       - `provision-test-database.ts` contains no `process.env` apart from inside `migrationCliEnv(target, process.env)`.
       - The literal `--skip-migrations` appears only in `provision-cli.ts` and this test.
-    - **Unit (stub client):** `readAppliedMigrations` with `to_regclass` null returns `[]`.
+    - **Unit (stub `QueryClient`, no `pg`):**
+      - `readAppliedMigrations` with `to_regclass` null returns `[]`, and issues no second query;
+      - with the table present, it returns the names in id order.
+    - **The provisioning name is proven by the child tests, not by a unit test.** In the first-run case, a guarded `DataSource` on `e2eConnectionOptions(name)` connects to the created database. In the pending case, `pg_database` holds exactly `name`. Together they show that the provisioning `CREATE DATABASE` names `target.database`. No unit test exercises the `pg.Client` path directly.
   - **In `migration-files.e2e-spec.ts` (characterization).**
     - **What it checks.** Each file under `src/platform/database/migrations/`:
       - matches `^\d{13}-[A-Za-z0-9]+\.ts$`;
@@ -616,7 +639,7 @@ Spec §4.2 (ordering contract), §4.4 items 1–6, invariant 1, §7 (ordering, `
 - [ ] **Step 2: Run it to verify it fails.** Run `pnpm --filter api test:e2e e2e-isolation.e2e-spec migration-files.e2e-spec`. Expected: FAIL ("Cannot find module" for the new support modules).
 - [ ] **Step 3: Implement** the signatures above. Update `jest-e2e.json`. Delete Task 3's self-publish.
 - [ ] **Step 4: Run it to verify it passes.** Same command. Expected: PASS.
-  - The `globalSetup` log shows `created=true` on a machine without `clensy_test`. Later runs show `created=false, applied=0, pending=0`.
+  - The `globalSetup` log shows `created=true` on a machine without `clensy_test`. Later runs show `created=false, applied=0, pending=0, unknown=0`.
   - Run the migration-file break, and record it.
   - **If `pnpm` cannot run with the allowlisted environment** (for example corepack needs another variable): **stop and report** the missing variable to the owner. Do not widen the allowlist silently, and never fall back to spreading the parent environment.
 - [ ] **Step 5: Commit** `test(api): resolve, publish and provision the e2e test database in Jest setup (#227)`
@@ -681,7 +704,7 @@ Spec §4.2 ("Single connection helper"), §4.5 item 2, invariants 2, 4, 6, 13 an
     `static-scan.ts` itself contains none of these strings literally.
 
 - [ ] **Step 1: Write the failing static guard tests.** **Scanned set:** `listE2eSourceFiles()` for every check below. The set defines what the checks scan; **it does not narrow invariants 2, 4, 6, 13 or 14, which apply to all e2e code** (spec §7 L512). Where a check permits something, it does so by a **location allowance for a specific statement** in a named file, never by excluding the file.
-  - **Scanned-set self-check.** The set is non-empty. It contains `support/static-scan.ts`, `e2e-static-guards.e2e-spec.ts`, `helpers/migration-db.ts` and every one of the 20 converted specs. No listed file ends in `.json`.
+  - **Scanned-set self-check (characterization).** The set is non-empty. It contains `support/static-scan.ts`, `e2e-static-guards.e2e-spec.ts`, `helpers/migration-db.ts`, `setup-e2e-env.ts`, `global-setup.ts` and every one of the 20 converted specs. No listed file ends in `.json`. It passes from the day it is written, because `listE2eSourceFiles` is written alongside it. Its break is Step 5 (g).
   - **Invariant 2 hygiene.**
     - No file matches `process\.env\.DB_[A-Z]+`, except `support/e2e-target.ts` (publish) and `support/e2e-connection.ts` (`e2eTarget`, `withE2eEnv`).
     - No file matches `\?\?\s*['"]clensy['"]`.
@@ -692,16 +715,29 @@ Spec §4.2 ("Single connection helper"), §4.5 item 2, invariants 2, 4, 6, 13 an
     - the one other permitted creation statement is in `support/provision-test-database.ts`, with no drop and no `ALTER` there;
     - `alterDatabase`, `createdb` and `dropdb` occur nowhere.
 
-    The test records this limit: the check verifies **where** the provisioning creation statement is, not **which** name it creates. The name is covered by the Task 5 unit and child tests (F6).
+    The test records this limit: the check verifies **where** the provisioning creation statement is, not **which** name it creates. The name is covered by the Task 5 **child** tests: the guarded connection to the created database, and the `pg_database` row in the pending case (F6).
+  - **Pattern controls (N2).** Each of these, assembled from fragments in the test, is matched by its `SEARCHED` pattern:
+    - lower case with two spaces (`alter  database`);
+    - mixed case with a tab (`Drop\tDatabase`);
+    - a newline between keywords (`CREATE\nDATABASE`);
+    - an upper-case function name (`PG_CANCEL_BACKEND(`).
+
+    This pins case-insensitive, whitespace-tolerant matching.
   - **Invariant 14 (extension references) hygiene.** `dblink` and `postgresFdw` occur nowhere.
     - **Positive control:** the line `CREATE EXTENSION IF NOT EXISTS "uuid-ossp"` (assembled in the test) matches no `SEARCHED` pattern.
     - **The ten migration suites still pass:** `add-booking-tenant`, `add-catalog-tenant`, `add-customer-property-tenant`, `add-job-checklist-tenant`, `add-laundry-billing-tenant`, `add-laundry-line-description`, `add-team-cleaner-tenant`, `add-tenant-and-admin-scope`, `add-tenant-label-overrides` and `create-payments`. Each still contains its `uuid-ossp` statement, and each passes this check.
     - Separate from the DDL check.
   - **Invariant 13 (session termination) hygiene.** `pgTerminateBackend` and `pgCancelBackend` occur nowhere. Separate from the DDL and extension checks.
   - **Invariant 6 (activity scoping) hygiene.**
-    - **What counts as a query:** a string literal or template that contains `pg_stat_activity` or `pg_locks` **and** a SQL keyword (`select`/`from`).
-    - **The rule:** each such query, taken as a whole, contains a `datname\s*=\s*current_database\(\)` predicate. It must not use `<>`, `!=` or `NOT`.
-    - **Exception:** a correlated `pg_locks` subquery is accepted when the enclosing query carries that predicate.
+    - **How queries are found:** through the TypeScript syntax tree, never the raw text. `ts.createSourceFile` is walked, and every `StringLiteral`, `NoSubstitutionTemplateLiteral` and `TemplateExpression` is collected. A template is taken as its head and span literals joined.
+      - Comments are never examined. `payments.concurrency.e2e-spec.ts` L60 and L68 mention `pg_stat_activity` in comments, and they are not queries.
+    - **What counts as a query:** a collected literal that contains `pg_stat_activity` or `pg_locks` (case-insensitive) **and** the keyword `select` or `from`.
+    - **The rule:** each such query, taken as a whole, contains a scoping predicate matching `\b(\w+\.)?datname\s*=\s*current_database\s*\(\s*\)`.
+    - **Negation ban, on the `datname` predicate only.** The query fails if it contains `datname\s*(<>|!=)\s*current_database`, or `not\s*\(?\s*(\w+\.)?datname\s*=`.
+      - Other negations are **not** restricted. The legitimate `pid <> pg_backend_pid()` in `catalog.service.e2e-spec.ts:644` and `payments.concurrency.e2e-spec.ts:114`, `:119` must pass.
+      - **Positive control:** the query assembled as `select … where datname = current_database() and pid <> pg_backend_pid()` passes.
+    - **Exception:** a correlated `pg_locks` subquery is accepted when the enclosing literal, which is the whole query, carries the predicate.
+    - **Fixtures:** any query fixture written in the guard test builds `pg_stat` + `_activity` and `pg_` + `locks` from fragments. The guard file is in its own scanned set.
   - **Self-matching meta-assertion.** For every `SEARCHED` pattern, the source of `e2e-static-guards.e2e-spec.ts` and of `support/static-scan.ts` contains no match. The guard file is part of the scanned set, and a match anywhere fails the check.
   - Each `describe` title ends with "(hygiene, not a security boundary — spec §4.10)".
 - [ ] **Step 2: Run it to verify it fails.** Run `pnpm --filter api test:e2e e2e-static-guards`. Expected: FAIL.
@@ -714,14 +750,23 @@ Spec §4.2 ("Single connection helper"), §4.5 item 2, invariants 2, 4, 6, 13 an
   - Run `pnpm --filter api test:e2e e2e-static-guards`.
   - Then run `pnpm --filter api test:e2e --testPathPatterns 'migration\.e2e-spec|service\.e2e-spec|service\.disable-concurrency|remove-test-tenants'`. Under pnpm 10, flags after the script name pass straight to Jest; do not insert `--`.
 
-  Expected: PASS for both. No `clensy_migration_%_test` database remains afterwards, checked through `SELECT datname FROM pg_database WHERE datname LIKE 'clensy\_migration\_%\_test'` on a guarded `clensy_test` `DataSource`.
+  Expected: PASS for both.
+  - **Leftover check.** No `clensy_migration_%_test` database remains afterwards. Check it read-only, outside Jest, with:
+    ```bash
+    docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d clensy_test -At -c "SELECT datname FROM pg_database WHERE datname LIKE '"'"'clensy\_migration\_%\_test'"'"'"'
+    ```
+    Expected: no output.
+  - The guard is not installed until Task 7; this check does not depend on it.
+  - Record the output in the M6 evidence record.
 - [ ] **Step 5: Characterization runs, outside the commit.** Each break is reverted and recorded in the M6 evidence record:
   - **(a)** make one activity query in `payments.concurrency.e2e-spec.ts` observe all databases → the invariant 6 check fails;
   - **(b)** add a `pg_term` + `inate_backend(` call to a scratch file under `test/support/` → the invariant 13 check fails;
   - **(c)** add a `db` + `link` reference in `test/helpers/` → the invariant 14 check fails, while a `uuid-ossp` line in the same file does not;
   - **(d)** add `ALTER` + ` DATABASE` in `global-setup.ts` → the invariant 4 check fails. The file is not excluded;
   - **(e)** add a drop statement to `provision-test-database.ts` → the invariant 4 check fails;
-  - **(f)** write `'DROP DATABASE'` literally in `e2e-static-guards.e2e-spec.ts` → the self-match meta-assertion fails.
+  - **(f)** write `'DROP DATABASE'` literally in `e2e-static-guards.e2e-spec.ts` → the self-match meta-assertion fails;
+  - **(g)** make `listE2eSourceFiles` skip `support/**` → the scanned-set self-check fails;
+  - **(h)** add `datname <> current_database()` to a copy of the `catalog` query → the invariant 6 negation ban fails, while the unchanged `pid <> pg_backend_pid()` does not.
 - [ ] **Step 6: Commit** `test(api): route every e2e connection through the e2e target helper (#227)`
 
 ### Task 7: Install the guard and prove coverage of every DataSource path (`code`; gate G6)
@@ -747,11 +792,24 @@ Spec §4.5 item 1, invariant 3, §9 G6, §7 (Nest retry, note a), Review Focus 1
     - **Forbidden in `jest-e2e.json`:** `resetModules` or `resetMocks` set to `true`.
     - **`apps/api/package.json`:** no `test:e2e*` script passes `--resetModules`.
     - **Not forbidden:** `unstable_mockModule`, `moduleNameMapper` and `requireActual` are not bypasses (Jest 30.4 source).
-    - **Break, outside the commit:** add `jest.resetModules()` to a scratch file, and expect a fail.
-  - **Static: raw `pg` (invariant 1; characterization).**
-    - **Import graph:** an import graph over the scanned set, built from the TypeScript AST (`ts.createSourceFile` and `forEachChild`, collecting static and dynamic imports and `require`s).
-    - **The rule:** only `support/provision-test-database.ts` imports `pg` or `pg-*`. No `*.e2e-spec.ts` file imports it, directly or transitively. `migration-files.ts` imports no `pg`.
-    - **Break:** import `pg` in a scratch spec, and expect a fail.
+    - **Structure:** one `it` per forbidden form, so that each break below is the cause of exactly one failure.
+    - **Breaks, outside the commit,** one per form. Each is added to a scratch file, or to a temporary copy of the config or script, and must make its own `it` fail:
+      - (r1) `jest.resetModules()`;
+      - (r2) `jest.isolateModules(() => {})`;
+      - (r3) `jest.mock('typeorm', () => ({}))`;
+      - (r4) `require('module')`;
+      - (r5) `"resetModules": true` in a temporary copy of `jest-e2e.json`, which the check is pointed at;
+      - (r6) `--resetModules` in a temporary copy of the `test:e2e` script.
+  - **Static: raw `pg` source imports (invariant 1; characterization).**
+    - **Import graph:** built from the TypeScript AST (`ts.createSourceFile` and `forEachChild`), over the scanned set only. It collects static `import`, dynamic `import()` and `require` specifiers, and follows only relative specifiers that resolve to scanned files.
+    - **The rule, stated for source imports and not for run-time loading.** TypeORM loads `pg` at run time in every test environment, and that is expected.
+      - No scanned file other than `support/provision-test-database.ts` has a `pg` or `pg-*` specifier.
+      - No `*.e2e-spec.ts` file reaches `support/provision-test-database.ts` through the graph.
+      - The only scanned files that reach it are `global-setup.ts` and `support/provision-cli.ts`.
+      - `support/migration-files.ts` and `support/provision-error.ts` have no `pg` specifier. The Task 4 `pg.native` pin passes `pg` only as text in a child's `-e` argument, which is a string, not an import.
+    - **Breaks, outside the commit:**
+      - (p1) add `import 'pg'` to a scratch spec → fails;
+      - (p2) import `support/provision-test-database` from a scratch spec → fails.
   - **Coverage: Nest application path.**
     - Under `withE2eEnv({ DB_NAME: 'clensy', DB_HOST: '127.0.0.1', DB_PORT: String(listener.port) })`, build `Test.createTestingModule({ imports: [AppConfigModule, DatabaseModule] }).compile()`.
     - Expect a rejection whose cause chain includes `UnsafeDataSourceError`, and `count() === 0`.
@@ -772,7 +830,7 @@ Spec §4.5 item 1, invariant 3, §9 G6, §7 (Nest retry, note a), Review Focus 1
   - the coverage cases report `count() === 0`;
   - the release gate suites pass.
 
-  Run the two static breaks, and record them.
+  Run breaks (r1)–(r6) and (p1)–(p2), and record each one.
 - [ ] **Step 5: G6 gate (objective).**
   - **G6 fails** if, with the guard installed by `setupFiles` and Task 4 green, any coverage case shows `count() > 0`, or rejects without `UnsafeDataSourceError` in its cause chain.
   - **On failure:**
@@ -867,7 +925,7 @@ Spec §4.7 (guard 6, lookup, behaviour table, password check, boundaries, output
     - `{ outcome: 'unchanged'; id: string; password: 'matches' | 'differs' }`
     - `{ outcome: 'password reset'; id: string }`
     - `{ outcome: 'mismatch'; id: string; differing: readonly ('role' | 'scope' | 'tenantId' | 'isActive')[] }`
-    - `{ outcome: 'not normalised' }`
+    - `{ outcome: 'not normalised'; count: 1 }`. Spec §4.7 L337: the un-normalised and ambiguous failures give only the match count. Here the count is always 1, because a second matching row would make the result `ambiguous`.
     - `{ outcome: 'ambiguous'; count: number }`
     - `{ outcome: 'tenant missing' }`
   - **`export async function seedDevOwner(dataSource: DataSource, input: { email: string; password: string; resetPassword: boolean; bootstrapTenantId?: string }): Promise<DevOwnerResult>`.**
@@ -883,7 +941,10 @@ Spec §4.7 (guard 6, lookup, behaviour table, password check, boundaries, output
   - **`export function formatDevOwnerResult(result: DevOwnerResult, context: { database: string; host: string; emailSource: ValueSource; passwordSource: ValueSource }): string`:** one line.
     - **Example:** `dev-owner: unchanged id=<uuid> database=clensy host=localhost email-source=apps/api/.env password-source=apps/api/.env password: matches ADMIN_SEED_PASSWORD`.
     - **`differs` uses exactly** `password: differs from ADMIN_SEED_PASSWORD (run with --reset-password to apply it)`.
-    - **Failures** are prefixed `dev-owner: refused:`. `mismatch` names the differing attributes and the id. `not normalised` says `existing account email is not normalised`. `ambiguous` says `ambiguous: <N> accounts match`.
+    - **Failures** are prefixed `dev-owner: refused:`.
+      - `mismatch` gives the id, and names each differing attribute as `<attribute> differs`, for example `isActive differs` (spec §6 L455).
+      - `not normalised` says `existing account email is not normalised` and gives `count=1`, with no id.
+      - `ambiguous` says `ambiguous: <N> accounts match`, with no id.
   - **`export function isFailure(result: DevOwnerResult): boolean`:** true for `mismatch`, `not normalised`, `ambiguous` and `tenant missing`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -901,7 +962,7 @@ Spec §4.7 (guard 6, lookup, behaviour table, password check, boundaries, output
     | unchanged, matches | second call | `unchanged`, `password: 'matches'`. No write; hash byte-identical (compared in the test, never printed). |
     | unchanged, differs | a different password | `password: 'differs'`. No write. |
     | mismatch | role `FINANCE`; tenant = a `createTestTenant` tenant; `isActive=false`; and the valid scope fixture `SUPER_ADMIN` / `PLATFORM` / `tenantId NULL` → `differing = ['role', 'scope', 'tenantId']` | No write, in each sub-case. |
-    | not normalised | insert `Dev-Owner-<uuid>@example.com` through raw SQL; seed the lowercase email | No write (Review Focus 2). |
+    | not normalised | insert `Dev-Owner-<uuid>@example.com` through raw SQL; seed the lowercase email | `{ outcome: 'not normalised', count: 1 }`. No write (Review Focus 2). |
     | ambiguous | two rows differing only in case | `count: 2`. No write. |
     | password reset | `resetPassword: true` on a correct row | Exactly one `UPDATE` touching only `passwordHash`. `bcrypt.compare(newPassword)` is true. Other columns and other tables unchanged. |
     | reset + each refusal | `resetPassword: true` with not normalised, ambiguous, each mismatch kind | The same refusal, and no write. |
@@ -913,7 +974,8 @@ Spec §4.7 (guard 6, lookup, behaviour table, password check, boundaries, output
   - **Unit (`dev-owner-output.spec.ts`).** For every outcome:
     - the line contains the outcome, the id or count, `database=`, `host=` and both sources;
     - the sentinel email, the sentinel password and a sample bcrypt hash appear in **no** line;
-    - the spec-quoted strings are pinned exactly: the `differs` sentence, `existing account email is not normalised` and `ambiguous: 2 accounts match`.
+    - the spec-quoted strings are pinned exactly: the `matches` line `password: matches ADMIN_SEED_PASSWORD`, the `differs` sentence, `existing account email is not normalised`, `ambiguous: 2 accounts match` and `isActive differs`;
+    - `not normalised` and `ambiguous` lines contain their count and **no** `id=`; a `mismatch` line contains `id=`.
 - [ ] **Step 2: Run them to verify they fail.** Run `pnpm --filter api test dev-owner-output` and `pnpm --filter api test:e2e seed-dev-owner.e2e-spec`. Expected: FAIL ("Cannot find module").
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run them to verify they pass.** Same commands. Expected: PASS.
@@ -957,6 +1019,10 @@ Spec §4.7 (invocation, "Never automatic", "Effective settings"), §2 (root alia
     - `installExtensions === false`;
     - the entities are exactly those two.
   - **CLI, as a child process.**
+    - **Invocation of every case**, never `pnpm --filter`, which forces `cwd` to `apps/api` and would read the developer's real `apps/api/.env`:
+      - **command:** `node -r <apiRoot>/node_modules/ts-node/register -r <apiRoot>/node_modules/tsconfig-paths/register <apiRoot>/src/platform/database/seed-dev-owner.ts`, with absolute paths and `TS_NODE_PROJECT=<apiRoot>/tsconfig.json`;
+      - **working directory:** a fresh temporary directory per case, created with `mkdtemp` and removed afterwards. Its `.env` is written by the test: **empty** unless the case says otherwise. So `apps/api/.env` can never influence a case;
+      - **precondition:** each case asserts its `cwd` is not `apiRoot`.
     - **Environment of every child:**
       - `DB_HOST=127.0.0.1`;
       - `DB_PORT=<counting listener>`;
@@ -971,15 +1037,12 @@ Spec §4.7 (invocation, "Never automatic", "Effective settings"), §2 (root alia
     | test database | `DB_NAME=clensy_test` | Exit 1; the Test-database refusal text; `count() === 0`. |
     | bad argument | argv `--bogus` | Exit 1; the argument refusal; `count() === 0`. |
     | remote host | `DB_HOST=db.example.com` | Exit 1; the host refusal; no DNS lookup is needed. |
-    | missing email | `ADMIN_SEED_EMAIL` missing | Exit 1; the credentials refusal; `count() === 0`. |
-    | every case | — | Output never contains the sentinel email or password. |
+    | missing email | `ADMIN_SEED_EMAIL` missing from the environment; the temporary `.env` is empty | Exit 1; the credentials refusal; `count() === 0`. |    | every case | — | Output never contains the sentinel email or password. |
 
     Each refusal text is matched specifically, so a later guard cannot mask an earlier one.
-  - **Review Focus 5.** Run the entrypoint directly:
-    - **Command:** `node -r <apiRoot>/node_modules/ts-node/register -r <apiRoot>/node_modules/tsconfig-paths/register <apiRoot>/src/platform/database/seed-dev-owner.ts`, with absolute paths and `TS_NODE_PROJECT=<apiRoot>/tsconfig.json`.
-    - **Working directory:** a temporary directory holding a `.env` with `NODE_ENV=production`.
-    - **Child environment:** the same as above, with `NODE_ENV` deleted.
+  - **Review Focus 5.** The same invocation, with the temporary directory's `.env` holding only `NODE_ENV=production`, and `NODE_ENV` deleted from the child environment.
     - **Expected:** exit 1, the production refusal text and `count() === 0`. That shows the working-directory `.env` was read.
+  - **The scripts.** `apps/api/package.json` and the root `package.json` contain the exact `db:seed:dev-owner` lines from Files. This is a static assertion; the scripts are not executed by the tests.
   - **Static: never automatic (invariant 10; characterization).**
     - **Seeder references:** `seed-dev-owner`, `db:seed:dev-owner`, `db:seed`, `seed.ts`, `seed.js`, `/seed'`, `/seed"`, and imports of `dev-owner/`.
     - **Where none may appear:**
@@ -1054,7 +1117,11 @@ Spec §4.8, §4.10, §9 G4, G5 and G7. TDD does not apply. Verification is a per
 - [ ] **Step 3: Update `apps/api/README.md`:** add `db:seed:dev-owner` to the command table, and note `clensy_test` beside `test:e2e`.
 - [ ] **Step 4: Verify.**
   - **Checklist:** for each bullet in Steps 1–3, record the file, the heading and the line where it is covered, in the M6 evidence record. An item with no location fails the step.
-  - **Credentials scan:** run `git diff -U0 -- docs apps/api/README.md | grep -nEi "postgres(ql)?://[^ ]*:[^ @]*@|password\s*[:=]\s*[^<\s]|secret\s*[:=]|ADMIN_SEED_PASSWORD\s*=\s*[^<\s]"`. Expected: no output. Placeholders use `<…>` and `example.com`.
+  - **Credentials scan.**
+    - **Command:** `git diff -U0 -- docs apps/api/README.md | grep -nEi "postgres(ql)?://[^ ]*:[^ @]*@|password\s*[:=]\s*[^<\s]|secret\s*[:=]|ADMIN_SEED_PASSWORD\s*=\s*[^<\s]" | grep -vE "password: (matches|differs from) ADMIN_SEED_PASSWORD"`.
+    - **The excluded phrases** are the two spec-quoted output phrases (§4.7 L329), which the docs must show.
+    - **Expected:** no output. Placeholders use `<…>` and `example.com`.
+    - **Failure rule:** any remaining line is reviewed. A real credential is removed before the commit. A false positive is listed, with its line and the reason, in the M6 evidence record. Nothing is waved through silently.
 - [ ] **Step 5: Commit** `docs(227): document clensy_test and the dev owner seeder`
 
 ### Task 13: Acceptance evidence and push readiness (`docs/process`)
@@ -1065,8 +1132,8 @@ Spec §4.5 item 4 (no observed change; `stopped`/`idle`), §7 (M6 evidence), the
 - **What the snapshot is:** evidence of no **observed** change. It detects gross damage after the fact. It does not prevent changes, and does not prove that none happened between the two moments. It covers only the Task 13 run, not Tasks 5–12.
 
 - [ ] **Step 1: Take the "before" snapshot in `stopped` mode (the default).**
-  - **Preconditions, all recorded:**
-    - `docker compose stop api`, then `docker compose ps -a`: `api` is not running;
+  - **Preconditions, all recorded in `before-preconditions.txt`, never in `before.txt`:**
+    - `docker compose stop api`, then `docker compose ps -a`: `api` is not running. Its STATUS column holds durations, so it must not be in the diffed file;
     - `ss -ltn '( sport = :3000 )'` shows no listener;
     - the operator's attestation, labelled as an attestation, that no host tool targets `clensy` during the run.
   - **The queries.** They run read-only:
@@ -1085,8 +1152,8 @@ Spec §4.5 item 4 (no observed change; `stopped`/`idle`), §7 (M6 evidence), the
   - **Commands:** `pnpm --filter api build:graphiql && pnpm --filter api test:e2e`, then `pnpm --filter api test:e2e:release-gate`.
   - **Expected:** PASS. The log shows `e2e target clensy_test@localhost:<port>`.
 - [ ] **Step 3: Take the "after" snapshot.**
-  - **How:** the same as Step 1, into `after.txt`, including `docker compose ps -a`, the port check and the activity query.
-  - **Comparison:** `diff before.txt after.txt` must exit `0`.
+  - **How:** the same as Step 1. The SQL output goes into `after.txt`. The `docker compose ps -a` output, the port check and the attestation go into `after-preconditions.txt`.
+  - **Comparison:** `diff before.txt after.txt` must exit `0`. Only the SQL output is diffed. The precondition files are checked by their own rules (`api` not running, no listener) and recorded, not diffed.
   - **Failure rule:** any difference, any activity row, read-only not `on`, or a missing precondition means **the evidence failed**. Stop M6, record the output, and do not proceed to M7.
   - **Record:** "mode: `stopped`", the operator, both files' contents, and the final `docker compose ps -a`.
   - **`idle` mode is an exception.** It is permitted only if stopping `api` is impractical, and the reason is recorded.
@@ -1114,7 +1181,13 @@ Spec §4.5 item 4 (no observed change; `stopped`/`idle`), §7 (M6 evidence), the
   - **Branch and upstream:** `git rev-parse --abbrev-ref HEAD` (expected `feat/227-e2e-db-isolation-dev-owner`), and `git rev-parse --abbrev-ref @{u}`, which must not be `origin/main`. A branch cut with `--no-track` has no upstream.
   - **The exact proposed push:** `git push origin feat/227-e2e-db-isolation-dev-owner:feat/227-e2e-db-isolation-dev-owner`. Never a bare `git push`.
   - **The PR:** the PR that will be opened or updated (one PR for #227).
-  - **CI:** the expected runs, **Lint**, **Test**, **Release gate** and **API e2e**, on the final head. Their green results are the §7 "green CI on the PR" evidence. They are recorded after the push, and re-recorded after any later push (M7 fixes, M8, M9).
+  - **CI:** the expected runs, **Lint**, **Test**, **Release gate** and **API e2e**, on the final head. Their green results are the §7 "green CI on the PR" evidence.
+  - **CI log evidence (spec §7, "CI evidence").** After the authorised push, the M6 evidence record captures, from the final-head logs of **both** **Release gate** and **API e2e**:
+    - the `pnpm --filter api migration:run` step, present and successful;
+    - the `globalSetup` line `e2e target clensy_test@localhost:5432: created=false, applied=0, pending=0`, with `unknown=0` following it.
+
+    Either job missing either item fails the evidence.
+  - **Re-recording:** the CI results and log evidence are recorded after the push, and re-recorded after any later push (M7 fixes, M8, M9).
 
   **No push happens until the owner authorises it explicitly.** Completing this step does not authorise a push.
 
@@ -1170,19 +1243,19 @@ Spec §4.5 item 4 (no observed change; `stopped`/`idle`), §7 (M6 evidence), the
 | §4.5 item 2: scratch names and limits | 3, 6 | `ScratchDatabases` tests; DDL scan | tested; hygiene |
 | §4.5 item 3: Bootstrap never deleted | 6 | Existing `remove-test-tenants` suite | tested (partial) |
 | §4.5 item 4: no observed change; `stopped`/`idle` | 13 | Snapshot diff and failure rule | detection only |
-| §4.6: CI `clensy_test`; `migration:run` kept; job names | 8, 13 | Task 8 diff; final-head PR CI | tested after the authorised push |
+| §4.6 and §7 "CI evidence": CI `clensy_test`; `migration:run` kept; `globalSetup` reports 0 applied, none pending; job names | 8, 13 | Task 8 diff; final-head PR CI; both jobs' `migration:run` step and `created=false, applied=0, pending=0` log line (Task 13, Step 6) | tested after the authorised push |
 | §4.7 guards 1–5; `.env` location | 9, 11 | Unit and CLI tests | tested |
-| §4.7 guard 6, lookup, behaviour table, password check, output | 10 | Core e2e and output unit tests | tested |
+| §4.7 guard 6, lookup, behaviour table, password check, output (including the match count on un-normalised and ambiguous failures, L337) | 10 | Core e2e and output unit tests; spec-quoted strings pinned | tested |
 | §4.8 documentation, including every §4.10 risk | 12 | Per-item checklist | design only (review) |
 | §4.10 risks | 12, Risks | Docs and Risks | residual risk |
 | §7 fail-closed run | 5 | Child Jest run, `count() === 0` | tested |
-| §7 L509–512: three separate checks; scanned set; self-match | 6 | Static guard test and breaks (a)–(f) | hygiene |
+| §7 L509–512: three separate checks; scanned set; self-match | 6 | Static guard test; pattern controls; breaks (a)–(h) | hygiene |
 | §9 G6: coverage; note a, retries | 7 | Coverage cases; objective G6 rule | tested |
-| §9 G7: stale or diverged `clensy_test` | 5, 12 | `unknown=<n>` in the log; docs | residual risk |
+| §9 G7: stale or diverged `clensy_test` | 5, 12 | `ProvisionResult.unknown` and `unknown=<n>` in the log; docs | residual risk |
 | Call 6 (reset with no row → created) | 10 | Core test | tested |
 | Call 9 (root alias) | 11 | Script present | design only |
 | Call 10 (no audit writes) | 10 | Every table's digest unchanged | tested |
-| **Invariant 1:** Test-database connections only; one maintenance connection outside test environments | 5, 7 | B-01 child design; AST `pg` import pin; guard | tested; hygiene |
+| **Invariant 1:** Test-database connections only; one maintenance connection outside test environments | 4, 5, 7 | B-01 child design; source-import rule for `pg` (AST pin, breaks p1–p2); `pg.native` pin in a child process; guard | tested; hygiene |
 | **Invariant 2:** no `DB_NAME` from a file | 2, 5, 6 | Resolver tests; ordering test with `DOTENV_CONFIG_*` deleted; `dotenv` import ban | tested; hygiene |
 | **Invariant 3:** both guard stages, including `extra.Client` | 4, 7 | Zero-connection tests; coverage | tested |
 | **Invariant 4:** database DDL limits; no `ALTER`; the provisioning exception | 3, 5, 6 | `ScratchDatabases` tests; DDL scan with location allowances | tested; hygiene |
