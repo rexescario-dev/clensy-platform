@@ -1512,7 +1512,34 @@ d41d8cd98f00b204e9800998ecf8427e
 
 - **Step 2:** `pnpm --filter api build:graphiql && pnpm --filter api test:e2e` → 63/63 suites, 691/691 tests; `pnpm --filter api test:e2e:release-gate` → 1/1 suite, 12/12 tests. Both logged `e2e target clensy_test@localhost:5432: created=false, applied=0, pending=0, unknown=0`.
 - **Step 4:** `pnpm run lint` → 6/6 tasks, and `git status --porcelain` clean afterwards (no `--fix` rewrites); `pnpm --filter api exec tsc --noEmit` → exit 0; `pnpm --filter web exec tsc --noEmit` → exit 0; `pnpm run test` → 10/10 tasks (API unit 1372/1372).
-- **CI log evidence:** pending the separately authorised push (Step 6).
+- **CI log evidence:** recorded below (Step 6, after the owner-authorised push).
+
+### CI evidence (Task 13 Step 6), final head `b395452`
+
+**Push:** after explicit owner authorisation on 2026-11-12, `git push origin feat/227-e2e-db-isolation-dev-owner:feat/227-e2e-db-isolation-dev-owner` created the remote branch at `b395452264614bb9c621b06c7e1ddafe0041b60f`. The first attempt was rejected by GitHub because the credential lacked the `workflow` scope that `.github/workflows/ci.yml` (Task 8) needs. No remote state was created by that attempt. The owner granted the scope, and the same command was retried.
+
+**PR:** #228, base `main`, head `feat/227-e2e-db-isolation-dev-owner`. It contains 58 changed files, identical to `git diff --name-only origin/main..b395452`, and 25 commits (spec, plan and M6).
+
+**CI:** workflow run `43118108475`, `pull_request` event, `headSha` `b395452264614bb9c621b06c7e1ddafe0041b60f`, conclusion `success`.
+
+| Job | Job id | Result | Log evidence |
+| --- | --- | --- | --- |
+| Lint | `130851242802` | success | `pnpm run lint` → `Tasks: 6 successful, 6 total`; `tsc --noEmit` for `api` and `web` steps passed |
+| Test | `130851242492` | success | `pnpm run test` → `Tests: 1372 passed, 1372 total`; `Tasks: 10 successful, 10 total` |
+| Release gate | `130851242927` | success | `Run pnpm --filter api migration:run` present and successful, applying 30 migrations to the fresh service database; then `e2e target clensy_test@localhost:5432: created=false, applied=0, pending=0, unknown=0`; `Test Suites: 1 passed, 1 total`; `Tests: 12 passed, 12 total` |
+| API e2e | `130851242872` | success | `Run pnpm --filter api migration:run` present and successful, applying 30 migrations to the fresh service database; then `e2e target clensy_test@localhost:5432: created=false, applied=0, pending=0, unknown=0`; `Test Suites: 62 passed, 62 total`; `Tests: 679 passed, 679 total` (release gate excluded by `--testPathIgnorePatterns`) |
+
+Both e2e jobs ran the `migration:run` step with `DB_NAME: clensy_test` in the step environment, so both §7 items are present in both jobs.
+
+**CI compared with local (Task 13 Steps 2 and 4):**
+- **E2e:** CI's 62 + 1 suites and 679 + 12 tests equal the local 63 suites and 691 tests.
+- **Unit tests:** 1372 in both.
+- **Lint and type checks:** pass in both.
+- **The one difference** is expected. CI's `migration:run` applies 30 migrations to an empty service database, so `globalSetup` reports `applied=0`. Locally, `clensy_test` already existed.
+
+**Annotations:** the runner's Node.js 20 deprecation warning and the ubuntu-latest migration notice, both about the platform rather than this change.
+
+**Re-recording:** this record covers `b395452`. The commit that adds it changes only this plan file. CI on that head, and on any later push (M7 fixes, M8, M9), is re-checked and re-recorded.
 
 ### Rulings made during M6
 
