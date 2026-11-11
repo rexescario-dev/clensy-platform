@@ -8,7 +8,11 @@ import {
   type CountingListener,
   startCountingListener,
 } from './support/counting-listener';
-import { withE2eEnv } from './support/e2e-connection';
+import {
+  e2eConnectionOptions,
+  ScratchDatabases,
+  withE2eEnv,
+} from './support/e2e-connection';
 import {
   assertConnectedDatabase,
   GUARD_MARKER,
@@ -36,8 +40,14 @@ describe('two-stage DataSource guard (standalone)', () => {
   let listener: CountingListener;
 
   beforeAll(async () => {
-    installDataSourceGuard();
+    // From Task 7 the guard comes only from setupFiles; this file does not
+    // install it on the real DataSource class.
     listener = await startCountingListener();
+  });
+
+  it('setupFiles installed the guard on DataSource (precondition)', () => {
+    const proto = DataSource.prototype as unknown as Record<symbol, unknown>;
+    expect(proto[GUARD_MARKER]).toBe(true);
   });
 
   afterAll(async () => {
@@ -269,4 +279,67 @@ describe('two-stage DataSource guard (standalone)', () => {
       },
     );
   }, 60_000);
+
+  // G6 coverage (plan Task 7). The guard must reach every DataSource path
+  // through setupFiles alone.
+  describe('coverage of every DataSource path', () => {
+    it('helper path: a non-Test name is rejected before connecting', async () => {
+      await expectRejectedWithoutConnecting({
+        ...e2eConnectionOptions(),
+        database: 'clensy',
+        host: listener.host,
+        port: listener.port,
+      });
+    });
+
+    it('scratch path: an unsuffixed scratch name is rejected before connecting', async () => {
+      await expectRejectedWithoutConnecting({
+        ...e2eConnectionOptions(),
+        database: `clensy_migration_${'0'.repeat(32)}`,
+        host: listener.host,
+        port: listener.port,
+      });
+    });
+
+    it('scratch path: a generated name passes stage 1 and reaches the server', async () => {
+      const name = new ScratchDatabases().generate();
+      let caught: unknown;
+      try {
+        await new DataSource(e2eConnectionOptions(name)).initialize();
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).not.toBeInstanceOf(UnsafeDataSourceError);
+      // 3D000 invalid_catalog_name: the server was reached and said the
+      // database does not exist, so the guard let the connection through.
+      expect((caught as { code?: string }).code).toBe('3D000');
+    });
+
+    it('pass: a Test-database DataSource initialises, with one current_database() check', async () => {
+      const ds = new DataSource(e2eConnectionOptions());
+      const spy = jest.spyOn(ds, 'query');
+      await ds.initialize();
+      try {
+        expect(ds.isInitialized).toBe(true);
+        const checks = spy.mock.calls.filter(([sql]) =>
+          String(sql).includes('current_database()'),
+        );
+        expect(checks).toHaveLength(1);
+      } finally {
+        spy.mockRestore();
+        await ds.destroy();
+      }
+    });
+
+    it('stage 2 integration: a different reported name destroys the DataSource', async () => {
+      const ds = new DataSource(e2eConnectionOptions());
+      jest
+        .spyOn(ds, 'query')
+        .mockResolvedValueOnce([{ name: 'other_test' }] as never);
+      await expect(ds.initialize()).rejects.toBeInstanceOf(
+        UnsafeDataSourceError,
+      );
+      expect(ds.isInitialized).toBe(false);
+    });
+  });
 });

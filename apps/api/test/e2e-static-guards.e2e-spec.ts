@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import * as ts from 'typescript';
 import {
   listE2eSourceFiles,
@@ -249,6 +250,163 @@ describe(`e2e static guards ${HYGIENE}`, () => {
           });
         }
       }
+    });
+  });
+
+  // Jest module registry (Review Focus 1; characterization). One test per
+  // bullet below; sub-variants share their bullet's test. Breaks (Task 7
+  // Step 4, outside the commit): r1 resetModules, r2 isolateModules, r3 a
+  // typeorm factory mock, r4 require of the module builtin, r5
+  // resetModules in a jest-e2e.json copy, r6 the flag in a script copy.
+  describe(`Jest module registry ${HYGIENE}`, () => {
+    const jestCall = (name: string): RegExp =>
+      new RegExp(`\\b${'jest'}\\.${name}\\s*\\(`);
+    const apiRoot = resolve(__dirname, '..');
+    const jestConfigPath =
+      process.env.E2E_GUARD_JEST_CONFIG ?? join(apiRoot, 'test/jest-e2e.json');
+    const packageJsonPath =
+      process.env.E2E_GUARD_PACKAGE_JSON ?? join(apiRoot, 'package.json');
+
+    it('never resets the module registry', () => {
+      expect(offenders(jestCall(['reset', 'Modules'].join('')))).toEqual([]);
+    });
+
+    it('never isolates modules (isolateModules, isolateModulesAsync)', () => {
+      expect(
+        offenders(jestCall(`${['isolate', 'Modules'].join('')}(Async)?`)),
+      ).toEqual([]);
+    });
+
+    it('never factory-mocks typeorm, @nestjs/typeorm or pg', () => {
+      const factoryMock = new RegExp(
+        `\\b${'jest'}\\.(mock|doMock)\\s*\\(\\s*['"](typeorm|@nestjs/typeorm|pg)['"]\\s*,`,
+      );
+      expect(offenders(factoryMock)).toEqual([]);
+    });
+
+    it('never loads the module builtin', () => {
+      const builtin = ['module', 'node:module'].join('|');
+      const pattern = new RegExp(
+        `(from\\s+|require\\(\\s*|import\\(\\s*)['"](${builtin})['"]`,
+      );
+      expect(offenders(pattern)).toEqual([]);
+    });
+
+    it('jest-e2e.json sets neither resetModules nor resetMocks', () => {
+      const config = JSON.parse(readFileSync(jestConfigPath, 'utf8')) as Record<
+        string,
+        unknown
+      >;
+      expect(config[['reset', 'Modules'].join('')]).not.toBe(true);
+      expect(config[['reset', 'Mocks'].join('')]).not.toBe(true);
+    });
+
+    it('no test:e2e script passes the resetModules flag', () => {
+      const scripts = (
+        JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
+          scripts: Record<string, string>;
+        }
+      ).scripts;
+      const flag = `--${['reset', 'Modules'].join('')}`;
+      for (const [name, script] of Object.entries(scripts)) {
+        if (name.startsWith('test:e2e')) {
+          expect({ name, script: script.includes(flag) }).toEqual({
+            name,
+            script: false,
+          });
+        }
+      }
+    });
+  });
+
+  // Invariant 1, source-import rule (characterization). TypeORM loads pg at
+  // run time in every test environment; this checks source imports only.
+  // Breaks (Task 7 Step 4): p1 a pg import in a spec, p2 a spec importing
+  // provision-test-database.
+  describe(`raw pg source imports ${HYGIENE}`, () => {
+    const pgSpecifier = /^pg(-[\w-]+)?$/;
+    const provisioner = 'support/provision-test-database.ts';
+
+    function specifiers(rel: string, source: string): string[] {
+      const sourceFile = ts.createSourceFile(
+        rel,
+        source,
+        ts.ScriptTarget.Latest,
+        true,
+      );
+      const found: string[] = [];
+      const visit = (node: ts.Node): void => {
+        if (
+          (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+          node.moduleSpecifier !== undefined &&
+          ts.isStringLiteral(node.moduleSpecifier)
+        ) {
+          found.push(node.moduleSpecifier.text);
+        } else if (
+          ts.isCallExpression(node) &&
+          (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+            (ts.isIdentifier(node.expression) &&
+              node.expression.text === 'require')) &&
+          node.arguments.length > 0 &&
+          ts.isStringLiteralLike(node.arguments[0])
+        ) {
+          found.push(node.arguments[0].text);
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(sourceFile);
+      return found;
+    }
+
+    const graph = new Map<string, { local: string[]; pg: boolean }>();
+    const byRel = new Map(files.map((f) => [f.rel, f]));
+    for (const { file, rel, source } of files) {
+      const specs = specifiers(rel, source);
+      const local: string[] = [];
+      for (const spec of specs.filter((sp) => sp.startsWith('.'))) {
+        const base = resolve(dirname(file), spec);
+        for (const candidate of [
+          base,
+          ...['.ts', '.js', '/index.ts'].map((ext) => base + ext),
+        ]) {
+          const candidateRel = testRelative(candidate);
+          if (byRel.has(candidateRel)) {
+            local.push(candidateRel);
+            break;
+          }
+        }
+      }
+      graph.set(rel, { local, pg: specs.some((sp) => pgSpecifier.test(sp)) });
+    }
+
+    function reaches(from: string, target: string): boolean {
+      const seen = new Set<string>();
+      const stack = [from];
+      while (stack.length > 0) {
+        const current = stack.pop() as string;
+        if (current === target) {
+          return true;
+        }
+        if (!seen.has(current)) {
+          seen.add(current);
+          stack.push(...(graph.get(current)?.local ?? []));
+        }
+      }
+      return false;
+    }
+
+    it('only provision-test-database.ts imports pg', () => {
+      const importers = [...graph.entries()]
+        .filter(([, node]) => node.pg)
+        .map(([rel]) => rel);
+      expect(importers).toEqual([provisioner]);
+    });
+
+    it('no spec reaches provision-test-database.ts; only the two entrypoints do', () => {
+      const reachers = [...graph.keys()]
+        .filter((rel) => rel !== provisioner && reaches(rel, provisioner))
+        .sort();
+      expect(reachers).toEqual(['global-setup.ts', 'support/provision-cli.ts']);
     });
   });
 });
