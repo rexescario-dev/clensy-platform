@@ -1346,3 +1346,174 @@ Spec §4.5 item 4 (no observed change; `stopped`/`idle`), §7 (M6 evidence), the
   No repository query has these shapes, and the check is not a security boundary.
 
 The review reports are kept outside the repository. This acceptance does not authorise implementation by itself. M6 starts only after the pre-M6 branch step (§"Implementation sequence and gates", item 2).
+
+## M6 evidence
+
+**Executor:** inline (superpowers:executing-plans), branch `feat/227-e2e-db-isolation-dev-owner`, cut from `bb67b40` with `--no-track`; 2026-11-12. Operator for Task 13: the M6 executor (Claude Code session). Pre-cut check: no #227 PR, no remote branch containing 227.
+
+### Task commits
+
+| Task | Commit | Verification |
+| --- | --- | --- |
+| 1 | `8465036` | unit 110/110 |
+| 2 | `854a90d` | resolver 41/41 |
+| 3 | `b5dc729` | helper 18/18 |
+| 4 | `f8cbb06` | guard 20/20, including the early Nest probe |
+| 8 | `b9630c9` | `ci.yml` diff: 6 values (3 per job), `migration:run` ×2 kept, job names and `POSTGRES_USER` unchanged |
+| 5 | `6a10505` | isolation and provisioning 16/16; first `globalSetup` run `created=true, applied=30` with the allowlisted child environment |
+| 6 | `65dbb78` | static guards 20/20; converted suites 20 suites, 201 tests; no `clensy_migration_%` leftovers |
+| 7 | `bdfbf1b` | guard + static 54/54; **G6 passed** |
+| 9 | `0ba7cd7` | unit 35/35 |
+| 10 | `e74bf90` | core 20/20, output 11/11 |
+| 11 | `f2150cf` | options 2/2; CLI + static 37/37 |
+| 12 | `d04cc3c` | docs checklist complete; credentials scan no output |
+
+### G6 outcome (Task 7, Step 5)
+
+**Passed.** With the guard installed by `setupFiles` only: the Nest application path was rejected with `UnsafeDataSourceError` in the cause chain and listener count 0; the helper and unsuffixed-scratch paths were rejected with count 0; a generated scratch name passed stage 1 and reached the server (`3D000`); the pass case recorded one `current_database()` check; the stage 2 integration case destroyed the `DataSource`. Full suite under the guard: 61/61 suites, 662/662 tests.
+
+### Characterization runs (outside the commits; each reverted)
+
+- **Task 1:** top-level `process.env` read in the settings module → the purity test failed (1 failed, 109 passed).
+- **Task 4:** `pg.native` redefined before its first read, in the child → the pin failed (expected 0, received 1).
+- **Task 5:** class suffix changed in `1786662379007-InitBookings.ts`. Run 1 was **unsuccessful as evidence**: `globalSetup` stopped at "confirm none pending" before the assigned test ran (`clensy_test` unaffected, 30 rows). Run 2, the same break with a no-op `globalSetup` kept outside the repository → the assigned test failed (1 failed, 1 total).
+- **Task 6:** (a) unscoped payments query → invariant 6 failed; (b) session-termination call under `test/support/` → invariant 13 failed; (c) extension reference under `test/helpers/` with a `uuid-ossp` line → the reference test failed, the `uuid-ossp` test passed; (d) `ALTER` in `global-setup.ts` → invariant 4 alter test failed; (e) a drop statement in `provision-test-database.ts` → invariant 4 create/drop failed; (f) a literal drop keyword in the guard file → self-match failed (and invariant 4 create/drop, because the guard file is scanned); (g) listing skips `support/**` → scanned-set self-check failed; (h) negated `datname` in a `catalog` literal → invariant 6 failed, the `pid <>` positive control passed.
+- **Task 7:** (r1) `resetModules`, (r2) `isolateModules`, (r3) a `typeorm` factory mock, (r4) `require` of the `module` builtin, (r5) `resetModules: true` in a `jest-e2e.json` copy, (r6) `--resetModules` in a `package.json` copy, (p1) a `pg` import in a scratch spec, (p2) a scratch spec importing `provision-test-database` → each failed exactly its own test.
+- **Task 11:** (a) `prestart: pnpm db:seed`, (b) a seed import in `src/main.ts`, (c) `RUN pnpm db:seed:dev-owner` in `Dockerfile` → each failed the never-automatic test.
+
+### Docs checklist (Task 12, Step 4)
+
+`local-development.md`: "Development and e2e databases" (two databases, default and auto-create, do not export `DB_NAME` with `docker compose config`, the mixed table, concurrent checkouts with `DB_NAME=<branch>_test`, the stale-database reset in both forms with the `clensy` warning, leftover scratch databases) and "Residual risks" (every §4.10 bullet, including the pre-seeding worktree inspection); "The development owner" (first run, re-runs, `--reset-password` spelling, password check, output, source-label limit, refusals, and the three failures with manual steps); "Seed data" (the full `db:seed` effects; not a safe check); "Troubleshooting" (resolver error; stale database). `testing-and-ci.md`: the §4.2 rule, no manual `migration:run`, `CREATEDB`, and "then `globalSetup` confirms none pending". `apps/api/README.md`: the `db:seed:dev-owner` row and `clensy_test` beside `test:e2e`. Credentials scan: no output.
+
+### Snapshot of `clensy` (Task 13) — mode: `stopped`
+
+Evidence of no **observed** change: detection at two moments, not proof that no change happened between them, and not prevention. It brackets only the Task 13 run.
+
+Query file (`snapshot.sql`), run as `docker compose exec -T postgres sh -c 'PGOPTIONS="-c default_transaction_read_only=on" psql -U "$POSTGRES_USER" -d clensy -v ON_ERROR_STOP=1 -At -f -' < snapshot.sql`:
+
+```sql
+SHOW default_transaction_read_only;
+SELECT oid, datname FROM pg_database ORDER BY datname;
+SELECT pid, usename, application_name, state FROM pg_stat_activity WHERE datname = 'clensy' AND backend_type = 'client backend' AND pid <> pg_backend_pid() ORDER BY pid;
+SELECT table_schema || '.' || table_name, (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from %I.%I', table_schema, table_name), false, true, '')))[1]::text FROM information_schema.tables WHERE table_type = 'BASE TABLE' AND table_schema NOT IN ('pg_catalog', 'information_schema') ORDER BY 1;
+SELECT md5(coalesce(string_agg(t::text, '|' ORDER BY t.id), '')) FROM admin_user_entity t;
+SELECT md5(coalesce(string_agg(t::text, '|' ORDER BY t.id), '')) FROM audit_event_entity t;
+```
+
+Before preconditions:
+
+```text
+# before-preconditions 2026-11-12T04:29:41+08:00
+NAME                         IMAGE                     COMMAND                  SERVICE    CREATED       STATUS                                PORTS
+clensy-platform-api-1        clensy-platform-api       "docker-entrypoint.s…"   api        6 days ago    Exited (137) Less than a second ago   
+clensy-platform-migrate-1    clensy-platform-migrate   "docker-entrypoint.s…"   migrate    3 weeks ago   Exited (0) 6 days ago                 
+clensy-platform-postgres-1   postgres:16-alpine        "docker-entrypoint.s…"   postgres   4 weeks ago   Up 6 days (healthy)                   0.0.0.0:5432->5432/tcp, :::5432->5432/tcp
+clensy-platform-web-1        clensy-platform-web       "docker-entrypoint.s…"   web        6 days ago    Up 6 days                             0.0.0.0:3001->3001/tcp, :::3001->3001/tcp
+--- ss :3000
+State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess
+--- attestation: operator = M6 executor (Claude Code session); no host tool targets clensy during the run
+```
+
+Before (`before.txt`):
+
+```text
+on
+16384|clensy
+436216|clensy_e2e
+215585|clensy_e2e_82
+282177|clensy_e2e_83
+347114|clensy_e2e_84
+600840|clensy_e2e_87
+1209750|clensy_test
+5|postgres
+4|template0
+1|template1
+public.add_on_entity|0
+public.admin_user_entity|2
+public.audit_event_entity|0
+public.booking_entity|0
+public.checklist_entity|0
+public.checklist_item_entity|0
+public.cleaner_entity|0
+public.cleaning_job_entity|0
+public.customer_entity|5
+public.invoice_entity|5
+public.invoice_line_entity|5
+public.invoice_number_counter|1
+public.laundry_order_entity|5
+public.laundry_order_line_entity|5
+public.migrations|30
+public.payment_entity|0
+public.pricing_rule_entity|5
+public.property_entity|0
+public.service_entity|5
+public.team_entity|0
+public.tenant_entity|1
+59f46f4a2dfe20d29f5e727f0fa726b2
+d41d8cd98f00b204e9800998ecf8427e
+```
+
+After preconditions:
+
+```text
+# after-preconditions 2026-11-12T04:32:48+08:00
+NAME                         IMAGE                     COMMAND                  SERVICE    CREATED       STATUS                       PORTS
+clensy-platform-api-1        clensy-platform-api       "docker-entrypoint.s…"   api        6 days ago    Exited (137) 3 minutes ago   
+clensy-platform-migrate-1    clensy-platform-migrate   "docker-entrypoint.s…"   migrate    3 weeks ago   Exited (0) 6 days ago        
+clensy-platform-postgres-1   postgres:16-alpine        "docker-entrypoint.s…"   postgres   4 weeks ago   Up 6 days (healthy)          0.0.0.0:5432->5432/tcp, :::5432->5432/tcp
+clensy-platform-web-1        clensy-platform-web       "docker-entrypoint.s…"   web        6 days ago    Up 6 days                    0.0.0.0:3001->3001/tcp, :::3001->3001/tcp
+--- ss :3000
+State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess
+--- attestation: operator = M6 executor (Claude Code session); no host tool targeted clensy during the run
+```
+
+After (`after.txt`):
+
+```text
+on
+16384|clensy
+436216|clensy_e2e
+215585|clensy_e2e_82
+282177|clensy_e2e_83
+347114|clensy_e2e_84
+600840|clensy_e2e_87
+1209750|clensy_test
+5|postgres
+4|template0
+1|template1
+public.add_on_entity|0
+public.admin_user_entity|2
+public.audit_event_entity|0
+public.booking_entity|0
+public.checklist_entity|0
+public.checklist_item_entity|0
+public.cleaner_entity|0
+public.cleaning_job_entity|0
+public.customer_entity|5
+public.invoice_entity|5
+public.invoice_line_entity|5
+public.invoice_number_counter|1
+public.laundry_order_entity|5
+public.laundry_order_line_entity|5
+public.migrations|30
+public.payment_entity|0
+public.pricing_rule_entity|5
+public.property_entity|0
+public.service_entity|5
+public.team_entity|0
+public.tenant_entity|1
+59f46f4a2dfe20d29f5e727f0fa726b2
+d41d8cd98f00b204e9800998ecf8427e
+```
+
+`diff before.txt after.txt` → exit 0. Read-only `on` both times; no client session on `clensy` either time. `docker compose start api` afterwards also re-ran the `migrate` service (exited 0), after the "after" snapshot (open question Q3: yes).
+
+### Task 13 runs
+
+- **Step 2:** `pnpm --filter api build:graphiql && pnpm --filter api test:e2e` → 63/63 suites, 691/691 tests; `pnpm --filter api test:e2e:release-gate` → 1/1 suite, 12/12 tests. Both logged `e2e target clensy_test@localhost:5432: created=false, applied=0, pending=0, unknown=0`.
+- **Step 4:** `pnpm run lint` → 6/6 tasks, and `git status --porcelain` clean afterwards (no `--fix` rewrites); `pnpm --filter api exec tsc --noEmit` → exit 0; `pnpm --filter web exec tsc --noEmit` → exit 0; `pnpm run test` → 10/10 tasks (API unit 1372/1372).
+- **CI log evidence:** pending the separately authorised push (Step 6).
+
+### Rulings made during M6
+
+Recorded in full in the M6 ledger and summarised in the M6 Slice Completion Report: the purity pin as one test (Task 1); the `PostgresConnectionOptions` alias (Task 3); the guard's scoped `unbound-method` disable (Task 4); deferred `require()` for the ordering test, async spawn for listener-observed children, and the `pg` result annotation (Task 5); renamed `SEARCHED` keys and test titles, `e2eTarget()` in the options test, and the `create target` step label (Task 6); the `E2E_GUARD_*` env seams for breaks r5/r6 (Task 7); the raw-insert winner in the race test (Task 10); comment stripping in the never-automatic check (Task 11).
