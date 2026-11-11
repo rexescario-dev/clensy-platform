@@ -94,7 +94,7 @@ export async function provisionTestDatabase(
         created = true;
       } catch (error) {
         if ((error as { code?: string }).code !== DUPLICATE_DATABASE) {
-          throw fail(target, 'create database', (error as Error).message);
+          throw fail(target, 'create target', (error as Error).message);
         }
       }
     }

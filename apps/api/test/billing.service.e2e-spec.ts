@@ -31,6 +31,7 @@ import {
   BillingDbTestLock,
 } from './helpers/billing-db-test-lock';
 import { uniqueEmail } from './helpers/unique-email';
+import { e2eConnectionOptions } from './support/e2e-connection';
 
 // This whole file runs under `acquireBillingDbTestLock` and truncates
 // `customer_entity` (among others) in its own `beforeEach` — no other spec
@@ -59,13 +60,8 @@ const ENTITIES = [
 
 const makeDataSource = () =>
   new DataSource({
-    database: process.env.DB_NAME ?? 'clensy',
+    ...e2eConnectionOptions(),
     entities: ENTITIES,
-    host: process.env.DB_HOST ?? 'localhost',
-    password: process.env.DB_PASSWORD ?? 'clensy_dev',
-    port: Number(process.env.DB_PORT ?? 5432),
-    type: 'postgres',
-    username: process.env.DB_USERNAME ?? 'clensy',
   });
 
 const TRUNCATE =

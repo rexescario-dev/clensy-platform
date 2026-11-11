@@ -102,13 +102,13 @@ describe('e2eConnectionOptions', () => {
   });
 
   it('returns the published target by default', () => {
-    const options = e2eConnectionOptions();
-    expect(options).toMatchObject({
-      database: process.env.DB_NAME,
-      host: process.env.DB_HOST,
-      port: Number(process.env.DB_PORT),
+    const target = e2eTarget();
+    expect(e2eConnectionOptions()).toMatchObject({
+      database: target.database,
+      host: target.host,
+      port: target.port,
       type: 'postgres',
-      username: process.env.DB_USERNAME,
+      username: target.username,
     });
   });
 });

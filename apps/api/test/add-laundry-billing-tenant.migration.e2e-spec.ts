@@ -2,7 +2,15 @@ import { randomUUID } from 'crypto';
 import { DataSource, QueryRunner } from 'typeorm';
 import { BOOTSTRAP_TENANT_ID } from '../src/platform/database/bootstrap-tenant';
 import { AddLaundryBillingTenant1790784000000 } from '../src/platform/database/migrations/1790784000000-AddLaundryBillingTenant';
-import { connectionOptions, migrationsBefore } from './helpers/migration-db';
+import { migrationsBefore } from './helpers/migration-db';
+import {
+  e2eConnectionOptions,
+  ScratchDatabases,
+} from './support/e2e-connection';
+
+// One registry per file: scratch databases are created and dropped only
+// through it (E2E isolation spec §4.5 item 2, invariant 4).
+const scratch = new ScratchDatabases();
 
 const TABLES = [
   'laundry_order_entity',
@@ -52,14 +60,12 @@ async function createMigrationDb(): Promise<{
   queryRunner: QueryRunner;
   database: string;
 }> {
-  const database = `clensy_migration_${randomUUID().replace(/-/g, '')}`;
-  const admin = new DataSource(
-    connectionOptions(process.env.DB_NAME ?? 'clensy'),
-  );
+  const database = scratch.generate();
+  const admin = new DataSource(e2eConnectionOptions());
   await admin.initialize();
-  await admin.query(`CREATE DATABASE "${database}"`);
+  await scratch.create(admin, database);
   const dataSource = new DataSource({
-    ...connectionOptions(database),
+    ...e2eConnectionOptions(database),
     migrations: migrationsBefore('1790784000000'),
   });
   await dataSource.initialize();
@@ -80,9 +86,15 @@ async function dropMigrationDb(db: {
   database: string;
 }): Promise<void> {
   await db.queryRunner?.release();
-  await db.dataSource?.destroy();
-  await db.admin?.query(`DROP DATABASE IF EXISTS "${db.database}"`);
-  await db.admin?.destroy();
+  if (db.dataSource?.isInitialized) {
+    await db.dataSource.destroy();
+  }
+  if (db.admin) {
+    await scratch.drop(db.admin, db.database);
+  }
+  if (db.admin?.isInitialized) {
+    await db.admin.destroy();
+  }
 }
 
 function fixtures(getRunner: () => QueryRunner) {

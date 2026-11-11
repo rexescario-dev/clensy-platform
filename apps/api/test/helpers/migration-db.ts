@@ -26,14 +26,3 @@ export function migrationsBefore(
       return Object.values(exported)[0];
     });
 }
-
-export function connectionOptions(database: string) {
-  return {
-    database,
-    host: process.env.DB_HOST ?? 'localhost',
-    password: process.env.DB_PASSWORD ?? 'clensy_dev',
-    port: Number(process.env.DB_PORT ?? 5432),
-    type: 'postgres' as const,
-    username: process.env.DB_USERNAME ?? 'clensy',
-  };
-}

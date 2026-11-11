@@ -3,7 +3,15 @@ import { DataSource, QueryRunner } from 'typeorm';
 import { BOOTSTRAP_TENANT_ID } from '../src/platform/database/bootstrap-tenant';
 import { CustomerEmailDuplicateError } from '../src/platform/database/customer-email-duplicates';
 import { AddCustomerPropertyTenant1790265191400 } from '../src/platform/database/migrations/1790265191400-AddCustomerPropertyTenant';
-import { connectionOptions, migrationsBefore } from './helpers/migration-db';
+import { migrationsBefore } from './helpers/migration-db';
+import {
+  e2eConnectionOptions,
+  ScratchDatabases,
+} from './support/e2e-connection';
+
+// One registry per file: scratch databases are created and dropped only
+// through it (E2E isolation spec §4.5 item 2, invariant 4).
+const scratch = new ScratchDatabases();
 
 const NEW_CONSTRAINTS = [
   'fk_customer_tenant',
@@ -26,7 +34,7 @@ const NEW_INDEXES = [
 // The cases below are intentionally sequential: later cases depend on state
 // (schema objects, rows) left behind by earlier ones.
 describe('AddCustomerPropertyTenant migration (real Postgres)', () => {
-  const database = `clensy_migration_${randomUUID().replace(/-/g, '')}`;
+  const database = scratch.generate();
   let admin: DataSource;
   let dataSource: DataSource;
   let queryRunner: QueryRunner;
@@ -96,12 +104,12 @@ describe('AddCustomerPropertyTenant migration (real Postgres)', () => {
   }
 
   beforeAll(async () => {
-    admin = new DataSource(connectionOptions(process.env.DB_NAME ?? 'clensy'));
+    admin = new DataSource(e2eConnectionOptions());
     await admin.initialize();
-    await admin.query(`CREATE DATABASE "${database}"`);
+    await scratch.create(admin, database);
 
     dataSource = new DataSource({
-      ...connectionOptions(database),
+      ...e2eConnectionOptions(database),
       migrations: migrationsBefore('1790265191400'),
     });
     await dataSource.initialize();
@@ -120,8 +128,10 @@ describe('AddCustomerPropertyTenant migration (real Postgres)', () => {
 
   afterAll(async () => {
     await queryRunner?.release();
-    await dataSource?.destroy();
-    await admin.query(`DROP DATABASE IF EXISTS "${database}"`);
+    if (dataSource?.isInitialized) {
+      await dataSource.destroy();
+    }
+    await scratch.drop(admin, database);
     await admin.destroy();
   });
 

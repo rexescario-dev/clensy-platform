@@ -2,7 +2,15 @@ import { randomUUID } from 'crypto';
 import { DataSource, QueryRunner } from 'typeorm';
 import { BOOTSTRAP_TENANT_ID } from '../src/platform/database/bootstrap-tenant';
 import { CreatePayments1791043200000 } from '../src/platform/database/migrations/1791043200000-CreatePayments';
-import { connectionOptions, migrationsBefore } from './helpers/migration-db';
+import { migrationsBefore } from './helpers/migration-db';
+import {
+  e2eConnectionOptions,
+  ScratchDatabases,
+} from './support/e2e-connection';
+
+// One registry per file: scratch databases are created and dropped only
+// through it (E2E isolation spec §4.5 item 2, invariant 4).
+const scratch = new ScratchDatabases();
 
 const PAYMENT_COLUMNS = `"id", "tenantId", "invoiceId", "type", "method", "amountMinorUnits", "status", "paidAt", "refundedPaymentId", "recordedByStaffId", "idempotencyKey"`;
 
@@ -24,7 +32,7 @@ interface PaymentRow {
 // idempotency key; down() refuses while an invoice holds either new status.
 // Throwaway database migrated to just before it. Sequential cases.
 describe('CreatePayments migration (real Postgres)', () => {
-  const database = `clensy_migration_${randomUUID().replace(/-/g, '')}`;
+  const database = scratch.generate();
   const migration = new CreatePayments1791043200000();
   let admin: DataSource;
   let dataSource: DataSource;
@@ -133,11 +141,11 @@ describe('CreatePayments migration (real Postgres)', () => {
   }
 
   beforeAll(async () => {
-    admin = new DataSource(connectionOptions(process.env.DB_NAME ?? 'clensy'));
+    admin = new DataSource(e2eConnectionOptions());
     await admin.initialize();
-    await admin.query(`CREATE DATABASE "${database}"`);
+    await scratch.create(admin, database);
     dataSource = new DataSource({
-      ...connectionOptions(database),
+      ...e2eConnectionOptions(database),
       migrations: migrationsBefore('1791043200000'),
     });
     await dataSource.initialize();
@@ -158,9 +166,15 @@ describe('CreatePayments migration (real Postgres)', () => {
 
   afterAll(async () => {
     await queryRunner?.release();
-    await dataSource?.destroy();
-    await admin?.query(`DROP DATABASE IF EXISTS "${database}"`);
-    await admin?.destroy();
+    if (dataSource?.isInitialized) {
+      await dataSource.destroy();
+    }
+    if (admin) {
+      await scratch.drop(admin, database);
+    }
+    if (admin?.isInitialized) {
+      await admin.destroy();
+    }
   });
 
   it('up() adds OVERPAID and REFUNDED to invoice_payment_status_enum and creates payment_entity', async () => {

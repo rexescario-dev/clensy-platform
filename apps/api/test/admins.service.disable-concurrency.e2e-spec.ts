@@ -15,6 +15,7 @@ import {
   removeTestTenants,
   seedTenantAdmin,
 } from './helpers/seed-tenant-admin';
+import { e2eConnectionOptions } from './support/e2e-connection';
 
 // Separate file, on purpose: this test proves actual Postgres row-locking
 // behavior, which no mock can do. It opens TWO independent `DataSource`
@@ -42,13 +43,8 @@ describe('AdminsService.disable — last-active-Tenant-Owner race (real Postgres
 
   const makeDataSource = () =>
     new DataSource({
-      database: process.env.DB_NAME ?? 'clensy',
+      ...e2eConnectionOptions(),
       entities: [AdminUserEntity, AuditEventEntity, TenantEntity],
-      host: process.env.DB_HOST ?? 'localhost',
-      password: process.env.DB_PASSWORD ?? 'clensy_dev',
-      port: Number(process.env.DB_PORT ?? 5432),
-      type: 'postgres',
-      username: process.env.DB_USERNAME ?? 'clensy',
     });
 
   beforeAll(async () => {

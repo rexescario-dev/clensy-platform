@@ -15,6 +15,7 @@ import {
   acquireCustomerDbTestLock,
   CustomerDbTestLock,
 } from './helpers/customer-db-test-lock';
+import { e2eConnectionOptions } from './support/e2e-connection';
 
 // This whole file runs under `acquireCustomerDbTestLock` and truncates
 // `customer_entity`/`property_entity` in its own `beforeEach` — no other
@@ -30,7 +31,7 @@ const TENANT_ID = BOOTSTRAP_TENANT_ID;
 // stateless config/query/fixture shape is factored out here.
 function createTestDataSource(): DataSource {
   return new DataSource({
-    database: process.env.DB_NAME ?? 'clensy',
+    ...e2eConnectionOptions(),
     entities: [
       CustomerEntity,
       PropertyEntity,
@@ -45,11 +46,6 @@ function createTestDataSource(): DataSource {
       AuditEventEntity,
       TenantEntity,
     ],
-    host: process.env.DB_HOST ?? 'localhost',
-    password: process.env.DB_PASSWORD ?? 'clensy_dev',
-    port: Number(process.env.DB_PORT ?? 5432),
-    type: 'postgres',
-    username: process.env.DB_USERNAME ?? 'clensy',
   });
 }
 
