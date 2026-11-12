@@ -1347,6 +1347,59 @@ Spec §4.5 item 4 (no observed change; `stopped`/`idle`), §7 (M6 evidence), the
 
 The review reports are kept outside the repository. This acceptance does not authorise implementation by itself. M6 starts only after the pre-M6 branch step (§"Implementation sequence and gates", item 2).
 
+**M7 Code Review: Approved for merge — 2026-11-12. Owner accepted the verdict.** 0 blocking findings, 11 non-blocking observations.
+
+- **Reviewer:** a fresh, independent agent, Claude Fable 5.1 (`claude-fable-5-1`), that did not implement #227. Dispatched under `CLAUDE.md` "M7 code review: who reviews", because the slice changes application code and the database.
+- **Subject:** PR #228, branch `feat/227-e2e-db-isolation-dev-owner`, head `98431f2452c04b96ba042e2ced33ee15706ab580`, base `main`, merge base `c9e449f`. Reviewed against the Accepted spec and this Accepted plan.
+- **Report:** kept verbatim, outside the tracked tree, at `.superpowers/sdd/2026-11-06-e2e-database-isolation-dev-owner-plan/m7-review-227.md`, SHA-256 `a5307561d7bc04e4aa1a2eb327582b3885a0cde5b1357c0d841f130559de115e`. The report is the authority; this record summarises it.
+- **Scope:**
+  - all 13 tasks and their diffs;
+  - the M6 evidence and characterization breaks;
+  - the implementation-time rulings;
+  - database isolation and failure paths;
+  - CI evidence against local verification;
+  - regressions, missing tests and cross-section consistency;
+  - repository conventions, including the `CONTRIBUTING.md` L16 deviation.
+
+**Confirmed by the reviewer**
+
+- **Plan conformance:**
+  - all 13 tasks ✓;
+  - running Task 8 before Task 5 is authorised by the plan;
+  - no undeclared scope: every changed file maps to the File structure table, and the "Untouched" list holds;
+  - the M6 work began after the acceptance record `bb67b40`.
+- **Spec conformance:** every §4.1–§4.10 item, invariants 1–14 and the §7 scanned set and evidence list trace to code and tests. No invented semantics.
+- **Characterization evidence:**
+  - every recorded break is valid;
+  - the Task 5 rerun with a no-op `globalSetup` kept outside the repository meets the characterization-test rule, because the assigned test failed because of the break;
+  - Task 5's first run is correctly recorded as unsuccessful as evidence.
+- **Rulings:** all nine M6 rulings accepted.
+- **CI, read-only via `gh`:** runs `43118108475` (`b395452`) and `43118683132` (`98431f2`), all four jobs success. In both e2e jobs at both heads, `migration:run` ran with `DB_NAME: clensy_test`, followed by `e2e target clensy_test@localhost:5432: created=false, applied=0, pending=0, unknown=0`. API e2e reported 62 suites and 679 tests; Release gate 1 suite and 12 tests.
+- **Reviewer's own runs, with no database:**
+  - `tsc --noEmit` for `api`, exit 0;
+  - eslint without `--fix`, exit 0;
+  - unit tests, 4 suites and 158 tests;
+  - the static-guard, resolver, helper and migration-file e2e specs, with a no-op `globalSetup` and unreachable port 1: 4 suites, 91 tests.
+- **Not re-run by the reviewer:** the database-backed suites. They were taken from the M6 record and corroborated by the CI logs. The `clensy` snapshot was reviewed as recorded: evidence of no observed change only.
+
+**Non-blocking observations (open; not fixed by this record)**
+
+These are the reviewer's observations, not confirmed defects. None is resolved here. Each is an M8/M9 triage item.
+
+1. `apps/api/test/e2e-isolation.e2e-spec.ts:163–164`: the ordering precondition depends on the developer's local `apps/api/.env` containing `DB_NAME=clensy`. This is plan-prescribed (Task 5 Step 1). The reviewer suggests an M9 note or a clearer assertion message.
+2. `apps/api/test/support/provision-test-database.ts:45–48`: on the 120 s migration timeout, SIGKILL reaches only the `pnpm` process, so a `ts-node` grandchild may keep running.
+3. The static scan misses some forms: bracket access `process.env['DB_NAME']`, a `|| 'clensy'` fallback, and `pg` subpath imports such as `pg/lib/client`. The scan is a hygiene check, not a security boundary (spec).
+4. `apps/api/test/support/migration-files.ts:78`: `migrationFileTimestamps` is exported but unused.
+5. `apps/api/test/e2e-static-guards.e2e-spec.ts:265–268`: the `E2E_GUARD_JEST_CONFIG` / `E2E_GUARD_PACKAGE_JSON` overrides are undocumented in code. Nothing in the repository sets them.
+6. `apps/api/src/platform/database/dev-owner/dev-owner-seeder.ts:57`: the ambiguous-match output repeats the row count. Cosmetic.
+7. `apps/api/src/platform/database/seed-dev-owner.ts:48`: refusals and errors go to stdout, not stderr. Cosmetic.
+8. `apps/api/src/platform/database/dev-owner/dev-owner-datasource.ts:12` duplicates the `Extract<DataSourceOptions, { type: 'postgres' }>` alias from `apps/api/test/support/e2e-connection.ts:15`. `src` cannot import from `test`.
+9. `docs/development/testing-and-ci.md:27` shortens the Test-database rule to a name "ending in `_test`".
+10. The PR #228 description said "31 planned breaks". The M6 record shows 22 distinct planned breaks across 23 runs, and is consistent. The PR description is corrected separately; this plan's M6 record is unchanged.
+11. The M6 Slice Completion Report, which labels the `CONTRIBUTING.md` L16 deviation, is not stored in the repository, so the reviewer could not confirm that labelling. The deviation itself is owner-approved (D-M5-4) and recorded in this plan's header.
+
+**Next gate:** observations 1–9 and 11 go to a separate, owner-authorised fix pass, followed by a fresh M7 re-review of that fix diff. Observation 10 is handled by the PR description correction. Merge is not authorised by this record.
+
 ## M6 evidence
 
 **Executor:** inline (superpowers:executing-plans), branch `feat/227-e2e-db-isolation-dev-owner`, cut from `bb67b40` with `--no-track`; 2026-11-12. Operator for Task 13: the M6 executor (Claude Code session). Pre-cut check: no #227 PR, no remote branch containing 227.
