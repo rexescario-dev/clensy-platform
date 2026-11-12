@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import { Client } from 'pg';
 import type { EffectiveConnectionSettings } from '../../src/platform/database/effective-connection-settings';
 import {
@@ -10,6 +9,7 @@ import {
   readAppliedMigrations,
 } from './migration-files';
 import { ProvisionError } from './provision-error';
+import { runWithTimeout } from './run-with-timeout';
 
 // E2E isolation spec §4.4: provisioning for the Jest globalSetup. This is
 // the only file under apps/api/test that imports `pg` (invariant 1,
@@ -31,34 +31,23 @@ const MIGRATION_TIMEOUT_MS = 120_000;
 const CREATE_DATABASE = ['CREATE', 'DATABASE'].join(' ');
 const DUPLICATE_DATABASE = '42P04';
 
-export const runMigrationCli: MigrationRunner = (target) =>
-  new Promise<void>((resolveRun, rejectRun) => {
-    const child = spawn('pnpm', ['run', 'migration:run'], {
-      cwd: apiRoot,
-      env: migrationCliEnv(target, process.env),
-    });
-    let stderr = '';
-    child.stdout.resume();
-    child.stderr.on('data', (chunk: Buffer) => {
-      stderr = (stderr + chunk.toString()).slice(-2048);
-    });
-    const timer = setTimeout(() => {
-      child.kill('SIGKILL');
-      rejectRun(fail(target, 'migrate', 'timed out after 120 s', stderr));
-    }, MIGRATION_TIMEOUT_MS);
-    child.on('error', (error) => {
-      clearTimeout(timer);
-      rejectRun(fail(target, 'migrate', error.message, stderr));
-    });
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      if (code === 0) {
-        resolveRun();
-      } else {
-        rejectRun(fail(target, 'migrate', `exit code ${code}`, stderr));
-      }
-    });
+export const runMigrationCli: MigrationRunner = async (target) => {
+  // migrationCliEnv runs before the child starts, so its own ProvisionError
+  // (no PATH) propagates as is; only a spawn error is wrapped here.
+  const run = await runWithTimeout('pnpm', ['run', 'migration:run'], {
+    cwd: apiRoot,
+    env: migrationCliEnv(target, process.env),
+    timeoutMs: MIGRATION_TIMEOUT_MS,
+  }).catch((error: Error) => {
+    throw fail(target, 'migrate', error.message, '');
   });
+  if (run.timedOut) {
+    throw fail(target, 'migrate', 'timed out after 120 s', run.stderr);
+  }
+  if (run.code !== 0) {
+    throw fail(target, 'migrate', `exit code ${run.code}`, run.stderr);
+  }
+};
 
 export async function provisionTestDatabase(
   target: EffectiveConnectionSettings,

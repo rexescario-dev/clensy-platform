@@ -75,10 +75,6 @@ export function migrationCliEnv(
   return env;
 }
 
-export function migrationFileTimestamps(dir = MIGRATIONS_DIR): string[] {
-  return migrationFiles(dir).map((file) => file.timestamp);
-}
-
 /** `<ClassName><timestamp>` for each migration file, the name TypeORM records. */
 export function migrationNamesFromFiles(dir = MIGRATIONS_DIR): string[] {
   return migrationFiles(dir).map((file) => {

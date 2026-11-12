@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import * as ts from 'typescript';
 import {
@@ -15,6 +15,13 @@ import {
 // assembled from fragments here, because this file is in its own scanned set.
 
 const HYGIENE = '(hygiene, not a security boundary — spec §4.10)';
+
+/** Invariant 2: a direct `DB_*` read, dotted or bracketed (M7 observation 3). */
+const DB_ENV_READ = /process\.env(\.DB_[A-Z]+|\[\s*['"`]DB_[A-Z]+['"`]\s*\])/;
+/** Invariant 2: a literal `clensy` fallback after `??` or `||`. */
+const CLENSY_FALLBACK = /(\?\?|\|\|)\s*['"`]clensy['"`]/;
+/** A `pg` or `pg-*` package specifier, or a subpath of one. */
+const PG_SPECIFIER = /^pg(-[\w-]+)?(\/.*)?$/;
 
 const files = listE2eSourceFiles().map((file) => ({
   file,
@@ -96,7 +103,7 @@ describe(`e2e static guards ${HYGIENE}`, () => {
   describe(`invariant 2: DB_* only through the helper ${HYGIENE}`, () => {
     it('reads process.env.DB_* only in the target and connection helpers', () => {
       expect(
-        offenders(/process\.env\.DB_[A-Z]+/, [
+        offenders(DB_ENV_READ, [
           'support/e2e-connection.ts',
           'support/e2e-target.ts',
         ]),
@@ -104,7 +111,7 @@ describe(`e2e static guards ${HYGIENE}`, () => {
     });
 
     it('has no literal clensy fallback', () => {
-      expect(offenders(/\?\?\s*['"]clensy['"]/)).toEqual([]);
+      expect(offenders(CLENSY_FALLBACK)).toEqual([]);
     });
 
     it('imports no dotenv', () => {
@@ -205,6 +212,63 @@ describe(`e2e static guards ${HYGIENE}`, () => {
     });
   });
 
+  // M7 observation 3: the forms each pattern must and must not see. The
+  // samples are built from fragments, because this file is scanned too.
+  describe(`invariant 2 and pg pattern controls ${HYGIENE}`, () => {
+    const env = ['process', 'env'].join('.');
+    const q = (text: string, quote = "'"): string => quote + text + quote;
+
+    it.each([
+      `${env}.DB_NAME`,
+      `${env}[${q('DB_NAME')}]`,
+      `${env}[${q('DB_HOST', '"')}]`,
+      `${env}[ ${q('DB_PORT')} ]`,
+      `${env}[${q('DB_USERNAME', '`')}]`,
+    ])('DB_* read %p is detected', (text) => {
+      expect(DB_ENV_READ.test(text)).toBe(true);
+    });
+
+    it.each([`${env}[key]`, `${env}.NODE_ENV`, `${env}[${q('NODE_ENV')}]`])(
+      '%p is not a DB_* read',
+      (text) => {
+        expect(DB_ENV_READ.test(text)).toBe(false);
+      },
+    );
+
+    it.each([
+      `x ?? ${q('clensy')}`,
+      `x || ${q('clensy')}`,
+      `x||${q('clensy', '"')}`,
+      `x ?? ${q('clensy', '`')}`,
+    ])('fallback %p is detected', (text) => {
+      expect(CLENSY_FALLBACK.test(text)).toBe(true);
+    });
+
+    it.each([`x ?? ${q('clensy_test')}`, `x || ${q('clensy_e2e')}`])(
+      '%p is not a clensy fallback',
+      (text) => {
+        expect(CLENSY_FALLBACK.test(text)).toBe(false);
+      },
+    );
+
+    it.each([
+      'pg',
+      'pg-pool',
+      'pg-native',
+      'pg/lib/client',
+      'pg/lib/native/index.js',
+    ])('specifier %p is a pg import', (specifier) => {
+      expect(PG_SPECIFIER.test(specifier)).toBe(true);
+    });
+
+    it.each(['pgsql-ast-parser', 'typeorm', './pg', '@types/pg'])(
+      'specifier %p is not a pg import',
+      (specifier) => {
+        expect(PG_SPECIFIER.test(specifier)).toBe(false);
+      },
+    );
+  });
+
   describe(`invariant 6: activity queries scope to current_database() ${HYGIENE}`, () => {
     const activity = ['pg', 'stat', 'activity'].join('_');
 
@@ -262,10 +326,41 @@ describe(`e2e static guards ${HYGIENE}`, () => {
     const jestCall = (name: string): RegExp =>
       new RegExp(`\\b${'jest'}\\.${name}\\s*\\(`);
     const apiRoot = resolve(__dirname, '..');
+    // Two test-only overrides (M7 observation 5), read nowhere else. They
+    // exist only so characterization breaks r5 and r6 can point these two
+    // checks at a temporary copy instead of editing the real file:
+    //   E2E_GUARD_JEST_CONFIG  — path of the Jest config to check; default
+    //                            apps/api/test/jest-e2e.json;
+    //   E2E_GUARD_PACKAGE_JSON — path of the package.json whose test:e2e
+    //                            scripts are checked; default
+    //                            apps/api/package.json.
+    // Each value must be a path to a readable JSON file. No script, CI job
+    // or config sets them (pinned below); an unset value means the default.
     const jestConfigPath =
       process.env.E2E_GUARD_JEST_CONFIG ?? join(apiRoot, 'test/jest-e2e.json');
     const packageJsonPath =
       process.env.E2E_GUARD_PACKAGE_JSON ?? join(apiRoot, 'package.json');
+
+    it('no script, CI workflow or Jest config sets an E2E_GUARD_* override', () => {
+      const repoRoot = resolve(apiRoot, '../..');
+      const workflows = join(repoRoot, '.github/workflows');
+      const checked = [
+        join(apiRoot, 'package.json'),
+        join(apiRoot, 'test/jest-e2e.json'),
+        join(apiRoot, 'jest.config.ts'),
+        join(repoRoot, 'package.json'),
+        join(repoRoot, 'turbo.json'),
+        ...readdirSync(workflows)
+          .filter((name) => /\.ya?ml$/.test(name))
+          .map((name) => join(workflows, name)),
+      ].filter((file) => existsSync(file));
+      const seam = ['E2E', 'GUARD', ''].join('_');
+      expect(
+        checked
+          .filter((file) => readFileSync(file, 'utf8').includes(seam))
+          .map((file) => file.slice(repoRoot.length + 1)),
+      ).toEqual([]);
+    });
 
     it('never resets the module registry', () => {
       expect(offenders(jestCall(['reset', 'Modules'].join('')))).toEqual([]);
@@ -324,7 +419,6 @@ describe(`e2e static guards ${HYGIENE}`, () => {
   // Breaks (Task 7 Step 4): p1 a pg import in a spec, p2 a spec importing
   // provision-test-database.
   describe(`raw pg source imports ${HYGIENE}`, () => {
-    const pgSpecifier = /^pg(-[\w-]+)?$/;
     const provisioner = 'support/provision-test-database.ts';
 
     function specifiers(rel: string, source: string): string[] {
@@ -376,7 +470,7 @@ describe(`e2e static guards ${HYGIENE}`, () => {
           }
         }
       }
-      graph.set(rel, { local, pg: specs.some((sp) => pgSpecifier.test(sp)) });
+      graph.set(rel, { local, pg: specs.some((sp) => PG_SPECIFIER.test(sp)) });
     }
 
     function reaches(from: string, target: string): boolean {

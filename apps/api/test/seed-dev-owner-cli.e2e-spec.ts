@@ -22,6 +22,8 @@ const SENTINEL_PASSWORD = 'S3ntinel-Pw!';
 interface Run {
   output: string;
   status: number | null;
+  stderr: string;
+  stdout: string;
 }
 
 let listener: CountingListener;
@@ -71,16 +73,20 @@ async function runSeeder(options: {
         { cwd, env },
       );
       let output = '';
+      let stdout = '';
+      let stderr = '';
       child.stdout.on('data', (chunk: Buffer) => {
         output += chunk.toString();
+        stdout += chunk.toString();
       });
       child.stderr.on('data', (chunk: Buffer) => {
         output += chunk.toString();
+        stderr += chunk.toString();
       });
       const timer = setTimeout(() => child.kill('SIGKILL'), 55_000);
       child.on('close', (status) => {
         clearTimeout(timer);
-        resolveRun({ output, status });
+        resolveRun({ output, status, stderr, stdout });
       });
     });
   } finally {
@@ -91,6 +97,12 @@ async function runSeeder(options: {
 function expectRedacted(output: string): void {
   expect(output).not.toContain(SENTINEL_EMAIL);
   expect(output).not.toContain(SENTINEL_PASSWORD);
+}
+
+/** M7 observation 7: a refusal or error is reported on stderr only. */
+function expectOnStderr(run: Run, message: RegExp): void {
+  expect(run.stderr).toMatch(message);
+  expect(run.stdout).toBe('');
 }
 
 describe('db:seed:dev-owner entrypoint (child process)', () => {
@@ -118,6 +130,7 @@ describe('db:seed:dev-owner entrypoint (child process)', () => {
       const run = await runSeeder(options);
       expect(run.status).toBe(1);
       expect(run.output).toMatch(refusal);
+      expectOnStderr(run, refusal);
       expect(listener.count()).toBe(before);
       expect(listener.count()).toBe(0);
       expectRedacted(run.output);
@@ -129,6 +142,7 @@ describe('db:seed:dev-owner entrypoint (child process)', () => {
     const run = await runSeeder({ env: { DB_HOST: 'db.example.com' } });
     expect(run.status).toBe(1);
     expect(run.output).toMatch(/refused: DB_HOST is not a local host/);
+    expectOnStderr(run, /refused: DB_HOST is not a local host/);
     expectRedacted(run.output);
   }, 60_000);
 
@@ -136,7 +150,24 @@ describe('db:seed:dev-owner entrypoint (child process)', () => {
     const run = await runSeeder({ dotenv: 'NODE_ENV=production\n' });
     expect(run.status).toBe(1);
     expect(run.output).toMatch(/refused: NODE_ENV is production/);
+    expectOnStderr(run, /refused: NODE_ENV is production/);
     expect(listener.count()).toBe(0);
     expectRedacted(run.output);
+  }, 60_000);
+
+  it('a connection error is reported on stderr, not stdout', async () => {
+    // A listener of its own, so the shared listener's count stays 0. It
+    // accepts and then closes, so the connection attempt fails after every
+    // guard has passed: the entrypoint's error branch.
+    const own = await startCountingListener();
+    try {
+      const run = await runSeeder({ env: { DB_PORT: String(own.port) } });
+      expect(run.status).toBe(1);
+      expectOnStderr(run, /^dev-owner: error: /m);
+      expectRedacted(run.output);
+      expect(own.count()).toBeGreaterThan(0);
+    } finally {
+      await own.close();
+    }
   }, 60_000);
 });

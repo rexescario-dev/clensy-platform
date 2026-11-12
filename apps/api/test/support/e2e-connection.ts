@@ -1,21 +1,17 @@
 import { randomBytes } from 'node:crypto';
-import type { DataSource, DataSourceOptions } from 'typeorm';
+import type { DataSource } from 'typeorm';
 import {
   type EffectiveConnectionSettings,
   isTestDatabaseName,
   validateEffectiveSettings,
 } from '../../src/platform/database/effective-connection-settings';
+import type { PostgresConnectionOptions } from '../../src/platform/database/postgres-connection-options';
 
 // E2E isolation spec §4.2 ("Single connection helper") and §4.5 item 2.
 // Every e2e connection is built here from the published target, and
 // scratch databases are created and dropped only through ScratchDatabases
 // (invariant 4). SQL keywords are assembled from fragments, so the static
 // guard scan (spec §7) finds them only where they are allowed.
-
-export type PostgresConnectionOptions = Extract<
-  DataSourceOptions,
-  { type: 'postgres' }
->;
 
 const CREATE_DATABASE = ['CREATE', 'DATABASE'].join(' ');
 const DROP_DATABASE_IF_EXISTS = ['DROP', 'DATABASE', 'IF', 'EXISTS'].join(' ');

@@ -1,5 +1,6 @@
 import {
   type DevOwnerResult,
+  devOwnerOutputStream,
   formatDevOwnerResult,
   isFailure,
 } from '../dev-owner/dev-owner-seeder';
@@ -19,14 +20,18 @@ const SENTINEL_PASSWORD = 'S3ntinel-Pw!';
 const SAMPLE_HASH =
   '$2b$10$abcdefghijklmnopqrstuuJ5m1yH8uS1ZcXcKq0x9V4lQ6sC0bQ2e';
 
-const outcomes: Array<[DevOwnerResult, 'count' | 'id' | 'neither']> = [
+// How each line carries what it identifies: an id, a `count=` field, or
+// (ambiguous) the count stated once in "<N> accounts match".
+const outcomes: Array<
+  [DevOwnerResult, 'count' | 'id' | 'matches' | 'neither']
+> = [
   [{ id: ID, outcome: 'created' }, 'id'],
   [{ id: ID, outcome: 'unchanged', password: 'matches' }, 'id'],
   [{ id: ID, outcome: 'unchanged', password: 'differs' }, 'id'],
   [{ id: ID, outcome: 'password reset' }, 'id'],
   [{ differing: ['role', 'isActive'], id: ID, outcome: 'mismatch' }, 'id'],
   [{ count: 1, outcome: 'not normalised' }, 'count'],
-  [{ count: 2, outcome: 'ambiguous' }, 'count'],
+  [{ count: 2, outcome: 'ambiguous' }, 'matches'],
   [{ outcome: 'tenant missing' }, 'neither'],
 ];
 
@@ -50,6 +55,11 @@ describe('formatDevOwnerResult', () => {
         expect(line).toContain(`count=${(result as { count: number }).count}`);
       } else {
         expect(line).not.toContain('count=');
+      }
+      if (carries === 'matches') {
+        expect(line).toContain(
+          `${(result as { count: number }).count} accounts match`,
+        );
       }
       for (const secret of [SENTINEL_EMAIL, SENTINEL_PASSWORD, SAMPLE_HASH]) {
         expect(line).not.toContain(secret);
@@ -89,11 +99,37 @@ describe('formatDevOwnerResult', () => {
     ).toContain('Bootstrap tenant missing');
   });
 
+  // M7 observation 6: the ambiguous line stated the count twice.
+  it('states the ambiguous count exactly once', () => {
+    expect(
+      formatDevOwnerResult({ count: 3, outcome: 'ambiguous' }, context),
+    ).toBe(
+      'dev-owner: refused: ambiguous: 3 accounts match database=clensy host=localhost email-source=apps/api/.env password-source=launch environment',
+    );
+  });
+
   it('prefixes failures with "dev-owner: refused:"', () => {
     for (const [result] of outcomes) {
       const line = formatDevOwnerResult(result, context);
       expect(line.startsWith('dev-owner: refused:')).toBe(isFailure(result));
     }
+  });
+});
+
+// M7 observation 7: failures go to stderr, every other outcome to stdout.
+describe('devOwnerOutputStream', () => {
+  it.each(outcomes)('routes %p by isFailure', (result) => {
+    expect(devOwnerOutputStream(result)).toBe(
+      isFailure(result) ? 'stderr' : 'stdout',
+    );
+  });
+
+  it('sends exactly the four failures to stderr', () => {
+    expect(
+      outcomes
+        .filter(([result]) => devOwnerOutputStream(result) === 'stderr')
+        .map(([result]) => result.outcome),
+    ).toEqual(['mismatch', 'not normalised', 'ambiguous', 'tenant missing']);
   });
 });
 

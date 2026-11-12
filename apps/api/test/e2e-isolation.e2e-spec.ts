@@ -1,11 +1,12 @@
 import { spawn } from 'node:child_process';
 import {
-  existsSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
@@ -156,31 +157,34 @@ describe('e2e isolation', () => {
   });
 
   describe('ordering', () => {
-    const envPath = join(apiRoot, '.env');
-    let wroteEnv = false;
+    // A controlled .env in a fresh directory, never the developer's
+    // apps/api/.env (M7 observation 1). ConfigModule.forRoot() and
+    // dotenv/config both read `.env` from process.cwd(), so the block runs
+    // with its working directory moved there; the sentinel proves the file
+    // was read, and DB_NAME=clensy in it must still lose to the target.
+    let envDir: string;
+    let previousCwd: string;
 
     beforeAll(() => {
-      if (existsSync(envPath)) {
-        expect(readFileSync(envPath, 'utf8')).toMatch(/^DB_NAME=clensy$/m);
-      } else {
-        writeFileSync(
-          envPath,
-          'DB_NAME=clensy\nE2E_ORDERING_SENTINEL=present\n',
-        );
-        wroteEnv = true;
-      }
+      envDir = mkdtempSync(join(tmpdir(), 'e2e-ordering-'));
+      writeFileSync(
+        join(envDir, '.env'),
+        'DB_NAME=clensy\nE2E_ORDERING_SENTINEL=present\n',
+      );
+      previousCwd = process.cwd();
+      process.chdir(envDir);
     });
 
     afterAll(() => {
-      if (wroteEnv) {
-        rmSync(envPath);
-      }
+      process.chdir(previousCwd);
+      rmSync(envDir, { force: true, recursive: true });
     });
 
     it('ConfigService, data-source.ts and a helper DataSource all see the published target', async () => {
       const target = e2eTarget().database;
       await withE2eEnv(dotenvConfigOverrides(), async () => {
-        // Loaded only now, after the precondition file exists: forRoot()
+        expect(process.cwd()).not.toBe(apiRoot);
+        // Loaded only now, inside the controlled directory: forRoot()
         // reads .env when the module is first evaluated. require(), because
         // ts-jest keeps import() as a native dynamic import here.
         /* eslint-disable @typescript-eslint/no-require-imports -- deferred loads, see above */
@@ -191,9 +195,7 @@ describe('e2e isolation', () => {
         }).compile();
         const config = moduleRef.get(ConfigService);
         expect(config.get('DB_NAME')).toBe(target);
-        if (wroteEnv) {
-          expect(config.get('E2E_ORDERING_SENTINEL')).toBe('present');
-        }
+        expect(config.get('E2E_ORDERING_SENTINEL')).toBe('present');
         await moduleRef.close();
 
         const dataSource = (

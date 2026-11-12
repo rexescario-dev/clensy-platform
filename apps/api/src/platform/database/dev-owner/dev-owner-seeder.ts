@@ -42,6 +42,13 @@ const FAILURES: ReadonlySet<DevOwnerResult['outcome']> = new Set([
   'tenant missing',
 ]);
 
+/** Failures are reported on stderr; every other outcome on stdout. */
+export function devOwnerOutputStream(
+  result: DevOwnerResult,
+): 'stderr' | 'stdout' {
+  return isFailure(result) ? 'stderr' : 'stdout';
+}
+
 export function formatDevOwnerResult(
   result: DevOwnerResult,
   context: {
@@ -54,7 +61,7 @@ export function formatDevOwnerResult(
   const where = `database=${context.database} host=${context.host} email-source=${context.emailSource} password-source=${context.passwordSource}`;
   switch (result.outcome) {
     case 'ambiguous':
-      return `dev-owner: refused: ambiguous: ${result.count} accounts match count=${result.count} ${where}`;
+      return `dev-owner: refused: ambiguous: ${result.count} accounts match ${where}`;
     case 'created':
       return `dev-owner: created id=${result.id} ${where}`;
     case 'mismatch':
