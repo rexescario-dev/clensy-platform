@@ -1597,3 +1597,55 @@ Both e2e jobs ran the `migration:run` step with `DB_NAME: clensy_test` in the st
 ### Rulings made during M6
 
 Recorded in full in the M6 ledger and summarised in the M6 Slice Completion Report: the purity pin as one test (Task 1); the `PostgresConnectionOptions` alias (Task 3); the guard's scoped `unbound-method` disable (Task 4); deferred `require()` for the ordering test, async spawn for listener-observed children, and the `pg` result annotation (Task 5); renamed `SEARCHED` keys and test titles, `e2eTarget()` in the options test, and the `create target` step label (Task 6); the `E2E_GUARD_*` env seams for breaks r5/r6 (Task 7); the raw-insert winner in the race test (Task 10); comment stripping in the never-automatic check (Task 11).
+
+## M8 fix pass: M7 observations 1–9 and 11
+
+**Authorisation:** owner, 2026-11-12, after CI run `43140196061` passed on `8ad628d` (Lint, Test, Release gate, API e2e: all success). The pass addresses M7 observations 1–9 and 11 on PR #228. Observation 10, the PR description's break count, was corrected separately and is not repeated here.
+
+- **Fix commit:** `76eadc41215fce2e1e882e09efd6060351386a97`. It changes 15 files: code, tests and the two docs pages.
+- **Executor:** the M6 implementer, so this pass needs a fresh M7 re-review.
+- **Unchanged:** the Accepted spec (SHA-256 `8885015d…a4`); this plan's M5 and M7 records; the M6 and CI evidence above.
+
+**Classification.** These are not all behaviour-preserving refactors, and the record says so:
+- **Refactors (M8 proper):** 4 and 8.
+- **Behaviour corrections the owner authorised in this pass:** 2 (child-process cleanup), 6 (output text) and 7 (output stream).
+- **Test-only:** 1, 3 and 5.
+- **Docs:** 9, the docs part of 5, and 11.
+
+| # | Observation | Change | Test evidence (RED → GREEN) |
+| --- | --- | --- | --- |
+| 1 | The ordering test depended on the developer's `apps/api/.env` | The `ordering` block writes `DB_NAME=clensy` and a sentinel to a `.env` in a fresh `mkdtemp` directory and moves `cwd` there for the block, because `ConfigModule.forRoot()` and `dotenv/config` read `.env` from `process.cwd()`. It never reads or writes `apps/api/.env`. | **RED:** with the old precondition and an unconditional sentinel assertion, the test failed (`Expected: "present"`, `Received: undefined`). That proves it read the real `.env`. **GREEN:** 1 passed. **Mutation** (outside the commit, reverted): `dotenv` with `override: true` in `data-source.ts` made the test fail at its `data-source.ts` assertion (`Expected: "clensy_test"`, `Received: "clensy"`). |
+| 2 | On a migration timeout, a `ts-node` grandchild could survive | New `test/support/run-with-timeout.ts`. On timeout it snapshots the child's descendants with POSIX `ps` and SIGKILLs the whole tree, then settles only on `close`, after exit. The child stays in the current process group, so Ctrl-C still reaches it. `runMigrationCli` uses it; its error messages and the "timed out after 120 s" step text are unchanged. | New `test/run-with-timeout.e2e-spec.ts`, 4 tests (success, non-zero exit, 2 KB stderr tail, timeout with a grandchild). **RED:** the naive kill-the-child version failed the timeout test, and also hung, because the surviving grandchild held the pipes, so `close` never fired. **GREEN:** 4 passed in 1.4 s, with no stray processes afterwards. |
+| 3 | The static scan missed bracket `process.env['DB_*']`, `\|\| 'clensy'` and `pg/lib/...` | Named patterns `DB_ENV_READ`, `CLENSY_FALLBACK` and `PG_SPECIFIER` now cover those forms. It remains a hygiene check, not a security boundary, and does not prove that every access path is covered. | New pattern controls: 9 detection cases failed, then passed. The 8 must-not-match controls passed throughout. **Breaks** (outside the commit, removed): s1 bracket read, s2 `\|\|` fallback, s3 `pg/lib/client` import. Each failed exactly its own test. **p1 re-run:** a `pg` import still fails its test. |
+| 4 | Unused `migrationFileTimestamps` export | Removed. The plan listed it as an interface, but nothing consumes it (repository search). | `tsc --noEmit` exit 0; full suites green. |
+| 5 | Undocumented `E2E_GUARD_*` overrides | A code comment gives each override's purpose, its default (`apps/api/test/jest-e2e.json`, `apps/api/package.json`), the value it takes (a JSON file path) and the rule that nothing else sets it. A paragraph in `testing-and-ci.md`. A new check: no script, CI workflow or Jest config sets them. | **Break r7** (outside the commit, reverted): a `test:e2e` script setting the override made exactly the new check fail. |
+| 6 | The ambiguous line repeated the count | `dev-owner: refused: ambiguous: <N> accounts match <context>`, with no `count=`. This is still the spec wording "ambiguous: N accounts match". | **RED:** the exact-line test received `… accounts match count=3 …`. **GREEN:** passed. |
+| 7 | Refusals went to stdout | `devOwnerOutputStream(result)`: failures go to stderr and other outcomes to stdout. The entrypoint prints refusals, failures and errors with `console.error`. Docs updated. | Unit tests: `devOwnerOutputStream` routing. CLI child tests: every refusal is on stderr with stdout empty, plus a new connection-error case with its own listener. **RED:** all 7 CLI cases failed on empty stderr. **GREEN:** 7 passed. |
+| 8 | Duplicated Postgres options alias | One type-only module, `src/platform/database/postgres-connection-options.ts`, used by `dev-owner-datasource.ts` and `test/support/e2e-connection.ts`. There is no runtime import and no cycle, and the unused re-export is dropped. | `tsc --noEmit` exit 0; static checks green, including the entrypoint-imports check. |
+| 9 | `testing-and-ci.md` shortened the rule to "ends in `_test`" | The full rule `^(?=.{6,63}$)[a-z][a-z0-9_]*_test$`, in words, in `testing-and-ci.md` and once in `local-development.md`. The other shorthand mentions now say "Test database". | Docs review against spec §4.1 L137. |
+| 11 | The L16 deviation was not recorded in the repository | Recorded below. | — |
+
+### Branch base: the approved deviation from `CONTRIBUTING.md` L16
+
+- **The normal rule:** `CONTRIBUTING.md` L16 says a branch is cut "from `main`".
+- **The deviation:** `feat/227-e2e-db-isolation-dev-owner` was cut from `bb67b40`, the head of the local spec branch `docs/227-e2e-db-isolation-spec`, with `--no-track`. It was not cut from `main`.
+- **Reason and approval:** one PR carries the spec, the plan and the implementation (process spec §2.8, "prefer one PR"). The owner approved this in D-M5-4. It is recorded in this plan's header Branch row, which is the source of truth for this record.
+- **Evidence:**
+  - `c9e449f` (`origin/main` when PR #228 was opened) is an ancestor of `bb67b40`, so the branch is based on `main` as it stood then;
+  - the 12 commits `c9e449f..bb67b40` are the spec and plan commits and change no file under `apps/`, `.github/` or `package.json`;
+  - PR #228 targets `main`.
+- **Scope:** the deviation applies to this slice only and does not change the rule. The M6 Slice Completion Report that mentioned it was kept outside the repository and is not claimed here.
+
+### Verification (local, 2026-11-12, on the fix tree)
+
+| Run | Result |
+| --- | --- |
+| `pnpm --filter api exec tsc --noEmit` / `pnpm --filter web exec tsc --noEmit` | exit 0 / exit 0 |
+| `pnpm run test` | `Tasks: 10 successful, 10 total`; API unit `1382 passed, 1382 total` (1372 + 10 new) |
+| `pnpm run lint` | `Tasks: 6 successful, 6 total`; the working-tree diff hash was unchanged, so nothing was rewritten |
+| `pnpm --filter api test:e2e`, first run | **1 failed**: the static-confinement test pins `env: migrationCliEnv(` at the spawn call, and the first `runMigrationCli` rewrite had moved it into a variable. Fixed by restoring the inline shape; the accepted test was not changed. |
+| `pnpm --filter api test:e2e`, re-run | `Test Suites: 64 passed, 64 total`; `Tests: 720 passed, 720 total`; `e2e target clensy_test@localhost:5432: created=false, applied=0, pending=0, unknown=0` |
+| `pnpm --filter api test:e2e:release-gate` | `1 passed`; `12 passed, 12 total`; the same `e2e target` line |
+| Leftovers | no `clensy_migration_%` database and no stray child process |
+
+**Next:** push; CI on the new head; a fresh independent M7 re-review of `8ad628d..<new head>`. Merge is not authorised by this record.
