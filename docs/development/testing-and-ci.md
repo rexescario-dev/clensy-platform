@@ -21,12 +21,14 @@ The e2e suites in `apps/api/test/` (`*.e2e-spec.ts`) boot the real API against P
 
 ```bash
 pnpm --filter api build:graphiql     # once on a fresh checkout: app.e2e-spec.ts serves the bundle
-pnpm --filter api migration:run      # the target database must be fully migrated
 pnpm --filter api test:e2e           # every e2e suite, including the release gate
 pnpm --filter api test:e2e:release-gate
 ```
 
-- They connect with the `DB_*` values in `apps/api/.env`, and create their own rows there. The migration suites (`*.migration.e2e-spec.ts`) also create and drop scratch databases through that connection, so the database user needs `CREATE DATABASE`.
+- **Which database.** e2e runs only against a **Test database**: a name that matches `^(?=.{6,63}$)[a-z][a-z0-9_]*_test$`, so it uses only lowercase ASCII letters, digits and underscores, starts with a letter, ends in `_test`, and is 6 to 63 bytes long (Postgres's identifier limit, so the name is never silently truncated). The name is `DB_NAME` from the launch environment if it is set, otherwise `clensy_test`. It never takes `DB_NAME` from a file, and fails before connecting if the name breaks the rule, so `Clensy_test`, `clensy-test` or a 64-byte name fails just as `clensy` does. Host, port, user and password come from the launch environment, then `apps/api/.env`, then the defaults. See [development and e2e databases](../getting-started/local-development.md#development-and-e2e-databases).
+- **Setup is automatic.** Jest's `globalSetup` creates the Test database if it is missing, runs every pending migration, and confirms that none is pending; there is no manual `migration:run` step. It needs a reachable local Postgres whose user may `CREATE DATABASE`. The migration suites (`*.migration.e2e-spec.ts`) also create and drop scratch databases named `clensy_migration_<32 hex>_test`.
+- **A guard on every connection.** Every `DataSource` in an e2e test is checked before it connects and again after, so no e2e connection can be opened to a database that is not a Test database. A static test (`e2e-static-guards.e2e-spec.ts`) checks the e2e sources for forbidden patterns; it is hygiene, not a security boundary: it cannot see SQL or settings built at run time, so it does not prove that every database access path is covered.
+- **Two test-only overrides.** `E2E_GUARD_JEST_CONFIG` and `E2E_GUARD_PACKAGE_JSON` are read only by `e2e-static-guards.e2e-spec.ts`. Each names the path of a JSON file that one check reads instead of its default (`apps/api/test/jest-e2e.json` and `apps/api/package.json`); unset means the default. They exist only so a characterization break can point those checks at a temporary copy. Do not set them otherwise. The static test fails if either name appears in `apps/api/package.json`, `apps/api/test/jest-e2e.json`, `apps/api/jest.config.ts` (if present), the root `package.json`, `turbo.json` or a `.github/workflows/*.yml` file; it does not see a value exported in a shell or set anywhere else.
 - No `JWT_SECRET` is needed: under Jest (`NODE_ENV=test`) the auth services fall back to a test-only secret.
 - CI always runs them against a fresh Postgres 16 service container.
 
@@ -38,8 +40,8 @@ pnpm --filter api test:e2e:release-gate
 | --- | --- |
 | **Lint** | `pnpm run lint`, then `tsc --noEmit` for `apps/api` and `apps/web` |
 | **Test** | `pnpm run test` |
-| **Release gate** | Fresh Postgres → `migration:run` → `test:e2e:release-gate` |
-| **API e2e** | Fresh Postgres → `build:graphiql` → `migration:run` → every e2e suite except the release gate |
+| **Release gate** | Fresh Postgres (`clensy_test`) → `migration:run` → `test:e2e:release-gate`, whose `globalSetup` then confirms none pending |
+| **API e2e** | Fresh Postgres (`clensy_test`) → `build:graphiql` → `migration:run` → every e2e suite except the release gate, whose `globalSetup` then confirms none pending |
 
 ### Required checks on `main`
 

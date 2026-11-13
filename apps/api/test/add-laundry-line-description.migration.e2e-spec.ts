@@ -2,7 +2,15 @@ import { randomUUID } from 'crypto';
 import { DataSource, QueryRunner } from 'typeorm';
 import { BOOTSTRAP_TENANT_ID } from '../src/platform/database/bootstrap-tenant';
 import { AddLaundryLineDescription1790956800000 } from '../src/platform/database/migrations/1790956800000-AddLaundryLineDescription';
-import { connectionOptions, migrationsBefore } from './helpers/migration-db';
+import { migrationsBefore } from './helpers/migration-db';
+import {
+  e2eConnectionOptions,
+  ScratchDatabases,
+} from './support/e2e-connection';
+
+// One registry per file: scratch databases are created and dropped only
+// through it (E2E isolation spec §4.5 item 2, invariant 4).
+const scratch = new ScratchDatabases();
 
 const LINE_COLUMNS = `"id", "tenantId", "laundryOrderId", "serviceId", "addOnId", "pricingSnapshotRateMinorUnits", "pricingSnapshotUnit", "pricingSnapshotQuantity", "pricingSnapshotAmountMinorUnits", "pricingSnapshotMinimumChargeApplied"`;
 
@@ -12,7 +20,7 @@ const LINE_COLUMNS = `"id", "tenantId", "laundryOrderId", "serviceId", "addOnId"
 // id AND tenant), enforces `not null`, and down() drops only the column — on
 // a throwaway database migrated to just before it. Sequential cases.
 describe('AddLaundryLineDescription migration (real Postgres)', () => {
-  const database = `clensy_migration_${randomUUID().replace(/-/g, '')}`;
+  const database = scratch.generate();
   const migration = new AddLaundryLineDescription1790956800000();
   let admin: DataSource;
   let dataSource: DataSource;
@@ -107,11 +115,11 @@ describe('AddLaundryLineDescription migration (real Postgres)', () => {
   }
 
   beforeAll(async () => {
-    admin = new DataSource(connectionOptions(process.env.DB_NAME ?? 'clensy'));
+    admin = new DataSource(e2eConnectionOptions());
     await admin.initialize();
-    await admin.query(`CREATE DATABASE "${database}"`);
+    await scratch.create(admin, database);
     dataSource = new DataSource({
-      ...connectionOptions(database),
+      ...e2eConnectionOptions(database),
       migrations: migrationsBefore('1790956800000'),
     });
     await dataSource.initialize();
@@ -149,9 +157,15 @@ describe('AddLaundryLineDescription migration (real Postgres)', () => {
 
   afterAll(async () => {
     await queryRunner?.release();
-    await dataSource?.destroy();
-    await admin?.query(`DROP DATABASE IF EXISTS "${database}"`);
-    await admin?.destroy();
+    if (dataSource?.isInitialized) {
+      await dataSource.destroy();
+    }
+    if (admin) {
+      await scratch.drop(admin, database);
+    }
+    if (admin?.isInitialized) {
+      await admin.destroy();
+    }
   });
 
   it('up() adds a text column, backfills every line from its catalog row and enforces not null', async () => {

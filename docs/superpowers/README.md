@@ -21,6 +21,7 @@ Specifications and implementation plans, produced by the project's [engineering 
 | [Paginated GraphQL collections](specs/2026-08-28-paginated-graphql-collections-design.md) | Accepted |
 | [Required CI checks on `main`](specs/2026-10-06-required-ci-checks-design.md) | Accepted |
 | [React Hooks lint rules](specs/2026-10-18-react-hooks-lint-rules-design.md): `rules-of-hooks` and `exhaustive-deps` at `error` in the React workspaces | Accepted |
+| [E2E database isolation & development owner seeder](specs/2026-11-06-e2e-database-isolation-dev-owner-design.md): the `clensy_test` e2e database, the e2e `DataSource` guard, `pnpm db:seed:dev-owner` | Accepted, with revisions 5–5c |
 
 ### Business modules
 
@@ -58,4 +59,4 @@ Specifications and implementation plans, produced by the project's [engineering 
 
 ## Plans
 
-One plan per delivery slice, 78 so far, in [`plans/`](plans/). The file name gives the date and topic; the plan's header names its GitHub issue and spec. Slices that changed the API's behavior also have a short note in [shipped slices](../history/shipped-slices.md).
+One plan per delivery slice, 79 so far, in [`plans/`](plans/). The file name gives the date and topic; the plan's header names its GitHub issue and spec. Slices that changed the API's behavior also have a short note in [shipped slices](../history/shipped-slices.md).

@@ -149,3 +149,18 @@ Shipped in this slice (PR [#220](https://github.com/rexescario-dev/clensy-platfo
 - Spec (Accepted): [2026-11-02-laundry-payments-design.md](../superpowers/specs/2026-11-02-laundry-payments-design.md), with Amendment #39 in [2026-09-06-laundry-invoices-design.md](../superpowers/specs/2026-09-06-laundry-invoices-design.md#9-amendment-39--payment-recording)
 - Plan (Accepted): [2026-11-02-laundry-payments-plan.md](../superpowers/plans/2026-11-02-laundry-payments-plan.md)
 - Current behavior: [laundry orders](../features/laundry.md#payments-and-refunds-39)
+
+## E2E database isolation & development owner seeder (#227)
+
+Approved at M7 in PR [#228](https://github.com/rexescario-dev/clensy-platform/pull/228); not merged when this note was written.
+
+- **The e2e suites stop sharing `clensy`.** They run only against a Test database: `clensy_test` by default, or another name matching the Test-database rule, taken from the launch environment and never from a file.
+- **Setup is automatic.** Jest's `globalSetup` creates `clensy_test` if it is missing, migrates it and confirms nothing is pending.
+- **Every e2e connection is checked.** A two-stage `DataSource` guard, installed for every e2e test, refuses any connection outside a Test database. It checks before connecting and confirms `current_database()` after.
+- **CI:** the **Release gate** and **API e2e** jobs now use `clensy_test`; their names are unchanged.
+- **New command: `pnpm db:seed:dev-owner [--reset-password]`.** It creates or verifies one development `TENANT_OWNER` of the Bootstrap tenant from `ADMIN_SEED_EMAIL` and `ADMIN_SEED_PASSWORD`. It refuses production, Test databases and non-local hosts, and nothing runs it automatically.
+- **Unchanged:** the API's runtime behavior, its schema (no migration) and `pnpm db:seed`.
+
+- Spec (Accepted): [2026-11-06-e2e-database-isolation-dev-owner-design.md](../superpowers/specs/2026-11-06-e2e-database-isolation-dev-owner-design.md)
+- Plan (Accepted): [2026-11-06-e2e-database-isolation-dev-owner-plan.md](../superpowers/plans/2026-11-06-e2e-database-isolation-dev-owner-plan.md)
+- Current behavior: [testing and CI](../development/testing-and-ci.md#api-end-to-end-suites) and [local development](../getting-started/local-development.md#development-and-e2e-databases)

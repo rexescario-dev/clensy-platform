@@ -1,13 +1,21 @@
 import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import { AddTenantLabelOverrides1790870400000 } from '../src/platform/database/migrations/1790870400000-AddTenantLabelOverrides';
-import { connectionOptions, migrationsBefore } from './helpers/migration-db';
+import { migrationsBefore } from './helpers/migration-db';
+import {
+  e2eConnectionOptions,
+  ScratchDatabases,
+} from './support/e2e-connection';
+
+// One registry per file: scratch databases are created and dropped only
+// through it (E2E isolation spec §4.5 item 2, invariant 4).
+const scratch = new ScratchDatabases();
 
 // #118 (tenant label overrides spec §4.1, §6.1): adds only the nullable
 // jsonb column, writes no data (every existing tenant row stays NULL), and
 // down() drops it — on a throwaway database migrated to just before it.
 describe('AddTenantLabelOverrides migration (real Postgres)', () => {
-  const database = `clensy_migration_${randomUUID().replace(/-/g, '')}`;
+  const database = scratch.generate();
   let admin: DataSource;
   let dataSource: DataSource;
 
@@ -30,11 +38,11 @@ describe('AddTenantLabelOverrides migration (real Postgres)', () => {
   }
 
   beforeAll(async () => {
-    admin = new DataSource(connectionOptions(process.env.DB_NAME ?? 'clensy'));
+    admin = new DataSource(e2eConnectionOptions());
     await admin.initialize();
-    await admin.query(`CREATE DATABASE "${database}"`);
+    await scratch.create(admin, database);
     dataSource = new DataSource({
-      ...connectionOptions(database),
+      ...e2eConnectionOptions(database),
       migrations: migrationsBefore('1790870400000'),
     });
     await dataSource.initialize();
@@ -46,9 +54,15 @@ describe('AddTenantLabelOverrides migration (real Postgres)', () => {
   }, 120_000);
 
   afterAll(async () => {
-    await dataSource?.destroy();
-    await admin?.query(`DROP DATABASE IF EXISTS "${database}"`);
-    await admin?.destroy();
+    if (dataSource?.isInitialized) {
+      await dataSource.destroy();
+    }
+    if (admin) {
+      await scratch.drop(admin, database);
+    }
+    if (admin?.isInitialized) {
+      await admin.destroy();
+    }
   });
 
   it('adds a nullable jsonb column, leaves every existing tenant NULL, and down() drops it', async () => {

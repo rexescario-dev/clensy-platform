@@ -19,6 +19,7 @@ import {
   seedSuperAdmin,
   seedTenantAdmin,
 } from './helpers/seed-tenant-admin';
+import { e2eConnectionOptions } from './support/e2e-connection';
 
 // Real Postgres, single connection — NOT mocked repositories. The brief's
 // forced-audit-failure assertions ("the AdminUser row does not exist
@@ -56,13 +57,8 @@ describe('AdminsService (real Postgres)', () => {
 
   beforeAll(async () => {
     dataSource = new DataSource({
-      database: process.env.DB_NAME ?? 'clensy',
+      ...e2eConnectionOptions(),
       entities: [AdminUserEntity, AuditEventEntity, TenantEntity],
-      host: process.env.DB_HOST ?? 'localhost',
-      password: process.env.DB_PASSWORD ?? 'clensy_dev',
-      port: Number(process.env.DB_PORT ?? 5432),
-      type: 'postgres',
-      username: process.env.DB_USERNAME ?? 'clensy',
     });
     await dataSource.initialize();
     dbLock = await acquireAdminDbTestLock(dataSource);

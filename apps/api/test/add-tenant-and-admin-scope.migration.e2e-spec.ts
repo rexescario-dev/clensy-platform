@@ -3,7 +3,15 @@ import { DataSource, QueryRunner } from 'typeorm';
 import { BOOTSTRAP_TENANT_ID } from '../src/platform/database/bootstrap-tenant';
 import { AddTenantAndAdminScope1790180877633 } from '../src/platform/database/migrations/1790180877633-AddTenantAndAdminScope';
 import { OwnerDesignationError } from '../src/platform/database/owner-designation';
-import { connectionOptions, migrationsBefore } from './helpers/migration-db';
+import { migrationsBefore } from './helpers/migration-db';
+import {
+  e2eConnectionOptions,
+  ScratchDatabases,
+} from './support/e2e-connection';
+
+// One registry per file: scratch databases are created and dropped only
+// through it (E2E isolation spec §4.5 item 2, invariant 4).
+const scratch = new ScratchDatabases();
 
 async function roleEnumValues(queryRunner: QueryRunner): Promise<string[]> {
   const [{ values }]: { values: string }[] = await queryRunner.query(
@@ -17,7 +25,7 @@ async function roleEnumValues(queryRunner: QueryRunner): Promise<string[]> {
 // in its own throwaway database so no shared database's OWNER rows are
 // touched.
 describe('AddTenantAndAdminScope migration (real Postgres)', () => {
-  const database = `clensy_migration_${randomUUID().replace(/-/g, '')}`;
+  const database = scratch.generate();
   let admin: DataSource;
   let dataSource: DataSource;
   let queryRunner: QueryRunner;
@@ -26,12 +34,12 @@ describe('AddTenantAndAdminScope migration (real Postgres)', () => {
   const opsManager = randomUUID();
 
   beforeAll(async () => {
-    admin = new DataSource(connectionOptions(process.env.DB_NAME ?? 'clensy'));
+    admin = new DataSource(e2eConnectionOptions());
     await admin.initialize();
-    await admin.query(`CREATE DATABASE "${database}"`);
+    await scratch.create(admin, database);
 
     dataSource = new DataSource({
-      ...connectionOptions(database),
+      ...e2eConnectionOptions(database),
       migrations: migrationsBefore('1790180877633'),
     });
     await dataSource.initialize();
@@ -50,8 +58,10 @@ describe('AddTenantAndAdminScope migration (real Postgres)', () => {
 
   afterAll(async () => {
     await queryRunner?.release();
-    await dataSource?.destroy();
-    await admin.query(`DROP DATABASE IF EXISTS "${database}"`);
+    if (dataSource?.isInitialized) {
+      await dataSource.destroy();
+    }
+    await scratch.drop(admin, database);
     await admin.destroy();
   });
 

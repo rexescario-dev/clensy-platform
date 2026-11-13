@@ -10,7 +10,7 @@ import {
   acquireLaundryDbTestLock,
   LaundryDbTestLock,
 } from './helpers/laundry-db-test-lock';
-import { connectionOptions } from './helpers/migration-db';
+import { e2eConnectionOptions } from './support/e2e-connection';
 import {
   createTestTenant,
   removeTestTenants,
@@ -39,7 +39,7 @@ describe('removeTestTenants — laundry & billing rows (#87)', () => {
 
   beforeAll(async () => {
     dataSource = new DataSource({
-      ...connectionOptions(process.env.DB_NAME ?? 'clensy'),
+      ...e2eConnectionOptions(),
       entities: [TenantEntity],
     });
     await dataSource.initialize();

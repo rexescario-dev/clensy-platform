@@ -33,6 +33,7 @@ import {
   acquireJobDbTestLock,
   JobDbTestLock,
 } from './helpers/job-db-test-lock';
+import { e2eConnectionOptions } from './support/e2e-connection';
 
 // This whole file runs under `acquireJobDbTestLock` and truncates
 // `customer_entity`/`property_entity`/`booking_entity` (among others) in
@@ -44,7 +45,7 @@ const TENANT_ID = BOOTSTRAP_TENANT_ID;
 
 function createTestDataSource(): DataSource {
   return new DataSource({
-    database: process.env.DB_NAME ?? 'clensy',
+    ...e2eConnectionOptions(),
     entities: [
       CleaningJobEntity,
       ChecklistEntity,
@@ -59,11 +60,6 @@ function createTestDataSource(): DataSource {
       AuditEventEntity,
       TenantEntity, // CustomerEntity#tenant / PropertyEntity#tenant (#82)
     ],
-    host: process.env.DB_HOST ?? 'localhost',
-    password: process.env.DB_PASSWORD ?? 'clensy_dev',
-    port: Number(process.env.DB_PORT ?? 5432),
-    type: 'postgres',
-    username: process.env.DB_USERNAME ?? 'clensy',
   });
 }
 

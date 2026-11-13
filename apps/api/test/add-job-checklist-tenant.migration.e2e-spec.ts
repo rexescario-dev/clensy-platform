@@ -2,7 +2,15 @@ import { randomUUID } from 'crypto';
 import { DataSource, QueryRunner } from 'typeorm';
 import { BOOTSTRAP_TENANT_ID } from '../src/platform/database/bootstrap-tenant';
 import { AddJobChecklistTenant1790697600000 } from '../src/platform/database/migrations/1790697600000-AddJobChecklistTenant';
-import { connectionOptions, migrationsBefore } from './helpers/migration-db';
+import { migrationsBefore } from './helpers/migration-db';
+import {
+  e2eConnectionOptions,
+  ScratchDatabases,
+} from './support/e2e-connection';
+
+// One registry per file: scratch databases are created and dropped only
+// through it (E2E isolation spec §4.5 item 2, invariant 4).
+const scratch = new ScratchDatabases();
 
 const NEW_CONSTRAINTS = [
   ['cleaning_job_entity', 'fk_cleaning_job_tenant'],
@@ -22,7 +30,7 @@ const OLD_CONSTRAINTS = [
 // `up`/`down` runs in a transaction exactly as TypeORM runs it. Sequential
 // cases.
 describe('AddJobChecklistTenant migration (real Postgres)', () => {
-  const database = `clensy_migration_${randomUUID().replace(/-/g, '')}`;
+  const database = scratch.generate();
   let admin: DataSource;
   let dataSource: DataSource;
   let queryRunner: QueryRunner;
@@ -117,11 +125,11 @@ describe('AddJobChecklistTenant migration (real Postgres)', () => {
   }
 
   beforeAll(async () => {
-    admin = new DataSource(connectionOptions(process.env.DB_NAME ?? 'clensy'));
+    admin = new DataSource(e2eConnectionOptions());
     await admin.initialize();
-    await admin.query(`CREATE DATABASE "${database}"`);
+    await scratch.create(admin, database);
     dataSource = new DataSource({
-      ...connectionOptions(database),
+      ...e2eConnectionOptions(database),
       migrations: migrationsBefore('1790697600000'),
     });
     await dataSource.initialize();
@@ -165,9 +173,15 @@ describe('AddJobChecklistTenant migration (real Postgres)', () => {
 
   afterAll(async () => {
     await queryRunner?.release();
-    await dataSource?.destroy();
-    await admin?.query(`DROP DATABASE IF EXISTS "${database}"`);
-    await admin?.destroy();
+    if (dataSource?.isInitialized) {
+      await dataSource.destroy();
+    }
+    if (admin) {
+      await scratch.drop(admin, database);
+    }
+    if (admin?.isInitialized) {
+      await admin.destroy();
+    }
   });
 
   it('fails with an explicit error when the bootstrap tenant is missing', async () => {
