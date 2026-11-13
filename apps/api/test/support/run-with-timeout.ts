@@ -1,11 +1,19 @@
-import { execFileSync, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 
-// Runs a child with a timeout (M7 observation 2). On timeout the child's
-// whole process tree is killed, not just the child: `pnpm run …` starts a
-// shell that starts ts-node, and a surviving grandchild would both keep
-// running and hold the stdio pipes open, so `close` would never fire. The
-// child stays in this process group, so Ctrl-C still reaches the tree.
-// The promise settles only on `close`, after the child has exited.
+// Runs a child with a timeout (M7 observation 2; re-review finding 1).
+//
+// `pnpm run …` starts a shell that starts ts-node, so killing only the child
+// would leave a grandchild running and holding the stdio pipes open. The
+// child is therefore spawned `detached`, which on Linux and macOS (the
+// supported platforms) makes it the leader of a new process group that its
+// descendants inherit. The timeout sends SIGKILL to that whole group, with
+// no dependency on `ps`. A timed-out run settles on the child's exit (or at
+// once, if the child had already exited), with this side of the pipes
+// destroyed, so a process that left the group cannot keep the run waiting.
+//
+// A detached group no longer receives the terminal's Ctrl-C, so while the
+// child runs, SIGINT, SIGTERM and SIGHUP to this process also SIGKILL the
+// group (then take their usual course), and so does this process exiting.
 
 export interface TimedRun {
   /** Exit code, or null when the child was killed. */
@@ -16,44 +24,20 @@ export interface TimedRun {
 }
 
 const STDERR_TAIL = 2048;
+const FORWARDED_SIGNALS: readonly NodeJS.Signals[] = [
+  'SIGHUP',
+  'SIGINT',
+  'SIGTERM',
+];
 
-/** The pid and every descendant of it, from one `ps` snapshot (POSIX). */
-export function processTree(rootPid: number): number[] {
-  const children = new Map<number, number[]>();
-  const listing = execFileSync('ps', ['-A', '-o', 'pid=', '-o', 'ppid='], {
-    encoding: 'utf8',
-  });
-  for (const line of listing.split('\n')) {
-    const [pid, ppid] = line.trim().split(/\s+/).map(Number);
-    if (Number.isInteger(pid) && Number.isInteger(ppid)) {
-      children.set(ppid, [...(children.get(ppid) ?? []), pid]);
-    }
+function killGroup(leaderPid: number | undefined): void {
+  if (leaderPid === undefined) {
+    return;
   }
-  const tree: number[] = [];
-  const stack = [rootPid];
-  while (stack.length > 0) {
-    const pid = stack.pop() as number;
-    if (!tree.includes(pid)) {
-      tree.push(pid);
-      stack.push(...(children.get(pid) ?? []));
-    }
-  }
-  return tree;
-}
-
-function killTree(rootPid: number): void {
-  let tree: number[];
   try {
-    tree = processTree(rootPid);
+    process.kill(-leaderPid, 'SIGKILL');
   } catch {
-    tree = [rootPid];
-  }
-  for (const pid of tree) {
-    try {
-      process.kill(pid, 'SIGKILL');
-    } catch {
-      // Already gone.
-    }
+    // The group is already gone.
   }
 }
 
@@ -67,26 +51,74 @@ export function runWithTimeout(
   },
 ): Promise<TimedRun> {
   return new Promise<TimedRun>((resolveRun, rejectRun) => {
-    const child = spawn(command, args, { cwd: options.cwd, env: options.env });
+    const child = spawn(command, args, {
+      cwd: options.cwd,
+      detached: true,
+      env: options.env,
+    });
     let stderr = '';
     let timedOut = false;
+    let settled = false;
+
+    const onSignal = (signal: NodeJS.Signals): void => {
+      killGroup(child.pid);
+      release();
+      if (process.listenerCount(signal) === 0) {
+        // No other handler: restore the signal's default effect.
+        process.kill(process.pid, signal);
+      }
+    };
+    const onExit = (): void => killGroup(child.pid);
+    function release(): void {
+      for (const signal of FORWARDED_SIGNALS) {
+        process.removeListener(signal, onSignal);
+      }
+      process.removeListener('exit', onExit);
+    }
+    for (const signal of FORWARDED_SIGNALS) {
+      process.on(signal, onSignal);
+    }
+    process.on('exit', onExit);
+
+    const finish = (outcome: () => void): void => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        release();
+        outcome();
+      }
+    };
+
     child.stdout.resume();
     child.stderr.on('data', (chunk: Buffer) => {
       stderr = (stderr + chunk.toString()).slice(-STDERR_TAIL);
     });
+    // Settles a timed-out run without waiting for `close`: a process outside
+    // the group could hold the pipes open indefinitely.
+    const settleTimedOut = (code: number | null): void => {
+      child.stdout.destroy();
+      child.stderr.destroy();
+      finish(() => resolveRun({ code, stderr, timedOut }));
+    };
     const timer = setTimeout(() => {
       timedOut = true;
-      if (child.pid !== undefined) {
-        killTree(child.pid);
+      killGroup(child.pid);
+      if (child.exitCode !== null || child.signalCode !== null) {
+        // The child already exited; only an escaped holder of the pipes
+        // was keeping the run open.
+        settleTimedOut(child.exitCode);
       }
     }, options.timeoutMs);
     child.on('error', (error) => {
-      clearTimeout(timer);
-      rejectRun(error);
+      finish(() => rejectRun(error));
+    });
+    child.on('exit', (code) => {
+      if (timedOut) {
+        settleTimedOut(code);
+      }
     });
     child.on('close', (code) => {
-      clearTimeout(timer);
-      resolveRun({ code, stderr, timedOut });
+      finish(() => resolveRun({ code, stderr, timedOut }));
     });
   });
 }
