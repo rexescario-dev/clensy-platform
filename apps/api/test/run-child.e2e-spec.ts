@@ -1,5 +1,11 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { apiRoot } from './support/migration-files';
@@ -122,6 +128,7 @@ describe('runChild', () => {
       { cwd: dir, graceMs: 1_000 },
     );
     expect(run.timedOut).toBe(true);
+    expect(run.status).toBeNull();
     expect(run.stdout).toBe('ready');
     expect(Date.now() - started).toBeLessThan(10_000);
   }, 30_000);
@@ -142,7 +149,7 @@ describe('runChild', () => {
       const started = Date.now();
       const run = await runChild(
         'sh',
-        ['-c', `setsid sleep 300 & echo $! > '${pidFile}'; sleep 300`],
+        ['-c', `setsid sleep 300 & echo $! > '${pidFile}'; exec sleep 300`],
         env,
         1_000,
         { cwd: dir, graceMs: 1_000 },
@@ -153,13 +160,13 @@ describe('runChild', () => {
     30_000,
   );
 
-  // Ctrl-C still reaches the work although runChild's child is detached: a
-  // SIGINT to the outer process's group (a stand-in for Jest) ends the
-  // migration grandchild. Every wait here is bounded.
-  it('a Ctrl-C to the parent process group also ends the migration grandchild', async () => {
-    const runChildModule = JSON.stringify(
-      join(apiRoot, 'test/support/run-child'),
-    );
+  // Review B-1: inside a Jest test environment `process` is Jest's sandboxed
+  // copy, so signal listeners registered there never fire. This test runs a
+  // REAL Jest process whose test calls runChild on a provision-cli-shaped
+  // child, then sends SIGINT to Jest's whole process group, as a terminal's
+  // Ctrl-C does. Nothing may survive. Every wait is bounded, and cleanup
+  // kills every recorded group and pid whatever the outcome.
+  it('a Ctrl-C to a real Jest run ends the child and its migration grandchild', async () => {
     const innerPidFile = join(dir, 'inner.pid');
     const inner = `
       require('node:fs').writeFileSync(${JSON.stringify(innerPidFile)}, String(process.pid));
@@ -169,47 +176,88 @@ describe('runChild', () => {
       });
       setInterval(() => {}, 1000);
     `;
-    const outer = `
-      const { runChild } = require(${runChildModule});
-      runChild(process.execPath, ['-r', ${JSON.stringify(tsNode)}, '-e', ${JSON.stringify(inner)}],
-        { PATH: process.env.PATH, TS_NODE_PROJECT: process.env.TS_NODE_PROJECT }, 600000,
-        { cwd: ${JSON.stringify(dir)} });
-    `;
-    const parent = spawn(process.execPath, ['-r', tsNode, '-e', outer], {
-      cwd: dir,
-      detached: true,
-      env,
-      stdio: 'ignore',
-    });
-    const parentExited = new Promise<void>((resolveExit) =>
-      parent.on('exit', () => resolveExit()),
+    writeFileSync(
+      join(dir, 'ctrlc.probe.js'),
+      `const { runChild } = require(${JSON.stringify(join(apiRoot, 'test/support/run-child.ts'))});
+test('runChild under Jest', async () => {
+  await runChild(process.execPath, ['-r', ${JSON.stringify(tsNode)}, '-e', ${JSON.stringify(inner)}],
+    { PATH: process.env.PATH, TS_NODE_PROJECT: ${JSON.stringify(env.TS_NODE_PROJECT)} }, 600000,
+    { cwd: ${JSON.stringify(dir)} });
+}, 600000);
+`,
     );
+    writeFileSync(
+      join(dir, 'jest.json'),
+      JSON.stringify({
+        maxWorkers: 1,
+        moduleFileExtensions: ['js', 'json', 'ts'],
+        rootDir: dir,
+        testEnvironment: 'node',
+        testRegex: '\\.probe\\.js$',
+        transform: {
+          '^.+\\.ts$': [
+            require.resolve('ts-jest', { paths: [apiRoot] }),
+            { diagnostics: false, tsconfig: join(apiRoot, 'tsconfig.json') },
+          ],
+        },
+      }),
+    );
+    // Detached: the Jest run gets its own process group, as a terminal job.
+    const jest = spawn(
+      process.execPath,
+      [
+        require.resolve('jest/bin/jest', { paths: [apiRoot] }),
+        '--config',
+        join(dir, 'jest.json'),
+      ],
+      { cwd: apiRoot, detached: true, env: { ...process.env } },
+    );
+    let output = '';
+    jest.stdout.on('data', (chunk: Buffer) => {
+      output = (output + chunk.toString()).slice(-2048);
+    });
+    jest.stderr.on('data', (chunk: Buffer) => {
+      output = (output + chunk.toString()).slice(-2048);
+    });
+    let jestExited = false;
+    const jestExit = new Promise<void>((resolveExit) =>
+      jest.on('exit', () => {
+        jestExited = true;
+        resolveExit();
+      }),
+    );
+    const innerPid = (): number => readPid(innerPidFile);
     try {
-      const deadline = Date.now() + 20_000;
-      while (readPid(pidFile) === 0 && Date.now() < deadline) {
-        await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+      const readyBy = Date.now() + 60_000;
+      while (readPid(pidFile) === 0 && !jestExited && Date.now() < readyBy) {
+        await new Promise((resolveWait) => setTimeout(resolveWait, 100));
       }
       const grandchild = readPid(pidFile);
-      expect(grandchild).toBeGreaterThan(0);
-      process.kill(-(parent.pid as number), 'SIGINT');
+      if (grandchild === 0) {
+        throw new Error(
+          `the migration grandchild never started (Jest ${jestExited ? 'exited' : 'still running'}); Jest output: ${JSON.stringify(output)}`,
+        );
+      }
+      const inner = innerPid();
+      process.kill(-(jest.pid as number), 'SIGINT');
       await Promise.race([
-        parentExited,
-        new Promise((resolveWait) => setTimeout(resolveWait, 10_000)),
+        jestExit,
+        new Promise((resolveWait) => setTimeout(resolveWait, 15_000)),
       ]);
-      expect(parent.exitCode !== null || parent.signalCode !== null).toBe(true);
+      expect(jestExited).toBe(true);
+      expect(await waitUntilDead(inner, 5_000)).toBe(true);
       expect(await waitUntilDead(grandchild, 5_000)).toBe(true);
     } finally {
-      // Clean up even when the property fails: the outer group, and the
-      // inner child's own (detached) group.
-      for (const leader of [parent.pid as number, readPid(innerPidFile)]) {
+      for (const leader of [jest.pid as number, innerPid()]) {
         if (leader > 0) {
           try {
             process.kill(-leader, 'SIGKILL');
           } catch {
-            // Already gone.
+            // Not a group leader, or already gone.
           }
+          killIfAlive(leader);
         }
       }
     }
-  }, 60_000);
+  }, 120_000);
 });
