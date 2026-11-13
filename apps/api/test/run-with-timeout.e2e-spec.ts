@@ -6,6 +6,7 @@ import {
   readFileSync,
   rmSync,
   symlinkSync,
+  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -64,8 +65,13 @@ function runInNode(
   script: string,
   env: Record<string, string | undefined>,
   limitMs: number,
-  onSpawn?: (pid: number) => void,
-): Promise<{ elapsedMs: number; killedAtLimit: boolean; stdout: string }> {
+  onSpawn?: (pid: number, hasExited: () => boolean) => void,
+): Promise<{
+  elapsedMs: number;
+  killedAtLimit: boolean;
+  stderr: string;
+  stdout: string;
+}> {
   return new Promise((resolveRun) => {
     const started = Date.now();
     const child = spawn(
@@ -78,11 +84,15 @@ function runInNode(
       },
     );
     let stdout = '';
+    let stderr = '';
     let killedAtLimit = false;
+    let exited = false;
     child.stdout.on('data', (chunk: Buffer) => {
       stdout += chunk.toString();
     });
-    child.stderr.resume();
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr = (stderr + chunk.toString()).slice(-2048);
+    });
     const timer = setTimeout(() => {
       killedAtLimit = true;
       try {
@@ -92,18 +102,103 @@ function runInNode(
       }
     }, limitMs);
     if (onSpawn !== undefined && child.pid !== undefined) {
-      onSpawn(child.pid);
+      onSpawn(child.pid, () => exited);
     }
     child.on('exit', () => {
+      exited = true;
       clearTimeout(timer);
       child.stdout.destroy();
       child.stderr.destroy();
-      resolveRun({ elapsedMs: Date.now() - started, killedAtLimit, stdout });
+      resolveRun({
+        elapsedMs: Date.now() - started,
+        killedAtLimit,
+        stderr,
+        stdout,
+      });
     });
   });
 }
 
 const helper = JSON.stringify(join(apiRoot, 'test/support/run-with-timeout'));
+
+/**
+ * Waits for the grandchild's pid file, polling every 50 ms. It always ends:
+ * it resolves with the pid, or rejects with a diagnostic at the deadline or
+ * as soon as the helper process has exited without writing the file.
+ */
+function waitForPidFile(
+  pidFile: string,
+  options: { deadlineMs: number; hasExited: () => boolean },
+): Promise<number> {
+  const deadline = Date.now() + options.deadlineMs;
+  return new Promise((resolveWait, rejectWait) => {
+    const poll = (): void => {
+      const pid = readPid(pidFile);
+      if (pid > 0) {
+        resolveWait(pid);
+      } else if (options.hasExited()) {
+        rejectWait(
+          new Error(
+            `the helper process exited before writing the grandchild pid file ${pidFile}`,
+          ),
+        );
+      } else if (Date.now() >= deadline) {
+        rejectWait(
+          new Error(
+            `the grandchild pid file ${pidFile} was not written within ${options.deadlineMs} ms`,
+          ),
+        );
+      } else {
+        setTimeout(poll, 50);
+      }
+    };
+    poll();
+  });
+}
+
+// Focused-review observation c: the Ctrl-C test's readiness poll had no stop
+// condition. The poll must end, with a diagnostic, on a deadline or as soon
+// as the helper process has exited.
+describe('waitForPidFile (readiness poll of the Ctrl-C test)', () => {
+  it('fails with a diagnostic when the pid file never appears', async () => {
+    const started = Date.now();
+    await expect(
+      waitForPidFile(join(tmpdir(), 'never-written-', String(process.pid)), {
+        deadlineMs: 300,
+        hasExited: () => false,
+      }),
+    ).rejects.toThrow(/was not written within 300 ms/);
+    expect(Date.now() - started).toBeLessThan(2_000);
+  }, 5_000);
+
+  it('stops as soon as the helper process has exited', async () => {
+    const started = Date.now();
+    let exited = false;
+    setTimeout(() => {
+      exited = true;
+    }, 100);
+    await expect(
+      waitForPidFile(join(tmpdir(), 'never-written-', String(process.pid)), {
+        deadlineMs: 60_000,
+        hasExited: () => exited,
+      }),
+    ).rejects.toThrow(/the helper process exited before writing/);
+    expect(Date.now() - started).toBeLessThan(2_000);
+  }, 5_000);
+
+  it('resolves with the pid once the file is written', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wait-for-pid-'));
+    const pidFile = join(dir, 'grandchild.pid');
+    try {
+      setTimeout(() => writeFileSync(pidFile, '4242\n'), 100);
+      await expect(
+        waitForPidFile(pidFile, { deadlineMs: 2_000, hasExited: () => false }),
+      ).resolves.toBe(4242);
+    } finally {
+      rmSync(dir, { force: true, recursive: true });
+    }
+  }, 5_000);
+});
 
 describe('runWithTimeout', () => {
   const env = { PATH: process.env.PATH };
@@ -207,21 +302,32 @@ describe('runWithTimeout', () => {
           cwd: ${JSON.stringify(dir)}, env: { PATH: process.env.PATH }, timeoutMs: 60000,
         });
       `;
+      // The readiness poll always settles (deadline, or the helper exiting),
+      // and the test waits for it, so a failure reports why instead of hanging.
+      let readiness: Promise<Error | undefined> = Promise.resolve(undefined);
       const run = await runInNode(
         script,
         { PATH: process.env.PATH },
         20_000,
-        (pid) => {
-          const sendWhenReady = (): void => {
-            if (readPid(pidFile) > 0) {
+        (pid, hasExited) => {
+          readiness = waitForPidFile(pidFile, {
+            deadlineMs: 15_000,
+            hasExited,
+          }).then(
+            () => {
               process.kill(-pid, 'SIGINT');
-            } else {
-              setTimeout(sendWhenReady, 50);
-            }
-          };
-          sendWhenReady();
+              return undefined;
+            },
+            (error: Error) => error,
+          );
         },
       );
+      const notReady = await readiness;
+      if (notReady !== undefined) {
+        throw new Error(
+          `${notReady.message}; helper stdout: ${JSON.stringify(run.stdout)}; stderr: ${JSON.stringify(run.stderr)}`,
+        );
+      }
       const grandchild = readPid(pidFile);
       try {
         expect(grandchild).toBeGreaterThan(0);

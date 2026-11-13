@@ -1985,3 +1985,86 @@ No applicable stage was missing, so no stage was skipped or overridden.
 ### Next Gate
 
 None. The slice is complete.
+
+## Post-closeout follow-ups: focused-review observations c and g (2026-11-14)
+
+This section adds resolution evidence for two observations tracked above. The original observations, their dispositions and the closeout record above are unchanged. The work is on branch `fix/227-timeout-followups`, cut from `main` at `d60091f`. It is **not merged**.
+
+| Commit | Change |
+| --- | --- |
+| `b453227` | Observation c |
+| `cfd90a2` | Observation g, first design (returned at review: B-1) |
+| `5fdf4eb` | Observation g, rework for B-1 |
+| `5d01515` | Review N-11 |
+
+### Observation c: the Ctrl-C test's readiness poll had no stop condition
+
+- **Reproduced.** The poll's shape, run as a standalone script with a pid file that never appears, was still polling after 100 polls. Only an outer 5 s `timeout` stopped it (exit 124).
+- **Test-first:**
+  - **RED:** two new `waitForPidFile` tests (stop at a deadline; stop when the helper exits) hit Jest's 5 s per-test bound against a stand-in with the old, unbounded semantics.
+  - **GREEN:** `waitForPidFile` always settles: with the pid, at a 15 s deadline, or as soon as the helper process exits. Each failure names its cause.
+  - The Ctrl-C test awaits that result and, on failure, reports the helper's stdout and stderr.
+- **Mutation** (outside the commits, reverted): `runWithTimeout` throwing before spawn. The Ctrl-C test then failed in 2 s with "the helper process exited before writing the grandchild pid file …", plus the helper's stderr.
+  - A first attempt failed at the grandchild assertion instead, because `runInNode` resolved before the poll recorded its rejection. Awaiting the poll's settled result fixed that.
+
+### Observation g: `runChild` could leave a migration process group running
+
+- **Traced.** `e2e-isolation`'s `runChild` SIGKILLed the `provision-cli` child at its own timeout. The child's migration runs in a detached process group (`runWithTimeout`), so SIGKILL let the child neither reach nor clean up that group.
+- **Test-first.** `runChild` moved verbatim to `test/support/run-child.ts` as the stand-in. New `test/run-child.e2e-spec.ts` cases:
+
+  | Case | On the stand-in |
+  | --- | --- |
+  | The `provision-cli` shape, where the child runs `runWithTimeout` over a grandchild | **RED:** the grandchild survived |
+  | An escaped holder of the pipes | **RED:** hung to Jest's 30 s bound |
+  | Finishes in time | Control; passed |
+  | A child that ignores SIGTERM | Control; passed |
+
+- **First design (`cfd90a2`) and review finding B-1.**
+  - The child was spawned `detached`, with SIGINT, SIGTERM and SIGHUP forwarded from `process`.
+  - A fresh independent review **Returned it for revision** (B-1). Inside a Jest test environment `process` is a sandboxed copy, so those listeners never fire. Under a real Jest process, a Ctrl-C left the child and its migration grandchild running, which was worse than `main`.
+  - My Ctrl-C test had used a plain-Node "stand-in for Jest" and could not see this.
+  - A probe confirmed the distinction: a signal listener fires in Jest's `globalSetup` but not in a test. So the merged `runWithTimeout` forwarding, used in `globalSetup` and in the plain-Node `provision-cli`, is effective where it is used.
+- **Rework (`5fdf4eb`).**
+  - The child is not detached, and no handlers are installed, so a terminal's Ctrl-C reaches it directly, as on `main`.
+  - On timeout it gets SIGTERM, which its `runWithTimeout` turns into a SIGKILL of the migration group, then SIGKILL after a grace period (5 s by default).
+  - A timed-out run settles on exit with the pipes destroyed.
+  - `runWithTimeout` and the `e2e-isolation` call sites and timeouts are unchanged; only the import changed.
+- **New test.** "a Ctrl-C to a real Jest run ends the child and its migration grandchild" drives a real Jest process and sends SIGINT to its process group.
+  - **RED** on `cfd90a2`: the inner child survived.
+  - **GREEN** on `5fdf4eb`.
+  - A mutation removing the earlier forwarding failed it, and with hardened cleanup it leaked nothing.
+- **N-11 (`5d01515`).** The new test's 15 s race timer was never cleared, so a focused run lingered (wall 24 s against Jest's 9.1 s, with a "did not exit" warning). It is now cleared: wall 16–17 s, no warning.
+
+### Verification (local, on the fix tree; no database seeded or changed)
+
+| Run | Result |
+| --- | --- |
+| Focused `run-child` + `run-with-timeout` | 15/15, five runs at `5fdf4eb` and three at `5d01515`. `--detectOpenHandles` was clean, but it did not detect the N-11 timer. |
+| API eslint without `--fix` | exit 0 |
+| `pnpm run lint` | 6/6, nothing rewritten |
+| `tsc --noEmit` | api and web, exit 0 |
+| `pnpm run test` | 1382/1382 |
+| `pnpm --filter api test:e2e` (at `5fdf4eb`) | 65/65 suites, 731/731 tests. `e2e-isolation`'s real `provision-cli` runs go through the reworked `runChild`. |
+| Release gate (at `5fdf4eb`) | 12/12 |
+| Leftovers | No `clensy_migration_%` database and no stray process. A read-only `clensy` snapshot was identical to the Task 13 baseline. |
+| `5d01515` | Test-only. Focused files, eslint and `tsc` were re-run; the full suite was not. |
+
+### Reviews
+
+- **Review of `cfd90a2`: Returned for Revision.** One blocking finding (B-1) and 10 non-blocking.
+  - Report: `.superpowers/sdd/2026-11-06-e2e-database-isolation-dev-owner-plan/review-c-g-227-followups.md`, SHA-256 `49ad6f4598172c7a312d6490d3d0f844a63b9bf857df45727ee1fa0e3dbd6f66`.
+- **Re-review of `5fdf4eb`: Approved for merge,** by a different fresh agent. 0 blocking findings.
+  - It confirmed B-1 resolved with a real-Jest probe: `main` and the branch are both clean, while `cfd90a2` and a `detached` mutant both leave the work running.
+  - It found that pnpm 10.30.3 forwards SIGTERM to its command, so the `pnpm exec jest` timeout path is better than `main`.
+  - Report: `.superpowers/sdd/2026-11-06-e2e-database-isolation-dev-owner-plan/rereview-c-g-227-followups.md`, SHA-256 `e5ca398a44bafc59be1780051c1b4211c3fbde706fdb9586621d1c046d43f2e5`.
+  - `5d01515` came after this review and is not covered by it.
+
+**Status of the review observations:**
+
+| Status | Observations |
+| --- | --- |
+| Resolved | N-3, N-4, N-7, N-10, N-11 |
+| Residual | N-2 (a child that already exited still waits one grace period) |
+| Open, non-blocking | N-1 (the fix-c ESRCH path bypasses the diagnostic), N-5 (no `child.on('error')`), N-6 (`runProvisionCli` does not surface `timedOut`), N-8 (the fail-closed test's 55 s plus 5 s grace equals its 60 s Jest timeout), N-12 (the spawned Jest in the new test has no `'error'` listener) |
+
+**Dispositions above:** focused-review **c** and **g** are now resolved by these commits, pending merge. Every other deferred observation stays as recorded: re-review 2, 5 and 6, and focused-review a, b, d, e and h.
