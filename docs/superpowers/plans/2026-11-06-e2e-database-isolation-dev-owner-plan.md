@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted** — 2026-11-12 (M5, owner), content as accepted at SHA-256 `86946361217d5efffeb063353dd65b1fe6b3678fba9d506e66b0c1092bed77b6` (M4 revision 3a, commit `4598433`). The acceptance is recorded under "Gate outcomes". It does not by itself authorise M6. |
+| Status | **Accepted** — 2026-11-12 (M5, owner), content as accepted at SHA-256 `86946361217d5efffeb063353dd65b1fe6b3678fba9d506e66b0c1092bed77b6` (M4 revision 3a, commit `4598433`). The acceptance is recorded under "Gate outcomes". It does not by itself authorise M6.<br>**Delivery state (2026-11-13):**<br>• **M6** Complete.<br>• **M7** Approved for merge at `8ad628d`. The M8 fix pass was re-reviewed and Approved at `98716b0`, and the finding 1 correction was focus-reviewed and Approved at `303d2db`.<br>• **M8** Complete. **M9** Complete. **M10** not applicable.<br>• PR [#228](https://github.com/rexescario-dev/clensy-platform/pull/228) is open and **not merged**. See [Documentation (M9)](#documentation-m9). |
 | Date | 2026-11-06 (revision 1); 2026-11-12 (revisions 2 and 3) |
 | Tracking issue | [#227](https://github.com/rexescario-dev/clensy-platform/issues/227) "test(api): isolate the e2e database and add a persistent dev TENANT_OWNER seeder" |
 | Branch | **Drafting (M4/M5):** `docs/227-e2e-db-isolation-spec`, which carries the Accepted spec and this plan.<br>**Implementation (M6 on):** `feat/227-e2e-db-isolation-dev-owner`, cut from the head of `docs/227-e2e-db-isolation-spec` after M5 Accepts, with `--no-track` (owner decision D-M5-4).<br>**Deviation from `CONTRIBUTING.md` L16:** that rule says "from `main`". The branch is cut from the spec branch instead, so that one PR carries the spec, the plan and the implementation (process spec §2.8, "prefer one PR"). The owner approved this in D-M5-4. |
@@ -1755,3 +1755,132 @@ Nothing in this table is fixed in code. The items to keep most visible for follo
 - This record adds lines, plus one owner-directed in-place correction: M8 table row 2. The M5, M7, M6 and CI records, and the rest of the M8 record, are unchanged, and no gate is re-accepted.
 
 **Not authorised by this record:** merge, deployment, release, cutover or database seeding. Before anyone seeds `clensy`, both existing worktrees must be inspected (D-M5-2).
+
+## Refactoring (M8)
+
+```text
+Decision: Complete
+Subject: PR #228, feat/227-e2e-db-isolation-dev-owner, range 8ad628d..303d2db (fix commits 76eadc4 and 303d2db)
+Scope:
+- apps/api/test/support/{migration-files,e2e-connection,provision-test-database,run-with-timeout}.ts
+- apps/api/src/platform/database/{postgres-connection-options.ts,dev-owner/*,seed-dev-owner.ts}
+- the tests and docs listed under "M8 fix pass" above
+Accepted specification: docs/superpowers/specs/2026-11-06-e2e-database-isolation-dev-owner-design.md
+Accepted implementation plan: docs/superpowers/plans/2026-11-06-e2e-database-isolation-dev-owner-plan.md
+M7 / authorization: Approved for merge at 8ad628d; owner-authorised fix pass (2026-11-12) and finding 1 correction (2026-11-13)
+Maintainability goals:
+- remove the unused migrationFileTimestamps export (M7 observation 4)
+- one shared PostgresConnectionOptions type (observation 8)
+Changes (Complete only):
+- both, in 76eadc4
+Verification:
+Before:
+- CI run 43140196061 on 8ad628d: all four jobs success
+After:
+- tsc --noEmit (api, web) exit 0; unit 1382/1382; e2e 64/64 suites, 720/720 tests; release gate 12/12 (76eadc4)
+- CI run 43143373251 on 98716b0, and run 43441676941 on 303d2db: all four jobs success
+Externally observable behavior changes: None from the two refactors.
+Gate: Complete
+```
+
+The same pass carried owner-authorised changes that are **not** behaviour-preserving, and so are not M8 refactors:
+- **Behaviour corrections:** observations 2, 6 and 7, plus re-review finding 1 in `303d2db`.
+- **Test-only:** observations 1, 3 and 5.
+- **Docs:** observations 9 and 11.
+
+Each was test-first (or docs-only) and was reviewed by a fresh M7 re-review: the re-review of `98716b0` and the focused review of `303d2db`, both Approved for merge. They are recorded under "M8 fix pass" and in the following section, with their open observations and the owner's dispositions.
+
+## Documentation (M9)
+
+```text
+Decision: Complete
+Subject: #227 E2E database isolation & development owner seeder, PR #228 at 6f73e51 (M7-approved, not merged)
+Accepted specification: docs/superpowers/specs/2026-11-06-e2e-database-isolation-dev-owner-design.md (revisions 5–5c)
+Accepted implementation plan: docs/superpowers/plans/2026-11-06-e2e-database-isolation-dev-owner-plan.md
+M7: Approved for merge (8ad628d; re-review at 98716b0; focused review at 303d2db)
+M8: Complete
+
+Documentation scope:
+- docs/superpowers/README.md
+- docs/history/shipped-slices.md
+- docs/development/testing-and-ci.md (one sentence)
+- this plan (Status line; M8, M9 and M10 records)
+Inventoried and left unchanged:
+- docs/getting-started/local-development.md, docs/development/testing-and-ci.md (the rest of it) and
+  apps/api/README.md: written in M6 (Task 12) and corrected in the M8 fix pass (observations 5, 7 and 9);
+  re-read against the code at 6f73e51
+- docs/development/database-migrations.md, docs/architecture/*.md, docs/README.md: no reference to the
+  e2e database or the seeder that is now stale (searched for clensy_e2e, DB_NAME with e2e, migration:run)
+- the spec: Accepted; not edited
+
+Updated artifacts:
+- docs/superpowers/README.md: new "Platform and API" row for the spec (Accepted, with revisions 5–5c);
+  plan count 78 -> 79 (78 on main, plus this plan) <- the Accepted spec and this plan
+- docs/history/shipped-slices.md: "E2E database isolation & development owner seeder (#227)" <- this
+  slice changes CI's e2e jobs and adds a command, like #140's note; it states M7-approved, not merged
+- docs/development/testing-and-ci.md: the E2E_GUARD_* sentence now names exactly the files the check
+  reads, instead of "no script, CI job or config" <- re-review finding 3 (deferred at the code-fix stage;
+  a docs-accuracy fix, so resolved here)
+- this plan: Status line and records <- M6–M10 outcomes
+
+Editorial changes:
+- None beyond the new text.
+Content updates:
+- As listed above.
+
+Verification:
+- Links checked: relative links and anchors in the touched files resolve (script check)
+- Heading hierarchy checked: new sections are ## with no skipped level
+- Status consistency checked: spec and plan Accepted; M7 Approved; PR #228 open, not merged
+- Cross-references checked: the anchors #api-end-to-end-suites and #development-and-e2e-databases exist
+- Terminology checked: "Test database", "Test-database rule", "E2E target", "Bootstrap tenant",
+  "TENANT_OWNER" as in spec §4.1 and §4.7
+- Duplicates / outdated refs checked: none found
+
+Gate: Documentation complete. Code, behavior and contracts unchanged by this stage.
+```
+
+The open observations remain as recorded under "Dispositions of the open observations". The exception is re-review 3, which the `testing-and-ci.md` change above resolves. Focused-review **c** (the Ctrl-C test's poll) and **g** (`runChild` can leave a migration group running) stay the most visible follow-ups.
+
+### Slice Completion Report (M9)
+
+| Field | Result |
+| --- | --- |
+| Slice | #227 E2E database isolation & development owner seeder |
+| Tracking | https://github.com/rexescario-dev/clensy-platform/issues/227 |
+| M2 | Spec drafted (revisions 1–5c) |
+| M3 | Spec **Accepted** (revisions 5–5c, 2026-11-11) |
+| M4 | Plan drafted (revisions 1–3a) |
+| M5 | Plan **Accepted** (revision 3a, 2026-11-12) |
+| M6 | **Complete** |
+| M7 | **Approved for merge** (fresh independent reviews at `8ad628d`, `98716b0` and `303d2db`) |
+| M8 | **Complete** |
+| M9 | **Complete** |
+| M10 | **Not applicable** (no workflow assets changed) |
+| Branch | `feat/227-e2e-db-isolation-dev-owner` |
+| PR | [#228](https://github.com/rexescario-dev/clensy-platform/pull/228), open, not merged |
+| Status | **Ready for closeout**, once the owner authorises the merge |
+
+#### Shipped
+
+- **E2e isolation:** `clensy_test` from the launch environment only; automatic provisioning and migration; the two-stage `DataSource` guard on every e2e connection; the static hygiene checks; CI's e2e jobs on `clensy_test`.
+- **The seeder:** `pnpm db:seed:dev-owner [--reset-password]`, explicit only, with its refusals and redacted output.
+- **Docs:** the docs above, the spec index and the shipped-slices note.
+
+#### Validation
+
+| Check | Result |
+| --- | --- |
+| Tests | Code last changed at `303d2db`: local unit 1382/1382, e2e 64/64 suites and 723/723 tests, release gate 12/12. This stage changes docs only. |
+| Typecheck | `tsc --noEmit` api and web exit 0 at `303d2db` |
+| Lint | `pnpm run lint` 6/6 at `303d2db`, nothing rewritten |
+| CI | Run `43446045935` on `6f73e51`: Lint, Test, Release gate and API e2e all success. The M9 commit is re-checked by CI after push. |
+| Build | N/A |
+
+#### Next Gate
+
+**Closeout** (§2.12): an owner-authorised merge of PR #228. Before anyone seeds `clensy`, both existing worktrees must be inspected (D-M5-2).
+
+## Workflow validation (M10)
+
+**Not applicable.** M10 applies only when a slice changes workflow assets (process spec §2.12, step 1). #227 changes no file under `docs/workflows/`, `docs/conventions/` or `docs/skills/`, no `.claude/` file and no `workflow.yaml`. Verified: `git diff --name-only origin/main..HEAD` lists none of them.
