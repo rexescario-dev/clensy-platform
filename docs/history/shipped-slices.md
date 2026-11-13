@@ -152,7 +152,7 @@ Shipped in this slice (PR [#220](https://github.com/rexescario-dev/clensy-platfo
 
 ## E2E database isolation & development owner seeder (#227)
 
-Approved at M7 in PR [#228](https://github.com/rexescario-dev/clensy-platform/pull/228); not merged when this note was written.
+Shipped in this slice (PR [#228](https://github.com/rexescario-dev/clensy-platform/pull/228)).
 
 - **The e2e suites stop sharing `clensy`.** They run only against a Test database: `clensy_test` by default, or another name matching the Test-database rule, taken from the launch environment and never from a file.
 - **Setup is automatic.** Jest's `globalSetup` creates `clensy_test` if it is missing, migrates it and confirms nothing is pending.

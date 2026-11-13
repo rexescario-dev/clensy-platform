@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted** — 2026-11-12 (M5, owner), content as accepted at SHA-256 `86946361217d5efffeb063353dd65b1fe6b3678fba9d506e66b0c1092bed77b6` (M4 revision 3a, commit `4598433`). The acceptance is recorded under "Gate outcomes". It does not by itself authorise M6.<br>**Delivery state (2026-11-13):**<br>• **M6** Complete.<br>• **M7** Approved for merge at `8ad628d`. The M8 fix pass was re-reviewed and Approved at `98716b0`, and the finding 1 correction was focus-reviewed and Approved at `303d2db`.<br>• **M8** Complete. **M9** Complete. **M10** not applicable.<br>• PR [#228](https://github.com/rexescario-dev/clensy-platform/pull/228) is open and **not merged**. See [Documentation (M9)](#documentation-m9). |
+| Status | **Accepted** — 2026-11-12 (M5, owner), content as accepted at SHA-256 `86946361217d5efffeb063353dd65b1fe6b3678fba9d506e66b0c1092bed77b6` (M4 revision 3a, commit `4598433`). The acceptance is recorded under "Gate outcomes". It does not by itself authorise M6.<br>**Delivery state (2026-11-13):**<br>• **M6** Complete.<br>• **M7** Approved for merge at `8ad628d`. The M8 fix pass was re-reviewed and Approved at `98716b0`, and the finding 1 correction was focus-reviewed and Approved at `303d2db`.<br>• **M8** Complete. **M9** Complete. **M10** not applicable.<br>• **Slice complete:** merged in PR [#228](https://github.com/rexescario-dev/clensy-platform/pull/228) (`347f2f3`, 2026-11-13), and #227 is closed. See [Closeout](#closeout-2026-11-13). |
 | Date | 2026-11-06 (revision 1); 2026-11-12 (revisions 2 and 3) |
 | Tracking issue | [#227](https://github.com/rexescario-dev/clensy-platform/issues/227) "test(api): isolate the e2e database and add a persistent dev TENANT_OWNER seeder" |
 | Branch | **Drafting (M4/M5):** `docs/227-e2e-db-isolation-spec`, which carries the Accepted spec and this plan.<br>**Implementation (M6 on):** `feat/227-e2e-db-isolation-dev-owner`, cut from the head of `docs/227-e2e-db-isolation-spec` after M5 Accepts, with `--no-track` (owner decision D-M5-4).<br>**Deviation from `CONTRIBUTING.md` L16:** that rule says "from `main`". The branch is cut from the spec branch instead, so that one PR carries the spec, the plan and the implementation (process spec §2.8, "prefer one PR"). The owner approved this in D-M5-4. |
@@ -1884,3 +1884,104 @@ The open observations remain as recorded under "Dispositions of the open observa
 ## Workflow validation (M10)
 
 **Not applicable.** M10 applies only when a slice changes workflow assets (process spec §2.12, step 1). #227 changes no file under `docs/workflows/`, `docs/conventions/` or `docs/skills/`, no `.claude/` file and no `workflow.yaml`. Verified: `git diff --name-only origin/main..HEAD` lists none of them.
+
+## Closeout (2026-11-13)
+
+**Authorisation** (owner, 2026-11-13, "merge, closeout"): merge PR #228 and run closeout. Earlier the same day the owner had the #227 acceptance criteria verified against the branch, and ticked criteria 1–16 on the issue. Criterion 17 was left unticked; see "Limits that stand".
+
+**M1–M10 check before the merge** (process spec §2.12, step 1):
+
+| Stage | Outcome |
+| --- | --- |
+| M1 | Passed: the installed prompt library is present |
+| M2 / M3 | Passed: the spec is Accepted (revision 4 on 2026-11-06; revisions 5–5c on 2026-11-11) |
+| M4 / M5 | Passed: this plan is Accepted (revision 3a, 2026-11-12) |
+| M6 | Passed: [M6 evidence](#m6-evidence) |
+| M7 | Passed: Approved for merge at `8ad628d`. The fix pass was re-reviewed and Approved at `98716b0`, and the finding 1 correction was focus-reviewed and Approved at `303d2db`. All three reviews were by fresh, independent agents. |
+| M8 | Passed: [Complete](#refactoring-m8) |
+| M9 | Passed: [Complete](#documentation-m9) (`9de6118`) |
+| M10 | Does not apply ([not applicable](#workflow-validation-m10)) |
+
+No applicable stage was missing, so no stage was skipped or overridden.
+
+**Merge verification:**
+- Before the merge, PR #228 was `MERGEABLE`, `mergeStateStatus: CLEAN` and up to date with `main` (`c9e449f`). All four checks had passed on head `9de6118` (run `43449136275`).
+- It was merged with a merge commit at 2026-11-13T15:16:00Z, as `347f2f3a240c603846a207aaf6ffc2d0301eb4d9` (parents `c9e449f` and `9de6118`). `--match-head-commit` pinned the head.
+- `9de6118` is an ancestor of `main`, and the tree of `main` equals the PR head's tree. The spec on `main` is still SHA-256 `8885015d…1ea4`.
+- CI on the `main` push of `347f2f3` (run `43450867934`): API e2e, Lint, Release gate and Test, all success.
+- **#227 closed** as completed, by hand, because the PR said "Refs #227". The closing comment points to PR #228 and `347f2f3`, explains why criterion 17 is unticked, and states the conditions still on #209.
+
+**Post-merge cleanup:**
+- `feat/227-e2e-db-isolation-dev-owner` is deleted locally and on the remote.
+- The local `docs/227-e2e-db-isolation-spec` branch is deleted. It was never pushed, and its commits are in `main`.
+- **The executor's git-ignored workspace is kept.** `.superpowers/sdd/2026-11-06-e2e-database-isolation-dev-owner-plan/` holds:
+  - the M6 ledger;
+  - the review packages;
+  - the three M7 reports, verbatim: `m7-review-227.md` (`a5307561…115e`), `m7-rereview-227.md` (`8dba76ef…bfee`) and `focused-review-finding1-227.md` (`6b36a106…f575`).
+
+  It is not in git.
+- **Other worktrees** are untouched: `.claude/worktrees/feat+53-web-i18n-architecture` and a detached scratch worktree at `c9e449f`. They are the subject of D-M5-2.
+- **Local data:** a read-only snapshot of `clensy`, taken with this plan's Task 13 query on 2026-11-13, was identical to the Task 13 "after" snapshot (`diff` exit 0). That covers four more full e2e runs and four release-gate runs since. It is evidence of no observed change, not proof. No seeder was run, and `clensy` has no development owner yet.
+- **Services:** the Docker `api` container was not rebuilt or restarted. #227 changes no runtime API code: the seeder is a host-run command. No branch server is running.
+
+**Final M7 position:** Approved for merge. No blocking findings remain.
+
+**Limits that stand:**
+- **Acceptance criterion 17** is unticked on #227: three fresh reviews are recorded, but some non-blocking observations were deferred rather than fixed (see "Dispositions of the open observations").
+- **The static checks are hygiene, not a security boundary,** and host names are checked by name only (spec §4.10; the docs' "Residual risks").
+- **The escaped-grandchild timeout case** is verified on Linux and CI only.
+
+**Follow-ups** (not filed as issues):
+- **Focused-review c:** the Ctrl-C test's pid-file poll has no stop condition (a test can itself hang).
+- **Focused-review g:** the `e2e-isolation` `runChild` helper can leave a migration process group running at its own timeout.
+- **Re-review 2:** the no-parent-spread check should read `run-with-timeout.ts`.
+- **Re-review 5:** keep the setup error if cleanup also throws.
+- **Re-review 6:** the zombie-process limitation, documented.
+- **Focused-review a, b, d, e and h:** accepted or recorded limitations.
+- **#209** stays blocked until three things are done, in order:
+  1. both existing worktrees are inspected (D-M5-2);
+  2. the development owner is seeded with `pnpm db:seed:dev-owner`;
+  3. the account is verified read-only: exactly one matching active `TENANT_OWNER`, scope `TENANT`, Bootstrap tenant, with no password fields read.
+
+  None of these is authorised by this closeout.
+
+## Final Slice Completion Report
+
+| Field | Result |
+| --- | --- |
+| Slice | #227 E2E database isolation & development owner seeder |
+| Tracking | https://github.com/rexescario-dev/clensy-platform/issues/227 (closed, completed) |
+| M2 / M3 | Spec **Accepted** (revisions 5–5c) |
+| M4 / M5 | Plan **Accepted** (revision 3a) |
+| M6 | **Complete** |
+| M7 | **Approved** (`8ad628d`; re-review `98716b0`; focused review `303d2db`) |
+| M8 | **Complete** |
+| M9 | **Complete** |
+| M10 | **Not applicable** |
+| Branch | `feat/227-e2e-db-isolation-dev-owner`, deleted after the merge |
+| PR | https://github.com/rexescario-dev/clensy-platform/pull/228 (merged, `347f2f3`) |
+| Status | **Slice complete** |
+
+### Shipped
+
+- **E2e isolation:** the e2e suites run only against a Test database (`clensy_test` by default), taken from the launch environment.
+  - Jest `globalSetup` creates and migrates it.
+  - A two-stage `DataSource` guard covers every e2e connection.
+  - Static hygiene checks back it up.
+  - CI's e2e jobs use `clensy_test`.
+- **The seeder:** `pnpm db:seed:dev-owner [--reset-password]`, an explicit, idempotent development `TENANT_OWNER` seeder. It refuses production, Test databases and non-local hosts, fails closed on a mismatch, and its output is redacted.
+- **Docs:** local development, testing and CI, the API README, the spec index and the shipped-slices note.
+
+### Validation
+
+| Check | Result |
+| --- | --- |
+| Tests | Local at `303d2db`: unit 1382/1382, e2e 64/64 suites and 723/723 tests, release gate 12/12 |
+| Typecheck | `tsc --noEmit` api and web, exit 0 |
+| Lint | `pnpm run lint` 6/6, nothing rewritten |
+| CI | PR head `9de6118`: run `43449136275`, all four checks pass. `main` at `347f2f3`: run `43450867934`, all four checks pass. |
+| Build | N/A |
+
+### Next Gate
+
+None. The slice is complete.
