@@ -1615,7 +1615,7 @@ Recorded in full in the M6 ledger and summarised in the M6 Slice Completion Repo
 | # | Observation | Change | Test evidence (RED → GREEN) |
 | --- | --- | --- | --- |
 | 1 | The ordering test depended on the developer's `apps/api/.env` | The `ordering` block writes `DB_NAME=clensy` and a sentinel to a `.env` in a fresh `mkdtemp` directory and moves `cwd` there for the block, because `ConfigModule.forRoot()` and `dotenv/config` read `.env` from `process.cwd()`. It never reads or writes `apps/api/.env`. | **RED:** with the old precondition and an unconditional sentinel assertion, the test failed (`Expected: "present"`, `Received: undefined`). That proves it read the real `.env`. **GREEN:** 1 passed. **Mutation** (outside the commit, reverted): `dotenv` with `override: true` in `data-source.ts` made the test fail at its `data-source.ts` assertion (`Expected: "clensy_test"`, `Received: "clensy"`). |
-| 2 | On a migration timeout, a `ts-node` grandchild could survive | New `test/support/run-with-timeout.ts`. On timeout it snapshots the child's descendants with POSIX `ps` and SIGKILLs the whole tree, then settles only on `close`, after exit. The child stays in the current process group, so Ctrl-C still reaches it. `runMigrationCli` uses it; its error messages and the "timed out after 120 s" step text are unchanged. | New `test/run-with-timeout.e2e-spec.ts`, 4 tests (success, non-zero exit, 2 KB stderr tail, timeout with a grandchild). **RED:** the naive kill-the-child version failed the timeout test, and also hung, because the surviving grandchild held the pipes, so `close` never fired. **GREEN:** 4 passed in 1.4 s, with no stray processes afterwards. |
+| 2 | On a migration timeout, a `ts-node` grandchild could survive | New `test/support/run-with-timeout.ts`, used by `runMigrationCli`. Its error messages and the "timed out after 120 s" step text are unchanged. **As corrected by `303d2db` (re-review finding 1, below):**<br>• The child is spawned `detached`, so it leads a process group; the timeout SIGKILLs that group, with no dependency on `ps`.<br>• A timed-out run settles on the child's exit, or at once if the child had already exited, with the pipes destroyed.<br>• SIGINT, SIGTERM and SIGHUP to the parent, and the parent exiting, also SIGKILL the group.<br>(The first version, in `76eadc4`, snapshotted descendants with POSIX `ps` and settled only on `close`. That design is superseded.) | New `test/run-with-timeout.e2e-spec.ts`, 4 tests (success, non-zero exit, 2 KB stderr tail, timeout with a grandchild). **RED:** the naive kill-the-child version failed the timeout test, and also hung, because the surviving grandchild held the pipes, so `close` never fired. **GREEN:** 4 passed in 1.4 s, with no stray processes afterwards. `303d2db` adds 3 cases (no `ps`, Ctrl-C, escaped grandchild); see below. |
 | 3 | The static scan missed bracket `process.env['DB_*']`, `\|\| 'clensy'` and `pg/lib/...` | Named patterns `DB_ENV_READ`, `CLENSY_FALLBACK` and `PG_SPECIFIER` now cover those forms. It remains a hygiene check, not a security boundary, and does not prove that every access path is covered. | New pattern controls: 9 detection cases failed, then passed. The 8 must-not-match controls passed throughout. **Breaks** (outside the commit, removed): s1 bracket read, s2 `\|\|` fallback, s3 `pg/lib/client` import. Each failed exactly its own test. **p1 re-run:** a `pg` import still fails its test. |
 | 4 | Unused `migrationFileTimestamps` export | Removed. The plan listed it as an interface, but nothing consumes it (repository search). | `tsc --noEmit` exit 0; full suites green. |
 | 5 | Undocumented `E2E_GUARD_*` overrides | A code comment gives each override's purpose, its default (`apps/api/test/jest-e2e.json`, `apps/api/package.json`), the value it takes (a JSON file path) and the rule that nothing else sets it. A paragraph in `testing-and-ci.md`. A new check: no script, CI workflow or Jest config sets them. | **Break r7** (outside the commit, reverted): a `test:e2e` script setting the override made exactly the new check fail. |
@@ -1649,3 +1649,109 @@ Recorded in full in the M6 ledger and summarised in the M6 Slice Completion Repo
 | Leftovers | no `clensy_migration_%` database and no stray child process |
 
 **Next:** push; CI on the new head; a fresh independent M7 re-review of `8ad628d..<new head>`. Merge is not authorised by this record.
+
+## M7 re-review of the M8 fix pass, and the finding 1 correction
+
+### M7 re-review of `8ad628d..98716b0`: Approved for merge
+
+The verdict was 0 blocking findings and 6 non-blocking observations.
+
+- **Reviewer:** a fresh, independent agent, Claude Fable 5.1 (`claude-fable-5-1`), that implemented neither #227 nor the fix pass. It ran read-only and touched no database.
+- **Report:** kept verbatim outside the tracked tree, at `.superpowers/sdd/2026-11-06-e2e-database-isolation-dev-owner-plan/m7-rereview-227.md`, SHA-256 `8dba76efb7b0e73c2e87375dbc9028dfff0287b1054431cb7af032928532bfee`.
+- **CI on `98716b0`:** run `43143373251`, all four jobs success:
+  - Lint: `Tasks: 6 successful, 6 total`.
+  - Test: `1382 passed`.
+  - API e2e: `63 passed` suites, `708 passed` tests.
+  - Release gate: `1 passed`, `12 passed`.
+  - Both e2e jobs ran `pnpm --filter api migration:run` with `DB_NAME: clensy_test` (30 migrations), then logged `e2e target clensy_test@localhost:5432: created=false, applied=0, pending=0, unknown=0`.
+  - The totals equal the local 64 suites and 720 tests.
+
+**Re-review observations** (the reviewer's, non-blocking):
+
+| # | Observation | Status |
+| --- | --- | --- |
+| 1 | `test/support/run-with-timeout.ts`: without `ps`, the timeout killed only the direct child, so a grandchild could hold the pipes and the run never settled. | **Resolved** by `303d2db` (below). |
+| 2 | The static-confinement "no parent spread" check (`test/e2e-isolation.e2e-spec.ts`) reads only `provision-test-database.ts`, but `spawn` now lives in `run-with-timeout.ts`. | **Deferred.** |
+| 3 | `testing-and-ci.md` says "no script, CI job or config sets them, and the static test fails if one does". The check reads five named files plus `.github/workflows/*.yml`, and the claim should be narrowed to that. | **Deferred.** |
+| 4 | The M8 record says "8 must-not-match controls"; there are **9**: 3 for `DB_ENV_READ`, 2 for `CLENSY_FALLBACK` and 4 for `PG_SPECIFIER`. | **Corrected here.** The M8 table row 3 above is left as written; this line is the correction. |
+| 5 | If the ordering block's `beforeAll` throws before `chdir`, `afterAll`'s `process.chdir(undefined)` masks the original error. | **Deferred.** |
+| 6 | The grandchild-liveness check `process.kill(pid, 0)` is true for a zombie. It could fail falsely in a container whose PID 1 does not reap. It does not apply to this project's CI. | **Deferred:** to be documented, with no platform-specific workaround unless one is shown to be needed. |
+
+### Finding 1 correction: `303d2db`
+
+- **Commit:** `303d2db1fb05dde900bcf3cf45b568a7cf4b9eac`. Owner-authorised. It changes only `apps/api/test/support/run-with-timeout.ts` and `apps/api/test/run-with-timeout.e2e-spec.ts`.
+- **Process groups, verified first:** on this Linux host, a `detached` child leads a new process group, and a `node` grandchild under `pnpm exec sh -c` inherited that pgid. A probe of `ps` with full arguments also failed with `ENOBUFS` (1 MB buffer): a second way the `ps` path could fail.
+- **Design:**
+  - The child is spawned `detached`, and the timeout SIGKILLs its process group (`process.kill(-pid)`), with no `ps`.
+  - A timed-out run settles on the child's `exit`, or at once if the child had already exited, with the parent's ends of the pipes destroyed. A process that escaped the group therefore cannot keep the run waiting.
+  - A detached group does not receive the terminal's Ctrl-C. So while a run is active, SIGINT, SIGTERM and SIGHUP to the parent SIGKILL the group and then take their usual course, and the parent exiting does the same. Listeners are removed when the run settles.
+  - The 120 s migration timeout, the `runMigrationCli` messages and redaction, and the `env: migrationCliEnv(` shape are unchanged.
+- **This supersedes the `ps`-based design.** M8 table row 2 above has been corrected to describe the current design, and it names the superseded one.
+
+**Tests (TDD).** Each new case runs the helper in a separate Node process with an outer 20 s bound, so a broken implementation cannot hang Jest.
+
+| Case | RED | GREEN |
+| --- | --- | --- |
+| No `ps` on PATH (only `sh` and `sleep`); a grandchild holds the pipes | Hung; killed at the 20 s bound (`killedAtLimit: true`) | Settles with `timedOut: true`; grandchild dead |
+| Ctrl-C: SIGINT to the parent's process group | Failed on the old code too, because a non-interactive `sh` runs `sleep &` with SIGINT ignored, so no plain forwarding could pass | Grandchild dead |
+| A `setsid` grandchild holds the pipes after the child exits 0 (skipped where `setsid` is absent) | Hung; killed at the 20 s bound | Settles with `code: 0`, `timedOut: true` |
+
+**Local verification:**
+- Timeout spec: 7/7, repeated, about 6.7 s each.
+- `pnpm run lint`: 6/6, with nothing rewritten.
+- `tsc --noEmit`: api and web, exit 0.
+- `pnpm run test`: 1382/1382.
+- `pnpm --filter api test:e2e`: `64 passed` suites, `723 passed` tests (720 + 3 new).
+- Release gate: 12/12.
+- No leftover process or scratch database.
+
+**CI on `303d2db`:** run `43441676941`, all four jobs success:
+- Lint: `6 successful`.
+- Test: `1382 passed`.
+- API e2e: `63 passed` suites, `711 passed` tests, with `PASS test/run-with-timeout.e2e-spec.ts` and nothing skipped.
+- Release gate: `1 passed`, `12 passed`.
+- Both e2e jobs ran `migration:run` with `DB_NAME: clensy_test` (30 migrations), then logged `e2e target clensy_test@localhost:5432: created=false, applied=0, pending=0, unknown=0`.
+- The totals equal the local 64 suites and 723 tests.
+
+### Focused review of `98716b0..303d2db`: Approved for merge
+
+The verdict was 0 blocking findings and 8 non-blocking observations. All eight owner requirements were met.
+
+- **Reviewer:** a fresh, independent agent, Claude Fable 5.1, that implemented neither the correction nor #227. It ran read-only and touched no database.
+- **Report:** `.superpowers/sdd/2026-11-06-e2e-database-isolation-dev-owner-plan/focused-review-finding1-227.md`, SHA-256 `6b36a106dab4c0d3ab503281ff4428ccefe588b9edcd70a2ae55ff39c5a6f575`.
+
+**Observations** (the reviewer's, non-blocking). Each one's disposition is in the table below:
+
+1. `killGroup` after the group is empty has a negligible pid/pgid reuse window. It applies only to the escaped-holder case and is bounded to the user's own processes.
+2. On the timeout path, stderr written in the child's last instant may be lost, because the pipes are destroyed at `exit`, not `close`. Earlier output is kept.
+3. The Ctrl-C test's pid-file poll has no stop condition if the helper exits early. This affects only the failure path.
+4. The escaped-holder test is skipped where `setsid` is absent (macOS), so that path is verified on Linux and CI only.
+5. The escaped-holder case reports `timedOut: true` even when the child exited 0. This is conservative, and the test says so.
+6. M8 table row 2 described the superseded `ps` design.
+7. The `e2e-isolation` `runChild` SIGKILLs `provision-cli` at its own test timeout, which could orphan a migration group. That is unchanged from before this correction; no regression.
+8. Listener accounting suits the single consumer, but 10 or more concurrent runs would trip Node's MaxListeners warning.
+
+### Dispositions of the open observations (owner, 2026-11-13)
+
+Nothing in this table is fixed in code. The items to keep most visible for follow-up are focused-review **c** (a test can itself hang) and **g** (a separate helper can leave a process group running).
+
+| Observation | Disposition |
+| --- | --- |
+| Re-review 2: the no-parent-spread test reads the wrong module for `spawn` | **Deferred:** correct the test in a separate, scoped follow-up. |
+| Re-review 3: the static-scan claim in `testing-and-ci.md` is too broad | **Deferred:** narrow the wording to the five named files and the workflows actually read. |
+| Re-review 5: a cleanup error can hide the setup error in the ordering block | **Deferred:** preserve the original error in a future test-helper correction. |
+| Re-review 6: a zombie is indistinguishable from a live process in the liveness check | **Documented limitation:** no platform-specific workaround without a demonstrated need. |
+| Focused a (1): pid/pgid reuse window | **Accepted** as a negligible residual risk. |
+| Focused b (2): final stderr may be lost on timeout | **Accepted for now** as a diagnostic limitation. |
+| Focused c (3): the Ctrl-C test's poll has no stop condition | **Deferred; tracked** as test-robustness work. |
+| Focused d (4): the escaped-grandchild case runs only where `setsid` exists | **Platform limitation:** verified on Linux and CI only; no macOS coverage is implied. |
+| Focused e (5): `timedOut: true` although the child exited 0 | **Kept deliberately:** the test's explanation is the contract. |
+| Focused f (6): M8 table row 2 described the old `ps` design | **Corrected** in this record: row 2 now describes the current design. |
+| Focused g (7): `e2e-isolation` `runChild` can leave a migration group running at its own timeout | **Tracked separately:** not in this fix's scope. |
+| Focused h (8): MaxListeners warning at 10 or more concurrent runs | **Accepted** for current usage (one consumer); a recorded concurrency limitation. |
+
+**Integrity:**
+- The Accepted spec is unchanged: SHA-256 `8885015db1cc2e5e09d0fc6a4b2b5cf71ea637233f07726f56b93271e9ba1ea4`.
+- This record adds lines, plus one owner-directed in-place correction: M8 table row 2. The M5, M7, M6 and CI records, and the rest of the M8 record, are unchanged, and no gate is re-accepted.
+
+**Not authorised by this record:** merge, deployment, release, cutover or database seeding. Before anyone seeds `clensy`, both existing worktrees must be inspected (D-M5-2).
