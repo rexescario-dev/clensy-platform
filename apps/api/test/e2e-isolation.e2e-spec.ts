@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import {
   mkdtempSync,
   readdirSync,
@@ -30,6 +29,7 @@ import {
   readAppliedMigrations,
 } from './support/migration-files';
 import { ProvisionError } from './support/provision-error';
+import { runChild } from './support/run-child';
 
 // E2E isolation spec §4.2 (ordering), §4.4 items 1–6, invariant 1 and §7
 // (ordering, PG*, fail-closed, globalSetup). This file never imports `pg` or
@@ -48,35 +48,6 @@ interface ChildRun {
   status: number | null;
   stderr: string;
   stdout: string;
-}
-
-/**
- * Spawns a child asynchronously. A synchronous spawn would block this
- * process's event loop, so the in-process counting listener could neither
- * accept nor count the child's connections.
- */
-function runChild(
-  command: string,
-  args: string[],
-  env: Record<string, string | undefined>,
-  timeoutMs: number,
-): Promise<{ status: number | null; stderr: string; stdout: string }> {
-  return new Promise((resolveRun) => {
-    const child = spawn(command, args, { cwd: apiRoot, env });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString();
-    });
-    child.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString();
-    });
-    const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs);
-    child.on('close', (status) => {
-      clearTimeout(timer);
-      resolveRun({ status, stderr, stdout });
-    });
-  });
 }
 
 async function runProvisionCli(
