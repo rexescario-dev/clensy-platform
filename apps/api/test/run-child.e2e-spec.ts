@@ -240,10 +240,15 @@ test('runChild under Jest', async () => {
       }
       const inner = innerPid();
       process.kill(-(jest.pid as number), 'SIGINT');
+      let raceTimer: NodeJS.Timeout | undefined;
       await Promise.race([
         jestExit,
-        new Promise((resolveWait) => setTimeout(resolveWait, 15_000)),
+        new Promise((resolveWait) => {
+          raceTimer = setTimeout(resolveWait, 15_000);
+        }),
       ]);
+      // Cleared so no timer outlives the test (re-review N-11).
+      clearTimeout(raceTimer);
       expect(jestExited).toBe(true);
       expect(await waitUntilDead(inner, 5_000)).toBe(true);
       expect(await waitUntilDead(grandchild, 5_000)).toBe(true);
