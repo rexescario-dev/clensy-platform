@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 5)** at M5, 2026-11-03 ([M5 decision](#m5-decision)). Drafted at M4 on 2026-11-03. Revision 1 was held by the owner before review with two required changes ([Revision 2 changes](#revision-2-changes)). The M5 review of revision 2 returned two blockers, B1 and B2 ([Revision 3 changes](#revision-3-changes)). The M5 review of revision 3 returned two blockers, B3 and B4, and one evidence note ([Revision 4 changes](#revision-4-changes)). The M5 review of revision 4 returned two blockers, B5 and B6 ([Revision 5 changes](#revision-5-changes)). **Revision 6 (Draft, 2026-11-14):** changes Task 1 Steps 4–5 only, to supply the API's runtime configuration through a read-only bind mount; its focused M5 re-review returned **Revise**, with one blocker, B7, and six non-blocking notes ([Revision 6 changes](#revision-6-changes)). **Revision 6a (Draft, 2026-11-14)** resolves B7 and applies N1–N5. N6 is a separate follow-up. A focused M5 confirmation **Accepted revision 6a** on 2026-11-14, with no blocking findings and five non-blocking notes carried into M6 ([M5 confirmation of revision 6a](#m5-focused-confirmation-of-revision-6a-2026-11-14)). Revision 6a governs Task 1 Steps 4–5. Revision 5 still governs everything else. **Revision 6b (2026-11-14, before publication; Accepted at its focused review)** only replaces the developer machine's absolute home path with the placeholder `<repo-root>` ([Revision 6b changes](#revision-6b-changes)). Until revision 6 is Accepted, M6 does not go past Task 1 Step 2. Revision 5 stays Accepted for everything revision 6 does not change. |
+| Status | **Accepted (revision 5)** at M5, 2026-11-03 ([M5 decision](#m5-decision)). Drafted at M4 on 2026-11-03. Revision 1 was held by the owner before review with two required changes ([Revision 2 changes](#revision-2-changes)). The M5 review of revision 2 returned two blockers, B1 and B2 ([Revision 3 changes](#revision-3-changes)). The M5 review of revision 3 returned two blockers, B3 and B4, and one evidence note ([Revision 4 changes](#revision-4-changes)). The M5 review of revision 4 returned two blockers, B5 and B6 ([Revision 5 changes](#revision-5-changes)). **Revision 6 (Draft, 2026-11-14):** changes Task 1 Steps 4–5 only, to supply the API's runtime configuration through a read-only bind mount; its focused M5 re-review returned **Revise**, with one blocker, B7, and six non-blocking notes ([Revision 6 changes](#revision-6-changes)). **Revision 6a (Draft, 2026-11-14)** resolves B7 and applies N1–N5. N6 is a separate follow-up. A focused M5 confirmation **Accepted revision 6a** on 2026-11-14, with no blocking findings and five non-blocking notes carried into M6 ([M5 confirmation of revision 6a](#m5-focused-confirmation-of-revision-6a-2026-11-14)). Revision 6a governs Task 1 Steps 4–5. Revision 5 still governs everything else. **Revision 6b (2026-11-14, before publication; Accepted at its focused review)** only replaces the developer machine's absolute home path with the placeholder `<repo-root>` ([Revision 6b changes](#revision-6b-changes)). Until revision 6 is Accepted, M6 does not go past Task 1 Step 2. Revision 5 stays Accepted for everything revision 6 does not change.<br>**Delivery state (2026-11-14):** M6 Complete; M7 **Approved for merge** by **self-review**; M8 N/A; M9 Complete; M10 not applicable. PR [#235](https://github.com/rexescario-dev/clensy-platform/pull/235), open, not merged. See [Slice Completion Report (M9)](#slice-completion-report-m9). |
 | M5 decision | **Accepted**, 2026-11-03, revision 5, by the owner as maintainer. B5 and B6 resolved; four non-blocking notes recorded in the [M5 decision](#m5-decision). Acceptance is of the plan only: it authorizes **none** of G0–G4, no image build, container change, browser check, database write, issue update or commit. The owner must still name the [approved active `TENANT_OWNER` account](#the-approved-active-tenant_owner-account-revision-5) before G0. |
 | Date | 2026-11-03 |
 | Tracking issue | [#209](https://github.com/rexescario-dev/clensy-platform/issues/209) "test(laundry): verify invoice and payment UI in browser". It has two checklists: the four #166 checks in the issue body, and the four #39 checks (a)–(d) in the [owner's comment](https://github.com/rexescario-dev/clensy-platform/issues/209#issuecomment-6593754934). |
@@ -402,7 +402,7 @@ Findings:
 - **N3.** Step 5 compares the database counts with the G0 reading, but the evidence file does not record the G0 query text. State that the G0 query is the Step 5 query, with the same column order.
 - **N4.** Run the "API started" check only after introspection has succeeded. `grep -c` prints `0` and exits 1; the expected result is the printed `0`.
 - **N5.** `$OVR` lives in a session scratchpad. Record the override's contents in the M6 record (it holds only a path), so the owner can reproduce it for a restart or rollback.
-- **N6 (outside this plan's scope).** `.dockerignore` lets `apps/api/.env` into earlier images. The old `clensy-platform-api:latest` (`97833f0c7104`) holds the secret in a layer. Propose a follow-up issue: add `**/.env` to `.dockerignore`, and treat that secret as exposed in the old image layers.
+- **N6 (outside this plan's scope).** `.dockerignore` lets `apps/api/.env` into earlier images. The old `clensy-platform-api:latest` (`97833f0c7104`) holds the secret in a layer. Propose a follow-up issue: add `**/.env` to `.dockerignore`, and treat that secret as exposed in the old image layers.<br>*Traceability note (M7, 2026-11-14): this is already tracked by [#226](https://github.com/rexescario-dev/clensy-platform/issues/226), filed on 2026-11-03 during the first Task 1 attempt.*
 
 Answers to the review questions:
 1. **Configuration.** `ConfigModule.forRoot({isGlobal:true})`, run from `/repo/apps/api`, reads `/repo/apps/api/.env`. Process-environment values win over the file, so compose's `DB_*`, `NODE_ENV`, `WEB_ORIGIN` and `APP_DEBUG` still apply. No other value is missing. `web` needs no runtime configuration. No secret reaches an image.
@@ -428,6 +428,8 @@ Drafted on 2026-11-14 in response to the [focused re-review of revision 6](#m5-f
 | **N5** | Step 4a requires the override's exact contents to be copied into the M6 record | Task 1 Step 4a |
 
 **N6, a separate security follow-up, is pending and needs its own authorization.** `.dockerignore` does not exclude `apps/api/.env`, and the old `clensy-platform-api:latest` (`97833f0c7104`) holds that file's `JWT_SECRET` in an image layer. Nothing has been remediated: no issue is filed, and `.dockerignore` and the old image are unchanged.
+
+*Traceability note (M7, 2026-11-14). The statement "no issue is filed" was wrong: [#226](https://github.com/rexescario-dev/clensy-platform/issues/226) ("pass JWT_SECRET at runtime; keep apps/api/.env out of the image") was filed on 2026-11-03 and tracks the JWT secret and runtime-configuration problem, including `.dockerignore`. Revision 6a's read-only bind mount is a local workaround for #209's check only; it does not resolve #226 and does not change the accepted technical decision. The old image is recorded on #226 ([comment](https://github.com/rexescario-dev/clensy-platform/issues/226#issuecomment-6871264755)).*
 
 Unchanged from revision 6: the bind-mount approach, the override's location and mode `600`, the 4c command, the host-path and live-file note, and the other Step 5 checks. Unchanged from revision 5: everything outside Task 1 Steps 4–5 and the Status row.
 
@@ -532,7 +534,7 @@ Executed against revision 5, with revision 6a for Task 1 Steps 4–5. Evidence: 
 | --- | --- | --- |
 | Approved account | The owner named `owner@clensy.local`, id `f057eca8-bdcf-474d-a66e-9af9954a2357` (active `TENANT_OWNER`, scope `TENANT`, Bootstrap tenant `b0075a4e-6c1e-4d0a-9f3a-6f1e2d7c0001`). The owner authorized creating it with `pnpm db:seed:dev-owner` (#227), which output `created`. | 2026-11-14 |
 | G0 + G1 | Approved by the owner. An earlier approval was withdrawn because it came before the account was named; it was given again after the account was named. The build was paused for revisions 6 and 6a, then resumed under the same approval. | 2026-11-14 |
-| G2, G3, G4 | **Not approved.** | — |
+| G2, G3, G4 | **Not approved** at the time of Task 1. Later approved by the owner on 2026-11-14: G2 (see [G2 results](#g2-results-task-2-step-3-tasks-3-and-4-2026-11-14)), G4 (see [Owner's D1 verdict and G4](#owners-d1-verdict-and-g4-2026-11-14)) and G3 (see [Task 5](#task-5-2026-11-14)). | — |
 
 Branch: `docs/209-invoice-payment-browser-check`, fast-forwarded from `c9e449f` to `7585658` (`main`, #227 and follow-ups). The images stay pinned to `c9e449f`. Before G0, at the owner's request, the two worktrees that predate the e2e isolation were removed, and all Docker containers on the host were stopped. Only clensy `postgres` was started again (`docker compose up -d postgres`).
 
@@ -563,7 +565,7 @@ Branch: `docs/209-invoice-payment-browser-check`, fast-forwarded from `c9e449f` 
   - `clensy-platform-api` = `sha256:b8d74fa2cbc7a2fd9d3450510fa365e381cbd54004bec07f4c3a96adfb66bb38`, label `c9e449f…`
   - `clensy-platform-web` = `sha256:963e0bdef04f6356547175b8779cb1cb5648e1925190c6264edbe89f91159ee0`, label `c9e449f…`
 - **Observation.** Every layer was a cache hit, and the image ids equal the unrecorded 2026-11-03 `c9e449f-209` images. Image ids are content-addressed, and the `COPY . .` cache key is a checksum of the build context. So those images were built from byte-identical content, and C4 cannot tell them apart because they are the same image.
-- The previous `:latest` images (`97833f0c7104`, `329a090c6b56`) lost their tags. They still exist and are not removed. `97833f0c7104` still holds `apps/api/.env` in a layer (N6).
+- The previous `:latest` images (`97833f0c7104`, `329a090c6b56`) lost their tags. They still exist and are not removed. `97833f0c7104` still holds `apps/api/.env` in a layer (N6, tracked by [#226](https://github.com/rexescario-dev/clensy-platform/issues/226)).
 - **Image content, checked without a container.** `docker image save clensy-platform-api` was unpacked, and each of the 10 layers listed with `tar -t`: 0 entries for `repo/apps/api/.env` or its whiteout. As a sanity check, `repo/apps/api/package.json` was found. The temporary files were deleted.
 
 **Step 4 (revision 6a).**
@@ -725,7 +727,7 @@ The owner then signed in by hand.
 
 **Not filed, by the owner's decision:**
 - **A1/A2:** the native bubble is the expected result, per the owner's #209 comment ("expected, since the select keeps native `required`").
-- **API stack traces in error responses:** these are development-only. `apps/api/src` sets neither `includeStacktraceInErrorResponses` nor `formatError`, so Apollo includes stack traces whenever `NODE_ENV` is not `production`. The `Dockerfile` defaults to `production`; only `docker-compose.yml` sets `development`. This is recorded as a possible hardening item for the separate N6 security follow-up.
+- **API stack traces in error responses:** these are development-only. `apps/api/src` sets neither `includeStacktraceInErrorResponses` nor `formatError`, so Apollo includes stack traces whenever `NODE_ENV` is not `production`. The `Dockerfile` defaults to `production`; only `docker-compose.yml` sets `development`. This is recorded as a possible hardening item for the separate N6 security follow-up.<br>*Update (M7, 2026-11-14): at the owner's request, filed separately as [#236](https://github.com/rexescario-dev/clensy-platform/issues/236) (low severity, hardening, not a release blocker), apart from #226.*
 
 ### Task 5 (2026-11-14)
 
@@ -780,7 +782,7 @@ The owner then signed in by hand.
   - the before snapshot was re-run before the first write;
   - focus was moved in code for the K1 Space test.
 - **Follow-ups outside this slice:**
-  - **N6:** `.dockerignore` and the old image layer holding `JWT_SECRET`, plus optionally turning stack traces off explicitly;
+  - **N6:** `.dockerignore` and the old image layer holding `JWT_SECRET` (tracked by [#226](https://github.com/rexescario-dev/clensy-platform/issues/226)), plus optionally turning stack traces off explicitly (now [#236](https://github.com/rexescario-dev/clensy-platform/issues/236));
   - the #209 results comment at closeout;
   - removing the untracked revision 5 copy of this plan from the main checkout after merge.
 
@@ -799,3 +801,170 @@ The browser rows above are this slice's evidence.
 ### Next Gate
 
 **M7 — Code Review**
+
+## Code review (M7): self-review
+
+**Self-review.** The M6 implementer reviewed this change; it is **not** an independent review. `CLAUDE.md` permits a self-review for a docs-only slice, and the owner did not ask for a fresh reviewer. Date: 2026-11-14.
+
+```text
+Decision: Approved for merge (self-review)
+Subject: PR #235 (https://github.com/rexescario-dev/clensy-platform/pull/235), docs/209-invoice-payment-browser-check at f0dd694 -> main at 7585658; OPEN, not draft, not merged, MERGEABLE
+Accepted specification: docs/superpowers/specs/2026-09-06-laundry-orders-lifecycle-design.md (§8.4.4, Amendment #164); docs/superpowers/specs/2026-11-02-laundry-payments-design.md (§4.10)
+Accepted implementation plan: this plan (revision 5; Task 1 Steps 4-5 at revision 6a; revision 6b redaction)
+
+Diff reviewed: git diff origin/main...f0dd694 = 1 file, +801/-0, this plan only; commits c96c7ac, fc42c5d, f0dd694
+
+Plan tasks reviewed:
+- Task 1 (rebuild from c9e449f, revision 6a mount): ✓
+- Task 2 (before snapshot, re-run; P1; N1 created, weighed, priced): ✓
+- Task 3 (L1, L2, K1, L3, L4, O1): ✓
+- Task 4 (C0, A1, A2, C1, B1, D1, L5): ✓
+- Task 5 Step 1 (after snapshot, worktree removed, M6 record): ✓
+- Task 5 Step 2 (G4 issues #231-#234): ✓
+- Task 5 Step 3 (#209 results comment): deferred to closeout, as Step 3 permits
+- Task 5 Step 4 (Slice Completion Report): ✓
+- Task 5 Step 5 (G3 commit, push, PR #235): ✓
+
+Verification evidence:
+- Configuration guard: sha256 of the Context Forge project.yaml = c4088e11...c99b (OK) before reading the PR
+- git rev-parse: HEAD = origin branch = PR headRefOid = f0dd694; origin/main = 7585658; worktree clean
+- gh pr view 235: state OPEN, isDraft false, mergedAt null, base main, one file
+- gh issue view 231-234: all OPEN; titles match the G4 table; URLs match the links in this plan and the PR body
+- Branch history scan (git log -p origin/main..HEAD): 0 home or session paths (the single "/home/" hit is the
+  quoted grep in the revision 6b review); 0 token or private-key patterns; no secret assignment;
+  the only e-mail address is the dev account owner@clensy.local; no password value
+- Commit messages: 0 Co-Authored-By or "Generated with" lines
+- Evidence: all 13 screenshots cited in this plan exist in the gitignored evidence folder, and every file there is cited;
+  git ls-files .superpowers = 0
+- Text evidence (209-ev): before-extra, before-extra.rerun, after-extra and after-unrelated equal the figures in the
+  M6 record: domain 3|1|5|5|5|5|0|5|5|5 -> 3|1|6|6|6|6|3|5|5|5; audit 0 -> 1 -> 8 with the 7 action rows listed;
+  counter 484 -> 485; four unrelated-row fingerprints unchanged
+- Live database, read-only transaction: admins 3, tenants 1, orders 6, invoices 6, payments 3, migrations 30,
+  newest 1791043200000 = the after snapshot
+- #209 owner comment: (a) names the native bubble as expected, which matches the A1/A2 treatment
+- PR body: results table, deviations, kept test data and issue list match this plan; no credential value
+
+Review summary: The change set is the plan and its records, nothing else. Every Task 1-5 step is covered or
+explicitly deferred as the plan allows. Results, counts, ids, issue links, the D1 verdict, the A1/A2 and
+stack-trace dispositions, and the browser and credential deviations are recorded accurately and traceably.
+No secret or local path is published.
+
+Blocking findings: None (no merge blockers)
+
+Non-blocking observations:
+1. M6 record, "Gate approvals" table: the row "G2, G3, G4 | Not approved" was true when Task 1 was recorded,
+   but later sections record all three as approved. Read alone, it contradicts them. (Annotated at M9.)
+2. Header "Status" row: it still reads as before M6 ("Until revision 6 is Accepted, M6 does not go past
+   Task 1 Step 2") and gives no delivery state. (Updated at M9.)
+3. The Task 3/4 D1 row ("owner's verdict pending") and "Defect candidates (G4 not approved; none filed)" are
+   point-in-time; "Owner's D1 verdict and G4" supersedes them. Acceptable as a chronological record.
+4. The task checkboxes stay unticked although the steps ran. The M6 record is the record of completion.
+5. The text evidence lives in a session scratchpad and the screenshots are gitignored, so outside this machine
+   the record rests on the figures quoted in this plan. The plan says so ("That location is session-local").
+6. Traceability: the plan, the PR body and the handoff called N6 a "separate follow-up" without citing #226,
+   which was filed on 2026-11-03 and tracks the JWT secret/runtime configuration problem; revision 6a's
+   statement "no issue is filed" was wrong. The read-only bind mount was a local workaround, not a fix.
+   Corrected with dated notes where N6 appears. The stack-trace item is filed separately as #236, and the
+   old image is recorded on #226. The accepted technical decision is unchanged.
+(These do not affect the merge decision.)
+
+Gate: Merge per human/project norms. M8/M9 may follow.
+```
+
+**Limits of this review.** It is a self-review: the same agent ran M6 and reviewed it. It checks the record against the evidence; it does not re-run the browser checks. Items that need separate owner decisions and are not part of this review: N6 (fixing [#226](https://github.com/rexescario-dev/clensy-platform/issues/226) and [#236](https://github.com/rexescario-dev/clensy-platform/issues/236); removing the old image `97833f0c7104` and rotating the local `JWT_SECRET`), removing the kept test data, rolling back the images, and the closeout edits to #209.
+
+**No prohibited action.** This review changed no container, image, database row, test data or evidence file; it posted nothing to GitHub and did not merge.
+
+## Refactoring (M8)
+
+```text
+Decision: N/A
+Subject: PR #235, docs/209-invoice-payment-browser-check
+Scope:
+- docs/superpowers/plans/2026-11-03-laundry-invoice-payment-browser-check-plan.md (the only changed file)
+Accepted specification: as cited at M7
+Accepted implementation plan: this plan
+M7 / authorization: Approved for merge (self-review), 2026-11-14
+Maintainability goals:
+- None. The slice changes no code, so there is nothing to refactor; the plan's own consistency is M9's job.
+Verification:
+Before: N/A
+After: N/A (not run)
+Externally observable behavior changes: None
+Gate: N/A — proceed to M9.
+```
+
+## Documentation (M9)
+
+```text
+Decision: Complete
+Subject: #209 laundry invoice and payment browser check, PR #235 (M7-approved by self-review, not merged)
+Accepted specification: as cited at M7
+Accepted implementation plan: this plan
+M7: Approved for merge (self-review)
+M8: N/A
+
+Documentation scope:
+- this plan (Status row; Gate approvals annotation; M7, M8, M9 and M10 records)
+- docs/superpowers/README.md (plan count)
+Inventoried and left unchanged:
+- docs/history/shipped-slices.md: holds notes for slices that changed the API's behavior; #209 changes none
+- docs/features/laundry.md (#payments-and-refunds-39): describes behavior, which #209 does not change;
+  the defects found are tracked in #231-#234 and belong to the slices that fix them
+- the two specs: Accepted; not edited (the #234 amendment goes through M2/M3)
+
+Updated artifacts:
+- this plan, Status row: adds the delivery state <- M6 Complete, M7 Approved, M8 N/A, M9 Complete, M10 n/a
+- this plan, Gate approvals: notes where G2, G3 and G4 were approved later <- M7 observation 1
+- this plan, N6 mentions: dated #226 / #236 traceability notes <- M7 observation 6
+- docs/superpowers/README.md: plan count 79 -> 80 (79 on main, plus this plan) <- this plan
+
+Editorial changes:
+- Gate approvals annotation (consistency; the original wording is kept)
+Content updates:
+- Status row; plan count; these records
+
+Verification:
+- Links checked: every in-plan anchor and relative .md link resolves (script check); the three links to
+  #snapshot-procedure-revision-5 target a heading indented inside a list item, which GitHub still anchors
+- Heading hierarchy checked: new sections are ## with ### beneath. One pre-existing skip (#### under ## at
+  "The approved active TENANT_OWNER account") is Accepted revision 5 content and is left unchanged
+- Status consistency checked: plan Accepted; M7 Approved (self-review); PR #235 open, not merged
+- Cross-references checked: #231-#234 and PR #235 links match gh output
+- Terminology checked: row ids, P1/N1 and gate names as defined in this plan
+- Duplicates / outdated refs checked: observations 1, 2 and 6 resolved; 3 and 4 kept as chronology
+
+Gate: Documentation complete. Code, behavior and contracts unchanged by this stage.
+```
+
+## Workflow validation (M10)
+
+**Not applicable.** M10 applies only when a slice changes workflow assets (process spec §2.12, step 1). `git diff --name-only origin/main...HEAD` lists only this plan and `docs/superpowers/README.md`; nothing under `docs/workflows/`, `docs/conventions/`, `docs/skills/` or `.claude/`, and no `workflow.yaml`.
+
+## Slice Completion Report (M9)
+
+| Field | Result |
+| --- | --- |
+| Slice | #209 laundry invoice and payment browser check |
+| Tracking | [#209](https://github.com/rexescario-dev/clensy-platform/issues/209) |
+| M4 | Plan drafted (revisions 1–6b) |
+| M5 | Plan **Accepted** (revision 5; 6a for Task 1 Steps 4–5; 6b redaction) |
+| M6 | **Complete** |
+| M7 | **Approved for merge**, by **self-review** (docs-only, permitted by `CLAUDE.md`) |
+| M8 | **N/A** |
+| M9 | **Complete** |
+| M10 | **Not applicable** |
+| Branch | `docs/209-invoice-payment-browser-check` |
+| PR | [#235](https://github.com/rexescario-dev/clensy-platform/pull/235), open, not merged |
+| Status | **Ready for closeout**, once the owner authorises the merge |
+
+### Validation
+
+| Check | Result |
+| --- | --- |
+| Tests, Typecheck, Lint, Build | N/A (docs only; no code changed) |
+| Docs | Links, headings, status and cross-references checked at M9 |
+
+### Next Gate
+
+**Closeout** (§2.12): an owner-authorised merge of PR #235. Then the [closeout instruction](#closeout-instruction-owner-2026-11-03): the #209 results comment (Task 5 Step 3), ticking both #209 checklists, closing #209 when every box is ticked, and deleting the untracked revision 5 copy of this plan from the main checkout. Separate owner decisions: N6 ([#226](https://github.com/rexescario-dev/clensy-platform/issues/226), [#236](https://github.com/rexescario-dev/clensy-platform/issues/236), the old image and secret rotation), removing the kept test data, rolling back the images.
