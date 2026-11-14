@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 5)** at M5, 2026-11-03 ([M5 decision](#m5-decision)). Drafted at M4 on 2026-11-03. Revision 1 was held by the owner before review with two required changes ([Revision 2 changes](#revision-2-changes)). The M5 review of revision 2 returned two blockers, B1 and B2 ([Revision 3 changes](#revision-3-changes)). The M5 review of revision 3 returned two blockers, B3 and B4, and one evidence note ([Revision 4 changes](#revision-4-changes)). The M5 review of revision 4 returned two blockers, B5 and B6 ([Revision 5 changes](#revision-5-changes)). |
+| Status | **Accepted (revision 5)** at M5, 2026-11-03 ([M5 decision](#m5-decision)). Drafted at M4 on 2026-11-03. Revision 1 was held by the owner before review with two required changes ([Revision 2 changes](#revision-2-changes)). The M5 review of revision 2 returned two blockers, B1 and B2 ([Revision 3 changes](#revision-3-changes)). The M5 review of revision 3 returned two blockers, B3 and B4, and one evidence note ([Revision 4 changes](#revision-4-changes)). The M5 review of revision 4 returned two blockers, B5 and B6 ([Revision 5 changes](#revision-5-changes)). **Revision 6 (Draft, 2026-11-14):** changes Task 1 Steps 4–5 only, to supply the API's runtime configuration through a read-only bind mount; its focused M5 re-review returned **Revise**, with one blocker, B7, and six non-blocking notes ([Revision 6 changes](#revision-6-changes)). **Revision 6a (Draft, 2026-11-14)** resolves B7 and applies N1–N5. N6 is a separate follow-up. A focused M5 confirmation **Accepted revision 6a** on 2026-11-14, with no blocking findings and five non-blocking notes carried into M6 ([M5 confirmation of revision 6a](#m5-focused-confirmation-of-revision-6a-2026-11-14)). Revision 6a governs Task 1 Steps 4–5. Revision 5 still governs everything else. **Revision 6b (2026-11-14, before publication; Accepted at its focused review)** only replaces the developer machine's absolute home path with the placeholder `<repo-root>` ([Revision 6b changes](#revision-6b-changes)). Until revision 6 is Accepted, M6 does not go past Task 1 Step 2. Revision 5 stays Accepted for everything revision 6 does not change. |
 | M5 decision | **Accepted**, 2026-11-03, revision 5, by the owner as maintainer. B5 and B6 resolved; four non-blocking notes recorded in the [M5 decision](#m5-decision). Acceptance is of the plan only: it authorizes **none** of G0–G4, no image build, container change, browser check, database write, issue update or commit. The owner must still name the [approved active `TENANT_OWNER` account](#the-approved-active-tenant_owner-account-revision-5) before G0. |
 | Date | 2026-11-03 |
 | Tracking issue | [#209](https://github.com/rexescario-dev/clensy-platform/issues/209) "test(laundry): verify invoice and payment UI in browser". It has two checklists: the four #166 checks in the issue body, and the four #39 checks (a)–(d) in the [owner's comment](https://github.com/rexescario-dev/clensy-platform/issues/209#issuecomment-6593754934). |
@@ -101,7 +101,31 @@ Let `REV=c9e449f3d58b5058b310d586129f8015b7be6559` and `SRC=<scratchpad>/clensy-
   - `docker build -f "$SRC/Dockerfile.web" -t clensy-platform-web --label org.opencontainers.image.revision=$REV "$SRC"`
   
   A build failure stops the task; nothing is changed by hand.
-- [ ] **Step 4 (G1):** From the repository root: `docker compose up -d --no-deps --no-build --force-recreate api web`. `--no-deps` keeps compose from starting `migrate` or touching `postgres`.
+- [ ] **Step 4 (G1; revision 6): recreate `api` and `web`, with the API's runtime configuration bind-mounted.** The image from Step 3 has no `apps/api/.env`: git ignores it, so the clean worktree has none. Without it the API has no `JWT_SECRET` and refuses to start (`token.service.ts`). Compose does not pass `JWT_SECRET`. The file is therefore mounted at run time, never copied into `$SRC` or any build context. Let `ROOT=<repo-root>` (the absolute path of the repository root checkout, which holds the root `.env` and `apps/api/.env`) and `OVR=<scratchpad>/209-api-env.override.yml`.
+  - **4a. Write the override outside the repository**, readable only by its owner:
+    ```bash
+    ( umask 077 && cat > "$OVR" <<'YAML'
+    services:
+      api:
+        volumes:
+          - type: bind
+            source: <repo-root>/apps/api/.env
+            target: /repo/apps/api/.env
+            read_only: true
+            bind:
+              create_host_path: false
+    YAML
+    )
+    ```
+    (Revision 6b: `<repo-root>` stands for the absolute value of `$ROOT`, here and in the expected outputs below. Write that absolute path into the file, because Compose needs an absolute bind source and the 4b check compares it.) Check: `stat -c '%a' "$OVR"` → `600`. The file contains a path and no secret value. `web` is not in it. The long syntax with `create_host_path: false` (revision 6a, N1) means a missing host file makes the recreate fail. With the short syntax, Docker would instead create a root-owned directory at that path inside the repository. **Copy the override's exact contents into the M6 record** (revision 6a, N5); the scratchpad copy is not durable.
+  - **4b. Preconditions (read-only).** Each check prints nothing on success, or only the jq projection shown:
+    - `git -C "$ROOT" diff --quiet $REV -- docker-compose.yml` → exit 0: the compose file used is the pinned revision's.
+    - `test -f "$ROOT/apps/api/.env"` → exit 0.
+    - **`JWT_SECRET` is present and not empty** (revision 6a, N2): `grep -qE '^JWT_SECRET=.+' "$ROOT/apps/api/.env"` → exit 0. It exits 1 if the line is missing or empty. `-q` prints nothing; never print the file, a value or a hash.
+    - **The build source has no `.env`** (revision 6a, B7): `test ! -e "$SRC/apps/api/.env"` → exit 0, run after Step 3 and before 4c (`$SRC` is removed only in Task 5). This replaces revision 6's image-execution check. The Step 3 image is `COPY . .` of `$SRC`, with nothing else added, so a file absent from `$SRC` cannot be in the image. If the check fails, M6 stops: the Step 3 image may hold the secret.
+    - The merged configuration, with only safe fields printed: `docker compose --project-directory "$ROOT" -f "$ROOT/docker-compose.yml" -f "$OVR" config --format json | jq -c '{name, api_volumes: .services.api.volumes, web_volumes: (.services.web.volumes // [])}'` → exactly `{"name":"clensy-platform","api_volumes":[{"type":"bind","source":"<repo-root>/apps/api/.env","target":"/repo/apps/api/.env","read_only":true,"bind":{}}],"web_volumes":[]}`. Compose omits `create_host_path` when it is `false`, so `"bind":{}` is the expected form (rendered on 2026-11-14 from this override, read from stdin). The short syntax would show `"bind":{"create_host_path":true}`, which fails the check. Do **not** print the full `config` output: it shows the interpolated `DB_PASSWORD`.
+  - **4c. Recreate:** `docker compose --project-directory "$ROOT" -f "$ROOT/docker-compose.yml" -f "$OVR" up -d --no-deps --no-build --force-recreate api web`. `--no-deps` keeps compose from starting `migrate` or touching `postgres`. `--no-build` uses the Step 3 tags unchanged.
+  - **Note: the mount points at a live file on the host.** The path belongs to this machine, and the container reads the host file. A change to `apps/api/.env` reaches the API on its next start. If `api` is later recreated without `-f "$OVR"`, it starts with no `JWT_SECRET` and fails; that is a rollback or restart question for the owner (Step 6).
 - [ ] **Step 5 (read-only): verify the source state and the schema.**
   - `docker inspect clensy-platform-api-1 clensy-platform-web-1 --format '{{.Name}} {{index .Config.Labels "org.opencontainers.image.revision"}}'` → both `$REV`. Both containers must report the **same** revision; otherwise stop.
   - **`migrate` did not run:** repeat the Step 1 command, `docker inspect clensy-platform-migrate-1 --format '{{.Id}} created={{.Created}} status={{.State.Status}} finished={{.State.FinishedAt}} image={{.Image}}'`. The output must be **identical** to Step 1's (same `Id`, `Created`, `FinishedAt` and `Image`). Any difference stops M6. `docker compose ps -a` is not used as this evidence.
@@ -114,6 +138,22 @@ Let `REV=c9e449f3d58b5058b310d586129f8015b7be6559` and `SRC=<scratchpad>/clensy-
   - `\d payment_entity` exists, and `select unnest(enum_range(null::invoice_payment_status_enum))` includes `OVERPAID` and `REFUNDED` (#39 spec §4.9).
   - Introspect `http://localhost:3000/graphql` (`NODE_ENV=development` in compose keeps introspection on): `Mutation` has `recordInvoicePayment` and `refundInvoicePayment`.
   - `GET http://localhost:3001/` answers. The payments panel's presence in the served web build is confirmed by row L3.
+  - **Runtime configuration (revision 6; revision 6a).** Run these only **after** the introspection check above has succeeded, so the API has finished starting. No check here starts a container. Every check prints names, paths, counts or exit codes, never a secret value:
+    - **Mount:** `docker inspect clensy-platform-api-1 --format '{{json .Mounts}}' | jq -c '[.[] | {Type, Source, Destination, RW}]'` → exactly `[{"Type":"bind","Source":"<repo-root>/apps/api/.env","Destination":"/repo/apps/api/.env","RW":false}]`.
+    - **`web` has no mount:** `docker inspect clensy-platform-web-1 --format '{{len .Mounts}}'` → `0`.
+    - **No secret in the container's configuration:** `docker inspect clensy-platform-api-1 --format '{{range .Config.Env}}{{println .}}{{end}}' | cut -d= -f1 | sort` lists names only, and `JWT_SECRET` is not among them.
+    - **The mounted file can be read:** `docker exec clensy-platform-api-1 test -r /repo/apps/api/.env` → exit 0.
+    - **The image has no `.env`:** proven by the `$SRC` check in 4b (revision 6a, B7). No container is run for it.
+    - **The API started** (after introspection succeeded; revision 6a, N4):
+      - `docker inspect clensy-platform-api-1 --format '{{.State.Status}} restarts={{.RestartCount}}'` → `running restarts=0`.
+      - `docker logs clensy-platform-api-1 2>&1 | grep -c 'JWT_SECRET must be set'` → prints `0`. The expected result is the printed count `0`. `grep -c` then exits 1, and that exit status is not a failure.
+    - **Database unchanged by Task 1 (read-only; revision 6a, N3).** Run the **same query as the G0 baseline**:
+      ```sql
+      select 'counts', (select count(*) from admin_user_entity),(select count(*) from tenant_entity),(select count(*) from laundry_order_entity),(select count(*) from invoice_entity),(select count(*) from payment_entity)
+      ```
+      Run it with `psql -X -d clensy -At`, exactly as G0 did. The output must equal the G0 line in `209-ev/task1-step1-before.txt`: `counts|3|1|5|5|0`.
+      - Source of the query text: the G0 command run on 2026-11-14. The evidence file holds only that command's output, so the M6 record must quote the query alongside it.
+      - The migration checks above cover the schema.
   
   Any mismatch stops M6 before a single row runs.
 - [ ] **Step 6: Rollback is an owner decision, never automatic.** M6 does not roll the images back, on success or on failure: the issue requires the stack to serve code with #39. The old image ids and creation dates from Step 1 are recorded so the owner can decide. A rollback, if the owner asks for one, is a separate action needing its own approval.
@@ -318,6 +358,140 @@ M5 review of revision 4 (owner as maintainer, 2026-11-03): two blockers.
 | **B6:** "the seeded `TENANT_OWNER`" no longer matched the database | One term throughout: the **approved active `TENANT_OWNER` account**, named by the owner before G0, with credentials supplied out of band. Its email is the `seed_email` variable. The single-role decision is unchanged. M6 does not choose an account, change credentials or re-run the seed | What the recon found (new subsection); Constraints; Decisions (a); gate G0; Task 2 Steps 0 and 1 |
 
 Unchanged: source revision `c9e449f`, the Docker strategy, the migration checks, the payment formula, the test sequence, the test-data safety rules and gates G0–G4 (G0 now names the approved account as its precondition; its action is the same).
+
+## Revision 6 changes
+
+Found in the M6 preflight on 2026-11-14, after G0 and Task 1 Steps 1–2, and before any build. Revision 5 and its [M5 decision](#m5-decision) are not changed.
+
+| Point | Change | Sections |
+| --- | --- | --- |
+| **R6-1: the clean API image has no runtime configuration.** `NestConfigModule.forRoot({ isGlobal: true })` (`apps/api/src/platform/config/config.module.ts`) reads the process environment and `.env` in the working directory, `/repo/apps/api`. `token.service.ts` refuses to start without `JWT_SECRET` outside tests. `apps/api/.env` is gitignored, so the clean `c9e449f` worktree has none. Compose does not pass `JWT_SECRET`. Today's `api:latest` works only because `.dockerignore` excludes the root `.env` and not `apps/api/.env`, so `COPY . .` built that file, secret included, into an image layer. The unrecorded `api:c9e449f-209` image (2026-11-03) has no such file. Followed literally, Step 4 would start an API that cannot run, and Step 5 would stop M6. | The file is **bind-mounted read-only at run time** through a compose override file kept outside the repository (mode `600`). It is never copied into `$SRC` or a build context, so no image layer holds it. Step 4 now writes the override, checks its preconditions, and recreates `api` and `web` with `--project-directory "$ROOT" -f docker-compose.yml -f "$OVR"`, keeping `--no-deps --no-build --force-recreate`. Step 5 gains checks that print only names, paths or exit codes: the exact mount, no mount on `web`, no `JWT_SECRET` among the container's variable names, no `.env` inside the image, the API running with no `JWT_SECRET` error, and database counts unchanged | Task 1 Steps 4 and 5; Status |
+
+Options considered and rejected: copying the file into the build context (puts the secret into image layers); compose `env_file:` or `environment: JWT_SECRET: ${JWT_SECRET}` (both expose values in `docker inspect`, and the root `.env` holds a **different** `JWT_SECRET` from `apps/api/.env`, so the API would sign with a different secret).
+
+Risks the change adds: the mount names a path on this machine and a live host file. A change to `apps/api/.env` reaches the API on its next start. Recreating `api` later without the override starts it with no `JWT_SECRET`. The secret is still in plain text in the host file, as before; revision 6 does not redesign secret handling.
+
+Unchanged: source revision `c9e449f`; Steps 1–3 and 6, including the image tags `clensy-platform-api` and `clensy-platform-web` and the build commands; the `web` service; no `migrate`; the migration and schema checks; Tasks 2–5; the test-data rules; and gates G0–G4. No application code, Dockerfile, `.dockerignore`, repository compose file or `.env` file changes.
+
+### M5 focused re-review of revision 6 (2026-11-14)
+
+```text
+Decision: Revise
+Subject (plan): this file, revision 6 (the delta from revision 5: Task 1 Steps 4–5, Status, Revision 6 changes)
+Reviewer: a fresh, independent agent (most capable model) that did not draft revision 6; read-only review
+Review summary: the runtime bind mount, the override and the compose command are correct and keep the secret out of every image layer and out of the container's configuration; one Step 5 check falls outside gate G1
+Findings: B7 blocking; N1–N6 non-blocking
+Gate: revision 6 may not be used for M6 until B7 is resolved and the fix is confirmed
+```
+
+Evidence the reviewer collected (read-only):
+- `git show c9e449f:` for compose, both Dockerfiles, `.dockerignore`, `config.module.ts`, `token.service.ts`, `jwt.strategy.ts`, `database.module.ts` and `main.ts`.
+- The source of `@nestjs/config@4.0.4`, the version locked at `c9e449f`.
+- The variable names in both `.env` files (names only).
+- `git diff --quiet c9e449f -- docker-compose.yml` → exit 0.
+- Docker 27.1.1 and Compose v2.29.1.
+- The M5 decision section is byte-identical to revision 5's.
+
+Findings:
+
+- **B7 (blocking).** The image check in Step 5 runs `docker run --rm … clensy-platform-api`, which creates a third container. G1 allows recreating **only** `api` and `web`, and Step 5 is labelled read-only. The text's "no network use" is also wrong: without `--network none` the container joins the default bridge. Required fix, one of:
+  - (a) **Preferred:** replace the check with a host-side check that creates no container. In 4b, `test ! -e "$SRC/apps/api/.env"` → exit 0; optionally also `git -C "$SRC" status --porcelain --ignored` shows no `apps/api/.env`. The image is `COPY . .` of `$SRC`.
+  - (b) Keep `docker run`, add `--network none`, correct the wording, and widen G1 and Step 5's label to cover it.
+- **N1.** The short volume syntax defaults to `create_host_path: true`. If `apps/api/.env` were missing at `up`, Docker would create a root-owned directory at that path inside the repository. The 4b `test -f` prevents this. Hardening: use the long syntax with `bind: {create_host_path: false}`, and update the expected 4b jq output.
+- **N2.** 4b checks only that the name `JWT_SECRET` is present, so an empty value would pass. Use `grep -qE '^JWT_SECRET=.+' "$ROOT/apps/api/.env"` → exit 0. It prints nothing.
+- **N3.** Step 5 compares the database counts with the G0 reading, but the evidence file does not record the G0 query text. State that the G0 query is the Step 5 query, with the same column order.
+- **N4.** Run the "API started" check only after introspection has succeeded. `grep -c` prints `0` and exits 1; the expected result is the printed `0`.
+- **N5.** `$OVR` lives in a session scratchpad. Record the override's contents in the M6 record (it holds only a path), so the owner can reproduce it for a restart or rollback.
+- **N6 (outside this plan's scope).** `.dockerignore` lets `apps/api/.env` into earlier images. The old `clensy-platform-api:latest` (`97833f0c7104`) holds the secret in a layer. Propose a follow-up issue: add `**/.env` to `.dockerignore`, and treat that secret as exposed in the old image layers.
+
+Answers to the review questions:
+1. **Configuration.** `ConfigModule.forRoot({isGlobal:true})`, run from `/repo/apps/api`, reads `/repo/apps/api/.env`. Process-environment values win over the file, so compose's `DB_*`, `NODE_ENV`, `WEB_ORIGIN` and `APP_DEBUG` still apply. No other value is missing. `web` needs no runtime configuration. No secret reaches an image.
+2. **Compose.** The command is consistent:
+   - The project name is `clensy-platform`, and the root `.env` is still used for interpolation.
+   - The tags equal the Step 3 tags.
+   - The merge yields exactly one bind on `api` and none on `web`.
+   - `--no-deps` skips `migrate` and `postgres`.
+3. **Step 5 checks.** The syntax and expected outputs are correct, and the checks are secret-safe, except B7, N3 and N4.
+4. **Scope.** The pin, tags, Steps 1–3 and 6, Tasks 2–5 and the safety boundaries are unchanged, except B7.
+
+## Revision 6a changes
+
+Drafted on 2026-11-14 in response to the [focused re-review of revision 6](#m5-focused-re-review-of-revision-6-2026-11-14). That review record and revision 5 are not changed.
+
+| Finding | Change | Sections |
+| --- | --- | --- |
+| **B7** | The `docker run` image check is removed. Step 4b now checks `test ! -e "$SRC/apps/api/.env"`, the build input of the Step 3 image. No Step 4–5 check starts a container other than the recreated `api` and `web` | Task 1 Steps 4b and 5 |
+| **N1** | The override uses the long volume syntax with `read_only: true` and `bind.create_host_path: false`. Step 4b's expected jq output is exact and includes `"bind":{}`, which is how Compose renders `false` (checked with the override on stdin; no file written) | Task 1 Steps 4a and 4b |
+| **N2** | `grep -qE '^JWT_SECRET=.+'` replaces the name-only check. It fails when the line is missing or empty and prints nothing | Task 1 Step 4b |
+| **N3** | The database comparison quotes the exact G0 query and its recorded output (`counts|3|1|5|5|0`). The query text is taken from the G0 command, because the evidence file holds only its output | Task 1 Step 5 |
+| **N4** | The runtime checks run only after introspection succeeds. The expected `grep -c` result is the printed `0`, not the exit status | Task 1 Step 5 |
+| **N5** | Step 4a requires the override's exact contents to be copied into the M6 record | Task 1 Step 4a |
+
+**N6, a separate security follow-up, is pending and needs its own authorization.** `.dockerignore` does not exclude `apps/api/.env`, and the old `clensy-platform-api:latest` (`97833f0c7104`) holds that file's `JWT_SECRET` in an image layer. Nothing has been remediated: no issue is filed, and `.dockerignore` and the old image are unchanged.
+
+Unchanged from revision 6: the bind-mount approach, the override's location and mode `600`, the 4c command, the host-path and live-file note, and the other Step 5 checks. Unchanged from revision 5: everything outside Task 1 Steps 4–5 and the Status row.
+
+### M5 focused confirmation of revision 6a (2026-11-14)
+
+```text
+Decision: Accepted
+Subject (plan): this file, revision 6a (the delta from revision 6: Task 1 Steps 4a, 4b and 5; Status; Revision 6a changes)
+Reviewer: a fresh, independent agent (most capable model) that did not draft revision 6 or 6a; read-only review
+Review summary: B7 is resolved by a host-side check, and no Step 4–5 check starts a container beyond recreating api and web. N1–N5 are applied, and the stated expected outputs are exact. Preserved sections are byte-identical.
+Findings: none blocking; C1–C5 non-blocking
+Gate: acceptance authorizes no gate; G1 needs the owner's approval (the owner gave G0 + G1 on 2026-11-14)
+```
+
+The reviewer checked, read-only:
+- `git show c9e449f:` for the Dockerfile, `.dockerignore`, compose, `.gitignore`, both `package.json` files, `scripts/build-graphiql.ts`, `config.module.ts` and `token.service.ts`. No build step creates `apps/api/.env`.
+- `docker compose … -f - config` for the long syntax, the short syntax and the long syntax without `bind:`. The expected 4b output matched byte for byte and tells all three apart.
+- `git diff --quiet c9e449f -- docker-compose.yml` → exit 0.
+- The G0 evidence line.
+- That the revision 5 M5 decision record and the recorded revision 6 review are byte-identical.
+
+**Non-blocking notes, carried into M6 as operational notes; the accepted text is not changed:**
+
+1. **C1. `$SRC` guard.** Run `test ! -e "${SRC:?}/apps/api/.env"` in the same shell that confirmed `git -C "$SRC" rev-parse HEAD` = `$REV`, so an unset `$SRC` cannot pass vacuously. Optionally also run it just before Step 3, to cover the build from both sides.
+2. **C2. psql invocation.** The M6 record quotes the full G0 command: `docker exec clensy-platform-postgres-1 psql -X -U "$DB_USERNAME" -d clensy -At -c "<query>"`.
+3. **C3. Quoted-empty values.** `JWT_SECRET=""` or a whitespace-only value passes 4b. The API then refuses to start, and Step 5 stops M6.
+4. **C4. Running image identity.** Record `docker image inspect clensy-platform-api --format '{{.Id}}'` right after Step 3, and check in Step 5 that it equals `docker inspect clensy-platform-api-1 --format '{{.Image}}'`. This separates the new image from the older `api:c9e449f-209` (`b8d74fa2cbc7`), which may carry the same revision label.
+5. **C5. Wording.** The Status row now names revision 6a. In the evidence file, the `counts|3|1|5|5|0` line sits under "== Step 1 (read-only)", taken in the same G0 and Step 1 command.
+
+## Revision 6b changes
+
+Redaction before publication. The repository is public, and the owner chose to redact on 2026-11-14.
+
+| Change | Where |
+| --- | --- |
+| Each of the 7 occurrences of the developer machine's absolute repository path is replaced by the placeholder `<repo-root>`. `ROOT=<repo-root>` is now described as "the absolute path of the repository root checkout". | Task 1 Step 4 (the `ROOT` definition, the 4a override, the expected 4b output), Step 5 (the expected mount), and the M6 record (the quoted override, 4b output and Step 5 output) |
+| One sentence added to Step 4a: `<repo-root>` stands for `$ROOT`'s absolute value and must be written as that absolute path, because Compose needs an absolute bind source and 4b compares it. | Task 1 Step 4a |
+
+**Unchanged:** every command, check, expected structure and result.
+- In the M6 record's quoted outputs, only the path prefix is shown as `<repo-root>`. The values recorded at run time were that machine's absolute repository path.
+- `owner@clensy.local` (a dev seed address) and home-relative paths such as `~/.cache/...` are kept.
+- No other text changes.
+
+### Focused review of revision 6b (2026-11-14)
+
+```text
+Decision: Accepted
+Subject: revision 6b (path redaction only)
+Reviewer: a fresh, independent agent (most capable model) that did not draft it; read-only review
+Findings: none blocking
+```
+
+The reviewer checked:
+- `grep -c '/home/'` = 0.
+- The 7 changed lines differ only in the path prefix, apart from the disclosed rewording of the `ROOT` definition.
+- The added Step 4a sentence covers the quoted heredoc and the expected 4b and Step 5 outputs.
+- The M6 record states honestly that only the prefix was redacted.
+- "## M5 decision" through "## Risks" and every earlier review record are byte-identical.
+- No secret values. `owner@clensy.local` is the only email address.
+- No session `/tmp` paths remain.
+
+Non-blocking notes:
+- **N-a:** give revision 6b's acceptance state in the Status row. Done.
+- **N-b:** the change table's "Where" column is consistent with the text. No action.
 
 ## M5 decision
 
