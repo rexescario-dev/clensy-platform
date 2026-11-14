@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted (revision 5)** at M5, 2026-11-03 ([M5 decision](#m5-decision)). Drafted at M4 on 2026-11-03. Revision 1 was held by the owner before review with two required changes ([Revision 2 changes](#revision-2-changes)). The M5 review of revision 2 returned two blockers, B1 and B2 ([Revision 3 changes](#revision-3-changes)). The M5 review of revision 3 returned two blockers, B3 and B4, and one evidence note ([Revision 4 changes](#revision-4-changes)). The M5 review of revision 4 returned two blockers, B5 and B6 ([Revision 5 changes](#revision-5-changes)). **Revision 6 (Draft, 2026-11-14):** changes Task 1 Steps 4–5 only, to supply the API's runtime configuration through a read-only bind mount; its focused M5 re-review returned **Revise**, with one blocker, B7, and six non-blocking notes ([Revision 6 changes](#revision-6-changes)). **Revision 6a (Draft, 2026-11-14)** resolves B7 and applies N1–N5. N6 is a separate follow-up. A focused M5 confirmation **Accepted revision 6a** on 2026-11-14, with no blocking findings and five non-blocking notes carried into M6 ([M5 confirmation of revision 6a](#m5-focused-confirmation-of-revision-6a-2026-11-14)). Revision 6a governs Task 1 Steps 4–5. Revision 5 still governs everything else. **Revision 6b (2026-11-14, before publication; Accepted at its focused review)** only replaces the developer machine's absolute home path with the placeholder `<repo-root>` ([Revision 6b changes](#revision-6b-changes)). Until revision 6 is Accepted, M6 does not go past Task 1 Step 2. Revision 5 stays Accepted for everything revision 6 does not change.<br>**Delivery state (2026-11-14):** M6 Complete; M7 **Approved for merge** by **self-review**; M8 N/A; M9 Complete; M10 not applicable. PR [#235](https://github.com/rexescario-dev/clensy-platform/pull/235), open, not merged. See [Slice Completion Report (M9)](#slice-completion-report-m9). |
+| Status | **Accepted (revision 5)** at M5, 2026-11-03 ([M5 decision](#m5-decision)). Drafted at M4 on 2026-11-03. Revision 1 was held by the owner before review with two required changes ([Revision 2 changes](#revision-2-changes)). The M5 review of revision 2 returned two blockers, B1 and B2 ([Revision 3 changes](#revision-3-changes)). The M5 review of revision 3 returned two blockers, B3 and B4, and one evidence note ([Revision 4 changes](#revision-4-changes)). The M5 review of revision 4 returned two blockers, B5 and B6 ([Revision 5 changes](#revision-5-changes)). **Revision 6 (Draft, 2026-11-14):** changes Task 1 Steps 4–5 only, to supply the API's runtime configuration through a read-only bind mount; its focused M5 re-review returned **Revise**, with one blocker, B7, and six non-blocking notes ([Revision 6 changes](#revision-6-changes)). **Revision 6a (Draft, 2026-11-14)** resolves B7 and applies N1–N5. N6 is a separate follow-up. A focused M5 confirmation **Accepted revision 6a** on 2026-11-14, with no blocking findings and five non-blocking notes carried into M6 ([M5 confirmation of revision 6a](#m5-focused-confirmation-of-revision-6a-2026-11-14)). Revision 6a governs Task 1 Steps 4–5. Revision 5 still governs everything else. **Revision 6b (2026-11-14, before publication; Accepted at its focused review)** only replaces the developer machine's absolute home path with the placeholder `<repo-root>` ([Revision 6b changes](#revision-6b-changes)). Until revision 6 is Accepted, M6 does not go past Task 1 Step 2. Revision 5 stays Accepted for everything revision 6 does not change.<br>**Delivery state (2026-11-14):** M6 Complete; M7 **Approved for merge** by **self-review**; M8 N/A; M9 Complete; M10 not applicable. PR [#235](https://github.com/rexescario-dev/clensy-platform/pull/235), open, not merged. See [Slice Completion Report (M9)](#slice-completion-report-m9).<br>**Slice complete (2026-11-14):** merged in PR #235 (`afad403`), and #209 is closed. See [Closeout](#closeout-2026-11-14). |
 | M5 decision | **Accepted**, 2026-11-03, revision 5, by the owner as maintainer. B5 and B6 resolved; four non-blocking notes recorded in the [M5 decision](#m5-decision). Acceptance is of the plan only: it authorizes **none** of G0–G4, no image build, container change, browser check, database write, issue update or commit. The owner must still name the [approved active `TENANT_OWNER` account](#the-approved-active-tenant_owner-account-revision-5) before G0. |
 | Date | 2026-11-03 |
 | Tracking issue | [#209](https://github.com/rexescario-dev/clensy-platform/issues/209) "test(laundry): verify invoice and payment UI in browser". It has two checklists: the four #166 checks in the issue body, and the four #39 checks (a)–(d) in the [owner's comment](https://github.com/rexescario-dev/clensy-platform/issues/209#issuecomment-6593754934). |
@@ -968,3 +968,102 @@ Gate: Documentation complete. Code, behavior and contracts unchanged by this sta
 ### Next Gate
 
 **Closeout** (§2.12): an owner-authorised merge of PR #235. Then the [closeout instruction](#closeout-instruction-owner-2026-11-03): the #209 results comment (Task 5 Step 3), ticking both #209 checklists, closing #209 when every box is ticked, and deleting the untracked revision 5 copy of this plan from the main checkout. Separate owner decisions: N6 ([#226](https://github.com/rexescario-dev/clensy-platform/issues/226), [#236](https://github.com/rexescario-dev/clensy-platform/issues/236), the old image and secret rotation), removing the kept test data, rolling back the images.
+
+## Closeout (2026-11-14)
+
+**Authorisation history** (owner, 2026-11-14, in order):
+1. "m8-m10", with the M7 self-review instructions: run M7 as a self-review, then M8–M10. The commit and push of those records were held for separate approval.
+2. Approval of three traceability items: cite #226 in this plan, file #236, and comment on #226 about the old image. The records stayed uncommitted.
+3. "commit, push, merge, closeout": commit and push `0d583e4`, merge PR #235, and the #209 closeout edits. The post-merge cleanup that followed was refused by the session's permission check, so none of it ran.
+4. After a read-only cleanup proposal, separate approvals for each item: archive the evidence; then delete the remote branch and remove the worktree and local branch; remove the revision 5 copy; correct the PR #235 description; open this closeout PR. **Merging this closeout PR needs the owner's review.**
+
+**M1–M10 check before the merge** (process spec §2.12, step 1):
+
+| Stage | Outcome |
+| --- | --- |
+| M1 | Passed: the installed prompt library is present |
+| M2 / M3 | Passed: the two specs verified here are Accepted (header, "Verifies"). This slice amends neither. |
+| M4 / M5 | Passed: this plan is Accepted (revision 5; 6a for Task 1 Steps 4–5; 6b redaction) |
+| M6 | Passed: [M6 record](#m6-record) |
+| M7 | Passed: Approved for merge, by **self-review** ([Code review (M7)](#code-review-m7-self-review)) |
+| M8 | Passed: [N/A](#refactoring-m8) |
+| M9 | Passed: [Complete](#documentation-m9) |
+| M10 | Does not apply ([not applicable](#workflow-validation-m10)) |
+
+No applicable stage was missing, so no stage was skipped or overridden.
+
+**Merge verification:**
+- Before the merge, PR #235 was `MERGEABLE` and `mergeStateStatus: CLEAN`. All four checks had passed on head `0d583e4` (run `43557234491`).
+- It was merged with a merge commit at 2026-11-14T04:36:47Z, as `afad403e8c80f2935a2c52341a921ed4b4b33eae` (parents `7585658` and `0d583e4`). `--match-head-commit` pinned the head.
+- `0d583e4` is an ancestor of `main`, and the tree of `main` equals the PR head's tree.
+- CI on the `main` push of `afad403` (run `43557525086`): API e2e, Lint, Release gate and Test, all success.
+
+**#209 closeout** (per the [closeout instruction](#closeout-instruction-owner-2026-11-03)):
+- Results comment (Task 5 Step 3): [#209 comment](https://github.com/rexescario-dev/clensy-platform/issues/209#issuecomment-6871825268), with both tables, the browser, the viewports and the follow-up issues.
+- Each of the eight boxes (four in the issue body, four in the owner's #39 comment) is ticked, with a one-line result and a link to the results comment. The defects link #231–#234.
+- #209 closed as completed at 2026-11-14T04:37:59Z, after every box was ticked.
+
+**Other GitHub changes:**
+- [#236](https://github.com/rexescario-dev/clensy-platform/issues/236) was filed (stack traces outside production; low severity, hardening).
+- A [comment on #226](https://github.com/rexescario-dev/clensy-platform/issues/226#issuecomment-6871264755) records the old image `97833f0c7104` and the decisions still open. No secret value is in either.
+- The PR #235 description now says the read-only bind mount was a local workaround (linking #226), and lists #236. Before this, it did not mention N6 at all.
+
+**Post-merge cleanup** (2026-11-14, each step verified):
+
+| Step | State |
+| --- | --- |
+| Evidence archive | **Done.** The 13 screenshots and the 40 text evidence files (Task 1 logs, snapshots, `first-run/`) were copied to a private archive outside the repository, with a `SHA256SUMS` manifest. The manifest equals the sources, and the archive verifies against it. It is not committed or uploaded. The scratchpad originals are kept. |
+| Remote branch `docs/209-invoice-payment-browser-check` | **Deleted** after the archive was verified; `ls-remote` shows no ref. |
+| Evidence worktree | **Removed** after the archive was verified (the 13 screenshots were confirmed archived first, because `git worktree remove` deletes ignored files). |
+| Local branch `docs/209-invoice-payment-browser-check` | **Deleted** (`0d583e4`, an ancestor of `origin/main`). `branch -d` refused because the main checkout's `HEAD` is the old `main`, so `-D` was used after the ancestry check. |
+| Revision 5 copy in the main checkout | **Removed**, after its SHA-256 was rechecked against `c96c7ac` (`4426b6cb…f796`). Nothing else in that checkout was touched: its branch and the other session's modified #227 plan are unchanged. |
+| This closeout PR | **Pending** the owner's review and merge. Its branch and temporary worktree go after it merges. |
+
+**Evidence locations.** #226's evidence from 2026-11-03 (`t1s1.txt`, `t1s5.txt`, `api-startup.log`, `rb-before.txt`, `rb-after.txt`) is not in this archive. It is in the main checkout's own gitignored `.superpowers/sdd/2026-11-03-laundry-invoice-payment-browser-check-plan/evidence/`, which this closeout did not touch.
+
+**Final M7 position:** Approved for merge, by self-review. No blocking findings remain.
+
+**Limits that stand:**
+- M7 was a **self-review**, not an independent review.
+- The evidence is kept locally only. Outside the developer's machine, the record rests on the figures quoted in this plan.
+- The browser was the Playwright MCP Chrome, not Claude in Chrome. The credential incident is recorded in the M6 record; the owner chose not to rotate the local password.
+
+**Follow-ups:**
+- **Defects:** #231, #232, #233 and #234 (#234 needs an accepted #39 §4.10 amendment through M2/M3 first).
+- **Hardening:** #236.
+- **N6:** #226.
+- **Owner's decisions, outside this closeout:** removing the old image `97833f0c7104` and rotating the local `JWT_SECRET`; removing the retained test data (`N1`, `INV-2026-000485`, and the `QA209-` payments and refund on `INV-2026-000480`); rolling back the images (Task 1 Step 6).
+
+## Final Slice Completion Report
+
+| Field | Result |
+| --- | --- |
+| Slice | #209 laundry invoice and payment browser check |
+| Tracking | [#209](https://github.com/rexescario-dev/clensy-platform/issues/209) (closed, completed) |
+| M2 / M3 | Passed: the two specs verified are **Accepted**; this slice amends neither |
+| M4 / M5 | Plan **Accepted** (revision 5; 6a for Task 1 Steps 4–5; 6b redaction) |
+| M6 | **Complete** |
+| M7 | **Approved for merge** (self-review) |
+| M8 | **N/A** |
+| M9 | **Complete** |
+| M10 | **Not applicable** |
+| Branch | `docs/209-invoice-payment-browser-check`, deleted after the merge |
+| PR | [#235](https://github.com/rexescario-dev/clensy-platform/pull/235) (merged, `afad403`) |
+| Status | **Slice complete** |
+
+### Shipped
+
+- **Verification:** every #166 and #39 check in #209, run in a real browser at 1280×800 and 375×812 against `api` and `web` built from `c9e449f`.
+- **Results:** L1–L5, K1, O1 and C0 pass. A1/A2 show the native bubble only, as expected. B1, C1 and D1 found defects (#231, #232, #234), and O1 found one more (#233).
+- **Docs:** this plan and its records; the plan count in `docs/superpowers/README.md`.
+
+### Validation
+
+| Check | Result |
+| --- | --- |
+| Tests, Typecheck, Lint, Build | N/A (docs only) |
+| CI | PR head `0d583e4`: run `43557234491`, all four checks pass. `main` at `afad403`: run `43557525086`, all four checks pass. |
+
+### Next Gate
+
+None. The slice is complete once this closeout record merges.
