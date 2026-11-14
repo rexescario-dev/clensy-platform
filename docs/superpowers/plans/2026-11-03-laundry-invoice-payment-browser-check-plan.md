@@ -521,3 +521,281 @@ Reviewer: the owner, as maintainer, 2026-11-03. Earlier rounds: revision 1 held 
 - The rebuild could fail, for example on a dependency or build error at `c9e449f`. Then M6 stops at Task 1 and reports; nothing is changed by hand.
 - The Playwright Chromium's native validation bubble may not show in a screenshot. A1/A2 then record the select's `validationMessage` and `:invalid` state too.
 - Another session could run e2e against `clensy` and wipe the test data mid-pass. If ids disappear, M6 stops and reports.
+
+## M6 record
+
+Executed against revision 5, with revision 6a for Task 1 Steps 4–5. Evidence: `<scratchpad>/209-ev/`. That location is session-local, so this record quotes everything needed.
+
+### Gate approvals
+
+| Gate | Decision | Date |
+| --- | --- | --- |
+| Approved account | The owner named `owner@clensy.local`, id `f057eca8-bdcf-474d-a66e-9af9954a2357` (active `TENANT_OWNER`, scope `TENANT`, Bootstrap tenant `b0075a4e-6c1e-4d0a-9f3a-6f1e2d7c0001`). The owner authorized creating it with `pnpm db:seed:dev-owner` (#227), which output `created`. | 2026-11-14 |
+| G0 + G1 | Approved by the owner. An earlier approval was withdrawn because it came before the account was named; it was given again after the account was named. The build was paused for revisions 6 and 6a, then resumed under the same approval. | 2026-11-14 |
+| G2, G3, G4 | **Not approved.** | — |
+
+Branch: `docs/209-invoice-payment-browser-check`, fast-forwarded from `c9e449f` to `7585658` (`main`, #227 and follow-ups). The images stay pinned to `c9e449f`. Before G0, at the owner's request, the two worktrees that predate the e2e isolation were removed, and all Docker containers on the host were stopped. Only clensy `postgres` was started again (`docker compose up -d postgres`).
+
+### Task 1 results (2026-11-14)
+
+**Step 1 (read-only, G0).**
+- Migrations: `30|1791043200000`; newest `CreatePayments1791043200000`.
+- Counts, from the command quoted under Step 5: `counts|3|1|5|5|0`.
+- `git cat-file -t $REV` = `commit`.
+- Images before the build:
+  - `api:latest` `97833f0c7104`, built 2026-10-16
+  - `web:latest` `329a090c6b56`, built 2026-10-24
+  - `migrate:latest` `b9d8a4de76e0`
+  - an unrecorded `api:c9e449f-209` `b8d74fa2cbc7` and `web:c9e449f-209` `963e0bdef04f`, from 2026-11-03
+- The stopped `api` and `web` containers ran `97833f0c…` and `329a090c…`.
+- `migrate`: `d14ecd52409f… created=2026-10-15T17:13:01.750541028Z status=exited finished=2026-11-11T20:32:54.002100033Z image=sha256:b9d8a4de76e0…`. The recon value (finished 2026-11-01) was a prediction and is now stale.
+
+**Step 2.** `$SRC` = `<scratchpad>/clensy-209-src`.
+- `HEAD` = `c9e449f3d58b5058b310d586129f8015b7be6559`.
+- `status --porcelain` is empty, including ignored files.
+
+**Step 3.**
+- C1: `test ! -e "${SRC:?}/apps/api/.env"` passed both before and after the build, in the same shell as the `HEAD` = `$REV` check.
+- Build commands, exactly as written. Both exited 0:
+  - `docker build -f "$SRC/Dockerfile" -t clensy-platform-api --label org.opencontainers.image.revision=$REV "$SRC"`
+  - `docker build -f "$SRC/Dockerfile.web" … -t clensy-platform-web …`
+- Results (C4: ids captured right after the build):
+  - `clensy-platform-api` = `sha256:b8d74fa2cbc7a2fd9d3450510fa365e381cbd54004bec07f4c3a96adfb66bb38`, label `c9e449f…`
+  - `clensy-platform-web` = `sha256:963e0bdef04f6356547175b8779cb1cb5648e1925190c6264edbe89f91159ee0`, label `c9e449f…`
+- **Observation.** Every layer was a cache hit, and the image ids equal the unrecorded 2026-11-03 `c9e449f-209` images. Image ids are content-addressed, and the `COPY . .` cache key is a checksum of the build context. So those images were built from byte-identical content, and C4 cannot tell them apart because they are the same image.
+- The previous `:latest` images (`97833f0c7104`, `329a090c6b56`) lost their tags. They still exist and are not removed. `97833f0c7104` still holds `apps/api/.env` in a layer (N6).
+- **Image content, checked without a container.** `docker image save clensy-platform-api` was unpacked, and each of the 10 layers listed with `tar -t`: 0 entries for `repo/apps/api/.env` or its whiteout. As a sanity check, `repo/apps/api/package.json` was found. The temporary files were deleted.
+
+**Step 4 (revision 6a).**
+- 4a: the override at `<scratchpad>/209-api-env.override.yml`, mode `600`, with exactly this content:
+  ```yaml
+  services:
+    api:
+      volumes:
+        - type: bind
+          source: <repo-root>/apps/api/.env
+          target: /repo/apps/api/.env
+          read_only: true
+          bind:
+            create_host_path: false
+  ```
+- 4b, each passing:
+  - compose file equals `$REV`: exit 0
+  - `test -f` on the env file: exit 0
+  - `grep -qE '^JWT_SECRET=.+'`: exit 0
+  - `$SRC` has no `.env`: exit 0
+  - the merged-config projection exactly equals the expected `{"name":"clensy-platform","api_volumes":[{"type":"bind","source":"<repo-root>/apps/api/.env","target":"/repo/apps/api/.env","read_only":true,"bind":{}}],"web_volumes":[]}`
+  - extra check: with `api.volumes` removed, the merged config equals the base config, so the override changes nothing else
+- 4c: `docker compose --project-directory "$ROOT" -f "$ROOT/docker-compose.yml" -f "$OVR" up -d --no-deps --no-build --force-recreate api web` exited 0. Only `api` (`199b589f6b27`) and `web` (`4b46928e7445`) were recreated. `migrate` and `postgres` were untouched. Running afterwards: `api`, `web`, `postgres` and nothing else.
+
+**Step 5.**
+- Revision labels: `api` and `web` are both `c9e449f3d58b5058b310d586129f8015b7be6559`.
+- `migrate` inspect output is **identical** to Step 1's.
+- Migration files at `$REV`: 30, all matching the pattern, newest `1791043200000-CreatePayments.ts`, none later.
+- Database: `30|1791043200000`, newest `CreatePayments1791043200000`, equal to Step 1.
+- `payment_entity` exists. Read-only, this was checked through `information_schema.tables` (count 1) rather than `\d`.
+- `invoice_payment_status_enum` = `UNPAID,PARTIALLY_PAID,PAID,VOID,OVERPAID,REFUNDED`.
+- Introspection of `Mutation` lists `recordInvoicePayment,refundInvoicePayment`.
+- `GET http://localhost:3001/` answered HTTP `307` (redirect).
+- Runtime configuration, checked after introspection succeeded:
+  - api mounts exactly `[{"Type":"bind","Source":"<repo-root>/apps/api/.env","Destination":"/repo/apps/api/.env","RW":false}]`; web mounts `0`
+  - api env names: `APP_DEBUG DB_HOST DB_NAME DB_PASSWORD DB_PORT DB_USERNAME NODE_ENV NODE_VERSION PATH WEB_ORIGIN YARN_VERSION`, with no `JWT_SECRET`
+  - the mounted file is readable (exit 0)
+  - C4: the running `api` image is `b8d74fa2…` and the running `web` image is `963e0bde…`, each equal to its Step 3 id
+  - `api` is `running restarts=0`, and so is `web`
+  - `JWT_SECRET must be set` log count: `0`
+- Database counts (C2), using the full G0 command, run again unchanged: `docker exec clensy-platform-postgres-1 psql -X -U "$DB_USERNAME" -d clensy -At -c "select 'counts', (select count(*) from admin_user_entity),(select count(*) from tenant_entity),(select count(*) from laundry_order_entity),(select count(*) from invoice_entity),(select count(*) from payment_entity)"`. Before: `counts|3|1|5|5|0`. After: `counts|3|1|5|5|0`.
+
+**Step 6.** No rollback was done. The old image ids are recorded above, so the owner can decide.
+
+**Task 1: complete. Every Step 3–5 check passed.** No migration, e2e run, database write, seed (after the authorized one) or GitHub write took place. Next: Task 2, which needs **G2**.
+
+### G2 results: Task 2 Step 3, Tasks 3 and 4 (2026-11-14)
+
+**G2.** Approved by the owner on 2026-11-14 for Task 2 Step 3 (create, weigh and price `N1`), K1, C0, B1, and the read-only checks around them. The owner also chose:
+- `N1` uses the oldest customer and the oldest active service;
+- audit rows are reported in their own category.
+
+G3 and G4 are **not** approved.
+
+**Browser: deviation.** Claude in Chrome was not connected (`list_connected_browsers` returned `[]`). With the owner's approval, the plan's fallback was used: the Playwright MCP plugin's own headed Chrome, profile `~/.cache/ms-playwright-mcp/mcp-chrome-2a5aa8f`, kept separate from the owner's Chrome.
+
+**Credential incident.** That profile autofilled a saved `localhost:3001` login, and the first page snapshot captured the password. Actions taken:
+- the snapshot was deleted;
+- the field was cleared;
+- the owner approved R2, deleting that saved login (only the three `localhost:3999` logins remain), and R4, deleting the 18 older snapshots that held a password value;
+- the owner chose to leave the inactive profile and the transcripts as they are, and not to rotate the password (local dev environment).
+
+The owner then signed in by hand.
+
+**Sign-in check.** `currentAdmin` returned id `f057eca8-…`, `TENANT_OWNER`, `TENANT`, tenant `b0075a4e-…0001`.
+
+**Before snapshot (Task 2 Step 0).**
+- First run: `t0=2026-11-14 00:49:57.348729+00`, pid 6160, snapshot `379906:379906:`. The browser was unavailable at that point, so it was kept in `first-run/` and **re-run** before the first write.
+- Re-run: `t0=2026-11-14 01:30:50.168497+00`, pid 9910, snapshot `379907:379907:`, `repeatable read`, read-only `on`. `t0_check` and `snapshot_check` match, and `owner_rows=1`.
+- S1, S2 and S3 are identical to the first run. S2 is empty.
+- Extra baselines are identical except one audit row, `admin.login.succeeded` at 01:28:14, from the owner's sign-in.
+- `T0` = `2026-11-14 01:30:50.168497+00`.
+
+**`P1`.** S3 = the first qualifying S1 row = order `335c8ab3-82f6-487a-9b71-b1fb2b549017`, invoice `df407dad-16d8-452a-ba12-6422b05d3e51` `INV-2026-000480`, order `createdAt` `2026-11-02 09:40:05.645697+00`, `T = 2000`.
+- The order page and the drawer both showed Total ₱20.00, Amount paid ₱0.00, Unpaid.
+- `A1 = 500`, `A2 = 400`.
+
+**`N1` (Task 2 Step 3).**
+- Customer `f03d4a49-54f6-4d56-bb1d-268ccf0673e6`, the oldest customer. All 5 customers display as "Race Jane 555-0", so the option was chosen by its position in the search response (sorted by `fullName`, then `id`). The order's `customerId` was then checked.
+- Fulfillment: the default, Customer pickup (the plan does not specify one).
+- Weight 2.09 kg (one bag, `weightGrams` 2090).
+- Service `e3a2aff9-073d-43be-b9c7-24cd4b5a50f1`, the oldest active service, ₱10.00 per kg.
+- Displayed estimate ₱20.90. After Confirm price: line `71196d1b-…`, `unitPrice` 1000, quantity 2090, line total 2090.
+- Order `2584f08d-d7e8-4e9a-9b80-34e2a678c0c1`, `PRICED`, no invoice.
+
+**Task 3 (1280×800 and 375×812).** Evidence: `.superpowers/sdd/2026-11-03-laundry-invoice-payment-browser-check-plan/evidence/`, in this worktree.
+
+| Row | Result | Evidence and notes |
+| --- | --- | --- |
+| L1 | **Pass** | `L1-1280-N1-generate.png`. The cards sit side by side (both at top 297). All three terms show their help text. `scrollWidth` 1265 = `clientWidth` 1265. No control outside the viewport. |
+| L2 | **Pass** | `L2-375-N1-generate.png`. The cards are stacked. 360 = 360. No control cut off. Generate is at x 41–174. |
+| K1 | **Pass** | Each radio's accessible description is its help text. Tab from the Invoice heading lands on the checked option, Pay on completion, and `:focus-visible` is true. ArrowUp selects Pay now; ArrowDown twice selects Pay on delivery. Clicking the "Pay now" label selects it. Space selects. The accessibility tree shows `radio "Pay on delivery" [checked]` before Generate. Tab reaches Generate (focus visible), and Enter shows "Invoice generated.". After reload the card shows Pay on delivery, and `invoice_entity."paymentTerms"` = `PAY_ON_DELIVERY`. *Deviation:* a radio group's arrow keys change the selection, so for the Space test focus was moved onto the unchecked radio with `element.focus()` (no state change) before pressing Space. |
+| L3 | **Pass** | `L3-1280-N1-invoice.png`. Shows number, ₱20.90, Unpaid, Pay on delivery, Open invoice and the payments panel. 1265 = 1265. |
+| L4 | **Pass** | `L4-375-N1-invoice.png`. 360 = 360. All controls are inside the viewport, including Record payment (x 41–171). |
+| O1 | **Pass** | `O1-1280-N1-open-invoice.png`. Opens `/app/billing?detail=9842a3ee-07ba-4be6-b306-d019c0bba8aa`, drawer `INV-2026-000485`, Total ₱20.90. *Observation:* the drawer shows terms as the raw value `PAY_ON_DELIVERY` (and `PAY_NOW` for `P1`), while the order page shows the friendly label. |
+
+**`N1`'s invoice.** `9842a3ee-07ba-4be6-b306-d019c0bba8aa`, `INV-2026-000485`, `PAY_ON_DELIVERY`, `UNPAID`, total 2090, 1 invoice line. Invoice counter 484 → 485.
+
+**Task 4 (`P1`, 1280×800 unless stated).**
+
+| Row | Result | Evidence and notes |
+| --- | --- | --- |
+| C0 | **Pass** | `C0-1280-P1-after-two-payments.png`. Both payments were made with the method chosen explicitly and the pre-filled amount replaced (pre-filled ₱20.00, then ₱15.00). `2ffa762c-93c5-4cf8-9a57-ff12df55d369`: PAYMENT CASH 500 `QA209-C0-1`. `3f90976c-955f-43aa-a942-27a8cf88f4e4`: PAYMENT GCASH 400 `QA209-C0-2`. Partially paid; paid ₱9.00, due ₱11.00 (database: `PARTIALLY_PAID`, 900). Each row has a Refund button. |
+| A1 | Recorded | `A1-1280-P1-record-no-method.png`. The browser's bubble "Please select an item in the list." appears (`validationMessage`, `:invalid`). The inline "Choose how the money moved." does **not** appear. **No request:** the GraphQL list stays at #288. |
+| A2 | Recorded | `A2-1280-P1-refund-no-method.png`. Same as A1 for Refund: native bubble only, no inline message, no request. |
+| C1 | **Fail** (expected) | Accessibility tree: both Refund buttons are named "Refund payment" and cannot be told apart. This is the known issue. |
+| B1 | Recorded | `X` = `2ffa762c-…`. **1.** Tab A: Refund on `X`, Cash, ₱5.00 pre-filled, not submitted. **2.** Tab B: full refund with Cash `QA209-B1-tabB`. `refundInvoicePayment` (#52) returned refund `25f9a405-716e-4fa7-a8ea-22ff00923f73`, `refundedPaymentId` = `X`, invoice paid 400, due 1600, `PARTIALLY_PAID`. The toast had gone by the time it was checked; the network response is the evidence. **3.** Tab A submitted: exactly one request (#289) reached the server and was rejected (`BAD_REQUEST`): "This refund is more than the payment's refundable amount of ₱0.00." The dialog stayed open with that error (`B1-step3-tabA-server-error.png`). Nothing was written (still 3 payment rows). **4.** Tab A blanked the amount and submitted: **no request** (list stays at #289). The native "Please fill out this field." appears, and **the earlier server error stays visible beside it** (`B1-step4-tabA-stale-error.png`). **5.** Check (b) answer: yes, the stale server error persists. |
+| D1 | Recorded; **owner's verdict pending** | `D1-1280-P1-billing-drawer.png`, `D1-375-P1-billing-drawer.png`. Total ₱20.00, Amount paid ₱4.00, Amount due ₱16.00 and the Partially paid badge appear in **both** the amount block and the Payments panel just below it. The history table scrolls sideways inside the drawer: at 375 it is 889 px of content in a 312 px box, and the remaining Refund button starts off-screen at x 783. My reading: the repetition is noticeable at both widths, and at 375 it pushes the history further down. The owner decides whether it is a problem. |
+| L5 (375×812) | **Pass** | `L5-375-P1-history.png`. 360 = 360. The history table is `overflow-x: auto` (889 px of content in a 278 px box). The remaining Refund button (GCash row) scrolls into view on keyboard focus (x 189–311). The refund row shows `−₱5.00`. The fully refunded Cash row has no Refund button. |
+
+*Observation:* the API's error responses include a server stack trace. Compose runs it with `NODE_ENV=development`. This is outside #209's scope.
+
+**After snapshot (Task 5 Step 1 procedure, own transaction).**
+- `t0=2026-11-14 01:37:31.964718+00`, pid 10658, snapshot `379915:379915:`, `repeatable read`, read-only `on`. The end checks match, and `owner_rows=1`.
+- S1 differs from the before snapshot only in:
+  - `P1`: `UNPAID|0|…|0` → `PARTIALLY_PAID|400|2000|3`;
+  - one new row, `N1` `2584f08d-…` `PRICED` / `INV-2026-000485` `UNPAID|0|2090|0`.
+- S2 differs only by the 3 rows above.
+- **The difference equals the ledger exactly.**
+
+**Accounting, in three separate categories.**
+- **Domain rows** (before → after): admins 3→3, tenants 1→1, orders 5→6, order lines 5→6, invoices 5→6, invoice lines 5→6, payments 0→3, customers 5→5, services 5→5, pricing rules 5→5.
+- **Audit rows:** 1 → 8 after the sign-in (0 at the first baseline). All 7 new rows are by the owner in the Bootstrap tenant:
+  - `laundry_order.received`, `laundry_order.weighed`, `laundry_order.priced` on `N1`;
+  - `invoice.generated` on `9842a3ee…`;
+  - `payment.recorded` × 2 on `2ffa762c…` and `3f90976c…`;
+  - `payment.refunded` on `25f9a405…`.
+
+  The rejected attempt and the blocked submissions wrote no audit row.
+- **Invoice counter:** 484 → 485.
+- **Unrelated rows:** recomputed without `N1`'s rows and `P1`'s invoice, the fingerprints are unchanged (`55534fcc…`, `1fd495f1…`, `cec5d9bb…`, `146baa43…`). Customers, services, pricing rules, admins and tenants are unchanged. `P1`'s number, total and terms are unchanged.
+
+**Test data left in `clensy`.** Nothing was deleted or cleaned up.
+- `N1` `2584f08d-d7e8-4e9a-9b80-34e2a678c0c1` and its line `71196d1b-…`;
+- invoice `9842a3ee-07ba-4be6-b306-d019c0bba8aa` `INV-2026-000485` and its line;
+- payments `2ffa762c-…` (`QA209-C0-1`), `3f90976c-…` (`QA209-C0-2`) and refund `25f9a405-…` (`QA209-B1-tabB`) on `INV-2026-000480`;
+- 7 audit rows, plus 1 login audit row.
+
+**Defect candidates (G4 not approved; none filed):**
+1. the stale server error persists beside new validation (B1);
+2. the Refund buttons have identical accessible names (C1);
+3. the billing drawer shows payment terms as raw values;
+4. D1's repeated figures (pending the owner's verdict).
+
+**Status: G2 complete.** Next: Task 5 (the M6 Slice Completion Report). G3 (commits, push, PR) and G4 (issues) need separate approval.
+
+### Owner's D1 verdict and G4 (2026-11-14)
+
+**D1 verdict (owner).** The duplicated Total, Amount paid, Amount due and status in the billing drawer **is a UI defect**. The history table scrolling sideways at 375 px is **acceptable**, given the L5 keyboard result, and is not a defect.
+
+**G4: approved by the owner on 2026-11-14 and executed.** Each create ran on the same command line as the Context Forge configuration check (`unchanged`). They were created as `rexescario` in `rexescario-dev/clensy-platform`. The URLs come from `gh issue view --json url`.
+
+| Finding | Issue |
+| --- | --- |
+| B1: stale server error stays after the next validation failure | [#231](https://github.com/rexescario-dev/clensy-platform/issues/231) |
+| C1: Refund buttons have identical accessible names | [#232](https://github.com/rexescario-dev/clensy-platform/issues/232) |
+| O1 observation: billing drawer shows raw payment terms | [#233](https://github.com/rexescario-dev/clensy-platform/issues/233) |
+| D1: billing drawer repeats Total, Paid, Due and Status. Needs an accepted #39 spec §4.10 amendment through M2/M3 before implementation | [#234](https://github.com/rexescario-dev/clensy-platform/issues/234) |
+
+**Not filed, by the owner's decision:**
+- **A1/A2:** the native bubble is the expected result, per the owner's #209 comment ("expected, since the select keeps native `required`").
+- **API stack traces in error responses:** these are development-only. `apps/api/src` sets neither `includeStacktraceInErrorResponses` nor `formatError`, so Apollo includes stack traces whenever `NODE_ENV` is not `production`. The `Dockerfile` defaults to `production`; only `docker-compose.yml` sets `development`. This is recorded as a possible hardening item for the separate N6 security follow-up.
+
+### Task 5 (2026-11-14)
+
+- **Step 1.** The after snapshot was taken and reconciled with the ledger (see the G2 results). The difference equals the ledger exactly. The `c9e449f` build worktree `$SRC` was clean (no tracked, untracked or ignored files) and has been removed (`git worktree remove`). The running `api` and `web` containers are unaffected: they still run `b8d74fa2…` and `963e0bde…`.
+- **Step 2.** Proposals went to the owner, who approved them under G4: issues [#231](https://github.com/rexescario-dev/clensy-platform/issues/231), [#232](https://github.com/rexescario-dev/clensy-platform/issues/232) (C1, the known candidate), [#233](https://github.com/rexescario-dev/clensy-platform/issues/233) and [#234](https://github.com/rexescario-dev/clensy-platform/issues/234).
+- **Step 3.** **Deferred to closeout.** The #209 results comment is part of the owner-authorized closeout edits, and the plan lets it wait for closeout. The owner's instruction for this step did not include it.
+- **Step 4.** Report below. Its figures were re-checked on 2026-11-14 against the evidence files (`before-extra.txt`, `before-extra.rerun.txt`, `after-extra.txt`, `before-S1/S2`, `after-S1/S2`) and against a read-only query of the live database, which equals the after snapshot.
+- **Step 5 (G3).** Approved by the owner on 2026-11-14. The commit, push and PR follow this record.
+
+## Slice Completion Report
+
+| Field | Result |
+| --- | --- |
+| Slice | #209 laundry invoice and payment browser check |
+| Tracking | [#209](https://github.com/rexescario-dev/clensy-platform/issues/209) |
+| M4 | Plan **Accepted** (revision 5; Task 1 Steps 4–5 at revision 6a; revision 6b is redaction only) |
+| M5 | Review **Accepted** (revision 5, by the owner; revision 6 returned and 6a accepted, both by fresh independent reviewers; 6b redaction reviewed separately) |
+| M6 | **Complete** |
+| M7 | Pending (docs-only slice: self-review permitted by `CLAUDE.md`, and must be labelled so) |
+| M8 | Pending |
+| M9 | Pending |
+| Branch | `docs/209-invoice-payment-browser-check` |
+| PR | Opened from this branch at G3. The link is recorded at M7 and in the #209 closeout |
+| Status | **Ready for M7** |
+
+### Shipped
+
+- **Task 1:** `api` and `web` were rebuilt from `c9e449f` and run with the API's configuration bind-mounted read-only. Every check passed: revision labels, image identity, `migrate` untouched, migrations 30 / `1791043200000`, payment schema and enum, introspection, no `JWT_SECRET` in the container's configuration or the image.
+- **#166 checks:**
+  - **Pass:** L1, L2 (375 and 1280, generate form), K1 (keyboard radio group; chosen, displayed and stored terms agree on `PAY_ON_DELIVERY`), L3, L4, O1.
+- **#39 checks:**
+  - **C0 (setup): Pass.**
+  - **(a) A1, A2:** the browser's own bubble only; no request sent.
+  - **(b) B1:** the stale server error persists (#231).
+  - **(c) C1: Fail**, identical Refund names (#232).
+  - **(d) D1:** the owner judged it a UI defect (#234; needs a §4.10 amendment).
+  - **L5: Pass.**
+  - **Extra finding:** the billing drawer shows raw payment terms (#233).
+- **Data accounting, before → after:**
+  - Domain rows: orders 5→6, order lines 5→6, invoices 5→6, invoice lines 5→6, payments 0→3. Admins, tenants, customers, services and pricing rules are unchanged.
+  - Audit rows: 0 → 1 (the owner's sign-in) → 8 (7 for the approved writes).
+  - Invoice counter: 484 → 485.
+  - Fingerprints of pre-existing rows are unchanged.
+- **Test data kept in `clensy`:**
+  - `N1` `2584f08d-…` and `INV-2026-000485`;
+  - payments `QA209-C0-1` and `QA209-C0-2`, and refund `QA209-B1-tabB`, on `INV-2026-000480`.
+
+  Nothing was cleaned up; removing them is the owner's choice.
+- **Deviations, recorded above:**
+  - the browser was the Playwright MCP Chrome, not Claude in Chrome;
+  - a saved-password exposure, remediated by R2 and R4 (R1 skipped by the owner);
+  - the before snapshot was re-run before the first write;
+  - focus was moved in code for the K1 Space test.
+- **Follow-ups outside this slice:**
+  - **N6:** `.dockerignore` and the old image layer holding `JWT_SECRET`, plus optionally turning stack traces off explicitly;
+  - the #209 results comment at closeout;
+  - removing the untracked revision 5 copy of this plan from the main checkout after merge.
+
+### Validation
+
+| Check | Result |
+| --- | --- |
+| Tests | N/A (no code changed) |
+| Typecheck | N/A |
+| Lint | N/A |
+| Build | N/A (images were rebuilt from `c9e449f` as M6 Task 1, not as validation) |
+| Package validation | N/A |
+
+The browser rows above are this slice's evidence.
+
+### Next Gate
+
+**M7 — Code Review**
