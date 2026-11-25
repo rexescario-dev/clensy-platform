@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted** (revision 3), 2026-11-26 (M5). M6 complete (see [M6 execution record](#m6-execution-record)). M7 **Approved for merge** (see [M7 code review](#m7-code-review)). |
+| Status | **Accepted** (revision 3), 2026-11-26 (M5). M6 complete (see [M6 execution record](#m6-execution-record)). M7 **Approved for merge** (see [M7 code review](#m7-code-review)). M8 **N/A**, M9 **Complete**, M10 **N/A** (see [M8–M10](#m8-refactoring)). Ready for closeout. |
 | M5 decision | **Accepted** — 2026-11-26, revision 3 (`c75c8c9`), by the owner, on the independent reviewer's round 3 **ACCEPT** verdict (R1–R7 and N14–N16 resolved; no new findings). The owner's qualification: the real `pnpm --filter api exec` run with the `env -u` prefix and the repository's own suites were not run during review. They are implementation-stage verification gaps, closed in M6 by actual runs. The acceptance is not a claim that any check has passed. |
 | M5 history | **Round 1** (independent reviewer, 2026-11-26, reviewed revision 1 at `d642247`): **REVISE**. No blocking findings. Required: R1 (tests that pass on Task 1 code neither red-first nor labelled characterization), R2 (constant-`true` break cannot fail the `true` rows), R3 (preservation break runs not assigned to named tests), R4 (`src/schema.gql` is gitignored, so the `git diff` check was vacuous), R5 (cleanup not failure-safe). Non-blocking notes N1–N13. **Round 2** (same reviewer, 2026-11-26, reviewed revision 2 at `2b324c0`): **REVISE**. R1–R5 resolved, both departures confirmed correct (C1 → K1; the import-time break split into K4a/K4b), every break-catalogue assignment reproduced exactly in a clean-shell probe. New required: R6 (K4a/K4b depend on `NODE_ENV`/`APP_DEBUG` exported in the launching shell), R7 (the fixed break command can miss F tests placed in a sibling file). Non-blocking: N14 (schema checks compared only per group), N15 (`withEnvDir` must not call `withApp`), N16 (K5's tmpdir guard assumes the worktree is not under `os.tmpdir()`). **Round 3** (same reviewer, 2026-11-26, reviewed revision 3 at `c75c8c9`): **ACCEPT**. R1–R7 and N14–N16 resolved. K4a/K4b were re-probed with the `env -u` prefix from shells exporting `APP_DEBUG=true` and `NODE_ENV=production`, and matched the catalogue exactly. The K5 precondition command was verified. No new findings. Only the plan changed since `4f0bd92`. |
 | Revision history | Revision 1 (`d642247`): first draft. Revision 2: addresses R1–R5 and the notes the owner selected (N1, N2, N6, N10, N11), and carries N4, N5, N9 and N13 forward; see [Revision 2 (M5 round 1)](#revision-2-m5-round-1). Revision 3: addresses R6, R7 and N14–N16, as the owner directed; see [Revision 3 (M5 round 2)](#revision-3-m5-round-2). The spec is unchanged. |
@@ -443,3 +443,100 @@ Executed 2026-11-26, inline (superpowers:executing-plans), in worktree `.worktre
 - The live Compose stack: the plan's optional Task 5 Step 3 was not run by anyone.
 
 **Side effect:** `tsc --noEmit` (the project uses `incremental: true`) rewrote `apps/api/dist/tsconfig.tsbuildinfo`. That file is gitignored, no tracked file changed, and `git status --short` stayed clean.
+
+### M8 refactoring
+
+```text
+Decision: N/A
+Subject: fix/236-graphql-stacktrace, range f0cd979..59dbd12 (implementation commits f1fafb8, bb2709c, e03c339, 348e179)
+Scope considered:
+- apps/api/src/platform/graphql/graphql.module.ts
+- apps/api/src/platform/config/graphql-stacktrace.ts
+- apps/api/src/platform/graphql/tests/error-stacktrace.spec.ts
+- apps/api/src/platform/config/tests/graphql-stacktrace.spec.ts
+Accepted specification: docs/superpowers/specs/2026-11-26-graphql-error-stacktrace-design.md
+Accepted implementation plan: docs/superpowers/plans/2026-11-26-graphql-error-stacktrace-plan.md (revision 3)
+M7 / authorization: Approved for merge (59dbd12); owner authorized M8–M10 (2026-11-26)
+Rationale:
+- The production change is a 13-line pure helper plus one option in an existing factory. M7 found no maintainability issue in it.
+- The only candidate is the test file: applyEnv and restoreEnv have similar loops, and withApp and withEnvDir share a cleanup shape. They stay separate on purpose. Each states its own C7 ordering, and the K1–K7 break evidence was recorded against this exact test code. A refactor would need that characterization evidence to be re-established, so the risk outweighs the small benefit.
+- M7-2 (the cwd carried over on a timeout) and M7-3 (T6 checks only the type) are not behavior-preserving maintainability changes. By the owner's decision they remain open observations, not M8 work.
+Changes: none
+Verification: not applicable (no change). Last recorded runs: unit 91/1421 and e2e 65/731 (M6); reviewer rerun unit 91/1421 (M7)
+Externally observable behavior changes: None
+Gate: N/A
+```
+
+### M9 documentation
+
+```text
+Decision: Complete
+Subject: #236 GraphQL error stack traces, fix/236-graphql-stacktrace (M7-approved, not pushed, not merged)
+Accepted specification: docs/superpowers/specs/2026-11-26-graphql-error-stacktrace-design.md
+Accepted implementation plan: docs/superpowers/plans/2026-11-26-graphql-error-stacktrace-plan.md (revision 3)
+M7: Approved for merge (59dbd12). M8: N/A
+Documentation scope (paths that could be edited):
+- .env.example (the APP_DEBUG comment)
+- docs/superpowers/README.md (specs index, plan count)
+- this plan (gate records only)
+Content updates (commit 859e27c):
+- .env.example: "ignored when NODE_ENV is production" replaced by "Stack traces are never added when NODE_ENV is production." The SQL-logging lines are unchanged. Cause: M7-1, with the wording the owner decided.
+- docs/superpowers/README.md: a Platform and API row for the Accepted spec, and the plan count 80 → 81. Cause: the spec is Accepted at 4f0bd92, and this plan is the 81st file in plans/.
+Editorial updates: none
+Not changed, by design:
+- docs/getting-started/local-development.md: its Debugging bullet (348e179, Task 4) is accurate; M7 confirmed it.
+- docs/history/shipped-slices.md: notes are written when a slice ships. #236 is not merged, so its note belongs to closeout after merge, not here.
+- docs/superpowers/plans/2026-11-03-laundry-invoice-payment-browser-check-plan.md: it records the #209 observation that led to #236. Plans are historical (docs/superpowers/README.md), so it is not updated.
+- The Accepted spec: unchanged. Its Status (Accepted) matches reality.
+Editorial verification:
+- Internal links: the new index link resolves (specs/2026-11-26-graphql-error-stacktrace-design.md exists); the plan's anchors (#m6-execution-record, #m7-code-review, #m8-refactoring) resolve.
+- Heading hierarchy: the gate records are ### under "## Gate outcomes".
+- Contradictions: none. .env.example, local-development.md and spec §3/§4 agree (opt-in exactly `true`; production always suppresses).
+- Status consistency: spec Accepted; plan Accepted, with the M6/M7/M8/M9/M10 records appended.
+- Terminology: "stack trace", "opt-in" and "production" are used as defined in spec §3.
+Gate: Complete
+```
+
+M7-1 is **resolved** by `859e27c`. M7-2 and M7-3 remain **open**, non-blocking observations (owner decision: no scope expansion).
+
+### M10 workflow validation
+
+**N/A.** This slice changes no workflow asset: `git diff --name-only f0cd979 HEAD -- docs/workflows .claude workflow.yaml` is empty. Under process spec §2.12, M10 applies only when a slice changes workflow assets, so it does not apply here.
+
+## Slice Completion Report (M8–M10)
+
+| Field | Result |
+| --- | --- |
+| Slice | #236 GraphQL error stack traces |
+| Tracking | [#236](https://github.com/rexescario-dev/clensy-platform/issues/236) |
+| M4 | Plan **Accepted** (revision 3, `c75c8c9`) |
+| M5 | Review **Accepted** (`81e3b29`) |
+| M6 | **Complete** (`cd7abd9`) |
+| M7 | **Approved** for merge (independent reviewer; recorded at `59dbd12`) |
+| M8 | **N/A** (rationale recorded above) |
+| M9 | **Complete** (`859e27c`) |
+| M10 | N/A (no workflow asset changed) |
+| Branch | `fix/236-graphql-stacktrace` (local only, not pushed) |
+| PR | None. Push and PR are not authorized. |
+| Status | **Ready for closeout** (push, PR and a human-authorized merge are pending) |
+
+### Shipped
+
+- GraphQL error responses include `extensions.stacktrace` only when `APP_DEBUG` is exactly `true` and `NODE_ENV`, trimmed and lowercased, is not `production`. The setting is passed to Apollo explicitly and read through `ConfigService`.
+- Production always suppresses stack traces. The process environment wins over `.env`.
+- Error message, path, locations, code, status and `originalError` are unchanged. GraphiQL, Swagger and SQL logging are unchanged.
+- Setup docs and `.env.example` describe the opt-in and the production rule. The spec is indexed.
+
+### Validation
+
+| Check | Result |
+| --- | --- |
+| Tests | **Passed**: unit 91 suites / 1421 tests; e2e 65 suites / 731 tests (`fix236_test`); K1–K7 break runs matched their assignments |
+| Typecheck | **Passed**: `nest build` (M6), `tsc --noEmit` (M7) |
+| Lint | **Passed**: `api` and root lint (M6), `api` lint (M7) |
+| Build | **Passed**: `pnpm --filter api build` (M6) |
+| Package validation | N/A |
+
+### Next Gate
+
+**Closeout (§2.12)**: push the branch and open the single issue PR, CI, then a human-authorized merge. After the merge, add the shipped-slices note. None of this is authorized yet.
