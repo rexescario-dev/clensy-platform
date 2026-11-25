@@ -1,51 +1,74 @@
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { NestjsQueryGraphQLModule } from '@ptc-org/nestjs-query-graphql';
 import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { GraphQLModule as NestGraphQLModule } from '@nestjs/graphql';
 import type { Request, Response } from 'express';
 import { join } from 'path';
+import { includeStacktraceInErrorResponses } from '../config/graphql-stacktrace';
 import { GraphiqlController } from './graphiql.controller';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
+// Options for the Apollo GraphQL driver, built when the module is configured
+// (`forRootAsync`) so that values from `ConfigService` are read then, not at
+// import time (#236 spec invariant 4).
+export function graphqlModuleOptions(
+  config: ConfigService,
+): ApolloDriverConfig {
+  return {
+    autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
+    // Without an explicit `context` factory, @nestjs/apollo's default
+    // (`apollo-base.driver.js`'s `wrapContextResolver`) only puts `req` on
+    // the GraphQL context, never `res` — `@as-integrations/express5`'s own
+    // `expressMiddleware` receives both, but nothing forwards `res`
+    // unless we ask it to here. `AdminResolver.login` (Task 5) sets the
+    // HttpOnly session cookie via `context.res.cookie(...)`, and
+    // `AuthGuard.getResponse()` (Task 4) also reads `context.res` — both
+    // silently had `res: undefined` until this factory was added.
+    context: ({ req, res }: { req: Request; res: Response }) => ({
+      req,
+      res,
+    }),
+    driver: ApolloDriver,
+    // nestjs-query attaches an `AuthorizerInterceptor` to every relation
+    // `@ResolveField` it generates; `@RelationAuthorizerFilter` reads the
+    // authorizer that interceptor puts on the context. `@nestjs/graphql`
+    // skips interceptors on field resolvers unless enabled here, so
+    // without this a relation reached from a plain `@Query` (e.g.
+    // `job(id) { booking }`) ran with no tenant filter at all (#85).
+    // Guards stay root-only: the root operation is the unit of role
+    // authorization, and relation fields are authorized by it (RFC §4.2
+    // relation-field rules, #106). nestjs-query relation fields re-apply
+    // the tenant predicate through these interceptors.
+    fieldResolverEnhancers: ['interceptors'],
+    // Explicit, so Apollo's own NODE_ENV-based default never applies (#236).
+    // Read through ConfigService here, at configuration time, so the value
+    // does not depend on module import order (spec invariants 1, 4, 8).
+    includeStacktraceInErrorResponses: includeStacktraceInErrorResponses(
+      config.get<string>('NODE_ENV'),
+      config.get<string>('APP_DEBUG'),
+    ),
+    // playground: false (not a manually-passed `plugins` array) — @nestjs/apollo
+    // concatenates any `plugins` we pass with its own dev-mode default (the
+    // legacy Playground plugin) rather than replacing it, so passing our own
+    // ApolloServerPluginLandingPageDisabled() alongside their default left
+    // both registered, and the Playground still won. `playground: false`
+    // makes @nestjs/apollo itself register the disabled-landing-page plugin
+    // as its only default, with no manual plugins needed here.
+    playground: false,
+    sortSchema: true,
+  };
+}
+
 @Module({
   controllers: isProduction ? [] : [GraphiqlController],
   imports: [
-    NestGraphQLModule.forRoot<ApolloDriverConfig>({
-      autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
-      // Without an explicit `context` factory, @nestjs/apollo's default
-      // (`apollo-base.driver.js`'s `wrapContextResolver`) only puts `req` on
-      // the GraphQL context, never `res` — `@as-integrations/express5`'s own
-      // `expressMiddleware` receives both, but nothing forwards `res`
-      // unless we ask it to here. `AdminResolver.login` (Task 5) sets the
-      // HttpOnly session cookie via `context.res.cookie(...)`, and
-      // `AuthGuard.getResponse()` (Task 4) also reads `context.res` — both
-      // silently had `res: undefined` until this factory was added.
-      context: ({ req, res }: { req: Request; res: Response }) => ({
-        req,
-        res,
-      }),
+    NestGraphQLModule.forRootAsync<ApolloDriverConfig>({
       driver: ApolloDriver,
-      // nestjs-query attaches an `AuthorizerInterceptor` to every relation
-      // `@ResolveField` it generates; `@RelationAuthorizerFilter` reads the
-      // authorizer that interceptor puts on the context. `@nestjs/graphql`
-      // skips interceptors on field resolvers unless enabled here, so
-      // without this a relation reached from a plain `@Query` (e.g.
-      // `job(id) { booking }`) ran with no tenant filter at all (#85).
-      // Guards stay root-only: the root operation is the unit of role
-      // authorization, and relation fields are authorized by it (RFC §4.2
-      // relation-field rules, #106). nestjs-query relation fields re-apply
-      // the tenant predicate through these interceptors.
-      fieldResolverEnhancers: ['interceptors'],
-      // playground: false (not a manually-passed `plugins` array) — @nestjs/apollo
-      // concatenates any `plugins` we pass with its own dev-mode default (the
-      // legacy Playground plugin) rather than replacing it, so passing our own
-      // ApolloServerPluginLandingPageDisabled() alongside their default left
-      // both registered, and the Playground still won. `playground: false`
-      // makes @nestjs/apollo itself register the disabled-landing-page plugin
-      // as its only default, with no manual plugins needed here.
-      playground: false,
-      sortSchema: true,
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: graphqlModuleOptions,
     }),
     NestjsQueryGraphQLModule.forRoot({}),
   ],
