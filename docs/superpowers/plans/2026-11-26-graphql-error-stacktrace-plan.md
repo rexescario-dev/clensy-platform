@@ -343,7 +343,7 @@ Executed 2026-11-26, inline (superpowers:executing-plans), in worktree `.worktre
   - **Target:** global setup printed `e2e target fix236_test@localhost:5432: created=true, applied=30, pending=0, unknown=0`. It created `fix236_test`, which did not exist before, and applied 30 migrations. The run did not target `clensy` or `clensy_test`, and used the default connection settings: the worktree has no `apps/api/.env`, and no env file was copied. No container was started, stopped or rebuilt. `fix236_test` was kept.
   - **Expected log noise, not failures:** `UnsafeDataSourceError: refused: database "clensy" is not a Test database`, with nine TypeORM retries, comes from `datasource-guard.e2e-spec.ts` ("rejects the Nest application DataSource before connecting"). It targets a fake local listener and asserts zero connections. `QueryFailedError: operator does not exist: uuid ~~* unknown` comes from `laundry-order-list-filters.e2e-spec.ts` ("rejects a partial iLike on the uuid id"). There is also a `pg` `DeprecationWarning` about concurrent `client.query()` calls. None is related to #236.
   - **Schema file:** `ABSENT` before the run. The run generated it (modified 01:26:52, after the start at 01:23:57); it is gitignored and untracked. That generated file was removed, so the schema file is `ABSENT` again, equal to the Task 0 baseline.
-- **Step 3, optional manual check:** **NOT RUN**. It is optional in the plan and not a gate.
+- **Step 3, optional manual check:** **NOT RUN**. It is optional in the plan and not a gate. It also could not run at the time: the local Compose `api` container (`clensy-platform-api-1`) was in a restart loop (`JWT_SECRET must be set`), unrelated to #236.
 - **Step 4, invariant 6:** the merge-base diff reads only `config.get('NODE_ENV')` and `config.get('APP_DEBUG')`. No new environment variable name is added.
 - **Environment note, unrelated to #236:** the main checkout's Compose container `clensy-platform-api-1` was already in a restart loop before this run (`JWT_SECRET must be set`, from its built image). It was observed only, not touched, and does not affect this slice's verification.
 - **Final state:** `git status` clean apart from this record; schema file `ABSENT`.
@@ -517,8 +517,8 @@ M7-1 is **resolved** by `859e27c`. M7-2 and M7-3 remain **open**, non-blocking o
 | M9 | **Complete** (`859e27c`) |
 | M10 | N/A (no workflow asset changed) |
 | Branch | `fix/236-graphql-stacktrace` (local only, not pushed) |
-| PR | None. Push and PR are not authorized. |
-| Status | **Ready for closeout** (push, PR and a human-authorized merge are pending) |
+| PR | [#238](https://github.com/rexescario-dev/clensy-platform/pull/238) (opened 2026-11-26; the owner authorized the push and the PR) |
+| Status | **Ready for closeout** (CI on #238, then the merge; the owner authorized the merge once all four checks pass) |
 
 ### Shipped
 
