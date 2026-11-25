@@ -173,6 +173,7 @@ Then open http://localhost:3001/login and sign in with the `ADMIN_SEED_*` creden
 
 - **Logs:** `docker compose logs -f api` (or `web`, `migrate`).
 - **SQL logging:** set `APP_DEBUG=true` in the root `.env`, then recreate the container with `docker compose up -d api`. Only the exact string `true` enables it.
+- **GraphQL stack traces:** `APP_DEBUG=true` also adds `extensions.stacktrace` to GraphQL error responses. They are off by default, and `NODE_ENV=production` always suppresses them (in any case, ignoring surrounding whitespace), even with `APP_DEBUG=true`. For the Compose stack, set it in the root `.env` (or export it in the shell that runs `docker compose`), then run `docker compose up -d api`.
 - **Database shell:** `docker compose exec postgres psql -U <DB_USERNAME> -d <DB_NAME>`.
 - **GraphQL by hand:** GraphiQL at `/graphiql`. Log in with the `login` mutation first; the session is an HttpOnly cookie (`clensy_admin_session`) the browser then sends automatically.
 
