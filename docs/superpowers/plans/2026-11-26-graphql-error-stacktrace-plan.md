@@ -4,9 +4,9 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft** (revision 2), 2026-11-26 (M4). Awaiting M5 re-review. Not Accepted. |
-| M5 history | **Round 1** (independent reviewer, 2026-11-26, reviewed revision 1 at `d642247`): **REVISE**. No blocking findings. Required: R1 (tests that pass on Task 1 code neither red-first nor labelled characterization), R2 (constant-`true` break cannot fail the `true` rows), R3 (preservation break runs not assigned to named tests), R4 (`src/schema.gql` is gitignored, so the `git diff` check was vacuous), R5 (cleanup not failure-safe). Non-blocking notes N1–N13. |
-| Revision history | Revision 1 (`d642247`): first draft. Revision 2: addresses R1–R5 and the notes the owner selected (N1, N2, N6, N10, N11), and carries N4, N5, N9 and N13 forward; see [Revision 2 (M5 round 1)](#revision-2-m5-round-1). The spec is unchanged. |
+| Status | **Draft** (revision 3), 2026-11-26 (M4). Awaiting M5 round 3 confirmation. Not Accepted. |
+| M5 history | **Round 1** (independent reviewer, 2026-11-26, reviewed revision 1 at `d642247`): **REVISE**. No blocking findings. Required: R1 (tests that pass on Task 1 code neither red-first nor labelled characterization), R2 (constant-`true` break cannot fail the `true` rows), R3 (preservation break runs not assigned to named tests), R4 (`src/schema.gql` is gitignored, so the `git diff` check was vacuous), R5 (cleanup not failure-safe). Non-blocking notes N1–N13. **Round 2** (same reviewer, 2026-11-26, reviewed revision 2 at `2b324c0`): **REVISE**. R1–R5 resolved, both departures confirmed correct (C1 → K1; the import-time break split into K4a/K4b), every break-catalogue assignment reproduced exactly in a clean-shell probe. New required: R6 (K4a/K4b depend on `NODE_ENV`/`APP_DEBUG` exported in the launching shell), R7 (the fixed break command can miss F tests placed in a sibling file). Non-blocking: N14 (schema checks compared only per group), N15 (`withEnvDir` must not call `withApp`), N16 (K5's tmpdir guard assumes the worktree is not under `os.tmpdir()`). |
+| Revision history | Revision 1 (`d642247`): first draft. Revision 2: addresses R1–R5 and the notes the owner selected (N1, N2, N6, N10, N11), and carries N4, N5, N9 and N13 forward; see [Revision 2 (M5 round 1)](#revision-2-m5-round-1). Revision 3: addresses R6, R7 and N14–N16, as the owner directed; see [Revision 3 (M5 round 2)](#revision-3-m5-round-2). The spec is unchanged. |
 | Date | 2026-11-26 |
 | Tracking issue | [#236](https://github.com/rexescario-dev/clensy-platform/issues/236) "fix(api): don't include stack traces in GraphQL error responses outside production" |
 | Spec | [GraphQL Error Stack Traces](../specs/2026-11-26-graphql-error-stacktrace-design.md), Status **Accepted** (revision 3, M3 round 2, 2026-11-26, recorded at `4f0bd92`). |
@@ -39,7 +39,7 @@ Everything in spec §2 "Out of scope" and §1.2 non-goals. In particular: no `fo
 - **C5** (inv. 5): every other option currently passed to `NestGraphQLModule` SHALL be kept exactly: `autoSchemaFile`, `context`, `driver`, `fieldResolverEnhancers`, `playground`, `sortSchema`, and the existing comments. No `formatError` in committed code.
 - **C6** (inv. 7): the import-time `isProduction` that gates `GraphiqlController` SHALL stay as it is.
 - **C7** (§7 req 6): every test that changes `NODE_ENV`, `APP_DEBUG` or the cwd SHALL save the previous state before changing anything. It SHALL restore that state in a `finally` path that runs even when env setup, boot, assertions or `app.close()` fail. A key that was unset SHALL be deleted again. No test SHALL read or modify a developer's `apps/api/.env`.
-- **C8:** tests and builds in Tasks 1–3 SHALL NOT create or change `src/schema.gql`. The test app uses an in-memory schema (`autoSchemaFile: true`), overriding only that one option of the real factory. The file is gitignored (`.gitignore:21`), so this is checked by existence and hash (the [schema-file check](#schema-file-check)), never by `git diff`.
+- **C8:** tests and builds in Tasks 1–3 SHALL NOT create or change `src/schema.gql`. The test app uses an in-memory schema (`autoSchemaFile: true`), overriding only that one option of the real factory. The file is gitignored (`.gitignore:21`), so this is checked by existence and hash against the Task 0 baseline (the [schema-file check](#schema-file-check)), never by `git diff`.
 
 ## Traceability
 
@@ -90,9 +90,13 @@ Each break is stated in behavioral terms. The source edit is M6's choice (M4 ste
 
 1. Before applying the break: `git status --short` shows nothing outside the committed state.
 2. Apply an **uncommitted** edit that produces the named behavior.
-3. Run `pnpm --filter api exec jest src/platform/graphql/tests/error-stacktrace.spec.ts src/platform/config/tests/graphql-stacktrace.spec.ts`.
+3. Run the **break command**, exactly:
+
+   `env -u NODE_ENV -u APP_DEBUG pnpm --filter api exec jest src/platform/graphql/tests/error-stacktrace.spec.ts src/platform/config/tests/graphql-stacktrace.spec.ts`
+
+   The `env -u` prefix is mandatory for every break run (R6). Jest sets `NODE_ENV=test` only when it is unset and inherits any exported `APP_DEBUG`. The assignments below, K4a and K4b in particular, assume Jest's state at import is `NODE_ENV=test` with `APP_DEBUG` unset. With the prefix, that holds whatever the launching shell exports (for example after `set -a; . ./.env`). The break command names the only two files that hold the assigned tests: F-a, F-b and F-c MUST be in `error-stacktrace.spec.ts` (R7, Task 3 Step 1).
 4. **Expected:** exactly the assigned tests fail, and every other test in both files passes. Record the output (the failing test names and the counts).
-5. **Recovery:** `git restore <every file the break edited>`. Then `git status --short` shows nothing outside the committed state, and the same command passes in full. Record that output.
+5. **Recovery:** `git restore <every file the break edited>`. Then `git status --short` shows nothing outside the committed state, and the same break command, with the same `env -u` prefix, passes in full. Record that output.
 6. If any assigned test passes, or any unassigned test fails, stop and report. Do not adjust the tests to fit the break.
 
 | Break | Behavior | Example edit (non-binding) | Assigned tests (must fail) |
@@ -102,7 +106,7 @@ Each break is stated in behavioral terms. The source edit is M6's choice (M4 ste
 | **K3** | Production does not override the opt-in. | Helper returns `isAppDebugEnabled(appDebug)` alone. | T4, T5, C2, F-b; the H rows (`production`, `Production`, `' production '`, `'PRODUCTION'`) × `'true'` |
 | **K4a** | The values are read from `process.env` at import time: `APP_DEBUG` is captured when `graphql.module.ts` is imported. `NODE_ENV` is still read through `ConfigService`. | A module-level `const` that captures `process.env.APP_DEBUG`, used by the factory. | T3, C3, P1, P2, F-a |
 | **K4b** | The values are read from `process.env` at import time: `NODE_ENV` is captured when `graphql.module.ts` is imported (Jest's `test`). `APP_DEBUG` is still read through `ConfigService`. | A module-level `const` that captures `process.env.NODE_ENV`, used by the factory. | T4, T5, C2, F-b |
-| **K5** | The file wins over the process environment for `APP_DEBUG`. | When the cwd is under `os.tmpdir()`, the factory parses that directory's `.env` and prefers its `APP_DEBUG`. The restriction keeps the break from reading the developer's `apps/api/.env` during the `withApp` tests (C7). | F-c |
+| **K5** | The file wins over the process environment for `APP_DEBUG`. | When the cwd is under `os.tmpdir()`, the factory parses that directory's `.env` and prefers its `APP_DEBUG`. The restriction keeps the break from reading the developer's `apps/api/.env` during the `withApp` tests (C7). It is safe only while the worktree is **not** under `os.tmpdir()` (today: tmpdir `/tmp`, worktree under `/home`; N16). Precondition, checked before K5 from `apps/api`: `node -p "require('path').relative(require('os').tmpdir(), process.cwd()).startsWith('..')"` prints `true`. If it prints `false`, stop and report; do not run K5. | F-c |
 | **K6** | `extensions.originalError` is dropped when stack traces are on. | A temporary `formatError` that deletes `extensions.originalError` when `extensions.stacktrace` is present. | P1, P2 |
 | **K7** | `extensions.code` is changed when stack traces are on. | A temporary `formatError` that sets `extensions.code` to another value when `extensions.stacktrace` is present. | P1, P2 |
 
@@ -117,7 +121,7 @@ Notes on the assignments:
 
 `S=apps/api/src/schema.gql; if [ -e "$S" ]; then sha256sum "$S"; else echo ABSENT; fi`
 
-Run it before and after each group of unit, lint or build runs in Tasks 1–3 (Task 1 Steps 2–4, Task 2 Step 7, Task 3 Step 3). **Expected:** the output is identical before and after. If the file was `ABSENT` before, it is still `ABSENT`. A difference is a C8 failure: stop and report. Do not rely on `git diff` or `git status`; the file is gitignored. e2e boots `AppModule`, which writes the file. That is existing behavior, outside C8, so the check is not run around e2e. An e2e schema comparison against `f0cd979` is optional and not required.
+Task 0 Step 2 records the **baseline** (expected `ABSENT`; the worktree is fresh). If the baseline is not `ABSENT`, record its hash and use that as the baseline. Every later check is compared with **that Task 0 baseline**, not only with the check just before it (N14). This includes the checks between task groups: Task 1 Steps 2 and 4, Task 2 Steps 2, 3, 6 and 7, Task 3 Steps 3 and 4, and Task 5 Step 1. **Expected:** every check prints exactly the baseline. Any difference is a C8 failure: stop and report. Do not rely on `git diff` or `git status`; the file is gitignored. e2e boots `AppModule`, which writes the file. That is existing behavior, outside C8, so Task 5 Step 2 (e2e) runs after the last check and is not compared. An e2e schema comparison against `f0cd979` is optional and not required.
 
 ## Task 0 — Prepare the worktree (`code`, no file change)
 
@@ -134,9 +138,9 @@ Implements C4 and C5 structurally. Behavior is unchanged: the factory does not y
   - Keep `const isProduction` and `controllers` unchanged (C6).
   - `config` is unused in this task. M6 chooses how to satisfy `no-unused-vars` (for example an `_config` name) until Task 2 uses it (N3).
   - Under `forRootAsync`, `join(process.cwd(), 'src/schema.gql')` is evaluated when the factory runs, not at import (N5). Nothing changes the cwd before `AppModule` boots, so the resolved path is the same.
-- [ ] **Step 2.** Schema-file check (before). Run `pnpm --filter api exec jest src/platform/graphql`. **Expected:** every existing graphql spec passes, including `field-resolver-enhancers.spec.ts` (imports `GraphqlModule` alone and reads `GRAPHQL_MODULE_OPTIONS`) and `graphiql-dev-only.spec.ts`. If `field-resolver-enhancers.spec.ts` cannot resolve `ConfigService`, that is a defect in Step 1's `imports`, not a reason to edit the test.
+- [ ] **Step 2.** Schema-file check (= baseline). Run `pnpm --filter api exec jest src/platform/graphql`. **Expected:** every existing graphql spec passes, including `field-resolver-enhancers.spec.ts` (imports `GraphqlModule` alone and reads `GRAPHQL_MODULE_OPTIONS`) and `graphiql-dev-only.spec.ts`. If `field-resolver-enhancers.spec.ts` cannot resolve `ConfigService`, that is a defect in Step 1's `imports`, not a reason to edit the test.
 - [ ] **Step 3.** Run `pnpm --filter api build` and `pnpm --filter api lint`. **Expected:** both succeed. The lint script runs `eslint --fix` (N1), so then run `git status --short`. **Expected:** nothing beyond the Step 1 edit. Inspect any other change and either revert it or record why it is kept.
-- [ ] **Step 4.** Run `pnpm --filter api test`. **Expected:** pass. Schema-file check (after): identical to before.
+- [ ] **Step 4.** Run `pnpm --filter api test`. **Expected:** pass. Schema-file check: equals the Task 0 baseline.
 - [ ] **Step 5.** Commit: `refactor(api): configure GraphQL through forRootAsync (#236)`.
 
 ## Task 2 — Explicit stack-trace setting (`code`, TDD)
@@ -159,11 +163,11 @@ Implements C4 and C5 structurally. Behavior is unchanged: the factory does not y
   - T1–T6 **fail**: T1 and T2 because Apollo's default includes a stack trace for `development` and for unset `NODE_ENV`; T3 because Apollo's default omits it for `test`; T4 and T5 because Apollo's exact match treats `Production` and `' production '` as non-production; T6 because the option is `undefined`.
   - C1–C3 **pass**. They are characterization tests: Apollo's default already gives these results. Their breaks are K1 (C1), K3 and K4b (C2), and K2 and K4a (C3), run in Step 6.
 
-  Record the output. If any of T1–T6 passes, or any of C1–C3 fails, stop and report.
+  Record the output, and run the schema-file check (= baseline). If any of T1–T6 passes, or any of C1–C3 fails, stop and report.
 - [ ] **Step 3 — helper and wiring (green).**
   - Create `src/platform/config/graphql-stacktrace.ts` (the name is a planning choice). It exports `includeStacktraceInErrorResponses(nodeEnv: string | undefined, appDebug: string | undefined): boolean`, returning `isAppDebugEnabled(appDebug) && (nodeEnv ?? '').trim().toLowerCase() !== 'production'` (C2, C3).
   - In `graphqlModuleOptions`, add `includeStacktraceInErrorResponses: includeStacktraceInErrorResponses(config.get('NODE_ENV'), config.get('APP_DEBUG'))` (C1, C4).
-  - Run the Step 2 command. **Expected:** T1–T6 and C1–C3 all pass. Record the output.
+  - Run the Step 2 command. **Expected:** T1–T6 and C1–C3 all pass. Record the output, and run the schema-file check (= baseline).
 - [ ] **Step 4 — helper truth table (H).** Create `src/platform/config/tests/graphql-stacktrace.spec.ts`, with `it.each` rows:
   - `true` for `NODE_ENV` ∈ {`development`, `test`, `staging`, unset} × `APP_DEBUG` `'true'`;
   - `false` for `APP_DEBUG` ∈ {unset, `''`, `'false'`, `'1'`, `'TRUE'`} × `NODE_ENV` ∈ {`development`, unset, `production`};
@@ -184,15 +188,15 @@ Implements C4 and C5 structurally. Behavior is unchanged: the factory does not y
   3. **Equality:** `on` with `extensions.stacktrace` removed deep-equals `off`.
 
   Run. **Expected:** pass. P1 and P2 are characterization tests. They pin `@nestjs/apollo`'s existing transform, which this slice must not change. Breaks K6 and K7 are run in Step 6.
-- [ ] **Step 6 — break runs.** Run K1, K2, K3, K4a, K4b, K6 and K7 from the [break catalogue](#break-catalogue), one at a time, each with its full procedure and recovery. (K5 runs in Task 3, where F-a, F-b and F-c exist. Before Task 3, K1, K2, K4a and K4b have no F tests to fail; Task 3 Step 4 reruns them.) Record every result in the Execution record.
-- [ ] **Step 7.** Schema-file check (before). Run `pnpm --filter api test`, `pnpm --filter api lint`, then `git status --short` (inspect any `--fix` change, N1), then `pnpm --filter api build`. **Expected:** all pass, and `git status --short` shows only the Task 2 files. Schema-file check (after): identical to before.
+- [ ] **Step 6 — break runs.** Run K1, K2, K3, K4a, K4b, K6 and K7 from the [break catalogue](#break-catalogue), one at a time, each with its full procedure (including the `env -u` break command) and recovery. (K5 runs in Task 3, where F-a, F-b and F-c exist. Before Task 3, K1, K2, K4a and K4b have no F tests to fail; Task 3 Step 4 reruns them.) Record every result in the Execution record. After the last recovery, run the schema-file check (= baseline).
+- [ ] **Step 7.** Schema-file check (= baseline). Run `pnpm --filter api test`, `pnpm --filter api lint`, then `git status --short` (inspect any `--fix` change, N1), then `pnpm --filter api build`. **Expected:** all pass, and `git status --short` shows only the Task 2 files. Schema-file check: equals the Task 0 baseline.
 - [ ] **Step 8.** Commit: `fix(api): set GraphQL stack-trace inclusion explicitly from APP_DEBUG (#236)`.
 
 ## Task 3 — Config-source coverage (`code`, owner instruction 2, spec inv. 4)
 
 Uses the precedent in `test/e2e-isolation.e2e-spec.ts`: a temporary directory holding a `.env`, with `process.chdir` into it. That is the same file `ConfigModule.forRoot()` reads as `apps/api/.env` when the cwd is `apps/api`. The developer's real `apps/api/.env` is never read, created, modified or deleted.
 
-- [ ] **Step 1 — harness.** In `error-stacktrace.spec.ts` (or a sibling file; M6 chooses), add `withEnvDir(fileContents, processEnv, fn)`. Its order is fixed (C7):
+- [ ] **Step 1 — harness.** In `error-stacktrace.spec.ts` — mandatory, not a sibling file, so the break command runs F-a, F-b and F-c (R7) — add `withEnvDir(fileContents, processEnv, fn)`. Its order is fixed (C7):
   1. Save `previousCwd = process.cwd()`, and the presence and value of `NODE_ENV`, `APP_DEBUG` and every key named in `fileContents`, before changing anything.
   2. Declare `let dir: string | undefined` and `let app: INestApplication | undefined`.
   3. `try`:
@@ -200,7 +204,7 @@ Uses the precedent in `test/e2e-isolation.e2e-spec.ts`: a temporary directory ho
      - write `join(dir, '.env')`;
      - delete `NODE_ENV` and `APP_DEBUG`, then apply `processEnv`;
      - `process.chdir(dir)`;
-     - only now call `ConfigModule.forRoot()` (default `envFilePath`, no `ignoreEnvFile`) inside the test, and build the module as in `withApp`, with this `forRoot()` result in place of `ConfigModule.forRoot({ ignoreEnvFile: true })`. `forRoot` loads the file synchronously when called (N6);
+     - only now call `ConfigModule.forRoot()` (default `envFilePath`, no `ignoreEnvFile`) inside the test, and build the module **itself**, with the same imports and providers as `withApp` but with this `forRoot()` result in place of `ConfigModule.forRoot({ ignoreEnvFile: true })`. `withEnvDir` MUST NOT call `withApp`: `withApp`'s set-or-delete env step would wipe `processEnv`, which F-c relies on (`APP_DEBUG=false`) (N15). A shared module-builder function that takes the `ConfigModule` import as a parameter and touches no env is allowed. `forRoot` loads the file synchronously when called (N6);
      - init the app, then `return await fn(app)`.
   4. `finally`, each part in its own `try/catch` so that one failure cannot skip the rest:
      - `await app?.close()`;
@@ -212,8 +216,8 @@ Uses the precedent in `test/e2e-isolation.e2e-spec.ts`: a temporary directory ho
 
   The test file does not statically import `AppConfigModule` (N6), and does not import `dotenv`.
 - [ ] **Step 2 — cases.** F-a, F-b and F-c ([test inventory](#test-inventory)). F-a also shows that the file is read at all, so F-c's result cannot come from the file being ignored (N7).
-- [ ] **Step 3.** Schema-file check (before). Run the file twice in a row. **Expected:** both runs pass. `git status --short` shows no new `.env` or other untracked file under `apps/api`. `ls -d "$(node -p "require('os').tmpdir()")"/gql-stacktrace-* 2>/dev/null` lists nothing. Schema-file check (after): identical to before.
-- [ ] **Step 4 — break runs.** Run K5. Rerun K1, K2, K4a and K4b so that their F assignments are exercised. Each uses its full procedure, now including F-a, F-b and F-c. Record every result.
+- [ ] **Step 3.** Run the file twice in a row. **Expected:** both runs pass. `git status --short` shows no new `.env` or other untracked file under `apps/api`. `ls -d "$(node -p "require('os').tmpdir()")"/gql-stacktrace-* 2>/dev/null` lists nothing. Schema-file check: equals the Task 0 baseline.
+- [ ] **Step 4 — break runs.** Run K5. Rerun K1, K2, K4a and K4b so that their F assignments are exercised. Each uses its full procedure, including the `env -u` break command and, for K5, the tmpdir precondition. Their assignments now include F-a, F-b and F-c. Record every result. After the last recovery, run the schema-file check (= baseline).
 - [ ] **Step 5.** If `process.chdir` is unavailable in the Jest worker, stop and report. Do not fall back to writing `apps/api/.env`.
 - [ ] **Step 6.** Run `pnpm --filter api lint`, then `git status --short` (N1). Commit: `test(api): cover APP_DEBUG and NODE_ENV from the .env source (#236)`.
 
@@ -226,12 +230,12 @@ Uses the precedent in `test/e2e-isolation.e2e-spec.ts`: a temporary directory ho
 
 ## Task 5 — Verification and gate records (`docs/process`)
 
-- [ ] **Step 1.** Schema-file check. From the worktree root, run:
+- [ ] **Step 1.** From the worktree root, run:
   - `pnpm --filter api test`;
   - `pnpm --filter api lint`, then `git status --short` (N1);
   - `pnpm --filter api build`;
   - `pnpm run lint`, then `git status --short`;
-  - schema-file check again (identical).
+  - the schema-file check (equals the Task 0 baseline).
 
   **Expected:** all pass, and `git status --short` is empty. Record the exact counts.
 - [ ] **Step 2.** `pnpm --filter api test:e2e`. It needs the local Postgres stack, and `DB_NAME` must not be exported in the shell. **Expected:** pass. Record the counts. If it cannot run, record **NOT RUN** with the reason. NOT RUN leaves spec §7 req 5 unmet: the verification gate stays **incomplete**, and the Slice Completion Report MUST NOT say Ready for M7 unless the owner explicitly decides otherwise (N11).
@@ -258,7 +262,7 @@ Uses the precedent in `test/e2e-isolation.e2e-spec.ts`: a temporary directory ho
 | R1 | T1–T6 are written and shown red before the helper (Task 2 Step 2). T3 (`test` + `true`) and T4/T5 (`Production`, `' production '`) are now red-first, not after the fix. Tests that already pass on Task 1 code are labelled characterization (C1–C3, F-a–F-c). Each has named breaks with assigned tests, a procedure and recovery ([break catalogue](#break-catalogue)). The owner's break names are kept. Two assignments differ from the instruction's literal reading, with reasons: C1 → K1, and the import-time break split into K4a/K4b. |
 | R2 | H keeps its order, with two break runs: K1 (constant `true`) must fail every `false` row, and K2 (constant `false`) must fail every `true` row. Both are recorded. |
 | R3 | Two separate breaks: K6 (drop `originalError` when on) and K7 (change `code` when on). Each is assigned to both P1 (400) and P2 (404). The literal-value assertions run on both the `on` and `off` copies (Task 2 Step 5). |
-| R4 | The `git diff` checks are replaced by the [schema-file check](#schema-file-check) (existence or `sha256sum`, before and after). If the file starts `ABSENT`, it must stay `ABSENT`. The e2e comparison stays optional. |
+| R4 | The `git diff` checks are replaced by the [schema-file check](#schema-file-check) (existence or `sha256sum`). Revision 3 compares every check with the Task 0 baseline (N14). The e2e comparison stays optional. |
 | R5 | `withApp` and `withEnvDir` save all state first and restore env, cwd and the temporary directory in `finally`, each part guarded, whatever fails. There is no `restore()` callback that depends on a successful `init`. |
 | N1 | `git status --short` after every lint run, with any `--fix` change inspected. |
 | N2 | `res.body` is typed through a local interface. |
@@ -267,6 +271,16 @@ Uses the precedent in `test/e2e-isolation.e2e-spec.ts`: a temporary directory ho
 | N11 | e2e NOT RUN keeps the gate incomplete and blocks a Ready-for-M7 report. |
 | N4, N5, N9, N13 | Carried forward: timing note (Task 2 Step 1), `autoSchemaFile` resolution (Task 1 Step 1), T6 boolean check, and no `Co-Authored-By` trailer (header). |
 | N3, N7, N8, N12 | N3: Task 1 Step 1. N7: Task 3 Step 2. N8: Task 5 Step 4. N12: no change needed. |
+
+## Revision 3 (M5 round 2)
+
+| Finding | Resolution |
+| --- | --- |
+| R6 | Every break run uses one fixed break command, prefixed with `env -u NODE_ENV -u APP_DEBUG`, including its recovery rerun ([break catalogue](#break-catalogue) step 3). The reason and the assumed import-time state are stated there. Normal red, green and suite runs set their env per test and do not depend on the shell (M5 round 2 probe), so they are unchanged. |
+| R7 | F-a, F-b and F-c MUST be in `error-stacktrace.spec.ts` (Task 3 Step 1). The break command names that file. |
+| N14 | Every schema-file check is compared with the Task 0 baseline, including the checks between groups ([schema-file check](#schema-file-check)). |
+| N15 | `withEnvDir` builds its own module and MUST NOT call `withApp`. A shared env-free module builder is allowed (Task 3 Step 1). |
+| N16 | K5's tmpdir guard keeps its restriction, with its assumption stated and a precondition command that stops K5 if the worktree is under `os.tmpdir()` (K5 row). |
 
 ## Gate outcomes
 
