@@ -5,6 +5,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { GraphQLModule as NestGraphQLModule } from '@nestjs/graphql';
 import type { Request, Response } from 'express';
 import { join } from 'path';
+import { includeStacktraceInErrorResponses } from '../config/graphql-stacktrace';
 import { GraphiqlController } from './graphiql.controller';
 
 const isProduction = process.env.NODE_ENV === 'production';
@@ -12,7 +13,9 @@ const isProduction = process.env.NODE_ENV === 'production';
 // Options for the Apollo GraphQL driver, built when the module is configured
 // (`forRootAsync`) so that values from `ConfigService` are read then, not at
 // import time (#236 spec invariant 4).
-export function graphqlModuleOptions(): ApolloDriverConfig {
+export function graphqlModuleOptions(
+  config: ConfigService,
+): ApolloDriverConfig {
   return {
     autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
     // Without an explicit `context` factory, @nestjs/apollo's default
@@ -39,6 +42,13 @@ export function graphqlModuleOptions(): ApolloDriverConfig {
     // relation-field rules, #106). nestjs-query relation fields re-apply
     // the tenant predicate through these interceptors.
     fieldResolverEnhancers: ['interceptors'],
+    // Explicit, so Apollo's own NODE_ENV-based default never applies (#236).
+    // Read through ConfigService here, at configuration time, so the value
+    // does not depend on module import order (spec invariants 1, 4, 8).
+    includeStacktraceInErrorResponses: includeStacktraceInErrorResponses(
+      config.get<string>('NODE_ENV'),
+      config.get<string>('APP_DEBUG'),
+    ),
     // playground: false (not a manually-passed `plugins` array) — @nestjs/apollo
     // concatenates any `plugins` we pass with its own dev-mode default (the
     // legacy Playground plugin) rather than replacing it, so passing our own
