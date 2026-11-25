@@ -12,7 +12,10 @@ import {
   Resolver,
 } from '@nestjs/graphql';
 import { Test } from '@nestjs/testing';
+import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import type { Server } from 'http';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import request from 'supertest';
 import { GraphqlModule, graphqlModuleOptions } from '../graphql.module';
 
@@ -21,7 +24,7 @@ import { GraphqlModule, graphqlModuleOptions } from '../graphql.module';
 // 'production'. Every case below sends a real request through Apollo and
 // @nestjs/apollo's HTTP-exception transform, using the real options factory
 // with only `autoSchemaFile` replaced (in-memory, so `src/schema.gql` is
-// never written). Test IDs (T*, C*, P*) match the plan's test inventory.
+// never written). Test IDs (T*, C*, P*, F-*) match the plan's test inventory.
 
 type EnvKey = 'APP_DEBUG' | 'NODE_ENV';
 type EnvOverrides = Partial<Record<EnvKey, string>>;
@@ -185,6 +188,51 @@ async function withApp<T>(
   }
 }
 
+// Runs `fn` against an app whose ConfigModule reads `.env` from a temporary
+// directory, the same way it reads apps/api/.env from apps/api. The
+// developer's real apps/api/.env is never read or touched. It builds its own
+// app rather than calling `withApp`, whose env reset would wipe
+// `processEnv`. Every cleanup step runs whatever fails (spec §7 req 6).
+async function withEnvDir<T>(
+  fileEnv: Readonly<Record<string, string>>,
+  processEnv: EnvOverrides,
+  fn: (app: INestApplication) => Promise<T>,
+): Promise<T> {
+  const previousCwd = process.cwd();
+  const saved = snapshotEnv([...ENV_KEYS, ...Object.keys(fileEnv)]);
+  let dir: string | undefined;
+  let app: INestApplication | undefined;
+  let workFailed = false;
+  try {
+    dir = mkdtempSync(join(tmpdir(), 'gql-stacktrace-'));
+    writeFileSync(
+      join(dir, '.env'),
+      Object.entries(fileEnv)
+        .map(([key, value]) => `${key}=${value}\n`)
+        .join(''),
+    );
+    applyEnv(processEnv);
+    process.chdir(dir);
+    // Called only now, inside the temporary directory: forRoot() reads
+    // `.env` from the cwd synchronously when it is called.
+    app = await startApp(ConfigModule.forRoot());
+    return await fn(app);
+  } catch (error) {
+    workFailed = true;
+    throw error;
+  } finally {
+    await cleanUp(
+      [
+        () => app?.close(),
+        () => process.chdir(previousCwd),
+        () => dir && rmSync(dir, { force: true, recursive: true }),
+        () => restoreEnv(saved),
+      ],
+      workFailed,
+    );
+  }
+}
+
 describe('GraphQL error stack traces (#236)', () => {
   describe('red-first', () => {
     it.each(['badRequest', 'notFound'] as const)(
@@ -316,5 +364,37 @@ describe('GraphQL error stack traces (#236)', () => {
         expect({ ...on, extensions: onExtensions }).toEqual(off);
       },
     );
+  });
+
+  // Characterization: APP_DEBUG and NODE_ENV are honored from the `.env`
+  // file source, and the process environment wins over it (invariant 4).
+  describe('file source', () => {
+    async function fileStacktrace(
+      fileEnv: Readonly<Record<string, string>>,
+      processEnv: EnvOverrides = {},
+    ): Promise<unknown> {
+      return withEnvDir(fileEnv, processEnv, async (app) => {
+        const error = await firstError(app, 'badRequest');
+        return error.extensions?.stacktrace;
+      });
+    }
+
+    it('F-a: file APP_DEBUG=true, NODE_ENV=development → stack trace', async () => {
+      expectStacktrace(
+        await fileStacktrace({ APP_DEBUG: 'true', NODE_ENV: 'development' }),
+      );
+    });
+
+    it('F-b: file APP_DEBUG=true, NODE_ENV=production → no stack trace', async () => {
+      expect(
+        await fileStacktrace({ APP_DEBUG: 'true', NODE_ENV: 'production' }),
+      ).toBeUndefined();
+    });
+
+    it('F-c: process APP_DEBUG=false wins over file APP_DEBUG=true → no stack trace', async () => {
+      expect(
+        await fileStacktrace({ APP_DEBUG: 'true' }, { APP_DEBUG: 'false' }),
+      ).toBeUndefined();
+    });
   });
 });
