@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted** (revision 3), 2026-11-26 (M5). M6 complete (see [M6 execution record](#m6-execution-record)); Ready for M7. |
+| Status | **Accepted** (revision 3), 2026-11-26 (M5). M6 complete (see [M6 execution record](#m6-execution-record)). M7 **Approved for merge** (see [M7 code review](#m7-code-review)). |
 | M5 decision | **Accepted** — 2026-11-26, revision 3 (`c75c8c9`), by the owner, on the independent reviewer's round 3 **ACCEPT** verdict (R1–R7 and N14–N16 resolved; no new findings). The owner's qualification: the real `pnpm --filter api exec` run with the `env -u` prefix and the repository's own suites were not run during review. They are implementation-stage verification gaps, closed in M6 by actual runs. The acceptance is not a claim that any check has passed. |
 | M5 history | **Round 1** (independent reviewer, 2026-11-26, reviewed revision 1 at `d642247`): **REVISE**. No blocking findings. Required: R1 (tests that pass on Task 1 code neither red-first nor labelled characterization), R2 (constant-`true` break cannot fail the `true` rows), R3 (preservation break runs not assigned to named tests), R4 (`src/schema.gql` is gitignored, so the `git diff` check was vacuous), R5 (cleanup not failure-safe). Non-blocking notes N1–N13. **Round 2** (same reviewer, 2026-11-26, reviewed revision 2 at `2b324c0`): **REVISE**. R1–R5 resolved, both departures confirmed correct (C1 → K1; the import-time break split into K4a/K4b), every break-catalogue assignment reproduced exactly in a clean-shell probe. New required: R6 (K4a/K4b depend on `NODE_ENV`/`APP_DEBUG` exported in the launching shell), R7 (the fixed break command can miss F tests placed in a sibling file). Non-blocking: N14 (schema checks compared only per group), N15 (`withEnvDir` must not call `withApp`), N16 (K5's tmpdir guard assumes the worktree is not under `os.tmpdir()`). **Round 3** (same reviewer, 2026-11-26, reviewed revision 3 at `c75c8c9`): **ACCEPT**. R1–R7 and N14–N16 resolved. K4a/K4b were re-probed with the `env -u` prefix from shells exporting `APP_DEBUG=true` and `NODE_ENV=production`, and matched the catalogue exactly. The K5 precondition command was verified. No new findings. Only the plan changed since `4f0bd92`. |
 | Revision history | Revision 1 (`d642247`): first draft. Revision 2: addresses R1–R5 and the notes the owner selected (N1, N2, N6, N10, N11), and carries N4, N5, N9 and N13 forward; see [Revision 2 (M5 round 1)](#revision-2-m5-round-1). Revision 3: addresses R6, R7 and N14–N16, as the owner directed; see [Revision 3 (M5 round 2)](#revision-3-m5-round-2). The spec is unchanged. |
@@ -386,3 +386,60 @@ Executed 2026-11-26, inline (superpowers:executing-plans), in worktree `.worktre
 ### Next Gate
 
 **M7 — Code Review**, by a fresh, independent reviewer on the most capable model, given the Accepted spec, the Accepted plan and `git diff $(git merge-base HEAD origin/main)..HEAD`.
+
+### M7 code review
+
+| Field | Result |
+| --- | --- |
+| Decision | **APPROVED FOR MERGE** — 2026-11-26 |
+| Reviewer | A fresh, independent agent on the most capable model (Opus). It did not implement the change and took part in no M3 or M5 review, as `CLAUDE.md` requires for application code. It was given the Accepted spec, the Accepted plan with the M6 record, and `git diff f0cd979..cd7abd9`. |
+| Owner decision | The owner recorded M7 as Approved for merge on the reviewer's verdict (2026-11-26). This does not authorize a push, a PR or a merge. |
+| Subject | `fix/236-graphql-stacktrace` at `cd7abd9`; merge base `f0cd979`. Spec `4f0bd92` and plan revision 3 (`c75c8c9`) are unchanged, apart from the plan's Status cell and its appended gate records. |
+| Findings | **0 blocking, 1 minor (documentation), 2 nits.** All remain open as listed below; none is marked resolved here. |
+
+**Review summary (reviewer).** The change meets spec §3, §4 and invariants 1–8 and stays within the plan's Scope row:
+- The option is explicit and boolean.
+- The opt-in is the exact string `true`, via `isAppDebugEnabled`.
+- Production is matched after trimming and lowercasing.
+- Both values are read through `ConfigService` in the `forRootAsync` factory.
+- No new environment variable is added.
+- GraphiQL's import-time gate, Swagger, `main.ts` and `database.module.ts` are untouched.
+- Apart from the move into the factory and the new key, every option and comment is byte-identical (checked with a de-indented diff against `f0cd979`).
+- The tests verify what they claim, and their cleanup is failure-safe.
+
+**Findings**
+
+| # | Severity | Location | Finding | Disposition |
+| --- | --- | --- | --- | --- |
+| M7-1 | Minor (docs) | `.env.example:26` | "ignored when NODE_ENV is production" can be read as "`APP_DEBUG` is ignored in production", but SQL logging still turns on in production (invariant 7). An operator could leave `APP_DEBUG=true` in production expecting no effect and get query logging. It is not a spec violation (§7 req 8 is met, and the wording follows plan Task 4 Step 2). | **Open.** Owner decision: fix in M9 with the wording "Stack traces are never added when NODE_ENV is production.", keeping the separate fact that `APP_DEBUG` also controls SQL logging. |
+| M7-2 | Nit (test robustness) | `error-stacktrace.spec.ts:201–227` | If a `withEnvDir` test exceeded Jest's 5 s timeout during boot, the next test could start while the cwd is still the temporary directory, and could carry a deleted cwd into a later file in the same worker. This is theoretical: measured per-test times are 16–146 ms. | **Open, non-blocking observation.** Owner decision: no scope expansion unless M9 or a later review shows a practical failure. |
+| M7-3 | Nit (coverage) | `error-stacktrace.spec.ts:272` | T6 checks only that the real `GraphqlModule`'s option is a boolean. Response-level cases run through the test's own `forRootAsync` wrapper around the shared factory. The reviewer's probe confirmed the real module's end-to-end behavior. | **Open, non-blocking observation.** |
+
+**Observation (intended behavior, not a finding).** For non-HTTP errors (a plain `Error` thrown from a resolver) under `NODE_ENV=development`, the stack trace is now suppressed by default. The message, path, locations, code `INTERNAL_SERVER_ERROR` and Nest's server-side `ExceptionsHandler` log are unchanged. Apollo's other uses of the option (`errorResponse()` for HTTP-level request errors, and the fallback when `formatError` throws, which is invariant 5's acknowledged exception) change in line with the spec. The gateway-only use is not reached. The app has no subscriptions or other transports.
+
+**Verification by the reviewer (run)**
+- `env -u NODE_ENV -u APP_DEBUG pnpm --filter api exec jest src/platform/graphql src/platform/config`: 8 suites, 56 tests passed.
+- From a hostile shell environment (`APP_DEBUG=true NODE_ENV=production`): `error-stacktrace`, `field-resolver-enhancers` and `graphiql-dev-only` passed, 19/19.
+- `env -u NODE_ENV -u APP_DEBUG pnpm --filter api test`: 91 suites, 1421 tests passed.
+- `pnpm --filter api lint` passed, with `git status --short` clean afterwards. `tsc --noEmit -p apps/api/tsconfig.json` exited 0.
+- **Red-first reproduction:** the HEAD tests, run against the `f1fafb8` `graphql.module.ts` in a scratch `git archive` copy, failed T1×2, T2×2, T3, T4, T5 and T6, and passed C1–C3.
+- **Edge probe:**
+
+  | Input | Result |
+  | --- | --- |
+  | `NODE_ENV='production\n'` + `APP_DEBUG=true` | no stack trace |
+  | `NODE_ENV='\tPRODUCTION\r\n'` | suppressed |
+  | `APP_DEBUG=' true'` and `'true\n'` | no stack trace |
+  | `NODE_ENV='prod'` | not production |
+
+  The real `GraphqlModule` writes its schema to `<cwd>/src/schema.gql`.
+- `apps/api/src/schema.gql` was `ABSENT` after every run.
+
+**Verification by the reviewer (read):** the spec, the plan and the M6 record; the full diff and each commit; `app.module.ts`, `main.ts`, `database.module.ts` and `config.module.ts`; and the installed sources of `@nestjs/config` 4.0.4, `@apollo/server` 5.5.1 and `@nestjs/apollo` 13.4.4. The M6 rulings (1)–(3) were found sound.
+
+**Not re-verified by the reviewer:**
+- e2e (65 suites / 731 tests) and the K1–K7 break runs: on record from M6 only. The review brief did not allow them.
+- Root `pnpm run lint` and `pnpm --filter api build`: not rerun; `tsc --noEmit` and `api` lint stood in for them.
+- The live Compose stack: the plan's optional Task 5 Step 3 was not run by anyone.
+
+**Side effect:** `tsc --noEmit` (the project uses `incremental: true`) rewrote `apps/api/dist/tsconfig.tsbuildinfo`. That file is gitignored, no tracked file changed, and `git status --short` stayed clean.
