@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Accepted** (revision 3), 2026-11-26 (M5). |
+| Status | **Accepted** (revision 3), 2026-11-26 (M5). M6 complete (see [M6 execution record](#m6-execution-record)); Ready for M7. |
 | M5 decision | **Accepted** — 2026-11-26, revision 3 (`c75c8c9`), by the owner, on the independent reviewer's round 3 **ACCEPT** verdict (R1–R7 and N14–N16 resolved; no new findings). The owner's qualification: the real `pnpm --filter api exec` run with the `env -u` prefix and the repository's own suites were not run during review. They are implementation-stage verification gaps, closed in M6 by actual runs. The acceptance is not a claim that any check has passed. |
 | M5 history | **Round 1** (independent reviewer, 2026-11-26, reviewed revision 1 at `d642247`): **REVISE**. No blocking findings. Required: R1 (tests that pass on Task 1 code neither red-first nor labelled characterization), R2 (constant-`true` break cannot fail the `true` rows), R3 (preservation break runs not assigned to named tests), R4 (`src/schema.gql` is gitignored, so the `git diff` check was vacuous), R5 (cleanup not failure-safe). Non-blocking notes N1–N13. **Round 2** (same reviewer, 2026-11-26, reviewed revision 2 at `2b324c0`): **REVISE**. R1–R5 resolved, both departures confirmed correct (C1 → K1; the import-time break split into K4a/K4b), every break-catalogue assignment reproduced exactly in a clean-shell probe. New required: R6 (K4a/K4b depend on `NODE_ENV`/`APP_DEBUG` exported in the launching shell), R7 (the fixed break command can miss F tests placed in a sibling file). Non-blocking: N14 (schema checks compared only per group), N15 (`withEnvDir` must not call `withApp`), N16 (K5's tmpdir guard assumes the worktree is not under `os.tmpdir()`). **Round 3** (same reviewer, 2026-11-26, reviewed revision 3 at `c75c8c9`): **ACCEPT**. R1–R7 and N14–N16 resolved. K4a/K4b were re-probed with the `env -u` prefix from shells exporting `APP_DEBUG=true` and `NODE_ENV=production`, and matched the catalogue exactly. The K5 precondition command was verified. No new findings. Only the plan changed since `4f0bd92`. |
 | Revision history | Revision 1 (`d642247`): first draft. Revision 2: addresses R1–R5 and the notes the owner selected (N1, N2, N6, N10, N11), and carries N4, N5, N9 and N13 forward; see [Revision 2 (M5 round 1)](#revision-2-m5-round-1). Revision 3: addresses R6, R7 and N14–N16, as the owner directed; see [Revision 3 (M5 round 2)](#revision-3-m5-round-2). The spec is unchanged. |
@@ -286,3 +286,103 @@ Uses the precedent in `test/e2e-isolation.e2e-spec.ts`: a temporary directory ho
 ## Gate outcomes
 
 *(M5–M10 records are appended here.)*
+
+### M6 execution record
+
+Executed 2026-11-26, inline (superpowers:executing-plans), in worktree `.worktrees/236-graphql-stacktrace` on `fix/236-graphql-stacktrace`, after the M5 acceptance record (`81e3b29`). The owner authorized M6 in the same message as M5 ("m6"). Every result below comes from an actual run.
+
+**Commits**
+
+| Task | Commit | Subject |
+| --- | --- | --- |
+| 0 | — | `pnpm install --frozen-lockfile` succeeded, `git status` clean, schema-file baseline `ABSENT` |
+| 1 | `f1fafb8` | refactor(api): configure GraphQL through forRootAsync (#236) |
+| 2 | `bb2709c` | fix(api): set GraphQL stack-trace inclusion explicitly from APP_DEBUG (#236) |
+| 3 | `e03c339` | test(api): cover APP_DEBUG and NODE_ENV from the .env source (#236) |
+| 4 | `348e179` | docs: document APP_DEBUG stack traces in GraphQL errors (#236) |
+| 5 | this commit | the execution record and Slice Completion Report |
+
+**Rulings (deviations from the plan's letter)**
+
+1. **Task 1:** lint rejects an unused `_config` parameter (`no-unused-vars` has no `_` ignore pattern). The Task 1 factory therefore took no parameter, and Task 2 added `config: ConfigService` when it used it. `inject: [ConfigService]` was unchanged. The plan had delegated this choice to M6 (N3).
+2. **Task 2:** the break procedure needs a clean committed state and recovers with `git restore`. Run before the commit, that would have erased the uncommitted Task 2 edits in the same files. Steps 7 and 8 (verification and commit) were therefore run before the Step 6 break runs. The break edits were never committed either way.
+3. **Task 3:** Step 4 lists K5 plus reruns of K1, K2, K4a and K4b, but K3 is also assigned F-b. The full catalogue K1–K7 was therefore rerun against `e03c339`, so every assignment has evidence on the final test code.
+
+**Task 1 (refactor).** `jest src/platform/graphql`: 5 suites, 12 tests passed, including `field-resolver-enhancers.spec.ts` and `graphiql-dev-only.spec.ts`. `pnpm --filter api build` and `lint` passed, with `git status` showing only `graphql.module.ts`. `pnpm --filter api test`: 89 suites, 1382 tests passed. Schema file `ABSENT`.
+
+**Task 2, red (Step 2, on the Task 1 code).** `error-stacktrace.spec.ts`: 8 failed, 3 passed, all as planned.
+- T1 (both queries) and T2 (both queries) failed: a stack trace was present.
+- T3 failed: no stack trace under `test`.
+- T4 and T5 failed: `Production` and `' production '` returned stack traces.
+- T6 failed: the option was `undefined`.
+- C1, C2 and C3 passed (characterization).
+
+**Task 2, green and verification.** After Step 3, 11/11 passed. H: 23/23 passed (4 `true` rows, 19 `false` rows). After Step 5 (P1, P2): `error-stacktrace.spec.ts` 13/13 passed. Step 7: `pnpm --filter api test` 91 suites, 1418 tests passed; `lint` passed, with `git status` showing only the Task 2 files; `build` passed. Schema file `ABSENT` before and after.
+
+**Task 3.** `error-stacktrace.spec.ts`: 16/16 passed, run twice in a row. Afterwards no `gql-stacktrace-*` directory was left in tmpdir, there was no `.env` under `apps/api`, and the schema file was `ABSENT`. `lint` passed. The K5 precondition command printed `true`.
+
+**Break runs.** Every run used the break command `env -u NODE_ENV -u APP_DEBUG pnpm --filter api exec jest src/platform/graphql/tests/error-stacktrace.spec.ts src/platform/config/tests/graphql-stacktrace.spec.ts`. Each was recovered with `git restore`, after which `git status` was clean and the full command passed (36/36 against `bb2709c`, 39/39 against `e03c339`). Every assigned test failed, and every unassigned test passed, in every run, so every run is characterization evidence for its full assignment.
+
+| Break | Against `bb2709c` (Task 2 Step 6) | Against `e03c339` (Task 3 Step 4) |
+| --- | --- | --- |
+| K1 always included | 29 failed: T1×2, T2×2, T4, T5, C1, C2, P1, P2 and all 19 `false` H rows | 31 failed: the same, plus F-b and F-c |
+| K2 never included | 8 failed: T3, C3, P1, P2 and the 4 `true` H rows | 9 failed: the same, plus F-a |
+| K3 production does not override the opt-in | 7 failed: T4, T5, C2 and the 4 production × `'true'` H rows | 8 failed: the same, plus F-b |
+| K4a `APP_DEBUG` read at import time | 4 failed: T3, C3, P1, P2 | 5 failed: the same, plus F-a |
+| K4b `NODE_ENV` read at import time | 3 failed: T4, T5, C2 | 4 failed: the same, plus F-b |
+| K5 the file wins over the process environment | — (no F tests yet) | 1 failed: F-c |
+| K6 `originalError` dropped when on | P1, P2 (failed on the `originalError` assertion) | P1, P2 |
+| K7 `code` changed when on | P1, P2 (`Expected "BAD_REQUEST"`, `Received "CHANGED_BY_BREAK"`) | P1, P2 |
+
+**Task 4.** One bullet added to `local-development.md` (Debugging) and one comment line to `.env.example`. `git diff` showed only those two lines. The new text adds no links.
+
+**Task 5.**
+- **Step 1.** `pnpm --filter api test`: 91 suites, 1421 tests passed. `pnpm --filter api lint` passed, with `git status` clean. `pnpm --filter api build` passed. Root `pnpm run lint`: 6/6 turbo tasks succeeded, with `git status` clean. Schema file `ABSENT`, equal to the baseline.
+- **Step 2, e2e.** Run as the owner directed, with a branch-specific Test database: `DB_NAME=fix236_test env -u NODE_ENV -u APP_DEBUG pnpm --filter api test:e2e`.
+  - **Result:** exit **0**; 65 suites passed, 0 failed; 731 tests passed, 0 failed, 0 skipped; 170 s.
+  - **Target:** global setup printed `e2e target fix236_test@localhost:5432: created=true, applied=30, pending=0, unknown=0`. It created `fix236_test`, which did not exist before, and applied 30 migrations. The run did not target `clensy` or `clensy_test`, and used the default connection settings: the worktree has no `apps/api/.env`, and no env file was copied. No container was started, stopped or rebuilt. `fix236_test` was kept.
+  - **Expected log noise, not failures:** `UnsafeDataSourceError: refused: database "clensy" is not a Test database`, with nine TypeORM retries, comes from `datasource-guard.e2e-spec.ts` ("rejects the Nest application DataSource before connecting"). It targets a fake local listener and asserts zero connections. `QueryFailedError: operator does not exist: uuid ~~* unknown` comes from `laundry-order-list-filters.e2e-spec.ts` ("rejects a partial iLike on the uuid id"). There is also a `pg` `DeprecationWarning` about concurrent `client.query()` calls. None is related to #236.
+  - **Schema file:** `ABSENT` before the run. The run generated it (modified 01:26:52, after the start at 01:23:57); it is gitignored and untracked. That generated file was removed, so the schema file is `ABSENT` again, equal to the Task 0 baseline.
+- **Step 3, optional manual check:** **NOT RUN**. It is optional in the plan and not a gate.
+- **Step 4, invariant 6:** the merge-base diff reads only `config.get('NODE_ENV')` and `config.get('APP_DEBUG')`. No new environment variable name is added.
+- **Environment note, unrelated to #236:** the main checkout's Compose container `clensy-platform-api-1` was already in a restart loop before this run (`JWT_SECRET must be set`, from its built image). It was observed only, not touched, and does not affect this slice's verification.
+- **Final state:** `git status` clean apart from this record; schema file `ABSENT`.
+
+## Slice Completion Report
+
+| Field | Result |
+| --- | --- |
+| Slice | #236 GraphQL error stack traces |
+| Tracking | [#236](https://github.com/rexescario-dev/clensy-platform/issues/236) |
+| M4 | Plan **Accepted** (revision 3, `c75c8c9`) |
+| M5 | Review **Accepted** (owner, on the independent reviewer's round 3 ACCEPT; recorded at `81e3b29`) |
+| M6 | **Complete** |
+| M7 | Pending (fresh, independent reviewer required: application code, `CLAUDE.md`) |
+| M8 | Pending |
+| M9 | Pending |
+| Branch | `fix/236-graphql-stacktrace` (local only, not pushed) |
+| PR | None yet |
+| Status | **Ready for M7** |
+
+### Shipped
+
+- GraphQL error responses include `extensions.stacktrace` only when `APP_DEBUG` is exactly `true` and `NODE_ENV`, trimmed and lowercased, is not `production`. Apollo's implicit `NODE_ENV` default no longer applies.
+- Production always suppresses stack traces, even with `APP_DEBUG=true` and for `Production` or ` production `.
+- `NODE_ENV` and `APP_DEBUG` are read through `ConfigService` when the module is configured. The setting is honored from the process environment and from `.env`, and the process environment wins.
+- Error message, path, locations, code, status and `originalError` are unchanged.
+- GraphiQL, Swagger and SQL logging are unchanged. No new environment variable.
+- Setup docs (`local-development.md`, `.env.example`) document the opt-in and the production override.
+
+### Validation
+
+| Check | Result |
+| --- | --- |
+| Tests | **Passed**: unit 91 suites / 1421 tests; e2e 65 suites / 731 tests (`fix236_test`, exit 0); every K1–K7 break run matched its assignment |
+| Typecheck | **Passed**: `nest build` (tsc) |
+| Lint | **Passed**: `pnpm --filter api lint` and root `pnpm run lint` (6/6), `git status` clean afterwards |
+| Build | **Passed**: `pnpm --filter api build` |
+| Package validation | N/A |
+
+### Next Gate
+
+**M7 — Code Review**, by a fresh, independent reviewer on the most capable model, given the Accepted spec, the Accepted plan and `git diff $(git merge-base HEAD origin/main)..HEAD`.
