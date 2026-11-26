@@ -569,7 +569,42 @@ The owner authorized resolving both observations on 2026-11-26, after #238 merge
 
 **M7 review.** A fresh independent reviewer (not the implementer) reviewed `7dcad8f`: **Approved for merge**, with 0 blocking findings, 1 minor (M1: record the owner's authorization and the resolution here, done by this section) and 3 nits (N1–N3, fixed in `0b48c89` after the review; that commit is test wording and an import path only).
 
-**Still open, non-blocking**
+**Raised by this review, then resolved** (see the next subsection)
 
-- **N1-residual:** F-d checks the serving window only. A future change that kept the temporary cwd across the boot `await` would pass it (reviewer break B2). `configModuleIn` prevents that today.
-- **O1 (present before #236's follow-ups):** `withApp` and `withEnvDir` restore `APP_DEBUG`, `NODE_ENV` and `.env` keys in a `finally` that runs after `app.close()`. If a test timed out, the next test could start with those values, and the late restore could overwrite them mid-test. It is the same theoretical class as M7-2 and would show as a spurious failure, not a false pass.
+- **N1-residual:** F-d checked the serving window only. A future change that kept the temporary cwd across the boot `await` would have passed it (reviewer break B2).
+- **O1 (present before #236's follow-ups):** `withApp` and `withEnvDir` restore `APP_DEBUG`, `NODE_ENV` and `.env` keys in a `finally` that runs after `app.close()`. If a test timed out, the next test could start with those values, and the late restore could overwrite them mid-test.
+
+### N1-residual and O1: resolved
+
+The owner asked for the non-blocking observations to be resolved too (2026-11-26). The change is still test-only, in the same file.
+
+| # | Resolution | Commit |
+| --- | --- | --- |
+| O1 | `serialized(work)` chains every `withApp` and `withEnvDir` run on one promise, so a run starts only after the previous run, cleanup included, has finished. A failed run does not block later ones. A run that never finishes makes later runs time out: a loud failure, never a leak. New test **I1** starts two overlapping runs, as a timeout does. | `29d09ed` |
+| N1-residual | `BootCwdProbe` records the cwd in `onModuleInit`, during boot. F-d now checks the boot window as well as the serving window. | `29d09ed` |
+| Review nits | I1's unused first gate is removed. Setup that reads or resets shared state (F-d's probe reset, I1's baseline, the R tests' `mockClear`) runs through `serialized`. | `60a9cc2` |
+
+**Evidence**
+
+- **Red first:** I1 failed before `serialized` existed: the first run saw the second run's `APP_DEBUG=false`.
+- **Break runs (author)**, each restored:
+  - **K10:** the temporary cwd kept across the boot `await` (reviewer B2). Only F-d fails.
+  - **K11:** `serialized` made a pass-through. Only I1 fails, both at `29d09ed` and again at `60a9cc2`.
+- **Real Jest timeout (reviewer):** a throwaway spec timed out test A at 300 ms while its run was in flight. With `serialized`, only A failed and test B saw its own `APP_DEBUG`. Without it, B also failed, because A's late restore overwrote B's value. The reviewer also confirmed that a rejected run, and a run whose cleanup throws, do not stall the queue.
+- **Focused spec:** 21/21. **Unit:** 91 suites / 1426 tests. **Lint:** root 6/6. **Typecheck:** `tsc --noEmit` exit 0. **Build:** `pnpm --filter api build` exit 0.
+
+**M7 review.** A second fresh independent reviewer (not the implementer, and not the first follow-up reviewer) reviewed `29d09ed`: **Approved for merge**, with 0 blocking findings, 1 minor (this record) and 2 nits (fixed in `60a9cc2` after the review; test setup and one gate only).
+
+### Gates for the follow-ups
+
+The follow-ups stay inside the Accepted spec and plan, and change no application behavior, so M2–M5 are not re-run, following the #227 follow-ups (#230).
+
+| Gate | Result |
+| --- | --- |
+| M6 | **Complete**: `7dcad8f`, `0b48c89`, `29d09ed`, `60a9cc2` |
+| M7 | **Approved**: two fresh independent reviews (`7dcad8f`; `29d09ed`) |
+| M8 | **N/A**: no maintainability refactoring identified beyond the fixes themselves |
+| M9 | **Complete**: this record; no user-facing docs change |
+| M10 | **N/A**: no workflow asset changed |
+
+**Open:** none. Every M7 observation from #236 and its follow-ups is resolved.
