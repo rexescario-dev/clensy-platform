@@ -7,12 +7,12 @@ import {
 } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import {
+  FileSystemHelper,
   GRAPHQL_MODULE_OPTIONS,
   GraphQLModule as NestGraphQLModule,
   Query,
   Resolver,
 } from '@nestjs/graphql';
-import { FileSystemHelper } from '@nestjs/graphql/dist/schema-builder/helpers/file-system.helper.js';
 import { Test } from '@nestjs/testing';
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import type { Server } from 'http';
@@ -105,7 +105,8 @@ async function cleanUp(
 // reads it synchronously, before its first await, so `dir` is the cwd only
 // for this synchronous call: no await happens while it is changed, and no
 // other test can observe it, even one Jest starts after a timeout (#236
-// M7-2). If forRoot() ever read the file later, F-a would fail.
+// M7-2). If forRoot() ever read the file later, F-a would fail, as long as
+// the real cwd's `.env` does not itself turn stack traces on.
 function configModuleIn(dir: string): ReturnType<typeof ConfigModule.forRoot> {
   const previousCwd = process.cwd();
   process.chdir(dir);
@@ -474,9 +475,10 @@ describe('GraphQL error stack traces (#236)', () => {
       ).toBeUndefined();
     });
 
-    // M7-2: the temporary directory is never the cwd across an await, so a
-    // test Jest starts after this one times out cannot inherit it.
-    it('F-d: the cwd is unchanged while the app boots and serves', async () => {
+    // M7-2: the temporary directory is not the cwd once the app is serving.
+    // `configModuleIn` keeps it from being the cwd during boot as well, but
+    // this test checks only the serving window.
+    it('F-d: the cwd is unchanged while the app serves', async () => {
       const cwd = process.cwd();
       expect(
         await withEnvDir({}, {}, () => Promise.resolve(process.cwd())),
