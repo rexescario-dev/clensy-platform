@@ -164,3 +164,16 @@ Shipped in this slice (PR [#228](https://github.com/rexescario-dev/clensy-platfo
 - Spec (Accepted): [2026-11-06-e2e-database-isolation-dev-owner-design.md](../superpowers/specs/2026-11-06-e2e-database-isolation-dev-owner-design.md)
 - Plan (Accepted): [2026-11-06-e2e-database-isolation-dev-owner-plan.md](../superpowers/plans/2026-11-06-e2e-database-isolation-dev-owner-plan.md)
 - Current behavior: [testing and CI](../development/testing-and-ci.md#api-end-to-end-suites) and [local development](../getting-started/local-development.md#development-and-e2e-databases)
+
+## GraphQL error stack traces (#236)
+
+Shipped in this slice (PR [#238](https://github.com/rexescario-dev/clensy-platform/pull/238)).
+
+- **Stack traces are opt-in.** GraphQL error responses include `extensions.stacktrace` only when `APP_DEBUG` is exactly `true`. Before, Apollo added them whenever `NODE_ENV` was not `production`, so the local Compose stack (`NODE_ENV=development`) returned them by default.
+- **Never in production.** `NODE_ENV=production` always suppresses them, even with `APP_DEBUG=true`. Production is matched after trimming and lowercasing, so `Production` also counts.
+- **Explicit setting.** The API passes `includeStacktraceInErrorResponses` to Apollo itself, read through `ConfigService` when the GraphQL module is configured (`forRootAsync`). The process environment wins over `apps/api/.env`.
+- **Unchanged:** error message, path, locations, code, `status` and `originalError`; GraphiQL, Swagger and SQL logging (`APP_DEBUG=true` still turns that on too); the schema (no migration). There is no new environment variable.
+
+- Spec (Accepted): [2026-11-26-graphql-error-stacktrace-design.md](../superpowers/specs/2026-11-26-graphql-error-stacktrace-design.md)
+- Plan (Accepted): [2026-11-26-graphql-error-stacktrace-plan.md](../superpowers/plans/2026-11-26-graphql-error-stacktrace-plan.md)
+- Current behavior: [local development](../getting-started/local-development.md#debugging)
