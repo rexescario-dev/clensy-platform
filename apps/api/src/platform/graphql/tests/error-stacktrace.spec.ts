@@ -164,12 +164,14 @@ function restoreEnv(snapshot: EnvSnapshot): void {
 }
 
 // Runs `work` only after every earlier run has finished, cleanup included.
+// Tests also use it for setup that reads or resets shared state, so a run
+// still in flight from a timed-out test cannot race that setup.
 // The environment and the cwd are process-wide, so two runs must never
 // overlap. They would when Jest times a test out and starts the next one
 // while the first is still running (#236 O1). If that earlier run never
 // finishes, later ones time out too: a loud failure, never a leak. Runs
 // must not nest: a run started from inside another would wait for it forever.
-async function serialized<T>(work: () => Promise<T>): Promise<T> {
+async function serialized<T>(work: () => Promise<T> | T): Promise<T> {
   const run = lastRun.then(work);
   lastRun = run.catch(() => undefined);
   return run;
@@ -304,25 +306,23 @@ describe('GraphQL error stack traces (#236)', () => {
   // see the other's environment, and nothing may leak once both finish.
   describe('harness isolation', () => {
     it('I1: overlapping runs neither share nor leak APP_DEBUG', async () => {
-      const baseline = process.env.APP_DEBUG;
-      let releaseFirst: () => void = () => undefined;
+      const baseline = await serialized(() => process.env.APP_DEBUG);
+      // Holds the second run open until the first has finished, so without
+      // serialization the first run's late restore lands mid-way through it.
       let releaseSecond: () => void = () => undefined;
-      const firstGate = new Promise<void>((resolve) => {
-        releaseFirst = resolve;
-      });
       const secondGate = new Promise<void>((resolve) => {
         releaseSecond = resolve;
       });
 
-      const first = withApp({ APP_DEBUG: 'true' }, async () => {
-        await firstGate;
-        return process.env.APP_DEBUG;
-      });
+      // Both runs start before either finishes, as when Jest starts the next
+      // test while a timed-out one is still running.
+      const first = withApp({ APP_DEBUG: 'true' }, () =>
+        Promise.resolve(process.env.APP_DEBUG),
+      );
       const second = withApp({ APP_DEBUG: 'false' }, async () => {
         await secondGate;
         return process.env.APP_DEBUG;
       });
-      releaseFirst();
       const seenByFirst = await first;
       releaseSecond();
       const seenBySecond = await second;
@@ -388,9 +388,11 @@ describe('GraphQL error stack traces (#236)', () => {
   // M7-3: the same requests through the real GraphqlModule, so its own
   // forRootAsync wiring (imports, inject, useFactory) is covered end to end.
   describe('real GraphqlModule', () => {
-    beforeEach(() => {
-      writeSchemaFile.mockClear();
-    });
+    beforeEach(() =>
+      serialized(() => {
+        writeSchemaFile.mockClear();
+      }),
+    );
 
     it.each([
       {
@@ -546,8 +548,10 @@ describe('GraphQL error stack traces (#236)', () => {
     // test Jest starts after this one times out cannot inherit it. The probe
     // checks the boot window; the callback checks the serving window.
     it('F-d: the cwd is unchanged while the app boots and serves', async () => {
-      const cwd = process.cwd();
-      bootCwds.length = 0;
+      const cwd = await serialized(() => {
+        bootCwds.length = 0;
+        return process.cwd();
+      });
       expect(
         await withEnvDir({}, {}, () => Promise.resolve(process.cwd())),
       ).toBe(cwd);
