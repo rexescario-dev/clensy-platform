@@ -1,6 +1,7 @@
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import {
   BadRequestException,
+  DynamicModule,
   INestApplication,
   NotFoundException,
 } from '@nestjs/common';
@@ -11,6 +12,7 @@ import {
   Query,
   Resolver,
 } from '@nestjs/graphql';
+import { FileSystemHelper } from '@nestjs/graphql/dist/schema-builder/helpers/file-system.helper.js';
 import { Test } from '@nestjs/testing';
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import type { Server } from 'http';
@@ -24,7 +26,9 @@ import { GraphqlModule, graphqlModuleOptions } from '../graphql.module';
 // 'production'. Every case below sends a real request through Apollo and
 // @nestjs/apollo's HTTP-exception transform, using the real options factory
 // with only `autoSchemaFile` replaced (in-memory, so `src/schema.gql` is
-// never written). Test IDs (T*, C*, P*, F-*) match the plan's test inventory.
+// never written). R1–R3 boot the real GraphqlModule instead. Test IDs (T*, C*,
+// P*, F-*) match the plan's test inventory; F-d and R1–R3 are the post-closeout
+// follow-ups for M7-2 and M7-3.
 
 type EnvKey = 'APP_DEBUG' | 'NODE_ENV';
 type EnvOverrides = Partial<Record<EnvKey, string>>;
@@ -45,6 +49,10 @@ interface GraphqlResponseBody {
 const ENV_KEYS: readonly EnvKey[] = ['APP_DEBUG', 'NODE_ENV'];
 const BAD_REQUEST_MESSAGE = 'stacktrace test: bad request';
 const NOT_FOUND_MESSAGE = 'stacktrace test: not found';
+
+// Stands in for @nestjs/graphql's schema-file writer, so booting the real
+// GraphqlModule (whose `autoSchemaFile` is src/schema.gql) never writes a file.
+const writeSchemaFile = jest.fn<Promise<void>, [string, string]>();
 
 @Resolver()
 class StacktraceTestResolver {
@@ -89,6 +97,22 @@ async function cleanUp(
   }
   if (firstFailure && !workFailed) {
     throw firstFailure;
+  }
+}
+
+// Returns a ConfigModule that reads `.env` from `dir`, the same way the app
+// reads apps/api/.env from apps/api. forRoot() resolves the cwd's `.env` and
+// reads it synchronously, before its first await, so `dir` is the cwd only
+// for this synchronous call: no await happens while it is changed, and no
+// other test can observe it, even one Jest starts after a timeout (#236
+// M7-2). If forRoot() ever read the file later, F-a would fail.
+function configModuleIn(dir: string): ReturnType<typeof ConfigModule.forRoot> {
+  const previousCwd = process.cwd();
+  process.chdir(dir);
+  try {
+    return ConfigModule.forRoot();
+  } finally {
+    process.chdir(previousCwd);
   }
 }
 
@@ -137,25 +161,19 @@ async function stacktraceFor(
 }
 
 // Builds and starts the test app. It never touches the environment; callers
-// set it first. `configImport` is the ConfigModule import to use.
+// set it first. `configImport` is the ConfigModule import to use, and
+// `graphqlImport` the GraphQL module under test.
 async function startApp(
   configImport: ReturnType<typeof ConfigModule.forRoot>,
+  graphqlImport: DynamicModule | typeof GraphqlModule = wrappedGraphqlModule(),
 ): Promise<INestApplication> {
   const moduleRef = await Test.createTestingModule({
-    imports: [
-      configImport,
-      NestGraphQLModule.forRootAsync<ApolloDriverConfig>({
-        driver: ApolloDriver,
-        imports: [ConfigModule],
-        inject: [ConfigService],
-        useFactory: (config: ConfigService): ApolloDriverConfig => ({
-          ...graphqlModuleOptions(config),
-          autoSchemaFile: true,
-        }),
-      }),
-    ],
+    imports: [configImport, graphqlImport],
     providers: [StacktraceTestResolver],
-  }).compile();
+  })
+    .overrideProvider(FileSystemHelper)
+    .useValue({ writeFile: writeSchemaFile })
+    .compile();
   const app = moduleRef.createNestApplication();
   try {
     await app.init();
@@ -172,13 +190,17 @@ async function startApp(
 async function withApp<T>(
   env: EnvOverrides,
   fn: (app: INestApplication) => Promise<T>,
+  graphqlImport?: DynamicModule | typeof GraphqlModule,
 ): Promise<T> {
   const saved = snapshotEnv(ENV_KEYS);
   let app: INestApplication | undefined;
   let workFailed = false;
   try {
     applyEnv(env);
-    app = await startApp(ConfigModule.forRoot({ ignoreEnvFile: true }));
+    app = await startApp(
+      ConfigModule.forRoot({ ignoreEnvFile: true }),
+      graphqlImport,
+    );
     return await fn(app);
   } catch (error) {
     workFailed = true;
@@ -198,7 +220,6 @@ async function withEnvDir<T>(
   processEnv: EnvOverrides,
   fn: (app: INestApplication) => Promise<T>,
 ): Promise<T> {
-  const previousCwd = process.cwd();
   const saved = snapshotEnv([...ENV_KEYS, ...Object.keys(fileEnv)]);
   let dir: string | undefined;
   let app: INestApplication | undefined;
@@ -212,10 +233,7 @@ async function withEnvDir<T>(
         .join(''),
     );
     applyEnv(processEnv);
-    process.chdir(dir);
-    // Called only now, inside the temporary directory: forRoot() reads
-    // `.env` from the cwd synchronously when it is called.
-    app = await startApp(ConfigModule.forRoot());
+    app = await startApp(configModuleIn(dir));
     return await fn(app);
   } catch (error) {
     workFailed = true;
@@ -224,13 +242,26 @@ async function withEnvDir<T>(
     await cleanUp(
       [
         () => app?.close(),
-        () => process.chdir(previousCwd),
         () => dir && rmSync(dir, { force: true, recursive: true }),
         () => restoreEnv(saved),
       ],
       workFailed,
     );
   }
+}
+
+// The forRootAsync wrapper most cases use: the real options factory with only
+// `autoSchemaFile` replaced, so the schema is built in memory.
+function wrappedGraphqlModule(): DynamicModule {
+  return NestGraphQLModule.forRootAsync<ApolloDriverConfig>({
+    driver: ApolloDriver,
+    imports: [ConfigModule],
+    inject: [ConfigService],
+    useFactory: (config: ConfigService): ApolloDriverConfig => ({
+      ...graphqlModuleOptions(config),
+      autoSchemaFile: true,
+    }),
+  });
 }
 
 describe('GraphQL error stack traces (#236)', () => {
@@ -282,6 +313,52 @@ describe('GraphQL error stack traces (#236)', () => {
         );
       } finally {
         await moduleRef.close();
+      }
+    });
+  });
+
+  // M7-3: the same requests through the real GraphqlModule, so its own
+  // forRootAsync wiring (imports, inject, useFactory) is covered end to end.
+  describe('real GraphqlModule', () => {
+    beforeEach(() => {
+      writeSchemaFile.mockClear();
+    });
+
+    it.each([
+      {
+        id: 'R1',
+        env: { APP_DEBUG: 'true', NODE_ENV: 'development' },
+        label: 'NODE_ENV=development, APP_DEBUG=true → stack trace',
+        stacktrace: true,
+      },
+      {
+        id: 'R2',
+        env: { NODE_ENV: 'development' },
+        label: 'NODE_ENV=development, APP_DEBUG unset → no stack trace',
+        stacktrace: false,
+      },
+      {
+        id: 'R3',
+        env: { APP_DEBUG: 'true', NODE_ENV: 'production' },
+        label: 'NODE_ENV=production, APP_DEBUG=true → no stack trace',
+        stacktrace: false,
+      },
+    ] as const)('$id: $label', async ({ env, stacktrace }) => {
+      const error = await withApp(
+        env,
+        (app) => firstError(app, 'badRequest'),
+        GraphqlModule,
+      );
+
+      // The real options were used: their schema file, written to the stub.
+      expect(writeSchemaFile).toHaveBeenCalledWith(
+        expect.stringMatching(/[\\/]src[\\/]schema\.gql$/),
+        expect.any(String),
+      );
+      if (stacktrace) {
+        expectStacktrace(error.extensions?.stacktrace);
+      } else {
+        expect(error.extensions?.stacktrace).toBeUndefined();
       }
     });
   });
@@ -395,6 +472,15 @@ describe('GraphQL error stack traces (#236)', () => {
       expect(
         await fileStacktrace({ APP_DEBUG: 'true' }, { APP_DEBUG: 'false' }),
       ).toBeUndefined();
+    });
+
+    // M7-2: the temporary directory is never the cwd across an await, so a
+    // test Jest starts after this one times out cannot inherit it.
+    it('F-d: the cwd is unchanged while the app boots and serves', async () => {
+      const cwd = process.cwd();
+      expect(
+        await withEnvDir({}, {}, () => Promise.resolve(process.cwd())),
+      ).toBe(cwd);
     });
   });
 });
