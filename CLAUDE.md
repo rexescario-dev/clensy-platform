@@ -20,7 +20,7 @@ This standing instruction counts as the owner's request to dispatch a reviewer a
 
 ## Follow-up work on a shipped slice
 
-Owner decision, pending approval (proposed 2026-11-26 from the #236 retrospective; precedents: #230 for #227, #240 for #236).
+Owner decision, 2026-11-26, from the #236 retrospective (precedents: #230 for #227, #240 for #236).
 
 A **follow-up** resolves observations recorded at M7 or later for a slice whose specification and implementation plan are both Accepted.
 
@@ -37,7 +37,7 @@ A **follow-up** resolves observations recorded at M7 or later for a slice whose 
 
 ## Merge preflight
 
-Owner decision, pending approval. Run this check before reporting a pull request as ready to merge (the **readiness run**), and again immediately before a merge the owner has explicitly requested (the **merge run**). This section authorizes no merge and no push: a merge happens only on the owner's explicit request (generic spec §2.12 step 1), and a push only as step 3 says. `main` requires up-to-date branches: the ruleset "main: required CI checks" (active) uses a strict required-status-checks policy with Lint, Test, API e2e and Release gate.
+Owner decision, 2026-11-26. Run this check before reporting a pull request as ready to merge (the **readiness run**), and again immediately before a merge the owner has explicitly requested (the **merge run**). This section authorizes no merge and no push: a merge happens only on the owner's explicit request (generic spec §2.12 step 1), and a push only as step 3 says. `main` requires up-to-date branches: the ruleset "main: required CI checks" (active) uses a strict required-status-checks policy with Lint, Test, API e2e and Release gate.
 
 1. Run `git fetch origin`, then `gh pr view <n> --json headRefOid,baseRefName,mergeStateStatus,mergeable,statusCheckRollup`. If `mergeStateStatus` is `UNKNOWN`, retry up to three times, a few seconds apart, before reporting it.
 2. Act on the state:
@@ -77,7 +77,7 @@ Owner decision, pending approval. Run this check before reporting a pull request
 
 ## Post-merge cleanup
 
-Owner decision, pending approval.
+Owner decision, 2026-11-26.
 
 **Closeout inventory (pilot).** Every implementation plan written at M4 from now on includes a "Closeout inventory" section. Each row names:
 - the resource by exact name: branch, worktree, database, container, image, volume or temporary file;
