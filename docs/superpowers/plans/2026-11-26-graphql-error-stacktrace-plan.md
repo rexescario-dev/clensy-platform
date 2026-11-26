@@ -540,3 +540,36 @@ M7-1 is **resolved** by `859e27c`. M7-2 and M7-3 remain **open**, non-blocking o
 ### Next Gate
 
 **Closeout (§2.12)**: push the branch and open the single issue PR, CI, then a human-authorized merge. After the merge, add the shipped-slices note. None of this is authorized yet.
+
+## Post-closeout follow-ups
+
+### M7-2 and M7-3: resolved
+
+The owner authorized resolving both observations on 2026-11-26, after #238 merged, which supersedes the earlier "no scope expansion" decision for these two items. The work is test-only, in `apps/api/src/platform/graphql/tests/error-stacktrace.spec.ts`, on branch `test/236-followups`. There are no application code or spec changes.
+
+| # | Resolution | Commit |
+| --- | --- | --- |
+| M7-2 | `configModuleIn(dir)` makes the temporary directory the cwd only around the synchronous `ConfigModule.forRoot()` call. @nestjs/config 4.0.4 resolves and reads `.env` before its first `await`, so the cwd is never changed across an `await`. New test **F-d** checks that the cwd is unchanged while the app serves. | `7dcad8f` |
+| M7-3 | New tests **R1–R3** send requests through the real `GraphqlModule` and its own `forRootAsync` wiring: development with `APP_DEBUG=true` gives a stack trace; development without it, and production with it, give none. @nestjs/graphql's `FileSystemHelper` is overridden with a stub, so `src/schema.gql` is never written. The tests assert the stub received the real `src/schema.gql` path. | `7dcad8f` |
+| Review nits | F-d's title says "while the app serves" (N1); `FileSystemHelper` is imported from the package root (N2); the `configModuleIn` comment states its condition (N3). | `0b48c89` |
+
+**Evidence**
+
+- **Red first:** F-d failed before the fix, with the cwd reported as `/tmp/gql-stacktrace-*`. R1–R3 are characterization tests and pass on the shipped code.
+- **Break runs (author)**, each applied outside the commit and restored:
+  - **K8:** the real module's factory forced to `includeStacktraceInErrorResponses: true`. R2 and R3 fail; T6 still passes, which is the gap M7-3 described.
+  - **K9:** the `FileSystemHelper` override removed. R1–R3 fail and `src/schema.gql` is written (then deleted).
+- **Break runs (reviewer):**
+  - **B1:** the old cwd behavior. Only F-d fails.
+  - **B2:** the cwd changed for boot only. All tests pass (see N1-residual below).
+  - **B3:** `forRoot` deferred past an `await`. Only F-a fails.
+  - **B4:** an added check that the wrapped cases never call the stub. It passes.
+- **Focused spec:** 20/20, with `env -u NODE_ENV -u APP_DEBUG`, and 20/20 with `APP_DEBUG=true NODE_ENV=production` set (reviewer).
+- **Unit:** 91 suites / 1425 tests. **Lint:** root 6/6; `api` eslint clean. **Typecheck:** `tsc --noEmit` exit 0. **Build:** `pnpm --filter api build` exit 0. e2e was not run locally (the change touches one unit spec only); CI runs it.
+
+**M7 review.** A fresh independent reviewer (not the implementer) reviewed `7dcad8f`: **Approved for merge**, with 0 blocking findings, 1 minor (M1: record the owner's authorization and the resolution here, done by this section) and 3 nits (N1–N3, fixed in `0b48c89` after the review; that commit is test wording and an import path only).
+
+**Still open, non-blocking**
+
+- **N1-residual:** F-d checks the serving window only. A future change that kept the temporary cwd across the boot `await` would pass it (reviewer break B2). `configModuleIn` prevents that today.
+- **O1 (present before #236's follow-ups):** `withApp` and `withEnvDir` restore `APP_DEBUG`, `NODE_ENV` and `.env` keys in a `finally` that runs after `app.close()`. If a test timed out, the next test could start with those values, and the late restore could overwrite them mid-test. It is the same theoretical class as M7-2 and would show as a spurious failure, not a false pass.
